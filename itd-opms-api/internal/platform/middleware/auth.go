@@ -179,16 +179,21 @@ func PublicRoute(next http.Handler) http.Handler {
 }
 
 // extractBearerToken pulls the token from the "Authorization: Bearer <token>" header.
+// Falls back to the "token" query parameter for SSE connections (EventSource cannot
+// set custom headers).
 func extractBearerToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
-	if header == "" {
-		return ""
+	if header != "" {
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
 	}
 
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
+	// Fallback: check query parameter (used by EventSource/SSE).
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
 	}
 
-	return strings.TrimSpace(parts[1])
+	return ""
 }

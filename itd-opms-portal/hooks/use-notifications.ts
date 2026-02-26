@@ -32,10 +32,10 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: ["notifications-unread-count"],
     queryFn: async () => {
-      const result = await apiClient.get<{ count: number }>(
+      const result = await apiClient.get<{ unreadCount: number }>(
         "/notifications/unread-count",
       );
-      return result.count;
+      return result.unreadCount ?? 0;
     },
     refetchInterval: (query) =>
       query.state.status === "error" ? false : 60_000,

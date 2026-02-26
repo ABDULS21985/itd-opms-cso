@@ -43,6 +43,14 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
 
+// Flush implements http.Flusher by delegating to the underlying ResponseWriter.
+// This is required for SSE (Server-Sent Events) connections.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Logging is a middleware that logs structured information about every HTTP
 // request and its response using slog. It records the method, path, status
 // code, duration, remote address, and correlation ID.
