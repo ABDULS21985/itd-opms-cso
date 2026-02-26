@@ -45,7 +45,7 @@ function ThemeToggle() {
     { value: "system" as const, icon: Monitor, label: "System" },
   ];
 
-  const currentIcon =
+  const CurrentIcon =
     theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 
   return (
@@ -55,7 +55,7 @@ function ThemeToggle() {
         className="p-2 rounded-xl hover:bg-[var(--surface-2)] text-[var(--neutral-gray)] transition-colors"
         aria-label="Toggle theme"
       >
-        {<currentIcon size={18} />}
+        <CurrentIcon size={18} />
       </button>
 
       <AnimatePresence>
@@ -282,18 +282,20 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           <ThemeToggle />
         </div>
 
-        {/* Notification bell placeholder */}
-        <button
-          className="relative p-2 rounded-xl hover:bg-[var(--surface-2)] text-[var(--neutral-gray)] transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell size={18} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--error)] ring-2 ring-[var(--surface-0)]" />
-        </button>
+        {/* Notification bell */}
+        <NotificationBell
+          onClick={() => setNotificationPanelOpen((prev) => !prev)}
+        />
 
         {/* User avatar dropdown */}
         <UserMenu />
       </div>
+
+      {/* Notification slide-in panel */}
+      <NotificationPanel
+        open={notificationPanelOpen}
+        onOpenChange={setNotificationPanelOpen}
+      />
     </header>
   );
 }

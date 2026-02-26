@@ -3,6 +3,7 @@ import { Toaster } from "sonner";
 import { QueryProvider } from "@/providers/query-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
+import { NotificationProvider } from "@/providers/notification-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -45,7 +46,9 @@ export default function RootLayout({
         <ThemeProvider>
           <QueryProvider>
             <AuthProvider>
+              <NotificationProvider>
               {children}
+              </NotificationProvider>
               <Toaster
                 theme="system"
                 position="top-right"
