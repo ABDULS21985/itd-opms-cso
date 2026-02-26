@@ -90,16 +90,16 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard/planning/portfolios", label: "Portfolios", icon: FolderKanban, permission: "planning.view" },
       { href: "/dashboard/planning/projects", label: "Projects", icon: Briefcase, permission: "planning.view" },
-      { href: "/dashboard/planning/tasks", label: "Tasks", icon: ListTodo, permission: "planning.view" },
-      { href: "/dashboard/planning/risks", label: "Risks", icon: AlertTriangle, permission: "planning.view" },
+      { href: "/dashboard/planning/work-items", label: "Work Items", icon: ListTodo, permission: "planning.view" },
+      { href: "/dashboard/planning/risks", label: "Risks & Issues", icon: AlertTriangle, permission: "planning.view" },
     ],
   },
   {
     label: "ITSM",
     items: [
-      { href: "/dashboard/itsm/catalog", label: "Service Catalog", icon: BookOpen, permission: "itsm.view" },
-      { href: "/dashboard/itsm/incidents", label: "Incidents", icon: CircleDot, permission: "itsm.view" },
-      { href: "/dashboard/itsm/requests", label: "Requests", icon: TicketCheck, permission: "itsm.view" },
+      { href: "/dashboard/itsm/service-catalog", label: "Service Catalog", icon: BookOpen, permission: "itsm.view" },
+      { href: "/dashboard/itsm/tickets", label: "Tickets", icon: CircleDot, permission: "itsm.view" },
+      { href: "/dashboard/itsm/my-queue", label: "My Queue", icon: TicketCheck, permission: "itsm.view" },
       { href: "/dashboard/itsm/problems", label: "Problems", icon: Bug, permission: "itsm.view" },
     ],
   },
