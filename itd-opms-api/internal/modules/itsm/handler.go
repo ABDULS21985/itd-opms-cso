@@ -1,31 +1,62 @@
 package itsm
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
-// Handler handles HTTP requests for the itsm module.
-type Handler struct{}
-
-// NewHandler creates a new itsm Handler.
-func NewHandler() *Handler {
-	return &Handler{}
+// Handler is the top-level HTTP handler for the ITSM module.
+// It composes all sub-handlers for service catalog, tickets,
+// SLA policies, problems, and support queues.
+type Handler struct {
+	catalog *CatalogHandler
+	ticket  *TicketHandler
+	sla     *SLAHandler
+	problem *ProblemHandler
+	queue   *QueueHandler
 }
 
-// Routes mounts itsm endpoints on the given router.
+// NewHandler creates a new ITSM Handler with all sub-handlers wired up.
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+	catalogSvc := NewCatalogService(pool, auditSvc)
+	ticketSvc := NewTicketService(pool, auditSvc)
+	slaSvc := NewSLAService(pool, auditSvc)
+	problemSvc := NewProblemService(pool, auditSvc)
+	queueSvc := NewQueueService(pool, auditSvc)
+
+	return &Handler{
+		catalog: NewCatalogHandler(catalogSvc),
+		ticket:  NewTicketHandler(ticketSvc),
+		sla:     NewSLAHandler(slaSvc),
+		problem: NewProblemHandler(problemSvc),
+		queue:   NewQueueHandler(queueSvc),
+	}
+}
+
+// Routes mounts all ITSM sub-routes on the given router.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/", h.index)
-}
+	// Service Catalog (FR-D001 to FR-D004)
+	r.Route("/catalog", func(r chi.Router) {
+		h.catalog.Routes(r)
+	})
 
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":  "info",
-		"message": "itsm module - not yet implemented",
-		"data":    nil,
+	// Tickets — incidents, service requests (FR-D005 to FR-D016)
+	r.Route("/tickets", func(r chi.Router) {
+		h.ticket.Routes(r)
+	})
+
+	// SLA policies, business hours, escalation rules (FR-D021 to FR-D027)
+	h.sla.Routes(r)
+
+	// Problems & known errors (FR-D017 to FR-D020)
+	r.Route("/problems", func(r chi.Router) {
+		h.problem.Routes(r)
+	})
+
+	// Support queues (FR-D030, FR-D031)
+	r.Route("/queues", func(r chi.Router) {
+		h.queue.Routes(r)
 	})
 }
