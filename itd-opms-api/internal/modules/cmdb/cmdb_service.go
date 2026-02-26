@@ -39,19 +39,17 @@ func NewCMDBService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *CMDBServi
 
 // cmdbItemColumns is the canonical column list for the cmdb_items table.
 const cmdbItemColumns = `
-	id, tenant_id, ci_type, name, description,
-	status, environment, criticality, owner_id,
-	linked_asset_id, attributes, dependencies,
-	version, created_at, updated_at`
+	id, tenant_id, ci_type, name, status,
+	asset_id, attributes, version,
+	created_at, updated_at`
 
 // scanCMDBItem scans a single CMDB item row into a CMDBItem struct.
 func scanCMDBItem(row pgx.Row) (CMDBItem, error) {
 	var c CMDBItem
 	err := row.Scan(
-		&c.ID, &c.TenantID, &c.CIType, &c.Name, &c.Description,
-		&c.Status, &c.Environment, &c.Criticality, &c.OwnerID,
-		&c.LinkedAssetID, &c.Attributes, &c.Dependencies,
-		&c.Version, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.TenantID, &c.CIType, &c.Name, &c.Status,
+		&c.AssetID, &c.Attributes, &c.Version,
+		&c.CreatedAt, &c.UpdatedAt,
 	)
 	return c, err
 }
@@ -62,10 +60,9 @@ func scanCMDBItems(rows pgx.Rows) ([]CMDBItem, error) {
 	for rows.Next() {
 		var c CMDBItem
 		if err := rows.Scan(
-			&c.ID, &c.TenantID, &c.CIType, &c.Name, &c.Description,
-			&c.Status, &c.Environment, &c.Criticality, &c.OwnerID,
-			&c.LinkedAssetID, &c.Attributes, &c.Dependencies,
-			&c.Version, &c.CreatedAt, &c.UpdatedAt,
+			&c.ID, &c.TenantID, &c.CIType, &c.Name, &c.Status,
+			&c.AssetID, &c.Attributes, &c.Version,
+			&c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -98,29 +95,22 @@ func (s *CMDBService) CreateCMDBItem(ctx context.Context, req CreateCMDBItemRequ
 	if attributes == nil {
 		attributes = json.RawMessage("{}")
 	}
-	dependencies := req.Dependencies
-	if dependencies == nil {
-		dependencies = []uuid.UUID{}
-	}
 
 	query := `
 		INSERT INTO cmdb_items (
-			id, tenant_id, ci_type, name, description,
-			status, environment, criticality, owner_id,
-			linked_asset_id, attributes, dependencies,
-			version, created_at, updated_at
+			id, tenant_id, ci_type, name, status,
+			asset_id, attributes, version,
+			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5,
-			COALESCE($6, 'active'), $7, $8, $9,
-			$10, $11, $12,
-			1, $13, $14
+			$1, $2, $3, $4, COALESCE($5, 'active'),
+			$6, $7, 1,
+			$8, $9
 		)
 		RETURNING ` + cmdbItemColumns
 
 	item, err := scanCMDBItem(s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.CIType, req.Name, req.Description,
-		req.Status, req.Environment, req.Criticality, req.OwnerID,
-		req.LinkedAssetID, attributes, dependencies,
+		id, auth.TenantID, req.CIType, req.Name, req.Status,
+		req.AssetID, attributes,
 		now, now,
 	))
 	if err != nil {
@@ -214,6 +204,52 @@ func (s *CMDBService) ListCMDBItems(ctx context.Context, ciType, status *string,
 	return items, total, nil
 }
 
+// SearchCMDBItems performs a full-text search on configuration items by name, CI type, or description.
+func (s *CMDBService) SearchCMDBItems(ctx context.Context, query string, params types.PaginationParams) ([]CMDBItem, int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, 0, apperrors.Unauthorized("authentication required")
+	}
+
+	searchPattern := "%" + query + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM cmdb_items
+		WHERE tenant_id = $1
+			AND (name ILIKE $2 OR ci_type ILIKE $2 OR description ILIKE $2)`
+
+	var total int64
+	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, searchPattern).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to count CMDB search results", err)
+	}
+
+	dataQuery := `
+		SELECT ` + cmdbItemColumns + `
+		FROM cmdb_items
+		WHERE tenant_id = $1
+			AND (name ILIKE $2 OR ci_type ILIKE $2 OR description ILIKE $2)
+		ORDER BY created_at DESC
+		LIMIT $3 OFFSET $4`
+
+	rows, err := s.pool.Query(ctx, dataQuery,
+		auth.TenantID, searchPattern,
+		params.Limit, params.Offset(),
+	)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to search CMDB items", err)
+	}
+	defer rows.Close()
+
+	items, err := scanCMDBItems(rows)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to scan CMDB search results", err)
+	}
+
+	return items, total, nil
+}
+
 // UpdateCMDBItem updates an existing configuration item using COALESCE partial update.
 // Also increments the version number.
 func (s *CMDBService) UpdateCMDBItem(ctx context.Context, id uuid.UUID, req UpdateCMDBItemRequest) (CMDBItem, error) {
@@ -232,24 +268,19 @@ func (s *CMDBService) UpdateCMDBItem(ctx context.Context, id uuid.UUID, req Upda
 
 	updateQuery := `
 		UPDATE cmdb_items SET
-			name = COALESCE($1, name),
-			description = COALESCE($2, description),
+			ci_type = COALESCE($1, ci_type),
+			name = COALESCE($2, name),
 			status = COALESCE($3, status),
-			environment = COALESCE($4, environment),
-			criticality = COALESCE($5, criticality),
-			owner_id = COALESCE($6, owner_id),
-			linked_asset_id = COALESCE($7, linked_asset_id),
-			attributes = COALESCE($8, attributes),
-			dependencies = COALESCE($9, dependencies),
+			asset_id = COALESCE($4, asset_id),
+			attributes = COALESCE($5, attributes),
 			version = version + 1,
-			updated_at = $10
-		WHERE id = $11 AND tenant_id = $12
+			updated_at = $6
+		WHERE id = $7 AND tenant_id = $8
 		RETURNING ` + cmdbItemColumns
 
 	item, err := scanCMDBItem(s.pool.QueryRow(ctx, updateQuery,
-		req.Name, req.Description, req.Status,
-		req.Environment, req.Criticality, req.OwnerID,
-		req.LinkedAssetID, req.Attributes, req.Dependencies,
+		req.CIType, req.Name, req.Status,
+		req.AssetID, req.Attributes,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -309,6 +340,10 @@ func (s *CMDBService) DeleteCMDBItem(ctx context.Context, id uuid.UUID) error {
 // Relationships
 // ──────────────────────────────────────────────
 
+// relationshipColumns is the canonical column list for the cmdb_relationships table.
+const relationshipColumns = `
+	id, source_ci_id, target_ci_id, relationship_type, description, is_active, created_at`
+
 // CreateRelationship creates a new relationship between two CIs.
 func (s *CMDBService) CreateRelationship(ctx context.Context, req CreateRelationshipRequest) (CMDBRelationship, error) {
 	auth := types.GetAuthContext(ctx)
@@ -320,16 +355,16 @@ func (s *CMDBService) CreateRelationship(ctx context.Context, req CreateRelation
 	now := time.Now().UTC()
 
 	query := `
-		INSERT INTO cmdb_relationships (id, tenant_id, source_ci_id, target_ci_id, relationship_type, description, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, tenant_id, source_ci_id, target_ci_id, relationship_type, description, created_at`
+		INSERT INTO cmdb_relationships (id, source_ci_id, target_ci_id, relationship_type, description, is_active, created_at)
+		VALUES ($1, $2, $3, $4, $5, true, $6)
+		RETURNING ` + relationshipColumns
 
 	var rel CMDBRelationship
 	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.SourceCIID, req.TargetCIID, req.RelationshipType, req.Description, now,
+		id, req.SourceCIID, req.TargetCIID, req.RelationshipType, req.Description, now,
 	).Scan(
-		&rel.ID, &rel.TenantID, &rel.SourceCIID, &rel.TargetCIID,
-		&rel.RelationshipType, &rel.Description, &rel.CreatedAt,
+		&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
+		&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
 	)
 	if err != nil {
 		return CMDBRelationship{}, apperrors.Internal("failed to create relationship", err)
@@ -363,13 +398,12 @@ func (s *CMDBService) ListRelationshipsByCI(ctx context.Context, ciID uuid.UUID)
 	}
 
 	query := `
-		SELECT id, tenant_id, source_ci_id, target_ci_id, relationship_type, description, created_at
+		SELECT ` + relationshipColumns + `
 		FROM cmdb_relationships
-		WHERE tenant_id = $1
-			AND (source_ci_id = $2 OR target_ci_id = $2)
+		WHERE (source_ci_id = $1 OR target_ci_id = $1)
 		ORDER BY created_at DESC`
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID, ciID)
+	rows, err := s.pool.Query(ctx, query, ciID)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list relationships", err)
 	}
@@ -379,8 +413,8 @@ func (s *CMDBService) ListRelationshipsByCI(ctx context.Context, ciID uuid.UUID)
 	for rows.Next() {
 		var rel CMDBRelationship
 		if err := rows.Scan(
-			&rel.ID, &rel.TenantID, &rel.SourceCIID, &rel.TargetCIID,
-			&rel.RelationshipType, &rel.Description, &rel.CreatedAt,
+			&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
+			&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan relationship", err)
 		}
@@ -395,6 +429,8 @@ func (s *CMDBService) ListRelationshipsByCI(ctx context.Context, ciID uuid.UUID)
 		rels = []CMDBRelationship{}
 	}
 
+	_ = auth
+
 	return rels, nil
 }
 
@@ -406,8 +442,8 @@ func (s *CMDBService) DeleteRelationship(ctx context.Context, id uuid.UUID) erro
 	}
 
 	result, err := s.pool.Exec(ctx, `
-		DELETE FROM cmdb_relationships WHERE id = $1 AND tenant_id = $2`,
-		id, auth.TenantID,
+		DELETE FROM cmdb_relationships WHERE id = $1`,
+		id,
 	)
 	if err != nil {
 		return apperrors.Internal("failed to delete relationship", err)
@@ -437,9 +473,20 @@ func (s *CMDBService) DeleteRelationship(ctx context.Context, id uuid.UUID) erro
 
 // reconciliationRunColumns is the canonical column list for the reconciliation_runs table.
 const reconciliationRunColumns = `
-	id, tenant_id, source_name, started_at, completed_at,
-	status, items_scanned, items_matched, items_unmatched,
-	items_new, summary, created_at`
+	id, tenant_id, source, started_at, completed_at,
+	matches, discrepancies, new_items,
+	report, created_at`
+
+// scanReconciliationRun scans a single reconciliation run row.
+func scanReconciliationRun(row pgx.Row) (ReconciliationRun, error) {
+	var run ReconciliationRun
+	err := row.Scan(
+		&run.ID, &run.TenantID, &run.Source, &run.StartedAt, &run.CompletedAt,
+		&run.Matches, &run.Discrepancies, &run.NewItems,
+		&run.Report, &run.CreatedAt,
+	)
+	return run, err
+}
 
 // CreateReconciliationRun creates a new reconciliation run record.
 func (s *CMDBService) CreateReconciliationRun(ctx context.Context, req CreateReconciliationRunRequest) (ReconciliationRun, error) {
@@ -453,31 +500,26 @@ func (s *CMDBService) CreateReconciliationRun(ctx context.Context, req CreateRec
 
 	query := `
 		INSERT INTO reconciliation_runs (
-			id, tenant_id, source_name, started_at,
-			status, items_scanned, items_matched, items_unmatched,
-			items_new, created_at
+			id, tenant_id, source, started_at,
+			matches, discrepancies, new_items,
+			created_at
 		) VALUES (
 			$1, $2, $3, $4,
-			'in_progress', 0, 0, 0,
-			0, $5
+			0, 0, 0,
+			$5
 		)
 		RETURNING ` + reconciliationRunColumns
 
-	var run ReconciliationRun
-	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.SourceName, now, now,
-	).Scan(
-		&run.ID, &run.TenantID, &run.SourceName, &run.StartedAt, &run.CompletedAt,
-		&run.Status, &run.ItemsScanned, &run.ItemsMatched, &run.ItemsUnmatched,
-		&run.ItemsNew, &run.Summary, &run.CreatedAt,
-	)
+	run, err := scanReconciliationRun(s.pool.QueryRow(ctx, query,
+		id, auth.TenantID, req.Source, now, now,
+	))
 	if err != nil {
 		return ReconciliationRun{}, apperrors.Internal("failed to create reconciliation run", err)
 	}
 
 	// Audit log.
 	changes, _ := json.Marshal(map[string]any{
-		"source_name": req.SourceName,
+		"source": req.Source,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   auth.TenantID,
@@ -502,12 +544,7 @@ func (s *CMDBService) GetReconciliationRun(ctx context.Context, id uuid.UUID) (R
 
 	query := `SELECT ` + reconciliationRunColumns + ` FROM reconciliation_runs WHERE id = $1 AND tenant_id = $2`
 
-	var run ReconciliationRun
-	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
-		&run.ID, &run.TenantID, &run.SourceName, &run.StartedAt, &run.CompletedAt,
-		&run.Status, &run.ItemsScanned, &run.ItemsMatched, &run.ItemsUnmatched,
-		&run.ItemsNew, &run.Summary, &run.CreatedAt,
-	)
+	run, err := scanReconciliationRun(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return ReconciliationRun{}, apperrors.NotFound("ReconciliationRun", id.String())
@@ -552,9 +589,9 @@ func (s *CMDBService) ListReconciliationRuns(ctx context.Context, params types.P
 	for rows.Next() {
 		var run ReconciliationRun
 		if err := rows.Scan(
-			&run.ID, &run.TenantID, &run.SourceName, &run.StartedAt, &run.CompletedAt,
-			&run.Status, &run.ItemsScanned, &run.ItemsMatched, &run.ItemsUnmatched,
-			&run.ItemsNew, &run.Summary, &run.CreatedAt,
+			&run.ID, &run.TenantID, &run.Source, &run.StartedAt, &run.CompletedAt,
+			&run.Matches, &run.Discrepancies, &run.NewItems,
+			&run.Report, &run.CreatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan reconciliation run", err)
 		}
@@ -587,45 +624,29 @@ func (s *CMDBService) CompleteReconciliationRun(ctx context.Context, id uuid.UUI
 
 	now := time.Now().UTC()
 
-	completedStatus := "completed"
-	if req.Status != nil {
-		completedStatus = *req.Status
-	}
-
 	query := `
 		UPDATE reconciliation_runs SET
 			completed_at = $1,
-			status = $2,
-			items_scanned = COALESCE($3, items_scanned),
-			items_matched = COALESCE($4, items_matched),
-			items_unmatched = COALESCE($5, items_unmatched),
-			items_new = COALESCE($6, items_new),
-			summary = COALESCE($7, summary)
-		WHERE id = $8 AND tenant_id = $9
+			matches = $2,
+			discrepancies = $3,
+			new_items = $4,
+			report = COALESCE($5, report)
+		WHERE id = $6 AND tenant_id = $7
 		RETURNING ` + reconciliationRunColumns
 
-	var run ReconciliationRun
-	err = s.pool.QueryRow(ctx, query,
-		now, completedStatus,
-		req.ItemsScanned, req.ItemsMatched, req.ItemsUnmatched,
-		req.ItemsNew, req.Summary,
+	run, err := scanReconciliationRun(s.pool.QueryRow(ctx, query,
+		now, req.Matches, req.Discrepancies, req.NewItems, req.Report,
 		id, auth.TenantID,
-	).Scan(
-		&run.ID, &run.TenantID, &run.SourceName, &run.StartedAt, &run.CompletedAt,
-		&run.Status, &run.ItemsScanned, &run.ItemsMatched, &run.ItemsUnmatched,
-		&run.ItemsNew, &run.Summary, &run.CreatedAt,
-	)
+	))
 	if err != nil {
 		return ReconciliationRun{}, apperrors.Internal("failed to complete reconciliation run", err)
 	}
 
 	// Audit log.
 	changes, _ := json.Marshal(map[string]any{
-		"status":          completedStatus,
-		"items_scanned":   req.ItemsScanned,
-		"items_matched":   req.ItemsMatched,
-		"items_unmatched": req.ItemsUnmatched,
-		"items_new":       req.ItemsNew,
+		"matches":       req.Matches,
+		"discrepancies": req.Discrepancies,
+		"new_items":     req.NewItems,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   auth.TenantID,

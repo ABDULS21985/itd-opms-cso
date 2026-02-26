@@ -33,6 +33,7 @@ func NewAssetHandler(svc *AssetService) *AssetHandler {
 func (h *AssetHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("cmdb.view")).Get("/", h.ListAssets)
 	r.With(middleware.RequirePermission("cmdb.view")).Get("/stats", h.GetAssetStats)
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/search", h.SearchAssets)
 	r.With(middleware.RequirePermission("cmdb.view")).Get("/{id}", h.GetAsset)
 	r.With(middleware.RequirePermission("cmdb.manage")).Post("/", h.CreateAsset)
 	r.With(middleware.RequirePermission("cmdb.manage")).Put("/{id}", h.UpdateAsset)
@@ -147,6 +148,31 @@ func (h *AssetHandler) GetAssetStats(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, stats, nil)
 }
 
+// SearchAssets handles GET /search — searches assets by name, tag, serial number, or model.
+func (h *AssetHandler) SearchAssets(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Search query (q) is required")
+		return
+	}
+
+	params := types.ParsePagination(r)
+
+	assets, total, err := h.svc.SearchAssets(r.Context(), q, params)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, assets, types.NewMeta(total, params))
+}
+
 // GetAsset handles GET /{id} — retrieves a single asset.
 func (h *AssetHandler) GetAsset(w http.ResponseWriter, r *http.Request) {
 	auth := types.GetAuthContext(r.Context())
@@ -189,8 +215,18 @@ func (h *AssetHandler) CreateAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AssetType == "" {
+	if req.Type == "" {
 		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Asset type is required")
+		return
+	}
+
+	if req.Category == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Category is required")
+		return
+	}
+
+	if req.AssetTag == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Asset tag is required")
 		return
 	}
 

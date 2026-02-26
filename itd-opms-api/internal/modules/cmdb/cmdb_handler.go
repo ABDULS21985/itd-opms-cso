@@ -326,8 +326,8 @@ func (h *CMDBCIHandler) CreateReconciliationRun(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if req.SourceName == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Source name is required")
+	if req.Source == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Source is required")
 		return
 	}
 
