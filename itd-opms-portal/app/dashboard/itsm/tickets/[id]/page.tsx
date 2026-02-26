@@ -347,7 +347,7 @@ export default function TicketDetailPage({
   const { data: historyData } = useTicketStatusHistory(id);
   const { data: breachesData } = useSLABreaches(id);
 
-  const addComment = useAddComment();
+  const addComment = useAddComment(id);
   const transitionTicket = useTransitionTicket();
   const assignTicket = useAssignTicket();
   const resolveTicket = useResolveTicket();
