@@ -155,7 +155,7 @@ func (s *Server) Setup() {
 	planningHandler := planning.NewHandler(s.pool, auditService)
 	itsmHandler := itsm.NewHandler(s.pool, auditService)
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
-	knowledgeHandler := knowledge.NewHandler()
+	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler()
 	reportingHandler := reporting.NewHandler()
 
