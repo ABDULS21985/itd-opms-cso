@@ -103,9 +103,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const userPermissions = user?.permissions || [];
 
-  // Filter modules based on user permissions (show all if no permissions set yet)
+  // Filter modules based on user permissions (show all if wildcard or no permissions set)
   const visibleModules = useMemo(() => {
-    if (userPermissions.length === 0) return modules;
+    if (userPermissions.length === 0 || userPermissions.includes("*")) return modules;
     return modules.filter(
       (m) => !m.permission || userPermissions.includes(m.permission),
     );
