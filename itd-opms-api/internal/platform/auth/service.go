@@ -1,0 +1,374 @@
+package auth
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
+	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/helpers"
+)
+
+// TokenPair holds a freshly generated access + refresh token pair.
+type TokenPair struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+// UserProfile represents the authenticated user's profile data.
+type UserProfile struct {
+	ID          uuid.UUID `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"displayName"`
+	TenantID    uuid.UUID `json:"tenantId"`
+	JobTitle    *string   `json:"jobTitle,omitempty"`
+	Department  *string   `json:"department,omitempty"`
+	Office      *string   `json:"office,omitempty"`
+	Unit        *string   `json:"unit,omitempty"`
+	Roles       []string  `json:"roles"`
+	Permissions []string  `json:"permissions"`
+}
+
+// LoginResponse is the full response returned on successful login.
+type LoginResponse struct {
+	AccessToken  string      `json:"accessToken"`
+	RefreshToken string      `json:"refreshToken"`
+	User         UserProfile `json:"user"`
+}
+
+// AuthService handles authentication logic: login, token refresh, and logout.
+type AuthService struct {
+	pool   *pgxpool.Pool
+	jwtCfg config.JWTConfig
+}
+
+// NewAuthService creates a new AuthService.
+func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig) *AuthService {
+	return &AuthService{
+		pool:   pool,
+		jwtCfg: jwtCfg,
+	}
+}
+
+// Login authenticates a user by email and password, returning a token pair
+// and user profile on success. Uses raw pgx queries.
+func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, error) {
+	// Find the user by email.
+	var (
+		userID       uuid.UUID
+		tenantID     uuid.UUID
+		displayName  string
+		passwordHash *string
+		jobTitle     *string
+		department   *string
+		office       *string
+		unit         *string
+	)
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, tenant_id, display_name, password_hash, job_title, department, office, unit
+		 FROM users WHERE email = $1 AND is_active = true`,
+		email,
+	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.Unauthorized("Invalid email or password")
+		}
+		return nil, apperrors.Internal("Failed to query user", err)
+	}
+
+	// Verify password.
+	if passwordHash == nil || *passwordHash == "" {
+		return nil, apperrors.Unauthorized("Invalid email or password")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(password)); err != nil {
+		return nil, apperrors.Unauthorized("Invalid email or password")
+	}
+
+	// Fetch roles and aggregate permissions.
+	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user roles", err)
+	}
+
+	// Generate tokens.
+	accessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to generate access token", err)
+	}
+
+	refreshToken := GenerateRefreshToken()
+
+	// Save the refresh token hash in the database.
+	tokenHash := helpers.SHA256Checksum([]byte(refreshToken))
+	expiresAt := time.Now().Add(s.jwtCfg.RefreshExpiry)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, tokenHash, expiresAt,
+	)
+	if err != nil {
+		slog.Error("failed to save refresh token", "error", err.Error(), "user_id", userID)
+		return nil, apperrors.Internal("Failed to create session", err)
+	}
+
+	// Update last login timestamp.
+	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
+
+	return &LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User: UserProfile{
+			ID:          userID,
+			Email:       email,
+			DisplayName: displayName,
+			TenantID:    tenantID,
+			JobTitle:    jobTitle,
+			Department:  department,
+			Office:      office,
+			Unit:        unit,
+			Roles:       roles,
+			Permissions: permissions,
+		},
+	}, nil
+}
+
+// RefreshToken validates the given refresh token and issues a new token pair.
+func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
+	tokenHash := helpers.SHA256Checksum([]byte(refreshToken))
+
+	// Look up the refresh token.
+	var (
+		tokenID uuid.UUID
+		userID  uuid.UUID
+	)
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, user_id FROM refresh_tokens
+		 WHERE token_hash = $1 AND revoked = false AND expires_at > NOW()`,
+		tokenHash,
+	).Scan(&tokenID, &userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.Unauthorized("Invalid or expired refresh token")
+		}
+		return nil, apperrors.Internal("Failed to validate refresh token", err)
+	}
+
+	// Revoke the old refresh token (single-use rotation).
+	_, err = s.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked = true WHERE id = $1`,
+		tokenID,
+	)
+	if err != nil {
+		slog.Error("failed to revoke old refresh token", "error", err.Error(), "token_id", tokenID)
+	}
+
+	// Fetch user data for the new access token.
+	var (
+		tenantID    uuid.UUID
+		email       string
+		displayName string
+	)
+	err = s.pool.QueryRow(ctx,
+		`SELECT tenant_id, email, display_name FROM users WHERE id = $1 AND is_active = true`,
+		userID,
+	).Scan(&tenantID, &email, &displayName)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.Unauthorized("User account is no longer active")
+		}
+		return nil, apperrors.Internal("Failed to fetch user", err)
+	}
+
+	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user roles", err)
+	}
+
+	// Generate new tokens.
+	newAccessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to generate access token", err)
+	}
+
+	newRefreshToken := GenerateRefreshToken()
+	newTokenHash := helpers.SHA256Checksum([]byte(newRefreshToken))
+	expiresAt := time.Now().Add(s.jwtCfg.RefreshExpiry)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, newTokenHash, expiresAt,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to create session", err)
+	}
+
+	return &TokenPair{
+		AccessToken:  newAccessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
+}
+
+// Logout revokes the specified refresh token.
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	tokenHash := helpers.SHA256Checksum([]byte(refreshToken))
+
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked = true WHERE token_hash = $1 AND revoked = false`,
+		tokenHash,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to revoke refresh token", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		slog.Warn("logout: refresh token not found or already revoked",
+			"token_hash_prefix", tokenHash[:8],
+		)
+	}
+
+	return nil
+}
+
+// GetMe returns the user profile for the given user ID, including roles and
+// permissions.
+func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile, error) {
+	var (
+		email       string
+		displayName string
+		tenantID    uuid.UUID
+		jobTitle    *string
+		department  *string
+		office      *string
+		unit        *string
+	)
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT email, display_name, tenant_id, job_title, department, office, unit
+		 FROM users WHERE id = $1 AND is_active = true`,
+		userID,
+	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NotFound("user", userID.String())
+		}
+		return nil, apperrors.Internal("Failed to fetch user profile", err)
+	}
+
+	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user roles", err)
+	}
+
+	return &UserProfile{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		TenantID:    tenantID,
+		JobTitle:    jobTitle,
+		Department:  department,
+		Office:      office,
+		Unit:        unit,
+		Roles:       roles,
+		Permissions: permissions,
+	}, nil
+}
+
+// getUserRolesAndPermissions queries the role_bindings + roles tables and
+// aggregates all roles and permissions for a user. It also includes
+// permissions inherited through active delegations.
+func (s *AuthService) getUserRolesAndPermissions(ctx context.Context, userID uuid.UUID) ([]string, []string, error) {
+	roleSet := make(map[string]struct{})
+	permSet := make(map[string]struct{})
+
+	// Direct role bindings.
+	rows, err := s.pool.Query(ctx,
+		`SELECT r.name, r.permissions
+		 FROM role_bindings rb
+		 JOIN roles r ON r.id = rb.role_id
+		 WHERE rb.user_id = $1 AND rb.is_active = true
+		   AND (rb.expires_at IS NULL OR rb.expires_at > NOW())`,
+		userID,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query role bindings: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var roleName string
+		var permJSON json.RawMessage
+		if err := rows.Scan(&roleName, &permJSON); err != nil {
+			return nil, nil, fmt.Errorf("scan role binding: %w", err)
+		}
+		roleSet[roleName] = struct{}{}
+		parsePermissions(permJSON, permSet)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("iterate role bindings: %w", err)
+	}
+
+	// Delegated roles.
+	dRows, err := s.pool.Query(ctx,
+		`SELECT r.name, r.permissions
+		 FROM delegations d
+		 JOIN roles r ON r.id = d.role_id
+		 WHERE d.delegate_id = $1 AND d.is_active = true
+		   AND d.starts_at <= NOW() AND d.ends_at > NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query delegations: %w", err)
+	}
+	defer dRows.Close()
+
+	for dRows.Next() {
+		var roleName string
+		var permJSON json.RawMessage
+		if err := dRows.Scan(&roleName, &permJSON); err != nil {
+			return nil, nil, fmt.Errorf("scan delegation: %w", err)
+		}
+		roleSet[roleName] = struct{}{}
+		parsePermissions(permJSON, permSet)
+	}
+	if err := dRows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("iterate delegations: %w", err)
+	}
+
+	// Convert sets to slices.
+	roles := make([]string, 0, len(roleSet))
+	for r := range roleSet {
+		roles = append(roles, r)
+	}
+
+	permissions := make([]string, 0, len(permSet))
+	for p := range permSet {
+		permissions = append(permissions, p)
+	}
+
+	return roles, permissions, nil
+}
+
+// parsePermissions unmarshals a JSON array of permission strings and adds
+// them to the provided set.
+func parsePermissions(raw json.RawMessage, permSet map[string]struct{}) {
+	if len(raw) == 0 {
+		return
+	}
+	var perms []string
+	if err := json.Unmarshal(raw, &perms); err != nil {
+		slog.Warn("failed to parse permissions JSON", "error", err.Error(), "raw", string(raw))
+		return
+	}
+	for _, p := range perms {
+		permSet[p] = struct{}{}
+	}
+}
