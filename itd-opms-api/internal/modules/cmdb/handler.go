@@ -1,31 +1,44 @@
 package cmdb
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
-// Handler handles HTTP requests for the cmdb module.
-type Handler struct{}
-
-// NewHandler creates a new cmdb Handler.
-func NewHandler() *Handler {
-	return &Handler{}
+// Handler is the top-level HTTP handler for the CMDB module.
+// It composes all sub-handlers for assets, CMDB configuration items,
+// licenses, warranties, and renewal alerts.
+type Handler struct {
+	asset   *AssetHandler
+	cmdbCI  *CMDBCIHandler
+	license *LicenseHandler
 }
 
-// Routes mounts cmdb endpoints on the given router.
+// NewHandler creates a new CMDB Handler with all sub-handlers wired up.
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+	assetSvc := NewAssetService(pool, auditSvc)
+	cmdbSvc := NewCMDBService(pool, auditSvc)
+	licenseSvc := NewLicenseService(pool, auditSvc)
+
+	return &Handler{
+		asset:   NewAssetHandler(assetSvc),
+		cmdbCI:  NewCMDBCIHandler(cmdbSvc),
+		license: NewLicenseHandler(licenseSvc),
+	}
+}
+
+// Routes mounts all CMDB sub-routes on the given router.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/", h.index)
-}
-
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":  "info",
-		"message": "cmdb module - not yet implemented",
-		"data":    nil,
+	// Asset lifecycle management (FR-E001 to FR-E005)
+	r.Route("/assets", func(r chi.Router) {
+		h.asset.Routes(r)
 	})
+
+	// CMDB & Relationships (FR-E006 to FR-E008)
+	h.cmdbCI.Routes(r)
+
+	// Licenses, Warranties & Renewals (FR-E009 to FR-E012)
+	h.license.Routes(r)
 }
