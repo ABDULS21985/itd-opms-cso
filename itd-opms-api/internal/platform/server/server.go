@@ -162,7 +162,7 @@ func (s *Server) Setup() {
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
-	reportingHandler := reporting.NewHandler()
+	reportingHandler := reporting.NewHandler(s.pool, auditService)
 
 	// --- Routes ---
 	r.Route("/api/v1", func(r chi.Router) {

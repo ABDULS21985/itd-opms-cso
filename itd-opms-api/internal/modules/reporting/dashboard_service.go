@@ -2,7 +2,6 @@ package reporting
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"time"
 

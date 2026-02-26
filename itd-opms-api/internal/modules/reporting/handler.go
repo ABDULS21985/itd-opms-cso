@@ -1,31 +1,37 @@
 package reporting
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
-// Handler handles HTTP requests for the reporting module.
-type Handler struct{}
-
-// NewHandler creates a new reporting Handler.
-func NewHandler() *Handler {
-	return &Handler{}
+// Handler is the top-level HTTP handler for the Reporting & Analytics module.
+// It composes all sub-handlers for dashboards, reports, and search.
+type Handler struct {
+	dashboard *DashboardHandler
+	report    *ReportHandler
+	search    *SearchHandler
 }
 
-// Routes mounts reporting endpoints on the given router.
+// NewHandler creates a new Reporting Handler with all sub-handlers wired up.
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+	return &Handler{
+		dashboard: NewDashboardHandler(NewDashboardService(pool, auditSvc)),
+		report:    NewReportHandler(NewReportService(pool, auditSvc)),
+		search:    NewSearchHandler(NewSearchService(pool, auditSvc)),
+	}
+}
+
+// Routes mounts all Reporting sub-routes on the given router.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/", h.index)
-}
+	// Dashboard & charts
+	r.Route("/dashboards", func(r chi.Router) { h.dashboard.Routes(r) })
 
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":  "info",
-		"message": "reporting module - not yet implemented",
-		"data":    nil,
-	})
+	// Report definitions & runs
+	r.Route("/reports", func(r chi.Router) { h.report.Routes(r) })
+
+	// Global search
+	r.Route("/search", func(r chi.Router) { h.search.Routes(r) })
 }
