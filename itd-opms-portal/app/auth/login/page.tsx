@@ -100,13 +100,15 @@ export default function LoginPage() {
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-20 -right-20 w-96 h-96 bg-gradient-to-br from-[#1B7340]/30 to-[#C4A962]/20 login-morph" />
           <div className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-gradient-to-br from-[#C4A962]/15 to-[#1B7340]/15 blur-xl login-float-slow" />
-          <div className="absolute bottom-1/4 left-1/4 w-48 h-48 rounded-full bg-gradient-to-br from-[#0E5A2D]/20 to-[#C4A962]/10 blur-lg login-float" />
+          <div className="absolute bottom-1/4 left-1/4 w-48 h-48 rounded-full bg-gradient-to-br from-[#0E5A2D]/20 to-[#C4A962]/10 blur-lg login-float-reverse" />
 
           {/* Floating particles */}
           <div className="absolute top-[15%] left-[20%] w-2 h-2 rounded-full bg-[#C4A962]/40 login-float" />
           <div className="absolute top-[25%] right-[30%] w-1.5 h-1.5 rounded-full bg-white/20 login-float-slow" />
-          <div className="absolute bottom-[35%] left-[40%] w-2.5 h-2.5 rounded-full bg-[#C4A962]/30 login-float" />
+          <div className="absolute bottom-[35%] left-[40%] w-2.5 h-2.5 rounded-full bg-[#C4A962]/30 login-float-reverse" />
           <div className="absolute top-[60%] left-[15%] w-1 h-1 rounded-full bg-white/30 login-float-slow" />
+          <div className="absolute top-[45%] right-[15%] w-2 h-2 rounded-full bg-[#C4A962]/35 login-float" />
+          <div className="absolute bottom-[20%] right-[25%] w-1.5 h-1.5 rounded-full bg-white/25 login-float-reverse" />
         </div>
 
         {/* Content */}

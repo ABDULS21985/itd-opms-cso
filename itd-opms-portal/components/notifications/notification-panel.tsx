@@ -74,7 +74,7 @@ export function NotificationPanel({ open, onOpenChange }: NotificationPanelProps
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] bg-[var(--surface-0)] shadow-2xl flex flex-col"
+            className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] bg-[var(--surface-1)] shadow-2xl flex flex-col"
           >
             {/* Header */}
             <div className="px-5 py-4 border-b border-[var(--border)] flex-shrink-0">

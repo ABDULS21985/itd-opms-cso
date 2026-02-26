@@ -10,6 +10,7 @@
    ============================================================================= */
 
 const TOKEN_KEY = "opms-token";
+const REFRESH_TOKEN_KEY = "opms-refresh-token";
 const AUTH_FLAG_COOKIE = "opms-authenticated";
 const AUTH_MODE_KEY = "opms-auth-mode"; // "oidc" | "dev"
 
@@ -222,6 +223,19 @@ export function setToken(token: string): void {
 export function removeToken(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+/** [DEV-MODE ONLY] Store the refresh token in localStorage. */
+export function setRefreshToken(token: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+}
+
+/** [DEV-MODE ONLY] Get the refresh token from localStorage. */
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Shield, AlertCircle, RefreshCw } from "lucide-react";
@@ -11,7 +11,7 @@ const API_BASE_URL =
 
 type CallbackStatus = "processing" | "success" | "error";
 
-export default function OIDCCallbackPage() {
+function OIDCCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<CallbackStatus>("processing");
@@ -233,5 +233,21 @@ export default function OIDCCallbackPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+function CallbackFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[var(--surface-1)]">
+      <div className="w-10 h-10 border-3 border-[#1B7340]/20 border-t-[#1B7340] rounded-full animate-spin" />
+    </div>
+  );
+}
+
+export default function OIDCCallbackPage() {
+  return (
+    <Suspense fallback={<CallbackFallback />}>
+      <OIDCCallbackContent />
+    </Suspense>
   );
 }

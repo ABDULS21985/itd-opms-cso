@@ -14,6 +14,7 @@ import {
   getToken,
   setToken,
   removeToken,
+  setRefreshToken,
   isAuthenticated,
   clearSession,
   setAuthenticatedFlag,
@@ -107,15 +108,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------------
   const login = useCallback(
     async (email: string, password: string) => {
-      const response = await apiClient.post<{ token: string }>(
-        "/auth/login",
-        { email, password },
-      );
-      setToken(response.token);
+      const response = await apiClient.post<{
+        accessToken: string;
+        refreshToken: string;
+        user: User;
+      }>("/auth/login", { email, password });
+      setToken(response.accessToken);
+      setRefreshToken(response.refreshToken);
       setAuthMode("dev");
-      await refreshUser();
+      setUser(response.user);
+      setIsLoading(false);
     },
-    [refreshUser],
+    [],
   );
 
   // ---------------------------------------------------------------------------
