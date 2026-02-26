@@ -944,7 +944,7 @@ func (s *TicketService) AddComment(ctx context.Context, ticketID uuid.UUID, req 
 
 	// If this is an external comment and the ticket is pending_customer,
 	// auto-transition to in_progress (customer responded, SLA resumes).
-	if !req.IsInternal && existing.Status == "pending_customer" {
+	if (req.IsInternal == nil || !*req.IsInternal) && existing.Status == "pending_customer" {
 		transReq := TransitionTicketRequest{
 			Status: "in_progress",
 			Reason: strPtr("Customer responded via comment"),
