@@ -33,6 +33,7 @@ CREATE INDEX idx_audit_correlation ON audit_events(correlation_id) WHERE correla
 -- ──────────────────────────────────────────────
 -- Trigger: compute SHA-256 checksum on INSERT
 -- ──────────────────────────────────────────────
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_audit_checksum()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -54,6 +55,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_audit_checksum
     BEFORE INSERT ON audit_events

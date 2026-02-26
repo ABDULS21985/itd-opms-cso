@@ -28,6 +28,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 )
@@ -96,6 +97,8 @@ func (s *Server) Setup() {
 	}
 
 	// --- Services ---
+	authService := auth.NewAuthService(s.pool, s.cfg.JWT)
+	authHandler := auth.NewAuthHandler(authService)
 	auditService := audit.NewAuditService(s.pool)
 	auditHandler := audit.NewAuditHandler(auditService)
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
@@ -116,10 +119,19 @@ func (s *Server) Setup() {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.PublicRoute)
 			healthHandler.Routes(r)
-			r.Route("/auth", func(r chi.Router) {
-				r.Get("/login", placeholderHandler("auth login"))
-				r.Post("/login", placeholderHandler("auth login"))
-				r.Post("/refresh", placeholderHandler("auth refresh"))
+		})
+
+		// Auth routes — mixed public/protected in a single mount.
+		r.Route("/auth", func(r chi.Router) {
+			// Public: no auth required.
+			r.Post("/login", authHandler.Login)
+			r.Post("/refresh", authHandler.Refresh)
+
+			// Protected: require valid JWT.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.Auth(s.cfg.JWT.Secret))
+				r.Get("/me", authHandler.Me)
+				r.Post("/logout", authHandler.Logout)
 			})
 		})
 
@@ -127,12 +139,6 @@ func (s *Server) Setup() {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(s.cfg.JWT.Secret))
 			r.Use(audit.AuditMiddleware(auditService))
-
-			// Auth management (protected).
-			r.Route("/auth", func(r chi.Router) {
-				r.Get("/me", placeholderHandler("auth me"))
-				r.Post("/logout", placeholderHandler("auth logout"))
-			})
 
 			// Audit module.
 			r.Route("/audit", func(r chi.Router) {
@@ -217,21 +223,6 @@ func (s *Server) Start() error {
 
 	slog.Info("HTTP server stopped gracefully")
 	return nil
-}
-
-// placeholderHandler returns an HTTP handler that responds with a JSON message
-// indicating the endpoint is a placeholder. This is used for auth routes that
-// are being implemented by another agent.
-func placeholderHandler(name string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
-			"status":  "info",
-			"message": name + " - not yet implemented",
-			"data":    nil,
-		})
-	}
 }
 
 // jsonEncoder returns a new JSON encoder writing to w. This is a package-level

@@ -176,7 +176,7 @@ INSERT INTO users (id, email, display_name, job_title, department, tenant_id, is
     'Information Technology',
     '00000000-0000-0000-0000-000000000001',
     true,
-    '$2a$10$8K1p/a0dL1LXMIgoEDFrwOfMQkR7.HFQBVW1uO1sG1zSaRiiJMi2'
+    '$2a$10$25lLTNSLitmXoxckd4dfNOp39C8lnGOK3FkU/C9sMjJBtOOmXvrpS'
 );
 
 -- Bind admin to global_admin role

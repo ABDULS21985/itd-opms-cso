@@ -16,6 +16,8 @@ type Config struct {
 	MinIO         MinIOConfig
 	NATS          NATSConfig
 	JWT           JWTConfig
+	EntraID       EntraIDConfig
+	Graph         GraphConfig
 	Observability ObservabilityConfig
 	Log           LogConfig
 }
@@ -74,6 +76,38 @@ type JWTConfig struct {
 	RefreshExpiry time.Duration `mapstructure:"refresh_expiry"`
 }
 
+type EntraIDConfig struct {
+	TenantID     string `mapstructure:"tenant_id"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURI  string `mapstructure:"redirect_uri"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+// Issuer returns the OIDC issuer URL for this Entra ID tenant.
+func (e EntraIDConfig) Issuer() string {
+	return fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", e.TenantID)
+}
+
+// JWKSURL returns the JWKS endpoint for token signature verification.
+func (e EntraIDConfig) JWKSURL() string {
+	return fmt.Sprintf("https://login.microsoftonline.com/%s/discovery/v2.0/keys", e.TenantID)
+}
+
+// AuthorizeURL returns the OAuth2 authorize endpoint.
+func (e EntraIDConfig) AuthorizeURL() string {
+	return fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/authorize", e.TenantID)
+}
+
+// TokenURL returns the OAuth2 token endpoint.
+func (e EntraIDConfig) TokenURL() string {
+	return fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", e.TenantID)
+}
+
+type GraphConfig struct {
+	ServiceAccountID string `mapstructure:"service_account_id"`
+}
+
 type ObservabilityConfig struct {
 	OTLPEndpoint string `mapstructure:"otlp_endpoint"`
 	ServiceName  string `mapstructure:"service_name"`
@@ -123,6 +157,16 @@ func Load() (*Config, error) {
 	v.SetDefault("OTEL_SERVICE_NAME", "itd-opms-api")
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("LOG_FORMAT", "json")
+
+	// Entra ID / Microsoft 365
+	v.SetDefault("ENTRA_TENANT_ID", "")
+	v.SetDefault("ENTRA_CLIENT_ID", "")
+	v.SetDefault("ENTRA_CLIENT_SECRET", "")
+	v.SetDefault("ENTRA_REDIRECT_URI", "http://localhost:3000/auth/callback")
+	v.SetDefault("ENTRA_ENABLED", false)
+
+	// Microsoft Graph
+	v.SetDefault("GRAPH_SERVICE_ACCOUNT_ID", "")
 
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
@@ -174,6 +218,16 @@ func Load() (*Config, error) {
 			Secret:        v.GetString("JWT_SECRET"),
 			Expiry:        jwtExpiry,
 			RefreshExpiry: refreshExpiry,
+		},
+		EntraID: EntraIDConfig{
+			TenantID:     v.GetString("ENTRA_TENANT_ID"),
+			ClientID:     v.GetString("ENTRA_CLIENT_ID"),
+			ClientSecret: v.GetString("ENTRA_CLIENT_SECRET"),
+			RedirectURI:  v.GetString("ENTRA_REDIRECT_URI"),
+			Enabled:      v.GetBool("ENTRA_ENABLED"),
+		},
+		Graph: GraphConfig{
+			ServiceAccountID: v.GetString("GRAPH_SERVICE_ACCOUNT_ID"),
 		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),

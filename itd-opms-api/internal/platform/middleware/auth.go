@@ -2,11 +2,17 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -14,12 +20,28 @@ type authContextKey string
 
 const publicRouteKey authContextKey = "public_route"
 
+// AuthConfig holds the configuration needed by the dual-mode auth middleware.
+type AuthConfig struct {
+	JWTSecret      string
+	EntraIDEnabled bool
+	OIDCValidator  *auth.OIDCValidator
+	Pool           *pgxpool.Pool
+}
+
 // Auth returns a middleware that validates JWT Bearer tokens from the
-// Authorization header. On success it populates the request context with
-// an AuthContext containing the user's identity, roles, and permissions.
-// If the route is marked as public via the PublicRoute middleware, the
-// auth check is skipped.
+// Authorization header using the dev-mode HS256 secret.
+// For dual-mode (Entra ID + dev JWT), use AuthDualMode instead.
 func Auth(jwtSecret string) func(http.Handler) http.Handler {
+	return AuthDualMode(AuthConfig{
+		JWTSecret:      jwtSecret,
+		EntraIDEnabled: false,
+	})
+}
+
+// AuthDualMode returns a middleware that supports both dev JWT and Entra ID OIDC.
+// When Entra ID is enabled it tries RS256 OIDC validation first, then falls back
+// to HS256 dev JWT. On success it populates the request context with an AuthContext.
+func AuthDualMode(cfg AuthConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip auth for routes marked as public.
@@ -40,25 +62,54 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := auth.ValidateToken(tokenString, jwtSecret)
-			if err != nil {
-				slog.Warn("invalid JWT token",
-					"error", err.Error(),
-					"path", r.URL.Path,
-					"correlation_id", types.GetCorrelationID(r.Context()),
-				)
-				types.ErrorMessage(w, http.StatusUnauthorized,
-					"UNAUTHORIZED", "Invalid or expired token",
-				)
-				return
+			var authCtx *types.AuthContext
+
+			// Try Entra ID OIDC validation first (if enabled).
+			if cfg.EntraIDEnabled && cfg.OIDCValidator != nil {
+				entraClaims, err := cfg.OIDCValidator.ValidateToken(r.Context(), tokenString)
+				if err == nil {
+					authCtx, err = resolveEntraUser(r.Context(), cfg.Pool, entraClaims)
+					if err != nil {
+						slog.Warn("failed to resolve Entra ID user",
+							"error", err.Error(),
+							"oid", entraClaims.OID,
+							"path", r.URL.Path,
+						)
+						types.ErrorMessage(w, http.StatusUnauthorized,
+							"UNAUTHORIZED", "User account not found or inactive",
+						)
+						return
+					}
+				} else {
+					slog.Debug("Entra ID validation failed, trying dev JWT",
+						"error", err.Error(),
+						"path", r.URL.Path,
+					)
+				}
 			}
 
-			authCtx := &types.AuthContext{
-				UserID:      claims.UserID,
-				TenantID:    claims.TenantID,
-				Email:       claims.Email,
-				Roles:       claims.Roles,
-				Permissions: claims.Permissions,
+			// Fallback to dev JWT if Entra validation didn't succeed.
+			if authCtx == nil {
+				claims, err := auth.ValidateToken(tokenString, cfg.JWTSecret)
+				if err != nil {
+					slog.Warn("invalid JWT token",
+						"error", err.Error(),
+						"path", r.URL.Path,
+						"correlation_id", types.GetCorrelationID(r.Context()),
+					)
+					types.ErrorMessage(w, http.StatusUnauthorized,
+						"UNAUTHORIZED", "Invalid or expired token",
+					)
+					return
+				}
+
+				authCtx = &types.AuthContext{
+					UserID:      claims.UserID,
+					TenantID:    claims.TenantID,
+					Email:       claims.Email,
+					Roles:       claims.Roles,
+					Permissions: claims.Permissions,
+				}
 			}
 
 			ctx := types.SetAuthContext(r.Context(), authCtx)
@@ -67,13 +118,59 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 	}
 }
 
+// resolveEntraUser looks up the local user by their Entra ID object ID (oid)
+// and returns an AuthContext populated with their roles and permissions.
+func resolveEntraUser(ctx context.Context, pool *pgxpool.Pool, claims *auth.EntraClaims) (*types.AuthContext, error) {
+	if pool == nil {
+		return nil, fmt.Errorf("database pool not available")
+	}
+
+	var (
+		userID   uuid.UUID
+		tenantID uuid.UUID
+		email    string
+	)
+
+	err := pool.QueryRow(ctx,
+		`SELECT id, tenant_id, email FROM users WHERE entra_id = $1 AND is_active = true`,
+		claims.OID,
+	).Scan(&userID, &tenantID, &email)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			lookupEmail := claims.PreferredUsername
+			if lookupEmail == "" {
+				lookupEmail = claims.Email
+			}
+			err = pool.QueryRow(ctx,
+				`SELECT id, tenant_id, email FROM users WHERE email = $1 AND is_active = true`,
+				lookupEmail,
+			).Scan(&userID, &tenantID, &email)
+			if err != nil {
+				return nil, fmt.Errorf("user not found by entra_id or email: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("query user: %w", err)
+		}
+	}
+
+	// Fetch roles and permissions using an ephemeral AuthService.
+	authService := auth.NewAuthService(pool, config.JWTConfig{})
+	roles, permissions, err := authService.GetUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch roles: %w", err)
+	}
+
+	return &types.AuthContext{
+		UserID:      userID,
+		TenantID:    tenantID,
+		Email:       email,
+		Roles:       roles,
+		Permissions: permissions,
+	}, nil
+}
+
 // PublicRoute marks the wrapped routes as public so the Auth middleware
-// will skip token validation. Use this inside a chi.Route group:
-//
-//	r.Group(func(r chi.Router) {
-//	    r.Use(middleware.PublicRoute)
-//	    r.Post("/login", handler.Login)
-//	})
+// will skip token validation.
 func PublicRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), publicRouteKey, true)
@@ -81,8 +178,7 @@ func PublicRoute(next http.Handler) http.Handler {
 	})
 }
 
-// extractBearerToken pulls the token from the "Authorization: Bearer <token>"
-// header.
+// extractBearerToken pulls the token from the "Authorization: Bearer <token>" header.
 func extractBearerToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header == "" {

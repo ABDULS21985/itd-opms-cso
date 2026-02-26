@@ -282,6 +282,12 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 	}, nil
 }
 
+// GetUserRolesAndPermissions is the exported version used by middleware and
+// other packages that need to resolve roles for a user (e.g., OIDC flow).
+func (s *AuthService) GetUserRolesAndPermissions(ctx context.Context, userID uuid.UUID) ([]string, []string, error) {
+	return s.getUserRolesAndPermissions(ctx, userID)
+}
+
 // getUserRolesAndPermissions queries the role_bindings + roles tables and
 // aggregates all roles and permissions for a user. It also includes
 // permissions inherited through active delegations.

@@ -69,6 +69,7 @@ CREATE INDEX idx_org_hierarchy_depth ON org_hierarchy(depth);
 -- ──────────────────────────────────────────────
 -- Trigger: auto-populate org_hierarchy on INSERT
 -- ──────────────────────────────────────────────
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_org_hierarchy_insert()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -87,6 +88,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_org_units_hierarchy
     AFTER INSERT ON org_units
@@ -96,6 +98,7 @@ CREATE TRIGGER trg_org_units_hierarchy
 -- ──────────────────────────────────────────────
 -- Trigger: auto-update updated_at
 -- ──────────────────────────────────────────────
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_update_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -103,6 +106,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_tenants_updated
     BEFORE UPDATE ON tenants
