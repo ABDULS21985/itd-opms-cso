@@ -9,7 +9,6 @@ import {
   Loader2,
   AlertCircle,
   Headphones,
-  MonitorSmartphone,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { useCreateTicket } from "@/hooks/use-itsm";

@@ -9,7 +9,6 @@ import {
   Filter,
   AlertTriangle,
   Clock,
-  Loader2,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
