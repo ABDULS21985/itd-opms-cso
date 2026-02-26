@@ -428,7 +428,7 @@ export default function TicketDetailPage({
       return;
     }
     if (newStatus === "closed") {
-      closeTicket.mutate({ id });
+      closeTicket.mutate(id);
       return;
     }
     transitionTicket.mutate({
@@ -472,7 +472,6 @@ export default function TicketDetailPage({
     if (!commentText.trim()) return;
     addComment.mutate(
       {
-        ticketId: id,
         content: commentText.trim(),
         isInternal: isInternalComment,
       },
@@ -486,7 +485,7 @@ export default function TicketDetailPage({
 
   function handleDeclareMajor() {
     if (!confirm("Declare this ticket as a Major Incident? This will trigger escalation notifications.")) return;
-    declareMajor.mutate({ id });
+    declareMajor.mutate(id);
   }
 
   /* ---- Tab content renderers ---- */

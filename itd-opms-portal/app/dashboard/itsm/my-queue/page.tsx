@@ -105,7 +105,7 @@ function TicketCard({
   onNavigate: (id: string) => void;
 }) {
   const transitionTicket = useTransitionTicket();
-  const addComment = useAddComment();
+  const addComment = useAddComment(ticket.id);
 
   const [showComment, setShowComment] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -129,7 +129,6 @@ function TicketCard({
     if (!commentText.trim()) return;
     addComment.mutate(
       {
-        ticketId: ticket.id,
         content: commentText.trim(),
         isInternal: isInternal,
       },
