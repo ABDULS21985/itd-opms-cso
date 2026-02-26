@@ -91,9 +91,10 @@ func (s *CMDBService) CreateCMDBItem(ctx context.Context, req CreateCMDBItemRequ
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	attributes := req.Attributes
-	if attributes == nil {
-		attributes = json.RawMessage("{}")
+	defaultAttrs := json.RawMessage("{}")
+	attributes := &defaultAttrs
+	if req.Attributes != nil {
+		attributes = req.Attributes
 	}
 
 	query := `
