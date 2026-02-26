@@ -220,11 +220,6 @@ func (h *AssetHandler) CreateAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Category == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Category is required")
-		return
-	}
-
 	if req.AssetTag == "" {
 		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Asset tag is required")
 		return

@@ -40,20 +40,20 @@ func NewLicenseService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Licens
 // licenseColumns is the canonical column list for the licenses table.
 const licenseColumns = `
 	id, tenant_id, software_name, vendor, license_type,
-	license_key, total_entitlements, assigned_count,
-	compliance_status, purchase_date, expiry_date,
-	cost_per_unit, currency_code, support_tier,
-	notes, created_at, updated_at`
+	total_entitlements, assigned_count,
+	compliance_status, expiry_date,
+	cost, renewal_contact,
+	created_at, updated_at`
 
 // scanLicense scans a single license row into a License struct.
 func scanLicense(row pgx.Row) (License, error) {
 	var l License
 	err := row.Scan(
 		&l.ID, &l.TenantID, &l.SoftwareName, &l.Vendor, &l.LicenseType,
-		&l.LicenseKey, &l.TotalEntitlements, &l.AssignedCount,
-		&l.ComplianceStatus, &l.PurchaseDate, &l.ExpiryDate,
-		&l.CostPerUnit, &l.CurrencyCode, &l.SupportTier,
-		&l.Notes, &l.CreatedAt, &l.UpdatedAt,
+		&l.TotalEntitlements, &l.AssignedCount,
+		&l.ComplianceStatus, &l.ExpiryDate,
+		&l.Cost, &l.RenewalContact,
+		&l.CreatedAt, &l.UpdatedAt,
 	)
 	return l, err
 }
@@ -65,10 +65,10 @@ func scanLicenses(rows pgx.Rows) ([]License, error) {
 		var l License
 		if err := rows.Scan(
 			&l.ID, &l.TenantID, &l.SoftwareName, &l.Vendor, &l.LicenseType,
-			&l.LicenseKey, &l.TotalEntitlements, &l.AssignedCount,
-			&l.ComplianceStatus, &l.PurchaseDate, &l.ExpiryDate,
-			&l.CostPerUnit, &l.CurrencyCode, &l.SupportTier,
-			&l.Notes, &l.CreatedAt, &l.UpdatedAt,
+			&l.TotalEntitlements, &l.AssignedCount,
+			&l.ComplianceStatus, &l.ExpiryDate,
+			&l.Cost, &l.RenewalContact,
+			&l.CreatedAt, &l.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -91,18 +91,18 @@ func scanLicenses(rows pgx.Rows) ([]License, error) {
 func calculateComplianceStatus(assigned, total int) string {
 	if total <= 0 {
 		if assigned > 0 {
-			return "over_deployed"
+			return ComplianceStatusOverDeployed
 		}
-		return "compliant"
+		return ComplianceStatusCompliant
 	}
 	ratio := float64(assigned) / float64(total)
 	if ratio > 1.0 {
-		return "over_deployed"
+		return ComplianceStatusOverDeployed
 	}
 	if ratio < 0.5 {
-		return "under_utilized"
+		return ComplianceStatusUnderUtilized
 	}
-	return "compliant"
+	return ComplianceStatusCompliant
 }
 
 // ──────────────────────────────────────────────
@@ -120,34 +120,30 @@ func (s *LicenseService) CreateLicense(ctx context.Context, req CreateLicenseReq
 	now := time.Now().UTC()
 
 	assignedCount := 0
-	totalEntitlements := 0
-	if req.TotalEntitlements != nil {
-		totalEntitlements = *req.TotalEntitlements
-	}
-	complianceStatus := calculateComplianceStatus(assignedCount, totalEntitlements)
+	complianceStatus := calculateComplianceStatus(assignedCount, req.TotalEntitlements)
 
 	query := `
 		INSERT INTO licenses (
 			id, tenant_id, software_name, vendor, license_type,
-			license_key, total_entitlements, assigned_count,
-			compliance_status, purchase_date, expiry_date,
-			cost_per_unit, currency_code, support_tier,
-			notes, created_at, updated_at
+			total_entitlements, assigned_count,
+			compliance_status, expiry_date,
+			cost, renewal_contact,
+			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8,
-			$9, $10, $11,
-			$12, $13, $14,
-			$15, $16, $17
+			$6, $7,
+			$8, $9,
+			$10, $11,
+			$12, $13
 		)
 		RETURNING ` + licenseColumns
 
 	license, err := scanLicense(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.SoftwareName, req.Vendor, req.LicenseType,
-		req.LicenseKey, totalEntitlements, assignedCount,
-		complianceStatus, req.PurchaseDate, req.ExpiryDate,
-		req.CostPerUnit, req.CurrencyCode, req.SupportTier,
-		req.Notes, now, now,
+		req.TotalEntitlements, assignedCount,
+		complianceStatus, req.ExpiryDate,
+		req.Cost, req.RenewalContact,
+		now, now,
 	))
 	if err != nil {
 		return License{}, apperrors.Internal("failed to create license", err)
@@ -261,24 +257,20 @@ func (s *LicenseService) UpdateLicense(ctx context.Context, id uuid.UUID, req Up
 			software_name = COALESCE($1, software_name),
 			vendor = COALESCE($2, vendor),
 			license_type = COALESCE($3, license_type),
-			license_key = COALESCE($4, license_key),
-			total_entitlements = COALESCE($5, total_entitlements),
-			purchase_date = COALESCE($6, purchase_date),
-			expiry_date = COALESCE($7, expiry_date),
-			cost_per_unit = COALESCE($8, cost_per_unit),
-			currency_code = COALESCE($9, currency_code),
-			support_tier = COALESCE($10, support_tier),
-			notes = COALESCE($11, notes),
-			updated_at = $12
-		WHERE id = $13 AND tenant_id = $14
+			total_entitlements = COALESCE($4, total_entitlements),
+			compliance_status = COALESCE($5, compliance_status),
+			expiry_date = COALESCE($6, expiry_date),
+			cost = COALESCE($7, cost),
+			renewal_contact = COALESCE($8, renewal_contact),
+			updated_at = $9
+		WHERE id = $10 AND tenant_id = $11
 		RETURNING ` + licenseColumns
 
 	license, err := scanLicense(s.pool.QueryRow(ctx, updateQuery,
 		req.SoftwareName, req.Vendor, req.LicenseType,
-		req.LicenseKey, req.TotalEntitlements,
-		req.PurchaseDate, req.ExpiryDate,
-		req.CostPerUnit, req.CurrencyCode, req.SupportTier,
-		req.Notes, now, id, auth.TenantID,
+		req.TotalEntitlements, req.ComplianceStatus,
+		req.ExpiryDate, req.Cost, req.RenewalContact,
+		now, id, auth.TenantID,
 	))
 	if err != nil {
 		return License{}, apperrors.Internal("failed to update license", err)
@@ -363,18 +355,15 @@ func (s *LicenseService) GetLicenseComplianceStats(ctx context.Context) (License
 	query := `
 		SELECT
 			COUNT(*) AS total,
-			COUNT(*) FILTER (WHERE compliance_status = 'compliant') AS compliant_count,
-			COUNT(*) FILTER (WHERE compliance_status = 'over_deployed') AS over_deployed_count,
-			COUNT(*) FILTER (WHERE compliance_status = 'under_utilized') AS under_utilized_count,
-			COALESCE(SUM(total_entitlements), 0) AS total_entitlements,
-			COALESCE(SUM(assigned_count), 0) AS total_assigned
+			COUNT(*) FILTER (WHERE compliance_status = 'compliant') AS compliant,
+			COUNT(*) FILTER (WHERE compliance_status = 'over_deployed') AS over_deployed,
+			COUNT(*) FILTER (WHERE compliance_status = 'under_utilized') AS under_utilized
 		FROM licenses
 		WHERE tenant_id = $1`
 
 	var stats LicenseComplianceStats
 	err := s.pool.QueryRow(ctx, query, auth.TenantID).Scan(
-		&stats.Total, &stats.CompliantCount, &stats.OverDeployedCount,
-		&stats.UnderUtilizedCount, &stats.TotalEntitlements, &stats.TotalAssigned,
+		&stats.Total, &stats.Compliant, &stats.OverDeployed, &stats.UnderUtilized,
 	)
 	if err != nil {
 		return LicenseComplianceStats{}, apperrors.Internal("failed to get license compliance stats", err)
@@ -404,17 +393,16 @@ func (s *LicenseService) CreateLicenseAssignment(ctx context.Context, req Create
 	now := time.Now().UTC()
 
 	query := `
-		INSERT INTO license_assignments (id, license_id, assigned_to, assigned_by, asset_id, notes, assigned_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, license_id, assigned_to, assigned_by, asset_id, notes, assigned_at, created_at`
+		INSERT INTO license_assignments (id, license_id, tenant_id, user_id, asset_id, assigned_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, license_id, tenant_id, user_id, asset_id, assigned_at`
 
 	var assignment LicenseAssignment
 	err = s.pool.QueryRow(ctx, query,
-		id, req.LicenseID, req.AssignedTo, auth.UserID, req.AssetID, req.Notes, now, now,
+		id, req.LicenseID, auth.TenantID, req.UserID, req.AssetID, now,
 	).Scan(
-		&assignment.ID, &assignment.LicenseID, &assignment.AssignedTo,
-		&assignment.AssignedBy, &assignment.AssetID, &assignment.Notes,
-		&assignment.AssignedAt, &assignment.CreatedAt,
+		&assignment.ID, &assignment.LicenseID, &assignment.TenantID,
+		&assignment.UserID, &assignment.AssetID, &assignment.AssignedAt,
 	)
 	if err != nil {
 		return LicenseAssignment{}, apperrors.Internal("failed to create license assignment", err)
@@ -435,8 +423,9 @@ func (s *LicenseService) CreateLicenseAssignment(ctx context.Context, req Create
 
 	// Audit log.
 	changes, _ := json.Marshal(map[string]any{
-		"license_id":  req.LicenseID,
-		"assigned_to": req.AssignedTo,
+		"license_id": req.LicenseID,
+		"user_id":    req.UserID,
+		"asset_id":   req.AssetID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   auth.TenantID,
@@ -460,12 +449,12 @@ func (s *LicenseService) ListAssignmentsByLicense(ctx context.Context, licenseID
 	}
 
 	query := `
-		SELECT id, license_id, assigned_to, assigned_by, asset_id, notes, assigned_at, created_at
+		SELECT id, license_id, tenant_id, user_id, asset_id, assigned_at
 		FROM license_assignments
-		WHERE license_id = $1
+		WHERE license_id = $1 AND tenant_id = $2
 		ORDER BY assigned_at DESC`
 
-	rows, err := s.pool.Query(ctx, query, licenseID)
+	rows, err := s.pool.Query(ctx, query, licenseID, auth.TenantID)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list license assignments", err)
 	}
@@ -475,9 +464,8 @@ func (s *LicenseService) ListAssignmentsByLicense(ctx context.Context, licenseID
 	for rows.Next() {
 		var a LicenseAssignment
 		if err := rows.Scan(
-			&a.ID, &a.LicenseID, &a.AssignedTo,
-			&a.AssignedBy, &a.AssetID, &a.Notes,
-			&a.AssignedAt, &a.CreatedAt,
+			&a.ID, &a.LicenseID, &a.TenantID,
+			&a.UserID, &a.AssetID, &a.AssignedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan license assignment", err)
 		}
@@ -492,8 +480,6 @@ func (s *LicenseService) ListAssignmentsByLicense(ctx context.Context, licenseID
 		assignments = []LicenseAssignment{}
 	}
 
-	_ = auth
-
 	return assignments, nil
 }
 
@@ -507,8 +493,8 @@ func (s *LicenseService) DeleteLicenseAssignment(ctx context.Context, id uuid.UU
 	// Get the assignment to find the license ID.
 	var licenseID uuid.UUID
 	err := s.pool.QueryRow(ctx, `
-		SELECT license_id FROM license_assignments WHERE id = $1`,
-		id,
+		SELECT license_id FROM license_assignments WHERE id = $1 AND tenant_id = $2`,
+		id, auth.TenantID,
 	).Scan(&licenseID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -519,8 +505,8 @@ func (s *LicenseService) DeleteLicenseAssignment(ctx context.Context, id uuid.UU
 
 	// Delete the assignment.
 	result, err := s.pool.Exec(ctx, `
-		DELETE FROM license_assignments WHERE id = $1`,
-		id,
+		DELETE FROM license_assignments WHERE id = $1 AND tenant_id = $2`,
+		id, auth.TenantID,
 	)
 	if err != nil {
 		return apperrors.Internal("failed to delete license assignment", err)
@@ -581,19 +567,19 @@ func (s *LicenseService) DeleteLicenseAssignment(ctx context.Context, id uuid.UU
 
 // warrantyColumns is the canonical column list for the warranties table.
 const warrantyColumns = `
-	id, tenant_id, asset_id, vendor, warranty_type,
-	start_date, end_date, contract_number,
-	coverage_details, renewal_status, renewal_cost,
-	currency_code, notes, created_at, updated_at`
+	id, asset_id, tenant_id, vendor, contract_number,
+	coverage_type, start_date, end_date,
+	cost, renewal_status,
+	created_at, updated_at`
 
 // scanWarranty scans a single warranty row into a Warranty struct.
 func scanWarranty(row pgx.Row) (Warranty, error) {
 	var w Warranty
 	err := row.Scan(
-		&w.ID, &w.TenantID, &w.AssetID, &w.Vendor, &w.WarrantyType,
-		&w.StartDate, &w.EndDate, &w.ContractNumber,
-		&w.CoverageDetails, &w.RenewalStatus, &w.RenewalCost,
-		&w.CurrencyCode, &w.Notes, &w.CreatedAt, &w.UpdatedAt,
+		&w.ID, &w.AssetID, &w.TenantID, &w.Vendor, &w.ContractNumber,
+		&w.CoverageType, &w.StartDate, &w.EndDate,
+		&w.Cost, &w.RenewalStatus,
+		&w.CreatedAt, &w.UpdatedAt,
 	)
 	return w, err
 }
@@ -604,10 +590,10 @@ func scanWarranties(rows pgx.Rows) ([]Warranty, error) {
 	for rows.Next() {
 		var w Warranty
 		if err := rows.Scan(
-			&w.ID, &w.TenantID, &w.AssetID, &w.Vendor, &w.WarrantyType,
-			&w.StartDate, &w.EndDate, &w.ContractNumber,
-			&w.CoverageDetails, &w.RenewalStatus, &w.RenewalCost,
-			&w.CurrencyCode, &w.Notes, &w.CreatedAt, &w.UpdatedAt,
+			&w.ID, &w.AssetID, &w.TenantID, &w.Vendor, &w.ContractNumber,
+			&w.CoverageType, &w.StartDate, &w.EndDate,
+			&w.Cost, &w.RenewalStatus,
+			&w.CreatedAt, &w.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -626,12 +612,12 @@ func scanWarranties(rows pgx.Rows) ([]Warranty, error) {
 func determineRenewalStatus(endDate time.Time) string {
 	now := time.Now().UTC()
 	if endDate.Before(now) {
-		return "expired"
+		return WarrantyRenewalStatusExpired
 	}
 	if endDate.Before(now.AddDate(0, 0, 90)) {
-		return "expiring_soon"
+		return WarrantyRenewalStatusExpiringSoon
 	}
-	return "active"
+	return WarrantyRenewalStatusActive
 }
 
 // CreateWarranty creates a new warranty record with auto-set renewal_status.
@@ -644,30 +630,30 @@ func (s *LicenseService) CreateWarranty(ctx context.Context, req CreateWarrantyR
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	renewalStatus := "active"
-	if req.EndDate != nil {
-		renewalStatus = determineRenewalStatus(*req.EndDate)
+	renewalStatus := determineRenewalStatus(req.EndDate)
+	if req.RenewalStatus != nil {
+		renewalStatus = *req.RenewalStatus
 	}
 
 	query := `
 		INSERT INTO warranties (
-			id, tenant_id, asset_id, vendor, warranty_type,
-			start_date, end_date, contract_number,
-			coverage_details, renewal_status, renewal_cost,
-			currency_code, notes, created_at, updated_at
+			id, asset_id, tenant_id, vendor, contract_number,
+			coverage_type, start_date, end_date,
+			cost, renewal_status,
+			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8,
-			$9, $10, $11,
-			$12, $13, $14, $15
+			$9, $10,
+			$11, $12
 		)
 		RETURNING ` + warrantyColumns
 
 	warranty, err := scanWarranty(s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.AssetID, req.Vendor, req.WarrantyType,
-		req.StartDate, req.EndDate, req.ContractNumber,
-		req.CoverageDetails, renewalStatus, req.RenewalCost,
-		req.CurrencyCode, req.Notes, now, now,
+		id, req.AssetID, auth.TenantID, req.Vendor, req.ContractNumber,
+		req.CoverageType, req.StartDate, req.EndDate,
+		req.Cost, renewalStatus,
+		now, now,
 	))
 	if err != nil {
 		return Warranty{}, apperrors.Internal("failed to create warranty", err)
@@ -675,9 +661,8 @@ func (s *LicenseService) CreateWarranty(ctx context.Context, req CreateWarrantyR
 
 	// Audit log.
 	changes, _ := json.Marshal(map[string]any{
-		"asset_id":      req.AssetID,
-		"vendor":        req.Vendor,
-		"warranty_type": req.WarrantyType,
+		"asset_id": req.AssetID,
+		"vendor":   req.Vendor,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   auth.TenantID,
@@ -741,7 +726,7 @@ func (s *LicenseService) ListWarranties(ctx context.Context, renewalStatus *stri
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR renewal_status = $2)
 			AND ($3::uuid IS NULL OR asset_id = $3)
-		ORDER BY end_date ASC NULLS LAST
+		ORDER BY end_date ASC
 		LIMIT $4 OFFSET $5`
 
 	rows, err := s.pool.Query(ctx, dataQuery,
@@ -779,24 +764,20 @@ func (s *LicenseService) UpdateWarranty(ctx context.Context, id uuid.UUID, req U
 	updateQuery := `
 		UPDATE warranties SET
 			vendor = COALESCE($1, vendor),
-			warranty_type = COALESCE($2, warranty_type),
-			start_date = COALESCE($3, start_date),
-			end_date = COALESCE($4, end_date),
-			contract_number = COALESCE($5, contract_number),
-			coverage_details = COALESCE($6, coverage_details),
+			contract_number = COALESCE($2, contract_number),
+			coverage_type = COALESCE($3, coverage_type),
+			start_date = COALESCE($4, start_date),
+			end_date = COALESCE($5, end_date),
+			cost = COALESCE($6, cost),
 			renewal_status = COALESCE($7, renewal_status),
-			renewal_cost = COALESCE($8, renewal_cost),
-			currency_code = COALESCE($9, currency_code),
-			notes = COALESCE($10, notes),
-			updated_at = $11
-		WHERE id = $12 AND tenant_id = $13
+			updated_at = $8
+		WHERE id = $9 AND tenant_id = $10
 		RETURNING ` + warrantyColumns
 
 	warranty, err := scanWarranty(s.pool.QueryRow(ctx, updateQuery,
-		req.Vendor, req.WarrantyType,
-		req.StartDate, req.EndDate, req.ContractNumber,
-		req.CoverageDetails, req.RenewalStatus, req.RenewalCost,
-		req.CurrencyCode, req.Notes,
+		req.Vendor, req.ContractNumber, req.CoverageType,
+		req.StartDate, req.EndDate,
+		req.Cost, req.RenewalStatus,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -863,7 +844,6 @@ func (s *LicenseService) ListExpiringWarranties(ctx context.Context, days int) (
 		SELECT ` + warrantyColumns + `
 		FROM warranties
 		WHERE tenant_id = $1
-			AND end_date IS NOT NULL
 			AND end_date > NOW()
 			AND end_date <= NOW() + ($2 || ' days')::interval
 		ORDER BY end_date ASC`
@@ -899,31 +879,20 @@ func (s *LicenseService) CreateRenewalAlert(ctx context.Context, req CreateRenew
 	query := `
 		INSERT INTO renewal_alerts (
 			id, tenant_id, entity_type, entity_id,
-			alert_type, due_date, notified_user_ids,
-			status, created_at, updated_at
+			alert_date, sent, created_at
 		) VALUES (
 			$1, $2, $3, $4,
-			$5, $6, $7,
-			'pending', $8, $9
+			$5, false, $6
 		)
-		RETURNING id, tenant_id, entity_type, entity_id,
-			alert_type, due_date, notified_user_ids,
-			status, sent_at, created_at, updated_at`
-
-	notifiedUsers := req.NotifiedUserIDs
-	if notifiedUsers == nil {
-		notifiedUsers = []uuid.UUID{}
-	}
+		RETURNING id, tenant_id, entity_type, entity_id, alert_date, sent, created_at`
 
 	var alert RenewalAlert
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.EntityType, req.EntityID,
-		req.AlertType, req.DueDate, notifiedUsers,
-		now, now,
+		req.AlertDate, now,
 	).Scan(
 		&alert.ID, &alert.TenantID, &alert.EntityType, &alert.EntityID,
-		&alert.AlertType, &alert.DueDate, &alert.NotifiedUserIDs,
-		&alert.Status, &alert.SentAt, &alert.CreatedAt, &alert.UpdatedAt,
+		&alert.AlertDate, &alert.Sent, &alert.CreatedAt,
 	)
 	if err != nil {
 		return RenewalAlert{}, apperrors.Internal("failed to create renewal alert", err)
@@ -932,7 +901,7 @@ func (s *LicenseService) CreateRenewalAlert(ctx context.Context, req CreateRenew
 	return alert, nil
 }
 
-// ListPendingAlerts returns all pending renewal alerts for the tenant.
+// ListPendingAlerts returns all unsent renewal alerts for the tenant.
 func (s *LicenseService) ListPendingAlerts(ctx context.Context) ([]RenewalAlert, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -940,12 +909,10 @@ func (s *LicenseService) ListPendingAlerts(ctx context.Context) ([]RenewalAlert,
 	}
 
 	query := `
-		SELECT id, tenant_id, entity_type, entity_id,
-			alert_type, due_date, notified_user_ids,
-			status, sent_at, created_at, updated_at
+		SELECT id, tenant_id, entity_type, entity_id, alert_date, sent, created_at
 		FROM renewal_alerts
-		WHERE tenant_id = $1 AND status = 'pending'
-		ORDER BY due_date ASC`
+		WHERE tenant_id = $1 AND sent = false
+		ORDER BY alert_date ASC`
 
 	rows, err := s.pool.Query(ctx, query, auth.TenantID)
 	if err != nil {
@@ -958,8 +925,7 @@ func (s *LicenseService) ListPendingAlerts(ctx context.Context) ([]RenewalAlert,
 		var a RenewalAlert
 		if err := rows.Scan(
 			&a.ID, &a.TenantID, &a.EntityType, &a.EntityID,
-			&a.AlertType, &a.DueDate, &a.NotifiedUserIDs,
-			&a.Status, &a.SentAt, &a.CreatedAt, &a.UpdatedAt,
+			&a.AlertDate, &a.Sent, &a.CreatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan renewal alert", err)
 		}
@@ -984,12 +950,10 @@ func (s *LicenseService) MarkAlertSent(ctx context.Context, id uuid.UUID) error 
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	now := time.Now().UTC()
-
 	result, err := s.pool.Exec(ctx, `
-		UPDATE renewal_alerts SET status = 'sent', sent_at = $1, updated_at = $2
-		WHERE id = $3 AND tenant_id = $4`,
-		now, now, id, auth.TenantID,
+		UPDATE renewal_alerts SET sent = true
+		WHERE id = $1 AND tenant_id = $2`,
+		id, auth.TenantID,
 	)
 	if err != nil {
 		return apperrors.Internal("failed to mark alert as sent", err)

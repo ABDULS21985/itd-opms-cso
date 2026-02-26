@@ -8,10 +8,95 @@ import (
 )
 
 // ──────────────────────────────────────────────
+// Proficiency level constants
+// ──────────────────────────────────────────────
+
+const (
+	ProficiencyLevelBeginner     = "beginner"
+	ProficiencyLevelIntermediate = "intermediate"
+	ProficiencyLevelAdvanced     = "advanced"
+	ProficiencyLevelExpert       = "expert"
+)
+
+// ──────────────────────────────────────────────
+// Checklist type constants
+// ──────────────────────────────────────────────
+
+const (
+	ChecklistTypeOnboarding  = "onboarding"
+	ChecklistTypeOffboarding = "offboarding"
+)
+
+// ──────────────────────────────────────────────
+// Checklist status constants
+// ──────────────────────────────────────────────
+
+const (
+	ChecklistStatusPending    = "pending"
+	ChecklistStatusInProgress = "in_progress"
+	ChecklistStatusCompleted  = "completed"
+	ChecklistStatusCancelled  = "cancelled"
+)
+
+// ──────────────────────────────────────────────
+// Task status constants
+// ──────────────────────────────────────────────
+
+const (
+	TaskStatusPending    = "pending"
+	TaskStatusInProgress = "in_progress"
+	TaskStatusCompleted  = "completed"
+	TaskStatusSkipped    = "skipped"
+)
+
+// ──────────────────────────────────────────────
+// Roster status constants
+// ──────────────────────────────────────────────
+
+const (
+	RosterStatusDraft     = "draft"
+	RosterStatusPublished = "published"
+	RosterStatusArchived  = "archived"
+)
+
+// ──────────────────────────────────────────────
+// Leave status constants
+// ──────────────────────────────────────────────
+
+const (
+	LeaveStatusPending   = "pending"
+	LeaveStatusApproved  = "approved"
+	LeaveStatusRejected  = "rejected"
+	LeaveStatusCancelled = "cancelled"
+)
+
+// ──────────────────────────────────────────────
+// Training type constants
+// ──────────────────────────────────────────────
+
+const (
+	TrainingTypeCourse        = "course"
+	TrainingTypeCertification = "certification"
+	TrainingTypeWorkshop      = "workshop"
+	TrainingTypeConference    = "conference"
+)
+
+// ──────────────────────────────────────────────
+// Training status constants
+// ──────────────────────────────────────────────
+
+const (
+	TrainingStatusPlanned    = "planned"
+	TrainingStatusInProgress = "in_progress"
+	TrainingStatusCompleted  = "completed"
+	TrainingStatusExpired    = "expired"
+)
+
+// ──────────────────────────────────────────────
 // Domain types
 // ──────────────────────────────────────────────
 
-// SkillCategory represents a hierarchical skill category.
+// SkillCategory represents a hierarchical grouping of skills.
 type SkillCategory struct {
 	ID          uuid.UUID  `json:"id"`
 	TenantID    uuid.UUID  `json:"tenantId"`
@@ -22,7 +107,7 @@ type SkillCategory struct {
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
-// Skill represents a specific skill within a category.
+// Skill represents an individual skill within a category.
 type Skill struct {
 	ID          uuid.UUID `json:"id"`
 	TenantID    uuid.UUID `json:"tenantId"`
@@ -49,7 +134,7 @@ type UserSkill struct {
 	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
-// RoleSkillRequirement defines the skill requirements for a given role type.
+// RoleSkillRequirement defines the required skill level for a specific role type.
 type RoleSkillRequirement struct {
 	ID            uuid.UUID `json:"id"`
 	TenantID      uuid.UUID `json:"tenantId"`
@@ -59,29 +144,27 @@ type RoleSkillRequirement struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
-// SkillGapEntry represents one entry in a skill gap analysis result.
+// SkillGapEntry represents a single row in the skill gap analysis result.
 type SkillGapEntry struct {
-	SkillID       uuid.UUID `json:"skillId"`
-	SkillName     string    `json:"skillName"`
-	RequiredLevel string    `json:"requiredLevel"`
-	CurrentLevel  *string   `json:"currentLevel"`
-	HasGap        bool      `json:"hasGap"`
+	SkillName     string `json:"skillName"`
+	RequiredLevel string `json:"requiredLevel"`
+	CurrentLevel  string `json:"currentLevel"`
 }
 
-// ChecklistTemplate represents a reusable checklist template for onboarding/offboarding.
+// ChecklistTemplate defines a reusable onboarding/offboarding checklist template.
 type ChecklistTemplate struct {
 	ID        uuid.UUID       `json:"id"`
 	TenantID  uuid.UUID       `json:"tenantId"`
 	Type      string          `json:"type"`
-	RoleType  *string         `json:"roleType"`
 	Name      string          `json:"name"`
+	RoleType  *string         `json:"roleType"`
 	Tasks     json.RawMessage `json:"tasks"`
 	IsActive  bool            `json:"isActive"`
 	CreatedAt time.Time       `json:"createdAt"`
 	UpdatedAt time.Time       `json:"updatedAt"`
 }
 
-// Checklist represents an instantiated checklist for a specific user.
+// Checklist represents an instantiated onboarding/offboarding checklist for a user.
 type Checklist struct {
 	ID            uuid.UUID  `json:"id"`
 	TenantID      uuid.UUID  `json:"tenantId"`
@@ -96,7 +179,7 @@ type Checklist struct {
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
-// ChecklistTask represents an individual task within a checklist.
+// ChecklistTask represents a single task within a checklist.
 type ChecklistTask struct {
 	ID            uuid.UUID  `json:"id"`
 	ChecklistID   uuid.UUID  `json:"checklistId"`
@@ -128,7 +211,7 @@ type Roster struct {
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
-// LeaveRecord represents a user's leave/absence record.
+// LeaveRecord represents a leave/absence request for a user.
 type LeaveRecord struct {
 	ID         uuid.UUID  `json:"id"`
 	TenantID   uuid.UUID  `json:"tenantId"`
@@ -143,7 +226,7 @@ type LeaveRecord struct {
 	UpdatedAt  time.Time  `json:"updatedAt"`
 }
 
-// CapacityAllocation represents a user's capacity allocation to a project.
+// CapacityAllocation represents a user's allocation percentage to a project for a period.
 type CapacityAllocation struct {
 	ID            uuid.UUID  `json:"id"`
 	TenantID      uuid.UUID  `json:"tenantId"`
@@ -156,7 +239,7 @@ type CapacityAllocation struct {
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
-// TrainingRecord represents a user's training, certification, or course record.
+// TrainingRecord represents a training activity (course, certification, workshop, conference).
 type TrainingRecord struct {
 	ID               uuid.UUID  `json:"id"`
 	TenantID         uuid.UUID  `json:"tenantId"`
@@ -180,8 +263,8 @@ type TrainingRecord struct {
 // CreateSkillCategoryRequest is the payload for creating a skill category.
 type CreateSkillCategoryRequest struct {
 	Name        string     `json:"name" validate:"required"`
-	Description *string    `json:"description"`
-	ParentID    *uuid.UUID `json:"parentId"`
+	Description *string    `json:"description,omitempty"`
+	ParentID    *uuid.UUID `json:"parentId,omitempty"`
 }
 
 // UpdateSkillCategoryRequest is the payload for updating a skill category.
@@ -195,35 +278,35 @@ type UpdateSkillCategoryRequest struct {
 type CreateSkillRequest struct {
 	CategoryID  uuid.UUID `json:"categoryId" validate:"required"`
 	Name        string    `json:"name" validate:"required"`
-	Description *string   `json:"description"`
+	Description *string   `json:"description,omitempty"`
 }
 
 // UpdateSkillRequest is the payload for updating a skill.
 type UpdateSkillRequest struct {
-	CategoryID  *uuid.UUID `json:"categoryId"`
 	Name        *string    `json:"name"`
+	CategoryID  *uuid.UUID `json:"categoryId"`
 	Description *string    `json:"description"`
 }
 
-// CreateUserSkillRequest is the payload for creating a user skill record.
+// CreateUserSkillRequest is the payload for adding a skill to a user.
 type CreateUserSkillRequest struct {
-	UserID              uuid.UUID `json:"userId" validate:"required"`
-	SkillID             uuid.UUID `json:"skillId" validate:"required"`
-	ProficiencyLevel    string    `json:"proficiencyLevel" validate:"required"`
-	Certified           *bool     `json:"certified"`
-	CertificationName   *string   `json:"certificationName"`
-	CertificationExpiry *string   `json:"certificationExpiry"` // date string
+	UserID              uuid.UUID  `json:"userId" validate:"required"`
+	SkillID             uuid.UUID  `json:"skillId" validate:"required"`
+	ProficiencyLevel    string     `json:"proficiencyLevel" validate:"required"`
+	Certified           *bool      `json:"certified,omitempty"`
+	CertificationName   *string    `json:"certificationName,omitempty"`
+	CertificationExpiry *time.Time `json:"certificationExpiry,omitempty"`
 }
 
-// UpdateUserSkillRequest is the payload for updating a user skill record.
+// UpdateUserSkillRequest is the payload for updating a user's skill record.
 type UpdateUserSkillRequest struct {
-	ProficiencyLevel    *string `json:"proficiencyLevel"`
-	Certified           *bool   `json:"certified"`
-	CertificationName   *string `json:"certificationName"`
-	CertificationExpiry *string `json:"certificationExpiry"` // date string
+	ProficiencyLevel    *string    `json:"proficiencyLevel"`
+	Certified           *bool      `json:"certified"`
+	CertificationName   *string    `json:"certificationName"`
+	CertificationExpiry *time.Time `json:"certificationExpiry"`
 }
 
-// CreateRoleSkillRequirementRequest is the payload for creating a role skill requirement.
+// CreateRoleSkillRequirementRequest is the payload for defining a role skill requirement.
 type CreateRoleSkillRequirementRequest struct {
 	RoleType      string    `json:"roleType" validate:"required"`
 	SkillID       uuid.UUID `json:"skillId" validate:"required"`
@@ -232,123 +315,121 @@ type CreateRoleSkillRequirementRequest struct {
 
 // CreateChecklistTemplateRequest is the payload for creating a checklist template.
 type CreateChecklistTemplateRequest struct {
-	Type     string          `json:"type" validate:"required"`
-	RoleType *string         `json:"roleType"`
-	Name     string          `json:"name" validate:"required"`
-	Tasks    json.RawMessage `json:"tasks"`
-	IsActive *bool           `json:"isActive"`
+	Type     string           `json:"type" validate:"required"`
+	Name     string           `json:"name" validate:"required"`
+	RoleType *string          `json:"roleType,omitempty"`
+	Tasks    *json.RawMessage `json:"tasks,omitempty"`
+	IsActive *bool            `json:"isActive,omitempty"`
 }
 
 // UpdateChecklistTemplateRequest is the payload for updating a checklist template.
 type UpdateChecklistTemplateRequest struct {
-	Type     *string         `json:"type"`
-	RoleType *string         `json:"roleType"`
-	Name     *string         `json:"name"`
-	Tasks    json.RawMessage `json:"tasks"`
-	IsActive *bool           `json:"isActive"`
+	Name     *string          `json:"name"`
+	RoleType *string          `json:"roleType"`
+	Tasks    *json.RawMessage `json:"tasks"`
+	IsActive *bool            `json:"isActive"`
 }
 
 // CreateChecklistRequest is the payload for creating a checklist instance.
 type CreateChecklistRequest struct {
-	TemplateID *uuid.UUID `json:"templateId"`
+	TemplateID *uuid.UUID `json:"templateId,omitempty"`
 	UserID     uuid.UUID  `json:"userId" validate:"required"`
 	Type       string     `json:"type" validate:"required"`
 }
 
-// UpdateChecklistStatusRequest is the payload for updating a checklist's status.
+// UpdateChecklistStatusRequest is the payload for updating checklist status and progress.
 type UpdateChecklistStatusRequest struct {
-	Status string `json:"status" validate:"required"`
+	Status        string     `json:"status" validate:"required"`
+	CompletionPct *float64   `json:"completionPct,omitempty"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
 }
 
-// CreateChecklistTaskRequest is the payload for creating a checklist task.
+// CreateChecklistTaskRequest is the payload for adding a task to a checklist.
 type CreateChecklistTaskRequest struct {
-	ChecklistID   uuid.UUID  `json:"checklistId" validate:"required"`
-	Title         string     `json:"title" validate:"required"`
-	Description   *string    `json:"description"`
-	AssigneeID    *uuid.UUID `json:"assigneeId"`
-	DueDate       *string    `json:"dueDate"` // date string
-	SortOrder     *int       `json:"sortOrder"`
+	ChecklistID uuid.UUID  `json:"checklistId" validate:"required"`
+	Title       string     `json:"title" validate:"required"`
+	Description *string    `json:"description,omitempty"`
+	AssigneeID  *uuid.UUID `json:"assigneeId,omitempty"`
+	DueDate     *time.Time `json:"dueDate,omitempty"`
+	SortOrder   *int       `json:"sortOrder,omitempty"`
 }
 
 // UpdateChecklistTaskRequest is the payload for updating a checklist task.
 type UpdateChecklistTaskRequest struct {
-	Title         *string    `json:"title"`
-	Description   *string    `json:"description"`
-	AssigneeID    *uuid.UUID `json:"assigneeId"`
-	Status        *string    `json:"status"`
-	DueDate       *string    `json:"dueDate"` // date string
-	Notes         *string    `json:"notes"`
-	EvidenceDocID *uuid.UUID `json:"evidenceDocId"`
-	SortOrder     *int       `json:"sortOrder"`
+	Title       *string    `json:"title"`
+	Description *string    `json:"description"`
+	AssigneeID  *uuid.UUID `json:"assigneeId"`
+	Status      *string    `json:"status"`
+	DueDate     *time.Time `json:"dueDate"`
+	Notes       *string    `json:"notes"`
+	SortOrder   *int       `json:"sortOrder"`
 }
 
 // CompleteChecklistTaskRequest is the payload for completing a checklist task.
 type CompleteChecklistTaskRequest struct {
-	Notes         *string    `json:"notes"`
-	EvidenceDocID *uuid.UUID `json:"evidenceDocId"`
+	EvidenceDocID *uuid.UUID `json:"evidenceDocId,omitempty"`
+	Notes         *string    `json:"notes,omitempty"`
 }
 
 // CreateRosterRequest is the payload for creating a roster.
 type CreateRosterRequest struct {
-	TeamID      *uuid.UUID      `json:"teamId"`
-	Name        string          `json:"name" validate:"required"`
-	PeriodStart string          `json:"periodStart" validate:"required"` // date string
-	PeriodEnd   string          `json:"periodEnd" validate:"required"`   // date string
-	Status      *string         `json:"status"`
-	Shifts      json.RawMessage `json:"shifts"`
+	TeamID      *uuid.UUID       `json:"teamId,omitempty"`
+	Name        string           `json:"name" validate:"required"`
+	PeriodStart time.Time        `json:"periodStart" validate:"required"`
+	PeriodEnd   time.Time        `json:"periodEnd" validate:"required"`
+	Shifts      *json.RawMessage `json:"shifts,omitempty"`
 }
 
 // UpdateRosterRequest is the payload for updating a roster.
 type UpdateRosterRequest struct {
-	TeamID      *uuid.UUID      `json:"teamId"`
-	Name        *string         `json:"name"`
-	PeriodStart *string         `json:"periodStart"` // date string
-	PeriodEnd   *string         `json:"periodEnd"`   // date string
-	Status      *string         `json:"status"`
-	Shifts      json.RawMessage `json:"shifts"`
+	Name        *string          `json:"name"`
+	Status      *string          `json:"status"`
+	PeriodStart *time.Time       `json:"periodStart"`
+	PeriodEnd   *time.Time       `json:"periodEnd"`
+	Shifts      *json.RawMessage `json:"shifts"`
 }
 
 // CreateLeaveRecordRequest is the payload for creating a leave record.
 type CreateLeaveRecordRequest struct {
 	UserID    uuid.UUID `json:"userId" validate:"required"`
 	LeaveType string    `json:"leaveType" validate:"required"`
-	StartDate string    `json:"startDate" validate:"required"` // date string
-	EndDate   string    `json:"endDate" validate:"required"`   // date string
-	Notes     *string   `json:"notes"`
+	StartDate time.Time `json:"startDate" validate:"required"`
+	EndDate   time.Time `json:"endDate" validate:"required"`
+	Notes     *string   `json:"notes,omitempty"`
 }
 
-// UpdateLeaveRecordStatusRequest is the payload for updating a leave record status.
+// UpdateLeaveRecordStatusRequest is the payload for approving/rejecting a leave record.
 type UpdateLeaveRecordStatusRequest struct {
-	Status string `json:"status" validate:"required"`
+	Status     string     `json:"status" validate:"required"`
+	ApprovedBy *uuid.UUID `json:"approvedBy,omitempty"`
 }
 
 // CreateCapacityAllocationRequest is the payload for creating a capacity allocation.
 type CreateCapacityAllocationRequest struct {
 	UserID        uuid.UUID  `json:"userId" validate:"required"`
-	ProjectID     *uuid.UUID `json:"projectId"`
+	ProjectID     *uuid.UUID `json:"projectId,omitempty"`
 	AllocationPct float64    `json:"allocationPct" validate:"required"`
-	PeriodStart   string     `json:"periodStart" validate:"required"` // date string
-	PeriodEnd     string     `json:"periodEnd" validate:"required"`   // date string
+	PeriodStart   time.Time  `json:"periodStart" validate:"required"`
+	PeriodEnd     time.Time  `json:"periodEnd" validate:"required"`
 }
 
 // UpdateCapacityAllocationRequest is the payload for updating a capacity allocation.
 type UpdateCapacityAllocationRequest struct {
 	ProjectID     *uuid.UUID `json:"projectId"`
 	AllocationPct *float64   `json:"allocationPct"`
-	PeriodStart   *string    `json:"periodStart"` // date string
-	PeriodEnd     *string    `json:"periodEnd"`   // date string
+	PeriodStart   *time.Time `json:"periodStart"`
+	PeriodEnd     *time.Time `json:"periodEnd"`
 }
 
 // CreateTrainingRecordRequest is the payload for creating a training record.
 type CreateTrainingRecordRequest struct {
-	UserID           uuid.UUID  `json:"userId" validate:"required"`
-	Title            string     `json:"title" validate:"required"`
-	Provider         *string    `json:"provider"`
-	Type             string     `json:"type" validate:"required"`
-	Status           *string    `json:"status"`
-	ExpiryDate       *string    `json:"expiryDate"` // date string
-	CertificateDocID *uuid.UUID `json:"certificateDocId"`
-	Cost             *float64   `json:"cost"`
+	UserID     uuid.UUID  `json:"userId" validate:"required"`
+	Title      string     `json:"title" validate:"required"`
+	Provider   *string    `json:"provider,omitempty"`
+	Type       string     `json:"type" validate:"required"`
+	Cost       *float64   `json:"cost,omitempty"`
+	ExpiryDate *time.Time `json:"expiryDate,omitempty"`
 }
 
 // UpdateTrainingRecordRequest is the payload for updating a training record.
@@ -357,8 +438,8 @@ type UpdateTrainingRecordRequest struct {
 	Provider         *string    `json:"provider"`
 	Type             *string    `json:"type"`
 	Status           *string    `json:"status"`
-	CompletedAt      *string    `json:"completedAt"` // timestamp string
-	ExpiryDate       *string    `json:"expiryDate"`  // date string
+	CompletedAt      *time.Time `json:"completedAt"`
+	ExpiryDate       *time.Time `json:"expiryDate"`
 	CertificateDocID *uuid.UUID `json:"certificateDocId"`
 	Cost             *float64   `json:"cost"`
 }

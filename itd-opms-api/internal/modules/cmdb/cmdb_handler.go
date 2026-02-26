@@ -29,6 +29,7 @@ func NewCMDBCIHandler(svc *CMDBService) *CMDBCIHandler {
 func (h *CMDBCIHandler) Routes(r chi.Router) {
 	r.Route("/items", func(r chi.Router) {
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/", h.ListCMDBItems)
+		r.With(middleware.RequirePermission("cmdb.view")).Get("/search", h.SearchCMDBItems)
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/{id}", h.GetCMDBItem)
 		r.With(middleware.RequirePermission("cmdb.manage")).Post("/", h.CreateCMDBItem)
 		r.With(middleware.RequirePermission("cmdb.manage")).Put("/{id}", h.UpdateCMDBItem)
@@ -64,6 +65,31 @@ func (h *CMDBCIHandler) ListCMDBItems(w http.ResponseWriter, r *http.Request) {
 	status := optionalString(r, "status")
 
 	items, total, err := h.svc.ListCMDBItems(r.Context(), ciType, status, params)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, items, types.NewMeta(total, params))
+}
+
+// SearchCMDBItems handles GET /items/search — searches CIs by name, type, or description.
+func (h *CMDBCIHandler) SearchCMDBItems(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Search query (q) is required")
+		return
+	}
+
+	params := types.ParsePagination(r)
+
+	items, total, err := h.svc.SearchCMDBItems(r.Context(), q, params)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

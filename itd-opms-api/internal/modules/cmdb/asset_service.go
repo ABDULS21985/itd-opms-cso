@@ -109,9 +109,10 @@ func (s *AssetService) CreateAsset(ctx context.Context, req CreateAssetRequest) 
 	if tags == nil {
 		tags = []string{}
 	}
-	attributes := req.Attributes
-	if attributes == nil {
-		attributes = json.RawMessage("{}")
+	defaultAttrs := json.RawMessage("{}")
+	attributes := &defaultAttrs
+	if req.Attributes != nil {
+		attributes = req.Attributes
 	}
 
 	// Default currency.
@@ -503,16 +504,16 @@ func (s *AssetService) CreateLifecycleEvent(ctx context.Context, assetID uuid.UU
 	}
 
 	query := `
-		INSERT INTO asset_lifecycle_events (id, asset_id, event_type, performed_by, details, evidence_document_id, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, asset_id, event_type, performed_by, details, evidence_document_id, timestamp`
+		INSERT INTO asset_lifecycle_events (id, asset_id, tenant_id, event_type, performed_by, details, evidence_document_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, asset_id, tenant_id, event_type, performed_by, details, evidence_document_id, created_at`
 
 	var evt AssetLifecycleEvent
 	err = s.pool.QueryRow(ctx, query,
-		id, assetID, eventType, auth.UserID, details, evidenceDocID, now,
+		id, assetID, auth.TenantID, eventType, auth.UserID, details, evidenceDocID, now,
 	).Scan(
-		&evt.ID, &evt.AssetID, &evt.EventType,
-		&evt.PerformedBy, &evt.Details, &evt.EvidenceDocumentID, &evt.Timestamp,
+		&evt.ID, &evt.AssetID, &evt.TenantID, &evt.EventType,
+		&evt.PerformedBy, &evt.Details, &evt.EvidenceDocumentID, &evt.CreatedAt,
 	)
 	if err != nil {
 		return AssetLifecycleEvent{}, apperrors.Internal("failed to create lifecycle event", err)
@@ -529,10 +530,10 @@ func (s *AssetService) ListLifecycleEvents(ctx context.Context, assetID uuid.UUI
 	}
 
 	query := `
-		SELECT id, asset_id, event_type, performed_by, details, evidence_document_id, timestamp
+		SELECT id, asset_id, tenant_id, event_type, performed_by, details, evidence_document_id, created_at
 		FROM asset_lifecycle_events
 		WHERE asset_id = $1
-		ORDER BY timestamp DESC`
+		ORDER BY created_at DESC`
 
 	rows, err := s.pool.Query(ctx, query, assetID)
 	if err != nil {
@@ -544,8 +545,8 @@ func (s *AssetService) ListLifecycleEvents(ctx context.Context, assetID uuid.UUI
 	for rows.Next() {
 		var evt AssetLifecycleEvent
 		if err := rows.Scan(
-			&evt.ID, &evt.AssetID, &evt.EventType,
-			&evt.PerformedBy, &evt.Details, &evt.EvidenceDocumentID, &evt.Timestamp,
+			&evt.ID, &evt.AssetID, &evt.TenantID, &evt.EventType,
+			&evt.PerformedBy, &evt.Details, &evt.EvidenceDocumentID, &evt.CreatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan lifecycle event", err)
 		}
@@ -605,10 +606,7 @@ func (s *AssetService) CreateDisposal(ctx context.Context, req CreateDisposalReq
 		witnessIDs = []uuid.UUID{}
 	}
 
-	dataWipeConfirmed := false
-	if req.DataWipeConfirmed != nil {
-		dataWipeConfirmed = *req.DataWipeConfirmed
-	}
+	dataWipeConfirmed := req.DataWipeConfirmed
 
 	query := `
 		INSERT INTO asset_disposals (
@@ -750,14 +748,13 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 			approved_by = COALESCE($2, approved_by),
 			disposal_date = COALESCE($3, disposal_date),
 			disposal_certificate_doc_id = COALESCE($4, disposal_certificate_doc_id),
-			data_wipe_confirmed = COALESCE($5, data_wipe_confirmed),
-			updated_at = $6
-		WHERE id = $7 AND tenant_id = $8
+			updated_at = $5
+		WHERE id = $6 AND tenant_id = $7
 		RETURNING ` + disposalColumns
 
 	disposal, err := scanDisposal(s.pool.QueryRow(ctx, query,
 		req.Status, req.ApprovedBy, req.DisposalDate,
-		req.DisposalCertificateDocID, req.DataWipeConfirmed,
+		req.DisposalCertificateDocID,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -814,69 +811,29 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 // Stats
 // ──────────────────────────────────────────────
 
-// GetAssetStats returns aggregate asset counts by status and type.
+// GetAssetStats returns aggregate asset counts by status.
 func (s *AssetService) GetAssetStats(ctx context.Context) (AssetStats, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return AssetStats{}, apperrors.Unauthorized("authentication required")
 	}
 
-	// Get total count.
-	var totalCount int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM assets WHERE tenant_id = $1`, auth.TenantID).Scan(&totalCount)
-	if err != nil {
-		return AssetStats{}, apperrors.Internal("failed to get asset total count", err)
-	}
+	query := `
+		SELECT
+			COUNT(*)::int AS total,
+			COUNT(*) FILTER (WHERE status = 'active')::int AS active_count,
+			COUNT(*) FILTER (WHERE status = 'maintenance')::int AS maintenance_count,
+			COUNT(*) FILTER (WHERE status = 'retired')::int AS retired_count
+		FROM assets
+		WHERE tenant_id = $1`
 
-	// Get counts by status.
-	byStatus := make(map[string]int)
-	statusRows, err := s.pool.Query(ctx, `
-		SELECT status, COUNT(*) FROM assets WHERE tenant_id = $1 GROUP BY status`,
-		auth.TenantID,
+	var stats AssetStats
+	err := s.pool.QueryRow(ctx, query, auth.TenantID).Scan(
+		&stats.Total, &stats.ActiveCount, &stats.MaintenanceCount, &stats.RetiredCount,
 	)
 	if err != nil {
-		return AssetStats{}, apperrors.Internal("failed to get asset status counts", err)
-	}
-	defer statusRows.Close()
-
-	for statusRows.Next() {
-		var status string
-		var count int
-		if err := statusRows.Scan(&status, &count); err != nil {
-			return AssetStats{}, apperrors.Internal("failed to scan asset status count", err)
-		}
-		byStatus[status] = count
-	}
-	if err := statusRows.Err(); err != nil {
-		return AssetStats{}, apperrors.Internal("failed to iterate asset status counts", err)
+		return AssetStats{}, apperrors.Internal("failed to get asset stats", err)
 	}
 
-	// Get counts by type.
-	byType := make(map[string]int)
-	typeRows, err := s.pool.Query(ctx, `
-		SELECT type, COUNT(*) FROM assets WHERE tenant_id = $1 GROUP BY type`,
-		auth.TenantID,
-	)
-	if err != nil {
-		return AssetStats{}, apperrors.Internal("failed to get asset type counts", err)
-	}
-	defer typeRows.Close()
-
-	for typeRows.Next() {
-		var assetType string
-		var count int
-		if err := typeRows.Scan(&assetType, &count); err != nil {
-			return AssetStats{}, apperrors.Internal("failed to scan asset type count", err)
-		}
-		byType[assetType] = count
-	}
-	if err := typeRows.Err(); err != nil {
-		return AssetStats{}, apperrors.Internal("failed to iterate asset type counts", err)
-	}
-
-	return AssetStats{
-		TotalCount: totalCount,
-		ByStatus:   byStatus,
-		ByType:     byType,
-	}, nil
+	return stats, nil
 }
