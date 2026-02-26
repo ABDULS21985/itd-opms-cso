@@ -302,3 +302,393 @@ export interface KPI {
   ownerId?: string;
   lastUpdatedAt?: string;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Planning Module Types                                              */
+/* ------------------------------------------------------------------ */
+
+export interface Portfolio {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  ownerId?: string;
+  fiscalYear: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Project {
+  id: string;
+  tenantId: string;
+  portfolioId?: string;
+  title: string;
+  code: string;
+  description?: string;
+  charter?: string;
+  scope?: string;
+  businessCase?: string;
+  sponsorId?: string;
+  projectManagerId?: string;
+  status: string;
+  ragStatus: string;
+  priority: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  budgetApproved?: number;
+  budgetSpent?: number;
+  completionPct?: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectDependency {
+  id: string;
+  projectId: string;
+  dependsOnProjectId: string;
+  dependencyType: string;
+  description?: string;
+  impactIfDelayed?: string;
+  createdAt: string;
+}
+
+export interface ProjectStakeholder {
+  id: string;
+  projectId: string;
+  userId: string;
+  role: string;
+  influence?: string;
+  interest?: string;
+  communicationPreference?: string;
+  createdAt: string;
+}
+
+export interface WorkItem {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  parentId?: string;
+  type: string;
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  reporterId?: string;
+  status: string;
+  priority: string;
+  estimatedHours?: number;
+  actualHours?: number;
+  dueDate?: string;
+  completedAt?: string;
+  sortOrder: number;
+  tags: string[];
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  children?: WorkItem[];
+}
+
+export interface PlanningMilestone {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  targetDate: string;
+  actualDate?: string;
+  status: string;
+  evidenceRefs: string[];
+  completionCriteria?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  workItemId: string;
+  userId: string;
+  hours: number;
+  description?: string;
+  loggedDate: string;
+  createdAt: string;
+}
+
+export interface Risk {
+  id: string;
+  tenantId: string;
+  projectId?: string;
+  title: string;
+  description?: string;
+  category?: string;
+  likelihood: string;
+  impact: string;
+  riskScore: number;
+  status: string;
+  mitigationPlan?: string;
+  contingencyPlan?: string;
+  ownerId?: string;
+  reviewDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectIssue {
+  id: string;
+  tenantId: string;
+  projectId?: string;
+  title: string;
+  description?: string;
+  category?: string;
+  severity: string;
+  status: string;
+  assigneeId?: string;
+  resolution?: string;
+  escalationLevel: number;
+  escalatedToId?: string;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChangeRequest {
+  id: string;
+  tenantId: string;
+  projectId?: string;
+  title: string;
+  description?: string;
+  justification?: string;
+  impactAssessment?: string;
+  status: string;
+  requestedBy: string;
+  reviewedBy?: string;
+  approvalChainId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortfolioAnalytics {
+  totalProjects: number;
+  activeProjects: number;
+  completedProjects: number;
+  onTimeDeliveryPct: number;
+  avgCompletionPct: number;
+  totalBudgetApproved: number;
+  totalBudgetSpent: number;
+  ragSummary: Record<string, number>;
+}
+
+export interface WorkItemStatusCount {
+  status: string;
+  count: number;
+}
+
+/* ------------------------------------------------------------------ */
+/*  ITSM Module Types                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface CatalogCategory {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  parentId?: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CatalogItem {
+  id: string;
+  tenantId: string;
+  categoryId?: string;
+  name: string;
+  description?: string;
+  fulfillmentWorkflowId?: string;
+  approvalRequired: boolean;
+  approvalChainConfig?: Record<string, unknown>;
+  slaPolicyId?: string;
+  formSchema?: Record<string, unknown>;
+  entitlementRoles: string[];
+  estimatedDelivery?: string;
+  status: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Ticket {
+  id: string;
+  tenantId: string;
+  ticketNumber: string;
+  type: string;
+  category?: string;
+  subcategory?: string;
+  title: string;
+  description: string;
+  priority: string;
+  urgency: string;
+  impact: string;
+  status: string;
+  channel: string;
+  reporterId: string;
+  assigneeId?: string;
+  teamQueueId?: string;
+  slaPolicyId?: string;
+  slaResponseTarget?: string;
+  slaResolutionTarget?: string;
+  slaResponseMet?: boolean;
+  slaResolutionMet?: boolean;
+  slaPausedAt?: string;
+  slaPausedDurationMinutes: number;
+  isMajorIncident: boolean;
+  relatedTicketIds: string[];
+  linkedProblemId?: string;
+  linkedAssetIds: string[];
+  resolutionNotes?: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  firstResponseAt?: string;
+  satisfactionScore?: number;
+  tags: string[];
+  customFields?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketComment {
+  id: string;
+  ticketId: string;
+  authorId: string;
+  content: string;
+  isInternal: boolean;
+  attachments: string[];
+  createdAt: string;
+}
+
+export interface TicketStatusHistory {
+  id: string;
+  ticketId: string;
+  fromStatus: string;
+  toStatus: string;
+  changedBy: string;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface TicketStats {
+  total: number;
+  openCount: number;
+  slaBreachedCount: number;
+  majorIncidents: number;
+}
+
+export interface SLAPolicy {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  priorityTargets: Record<string, { response_minutes: number; resolution_minutes: number }>;
+  businessHoursCalendarId?: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BusinessHoursCalendar {
+  id: string;
+  tenantId: string;
+  name: string;
+  timezone: string;
+  schedule: Record<string, { start: string; end: string }>;
+  holidays: Array<{ date: string; name: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SLABreachEntry {
+  id: string;
+  ticketId: string;
+  breachType: string;
+  breachedAt: string;
+  targetWas: string;
+  actualDurationMinutes?: number;
+  createdAt: string;
+}
+
+export interface SLAComplianceStats {
+  totalTickets: number;
+  responseMet: number;
+  resolutionMet: number;
+}
+
+export interface EscalationRule {
+  id: string;
+  tenantId: string;
+  name: string;
+  triggerType: string;
+  triggerConfig?: Record<string, unknown>;
+  escalationChain?: Record<string, unknown>;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ITSMProblem {
+  id: string;
+  tenantId: string;
+  problemNumber: string;
+  title: string;
+  description?: string;
+  rootCause?: string;
+  status: string;
+  linkedIncidentIds: string[];
+  workaround?: string;
+  permanentFix?: string;
+  linkedChangeId?: string;
+  ownerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnownError {
+  id: string;
+  problemId: string;
+  title: string;
+  description?: string;
+  workaround?: string;
+  kbArticleId?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportQueue {
+  id: string;
+  tenantId: string;
+  name: string;
+  teamId?: string;
+  priorityFilter: string[];
+  autoAssignRule: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CSATSurvey {
+  id: string;
+  ticketId: string;
+  respondentId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface CSATStats {
+  total: number;
+  avgRating: number;
+}

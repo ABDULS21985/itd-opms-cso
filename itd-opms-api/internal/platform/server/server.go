@@ -152,7 +152,7 @@ func (s *Server) Setup() {
 	// --- Module stub handlers ---
 	governanceHandler := governance.NewHandler(s.pool, auditService)
 	peopleHandler := people.NewHandler()
-	planningHandler := planning.NewHandler()
+	planningHandler := planning.NewHandler(s.pool, auditService)
 	itsmHandler := itsm.NewHandler()
 	cmdbHandler := cmdb.NewHandler()
 	knowledgeHandler := knowledge.NewHandler()

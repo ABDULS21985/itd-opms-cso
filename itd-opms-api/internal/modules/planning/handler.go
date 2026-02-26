@@ -1,31 +1,61 @@
 package planning
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
-// Handler handles HTTP requests for the planning module.
-type Handler struct{}
-
-// NewHandler creates a new planning Handler.
-func NewHandler() *Handler {
-	return &Handler{}
+// Handler is the top-level HTTP handler for the planning module.
+// It composes all sub-handlers for portfolios, projects, work-items,
+// milestones, and risks/issues/change-requests.
+type Handler struct {
+	portfolio *PortfolioHandler
+	project   *ProjectHandler
+	workItem  *WorkItemHandler
+	milestone *MilestoneHandler
+	risk      *RiskHandler
 }
 
-// Routes mounts planning endpoints on the given router.
+// NewHandler creates a new planning Handler with all sub-handlers wired up.
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+	portfolioSvc := NewPortfolioService(pool, auditSvc)
+	projectSvc := NewProjectService(pool, auditSvc)
+	workItemSvc := NewWorkItemService(pool, auditSvc)
+	riskSvc := NewRiskService(pool, auditSvc)
+
+	return &Handler{
+		portfolio: NewPortfolioHandler(portfolioSvc),
+		project:   NewProjectHandler(projectSvc),
+		workItem:  NewWorkItemHandler(workItemSvc),
+		milestone: NewMilestoneHandler(workItemSvc),
+		risk:      NewRiskHandler(riskSvc),
+	}
+}
+
+// Routes mounts all planning sub-routes on the given router.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/", h.index)
-}
-
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":  "info",
-		"message": "planning module - not yet implemented",
-		"data":    nil,
+	// Portfolio management (FR-C001 to FR-C004)
+	r.Route("/portfolios", func(r chi.Router) {
+		h.portfolio.Routes(r)
 	})
+
+	// Project management
+	r.Route("/projects", func(r chi.Router) {
+		h.project.Routes(r)
+	})
+
+	// Work items & task management (FR-C005 to FR-C010)
+	r.Route("/work-items", func(r chi.Router) {
+		h.workItem.Routes(r)
+	})
+
+	// Milestones
+	r.Route("/milestones", func(r chi.Router) {
+		h.milestone.Routes(r)
+	})
+
+	// Risks, Issues & Change Requests (FR-C011 to FR-C016)
+	h.risk.Routes(r)
 }
