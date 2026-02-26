@@ -19,7 +19,7 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 15s
     static_configs:
-      - targets: ["api:8080"]
+      - targets: ["api:8089"]
         labels:
           service: itd-opms-api
           environment: development

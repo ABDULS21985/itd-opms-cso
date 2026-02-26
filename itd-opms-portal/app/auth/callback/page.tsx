@@ -7,7 +7,7 @@ import { Shield, AlertCircle, RefreshCw } from "lucide-react";
 import { setAuthenticatedFlag, setAuthMode } from "@/lib/auth";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
 
 type CallbackStatus = "processing" | "success" | "error";
 
@@ -77,7 +77,7 @@ function OIDCCallbackContent() {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.message ||
-              `Token exchange failed (${response.status}). Please try again.`,
+            `Token exchange failed (${response.status}). Please try again.`,
           );
         }
 

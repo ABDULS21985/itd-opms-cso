@@ -129,7 +129,7 @@ func Load() (*Config, error) {
 
 	// Defaults
 	v.SetDefault("SERVER_HOST", "0.0.0.0")
-	v.SetDefault("SERVER_PORT", 8080)
+	v.SetDefault("SERVER_PORT", 8089)
 	v.SetDefault("SERVER_ENV", "development")
 	v.SetDefault("DB_HOST", "localhost")
 	v.SetDefault("DB_PORT", 5432)

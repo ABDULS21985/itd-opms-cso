@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
     container_name: opms-api
     ports:
-      - "8080:8080"
+      - "8089:8089"
     env_file:
       - .env
     environment:
@@ -53,7 +53,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U opms -d itd_opms"]
+      test: [ "CMD-SHELL", "pg_isready -U opms -d itd_opms" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -70,7 +70,7 @@ services:
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -83,8 +83,8 @@ services:
     image: minio/minio:latest
     container_name: opms-minio
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web Console
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web Console
     environment:
       MINIO_ROOT_USER: opms_minio
       MINIO_ROOT_PASSWORD: opms_minio_secret
@@ -92,7 +92,7 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -105,13 +105,13 @@ services:
     image: nats:2-alpine
     container_name: opms-nats
     ports:
-      - "4222:4222"   # Client connections
-      - "8222:8222"   # HTTP monitoring
+      - "4222:4222" # Client connections
+      - "8222:8222" # HTTP monitoring
     command: -js -sd /data -m 8222
     volumes:
       - natsdata:/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -152,7 +152,7 @@ services:
     image: grafana/grafana:latest
     container_name: opms-grafana
     ports:
-      - "3001:3000"   # 3001 on host to avoid conflict with Next.js on 3000
+      - "3001:3000" # 3001 on host to avoid conflict with Next.js on 3000
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -184,8 +184,8 @@ services:
     image: grafana/tempo:latest
     container_name: opms-tempo
     ports:
-      - "4317:4317"   # OTLP gRPC receiver
-      - "3200:3200"   # Tempo HTTP API
+      - "4317:4317" # OTLP gRPC receiver
+      - "3200:3200" # Tempo HTTP API
     volumes:
       - ./tempo.yml:/etc/tempo/tempo.yaml:ro
     command: -config.file=/etc/tempo/tempo.yaml

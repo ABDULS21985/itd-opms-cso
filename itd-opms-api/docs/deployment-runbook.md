@@ -27,7 +27,7 @@ Copy `.env.example` to `.env` and fill in production values. Key variables:
 | Variable               | Description                            | Example                                    |
 | ---------------------- | -------------------------------------- | ------------------------------------------ |
 | `SERVER_HOST`          | Bind address                           | `0.0.0.0`                                  |
-| `SERVER_PORT`          | Bind port                              | `8080`                                     |
+| `SERVER_PORT`          | Bind port                              | `8089`                                     |
 | `SERVER_ENV`           | Environment (development/production)   | `production`                                |
 | `DB_HOST`              | PostgreSQL hostname                    | `postgres`                                  |
 | `DB_PORT`              | PostgreSQL port                        | `5432`                                      |
@@ -152,7 +152,7 @@ After deployment, verify the API is healthy:
 
 ```bash
 # Health check endpoint
-curl -s http://localhost:8080/api/v1/health | jq .
+curl -s http://localhost:8089/api/v1/health | jq .
 
 # Expected response (all services healthy):
 # {
@@ -180,13 +180,13 @@ docker compose logs minio
 
 ```bash
 # Login with dev credentials
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8089/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@itd.cbn.gov.ng","password":"admin123"}' \
   | jq -r '.data.accessToken')
 
 # Verify authenticated endpoint works
-curl -s http://localhost:8080/api/v1/audit/events \
+curl -s http://localhost:8089/api/v1/audit/events \
   -H "Authorization: Bearer $TOKEN" | jq .status
 # Expected: "success"
 ```
@@ -240,7 +240,7 @@ recover data. Always take a database backup before deploying migrations.
 
 | Service    | URL                        | Purpose            |
 | ---------- | -------------------------- | ------------------ |
-| API        | http://localhost:8080       | Application        |
+| API        | http://localhost:8089       | Application        |
 | Grafana    | http://localhost:3001       | Dashboards         |
 | Prometheus | http://localhost:9090       | Metrics            |
 | Loki       | http://localhost:3100       | Log aggregation    |

@@ -55,10 +55,10 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
   isLoggedIn: false,
-  login: async () => {},
-  loginWithEntraID: async () => {},
-  logout: () => {},
-  refreshUser: async () => {},
+  login: async () => { },
+  loginWithEntraID: async () => { },
+  logout: () => { },
+  refreshUser: async () => { },
   isEntraIDEnabled: false,
 });
 
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Call backend logout endpoint (fire-and-forget)
     const apiBase =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
     fetch(`${apiBase}/auth/logout`, {
       method: "POST",
       credentials: "include",

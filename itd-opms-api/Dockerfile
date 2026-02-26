@@ -25,9 +25,9 @@ WORKDIR /app
 COPY --from=builder /app/bin/api .
 COPY --from=builder /app/migrations ./migrations
 
-EXPOSE 8080
+EXPOSE 8089
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/api/v1/health || exit 1
+  CMD curl -f http://localhost:8089/api/v1/health || exit 1
 
 ENTRYPOINT ["./api"]

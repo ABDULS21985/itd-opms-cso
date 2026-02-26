@@ -13,7 +13,7 @@ module.exports = {
       listen_timeout: 10000,
       env: {
         SERVER_HOST: '0.0.0.0',
-        SERVER_PORT: 8080,
+        SERVER_PORT: 8089,
         SERVER_ENV: 'development',
         DB_HOST: 'localhost',
         DB_PORT: 5432,
@@ -57,7 +57,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000,
         HOSTNAME: '0.0.0.0',
-        NEXT_PUBLIC_API_URL: 'http://localhost:8080/api/v1',
+        NEXT_PUBLIC_API_URL: 'http://localhost:8089/api/v1',
       },
     },
   ],

@@ -134,7 +134,7 @@ cd /opt/itd-opms-dr
 docker compose up -d api
 
 # Verify health
-curl -s http://dr-api:8080/api/v1/health | jq .
+curl -s http://dr-api:8089/api/v1/health | jq .
 ```
 
 #### Step 4: Switch DNS / Load Balancer
@@ -228,7 +228,7 @@ docker exec opms-postgres pg_ctl promote -D /var/lib/postgresql/data
 docker compose up -d api
 
 # Verify health
-curl -s http://localhost:8080/api/v1/health | jq .
+curl -s http://localhost:8089/api/v1/health | jq .
 ```
 
 #### Step 3: Switch DNS Back

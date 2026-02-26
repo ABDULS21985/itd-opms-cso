@@ -31,7 +31,7 @@ const NotificationContext = createContext<NotificationContextType>({
 });
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
 
 /* ------------------------------------------------------------------ */
 /*  Provider                                                           */
@@ -98,11 +98,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           description: notification.message,
           action: notification.actionUrl
             ? {
-                label: "View",
-                onClick: () => {
-                  window.location.href = notification.actionUrl;
-                },
-              }
+              label: "View",
+              onClick: () => {
+                window.location.href = notification.actionUrl;
+              },
+            }
             : undefined,
         });
 

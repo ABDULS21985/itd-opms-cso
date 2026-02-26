@@ -168,7 +168,7 @@ docker exec opms-postgres psql -U opms -d itd_opms -c "
 docker compose start api
 
 # Verify health
-curl -s http://localhost:8080/api/v1/health | jq .status
+curl -s http://localhost:8089/api/v1/health | jq .status
 ```
 
 ### 4.2 Point-in-Time Recovery (PITR)
@@ -216,7 +216,7 @@ After any restore operation, verify data integrity:
 ### 5.1 API Health Check
 
 ```bash
-curl -s http://localhost:8080/api/v1/health | jq .
+curl -s http://localhost:8089/api/v1/health | jq .
 # All services should show "healthy"
 ```
 
@@ -224,12 +224,12 @@ curl -s http://localhost:8080/api/v1/health | jq .
 
 ```bash
 # Login and verify audit checksum integrity
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8089/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@itd.cbn.gov.ng","password":"admin123"}' \
   | jq -r '.data.accessToken')
 
-curl -s http://localhost:8080/api/v1/audit/verify \
+curl -s http://localhost:8089/api/v1/audit/verify \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
@@ -249,10 +249,10 @@ docker exec opms-postgres psql -U opms -d itd_opms -c "
 ```bash
 # Verify key endpoints return data
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/governance/policies | jq .status
+  http://localhost:8089/api/v1/governance/policies | jq .status
 
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/itsm/tickets | jq .status
+  http://localhost:8089/api/v1/itsm/tickets | jq .status
 ```
 
 ---

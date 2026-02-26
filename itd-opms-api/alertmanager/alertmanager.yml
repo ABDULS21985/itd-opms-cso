@@ -24,20 +24,20 @@ route:
 receivers:
   - name: 'default'
     webhook_configs:
-      - url: 'http://api:8080/api/v1/notifications/webhook/alertmanager'
+      - url: 'http://api:8089/api/v1/notifications/webhook/alertmanager'
         send_resolved: true
 
   - name: 'critical-alerts'
     webhook_configs:
-      - url: 'http://api:8080/api/v1/notifications/webhook/alertmanager'
+      - url: 'http://api:8089/api/v1/notifications/webhook/alertmanager'
         send_resolved: true
 
   - name: 'high-alerts'
     webhook_configs:
-      - url: 'http://api:8080/api/v1/notifications/webhook/alertmanager'
+      - url: 'http://api:8089/api/v1/notifications/webhook/alertmanager'
         send_resolved: true
 
   - name: 'medium-alerts'
     webhook_configs:
-      - url: 'http://api:8080/api/v1/notifications/webhook/alertmanager'
+      - url: 'http://api:8089/api/v1/notifications/webhook/alertmanager'
         send_resolved: true
