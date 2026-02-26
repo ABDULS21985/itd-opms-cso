@@ -1,8 +1,35 @@
+/* =============================================================================
+   API Client — ITD-OPMS Portal
+
+   Dual authentication mode support:
+
+   1. OIDC / Cookie mode (production with Microsoft Entra ID):
+      - httpOnly cookies are sent automatically via `credentials: "include"`
+      - No explicit Authorization header needed
+      - Detected by checking for 'opms-auth-mode' === 'oidc' in localStorage
+
+   2. Dev-mode JWT (localStorage token):
+      - Bearer token read from localStorage ('opms-token')
+      - Sent as Authorization header on every request
+      - Used when Entra ID OIDC is not configured
+
+   The client auto-detects which mode is active and handles both transparently.
+   ============================================================================= */
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+}
+
+/**
+ * Detect the current authentication mode.
+ * Returns "oidc" if using httpOnly cookie auth, "dev" if using localStorage JWT.
+ */
+function getAuthMode(): "oidc" | "dev" | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("opms-auth-mode") as "oidc" | "dev" | null;
 }
 
 class ApiClient {
@@ -12,9 +39,21 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  /**
+   * Get the JWT token from localStorage (dev-mode only).
+   * In OIDC mode, returns null — cookies are sent automatically.
+   */
   private getToken(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("opms-token");
+  }
+
+  /**
+   * Check if we're using cookie-based auth (OIDC mode).
+   * When true, no explicit Authorization header is needed.
+   */
+  private isUsingCookieAuth(): boolean {
+    return getAuthMode() === "oidc";
   }
 
   private buildUrl(
@@ -36,19 +75,24 @@ class ApiClient {
     const { params, ...fetchOptions } = options;
     const url = this.buildUrl(path, params);
 
-    const token = this.getToken();
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
     };
 
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    // In dev mode, attach the Bearer token from localStorage.
+    // In OIDC mode, the httpOnly cookie is sent automatically via credentials.
+    if (!this.isUsingCookieAuth()) {
+      const token = this.getToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
     }
 
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
+      credentials: "include", // Always include cookies for OIDC mode
     });
 
     if (!response.ok) {
@@ -56,7 +100,12 @@ class ApiClient {
 
       // Redirect to login on 401 Unauthorized
       if (response.status === 401 && typeof window !== "undefined") {
+        // Clean up both auth modes
         localStorage.removeItem("opms-token");
+        localStorage.removeItem("opms-auth-mode");
+        // Clear the auth flag cookie
+        document.cookie =
+          "opms-authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
         window.location.href = "/auth/login";
       }
 
@@ -119,16 +168,21 @@ class ApiClient {
   }
 
   async upload<T>(path: string, formData: FormData): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {};
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+
+    // Only attach Bearer token in dev mode; OIDC uses cookies
+    if (!this.isUsingCookieAuth()) {
+      const token = this.getToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
     }
 
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: "POST",
       headers,
       body: formData,
+      credentials: "include", // Always include cookies for OIDC mode
     });
 
     if (!response.ok) {
@@ -136,6 +190,9 @@ class ApiClient {
 
       if (response.status === 401 && typeof window !== "undefined") {
         localStorage.removeItem("opms-token");
+        localStorage.removeItem("opms-auth-mode");
+        document.cookie =
+          "opms-authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
         window.location.href = "/auth/login";
       }
 

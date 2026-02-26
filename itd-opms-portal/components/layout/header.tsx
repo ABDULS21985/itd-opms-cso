@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
   Search,
-  Bell,
   ChevronRight,
   LogOut,
   User,
@@ -18,6 +17,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { NotificationPanel } from "@/components/notifications/notification-panel";
 
 /* ------------------------------------------------------------------ */
 /*  Theme Toggle                                                       */
@@ -197,6 +198,7 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
+  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
 
   // Breadcrumbs from pathname
   const breadcrumbs = useMemo(() => {

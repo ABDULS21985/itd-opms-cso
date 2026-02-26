@@ -12,17 +12,40 @@ import {
   Shield,
   Building2,
   Landmark,
+  LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 
+/**
+ * Microsoft logo SVG component for the "Sign in with Microsoft" button.
+ */
+function MicrosoftLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 21 21"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithEntraID, isEntraIDEnabled, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSSOLoading, setIsSSOLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +68,24 @@ export default function LoginPage() {
       toast.error("Sign in failed", { description: message });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEntraIDLogin = async () => {
+    setError("");
+    setIsSSOLoading(true);
+
+    try {
+      await loginWithEntraID();
+      // The function will redirect — this code only runs if something fails
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to initiate Microsoft sign-in. Please try again.";
+      setError(message);
+      toast.error("SSO Error", { description: message });
+      setIsSSOLoading(false);
     }
   };
 
@@ -238,7 +279,9 @@ export default function LoginPage() {
                 Sign in to OPMS
               </h1>
               <p className="text-sm text-[var(--neutral-gray)] mt-2">
-                Enter your credentials to access the portal
+                {isEntraIDEnabled
+                  ? "Sign in with your organizational account"
+                  : "Enter your credentials to access the portal"}
               </p>
             </motion.div>
 
@@ -263,12 +306,57 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
 
-            {/* Form */}
+            {/* Microsoft Entra ID SSO Button */}
+            {isEntraIDEnabled && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="mb-6"
+              >
+                <button
+                  type="button"
+                  onClick={handleEntraIDLogin}
+                  disabled={isSSOLoading || authLoading}
+                  className="w-full py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-3 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed border border-[var(--border)] bg-[var(--surface-0)] text-[var(--foreground)] hover:bg-[var(--surface-1)] hover:border-[var(--primary)]/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  {isSSOLoading ? (
+                    <div className="w-5 h-5 border-2 border-[var(--neutral-gray)]/30 border-t-[var(--foreground)] rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <MicrosoftLogo />
+                      Sign in with Microsoft
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            )}
+
+            {/* Divider — shown when both auth modes are available */}
+            {isEntraIDEnabled && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+                className="relative mb-6"
+              >
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-[var(--border)]" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-[var(--surface-0)] px-3 text-[var(--neutral-gray)]">
+                    or sign in with credentials
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Dev-mode email/password Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.25 }}
+                transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.35 : 0.25 }}
               >
                 <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
                   Email address
@@ -295,7 +383,7 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.35 }}
+                transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.45 : 0.35 }}
               >
                 <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
                   Password
@@ -329,7 +417,7 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.45 }}
+                transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.55 : 0.45 }}
                 className="pt-1"
               >
                 <button
@@ -341,11 +429,8 @@ export default function LoginPage() {
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      Sign In
-                      <ArrowRight
-                        size={16}
-                        className="transition-transform group-hover:translate-x-0.5"
-                      />
+                      <LogIn size={16} />
+                      Sign In with Credentials
                     </>
                   )}
                 </button>

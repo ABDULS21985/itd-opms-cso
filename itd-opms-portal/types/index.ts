@@ -81,3 +81,27 @@ export interface ApiResponse<T> {
   };
   message?: string;
 }
+
+/* =============================================================================
+   Notification Types
+   ============================================================================= */
+
+export interface Notification {
+  id: string;
+  tenantId: string;
+  type: string;
+  title: string;
+  message: string;
+  actionUrl?: string;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface NotificationPreferences {
+  channelPreferences: Record<string, boolean>;
+  digestFrequency: "immediate" | "daily" | "weekly";
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  disabledTypes: string[];
+}
