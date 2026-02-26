@@ -11,9 +11,10 @@ import (
 // It composes all sub-handlers for assets, CMDB configuration items,
 // licenses, warranties, and renewal alerts.
 type Handler struct {
-	asset   *AssetHandler
-	cmdbCI  *CMDBCIHandler
-	license *LicenseHandler
+	asset    *AssetHandler
+	cmdb     *CMDBCIHandler
+	license  *LicenseHandler
+	warranty *WarrantyHandler
 }
 
 // NewHandler creates a new CMDB Handler with all sub-handlers wired up.
@@ -21,11 +22,13 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 	assetSvc := NewAssetService(pool, auditSvc)
 	cmdbSvc := NewCMDBService(pool, auditSvc)
 	licenseSvc := NewLicenseService(pool, auditSvc)
+	warrantySvc := NewWarrantyService(pool, auditSvc)
 
 	return &Handler{
-		asset:   NewAssetHandler(assetSvc),
-		cmdbCI:  NewCMDBCIHandler(cmdbSvc),
-		license: NewLicenseHandler(licenseSvc),
+		asset:    NewAssetHandler(assetSvc),
+		cmdb:     NewCMDBCIHandler(cmdbSvc),
+		license:  NewLicenseHandler(licenseSvc),
+		warranty: NewWarrantyHandler(warrantySvc),
 	}
 }
 
@@ -36,9 +39,21 @@ func (h *Handler) Routes(r chi.Router) {
 		h.asset.Routes(r)
 	})
 
-	// CMDB & Relationships (FR-E006 to FR-E008)
-	h.cmdbCI.Routes(r)
+	// CMDB configuration items & relationships (FR-E006 to FR-E008)
+	h.cmdb.Routes(r)
 
-	// Licenses, Warranties & Renewals (FR-E009 to FR-E012)
-	h.license.Routes(r)
+	// Software licenses & assignments (FR-E009 to FR-E010)
+	r.Route("/licenses", func(r chi.Router) {
+		h.license.Routes(r)
+	})
+
+	// Warranties (FR-E011)
+	r.Route("/warranties", func(r chi.Router) {
+		h.warranty.WarrantyRoutes(r)
+	})
+
+	// Renewal alerts (FR-E012)
+	r.Route("/renewal-alerts", func(r chi.Router) {
+		h.warranty.AlertRoutes(r)
+	})
 }

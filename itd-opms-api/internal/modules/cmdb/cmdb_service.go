@@ -625,18 +625,24 @@ func (s *CMDBService) CompleteReconciliationRun(ctx context.Context, id uuid.UUI
 
 	now := time.Now().UTC()
 
+	// Default completed_at to now if not explicitly provided.
+	completedAt := &now
+	if req.CompletedAt != nil {
+		completedAt = req.CompletedAt
+	}
+
 	query := `
 		UPDATE reconciliation_runs SET
-			completed_at = $1,
-			matches = $2,
-			discrepancies = $3,
-			new_items = $4,
+			completed_at = COALESCE($1, completed_at),
+			matches = COALESCE($2, matches),
+			discrepancies = COALESCE($3, discrepancies),
+			new_items = COALESCE($4, new_items),
 			report = COALESCE($5, report)
 		WHERE id = $6 AND tenant_id = $7
 		RETURNING ` + reconciliationRunColumns
 
 	run, err := scanReconciliationRun(s.pool.QueryRow(ctx, query,
-		now, req.Matches, req.Discrepancies, req.NewItems, req.Report,
+		completedAt, req.Matches, req.Discrepancies, req.NewItems, req.Report,
 		id, auth.TenantID,
 	))
 	if err != nil {

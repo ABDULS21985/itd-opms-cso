@@ -1,31 +1,53 @@
 package people
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
-// Handler handles HTTP requests for the people module.
-type Handler struct{}
-
-// NewHandler creates a new people Handler.
-func NewHandler() *Handler {
-	return &Handler{}
+// Handler is the top-level HTTP handler for the People & Workforce module.
+// It composes all sub-handlers for skills, checklists, rosters, and training.
+type Handler struct {
+	skill     *SkillHandler
+	checklist *ChecklistHandler
+	roster    *RosterHandler
+	training  *TrainingHandler
 }
 
-// Routes mounts people endpoints on the given router.
+// NewHandler creates a new People Handler with all sub-handlers wired up.
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+	skillSvc := NewSkillService(pool, auditSvc)
+	checklistSvc := NewChecklistService(pool, auditSvc)
+	rosterSvc := NewRosterService(pool, auditSvc)
+	trainingSvc := NewTrainingService(pool, auditSvc)
+
+	return &Handler{
+		skill:     NewSkillHandler(skillSvc),
+		checklist: NewChecklistHandler(checklistSvc),
+		roster:    NewRosterHandler(rosterSvc),
+		training:  NewTrainingHandler(trainingSvc),
+	}
+}
+
+// Routes mounts all People sub-routes on the given router.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/", h.index)
-}
+	// Skills — categories, skills, user skills, role requirements, gap analysis
+	r.Route("/skills", func(r chi.Router) {
+		h.skill.Routes(r)
+	})
 
-func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":  "info",
-		"message": "people module - not yet implemented",
-		"data":    nil,
+	// Checklists — templates, checklists, tasks
+	r.Route("/checklists", func(r chi.Router) {
+		h.checklist.Routes(r)
+	})
+
+	// Rosters, Leave Records, Capacity Allocations
+	h.roster.Routes(r) // mounts /rosters, /leave, /capacity
+
+	// Training Records
+	r.Route("/training", func(r chi.Router) {
+		h.training.Routes(r)
 	})
 }
