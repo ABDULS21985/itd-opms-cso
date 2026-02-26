@@ -1231,3 +1231,74 @@ export interface ComplianceStats {
   total: number;
   compliantCount: number;
 }
+
+/* ====================================================================== */
+/*  Reporting & Analytics Types                                              */
+/* ====================================================================== */
+
+export interface ReportDefinition {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  type: string;
+  template: Record<string, unknown>;
+  scheduleCron?: string;
+  recipients: string[];
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportRun {
+  id: string;
+  definitionId: string;
+  tenantId: string;
+  status: string;
+  generatedAt?: string;
+  completedAt?: string;
+  documentId?: string;
+  dataSnapshot: Record<string, unknown>;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface ExecutiveSummary {
+  tenantId: string;
+  activePolicies: number;
+  overdueActions: number;
+  avgOkrProgress: number;
+  openTickets: number;
+  criticalTickets: number;
+  activeProjects: number;
+  activeAssets: number;
+  overDeployedLicenses: number;
+  highRisks: number;
+  expiringCerts: number;
+  refreshedAt: string;
+}
+
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+}
+
+export interface SavedSearch {
+  id: string;
+  tenantId: string;
+  userId: string;
+  query: string;
+  entityTypes: string[];
+  isSaved: boolean;
+  lastUsedAt: string;
+  createdAt: string;
+}
+
+export interface GlobalSearchResults {
+  tickets?: { results: Array<{ id: string; title: string; status: string }>; count: number };
+  articles?: { results: Array<{ id: string; title: string; slug: string }>; count: number };
+  assets?: { results: Array<{ id: string; name: string; assetTag: string }>; count: number };
+  projects?: { results: Array<{ id: string; name: string; status: string }>; count: number };
+  policies?: { results: Array<{ id: string; title: string; status: string }>; count: number };
+}

@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useExecutiveSummary } from "@/hooks/use-reporting";
 
 /* ------------------------------------------------------------------ */
 /*  Module cards config                                                */
@@ -101,6 +102,7 @@ const modules: ModuleCard[] = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { data: summary, isLoading: summaryLoading } = useExecutiveSummary();
   const userPermissions = user?.permissions || [];
 
   // Filter modules based on user permissions (show all if wildcard or no permissions set)
@@ -135,7 +137,7 @@ export default function DashboardPage() {
         </p>
       </motion.div>
 
-      {/* Quick stats placeholder */}
+      {/* Quick stats — live from executive summary */}
       <motion.div
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
         initial={{ opacity: 0, y: 12 }}
@@ -143,10 +145,10 @@ export default function DashboardPage() {
         transition={{ duration: 0.4, delay: 0.1 }}
       >
         {[
-          { label: "Open Incidents", value: "--", color: "#EF4444" },
-          { label: "Active Projects", value: "--", color: "#8B5CF6" },
-          { label: "Pending Requests", value: "--", color: "#F59E0B" },
-          { label: "Assets Tracked", value: "--", color: "#1B7340" },
+          { label: "Open Tickets", value: summary?.openTickets, color: "#EF4444" },
+          { label: "Active Projects", value: summary?.activeProjects, color: "#8B5CF6" },
+          { label: "Active Assets", value: summary?.activeAssets, color: "#F59E0B" },
+          { label: "High Risks", value: summary?.highRisks, color: "#1B7340" },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -155,12 +157,16 @@ export default function DashboardPage() {
             <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">
               {stat.label}
             </p>
-            <p
-              className="text-2xl font-bold mt-1"
-              style={{ color: stat.color }}
-            >
-              {stat.value}
-            </p>
+            {summaryLoading ? (
+              <div className="mt-1 h-8 w-12 rounded bg-[var(--surface-2)] animate-pulse" />
+            ) : (
+              <p
+                className="text-2xl font-bold mt-1 tabular-nums"
+                style={{ color: stat.color }}
+              >
+                {stat.value ?? "--"}
+              </p>
+            )}
           </div>
         ))}
       </motion.div>

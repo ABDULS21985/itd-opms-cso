@@ -31,6 +31,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/dirsync"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/metrics"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
@@ -89,6 +90,10 @@ func (s *Server) Setup() {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+
+	r.Use(middleware.SecurityHeaders)
+	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:5173"}))
+	r.Use(metrics.MetricsMiddleware)
 
 	if s.redis != nil {
 		r.Use(middleware.RateLimitByIP(s.redis, 100, 1*time.Minute))
@@ -267,6 +272,9 @@ func (s *Server) Setup() {
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
 		})
 	})
+
+	// Prometheus metrics (public, used by monitoring stack)
+	r.Handle("/metrics", metrics.Handler())
 
 	s.router = r
 }
