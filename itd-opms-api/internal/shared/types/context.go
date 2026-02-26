@@ -26,7 +26,7 @@ type AuthContext struct {
 // HasPermission checks if the user has a specific permission.
 func (a *AuthContext) HasPermission(permission string) bool {
 	for _, p := range a.Permissions {
-		if p == permission {
+		if p == "*" || p == permission {
 			return true
 		}
 	}

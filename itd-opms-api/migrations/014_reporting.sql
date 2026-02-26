@@ -95,7 +95,7 @@ SELECT
     -- Governance
     (SELECT COUNT(*) FROM policies p WHERE p.tenant_id = t.id AND p.status = 'active') AS active_policies,
     (SELECT COUNT(*) FROM action_items ai WHERE ai.tenant_id = t.id AND ai.status != 'completed' AND ai.due_date < CURRENT_DATE) AS overdue_actions,
-    (SELECT COALESCE(AVG(progress), 0) FROM okrs o WHERE o.tenant_id = t.id AND o.status = 'active') AS avg_okr_progress,
+    (SELECT COALESCE(AVG(progress_pct), 0) FROM okrs o WHERE o.tenant_id = t.id AND o.status = 'active') AS avg_okr_progress,
     -- ITSM
     (SELECT COUNT(*) FROM tickets tk WHERE tk.tenant_id = t.id AND tk.status NOT IN ('resolved','closed')) AS open_tickets,
     (SELECT COUNT(*) FROM tickets tk WHERE tk.tenant_id = t.id AND tk.status NOT IN ('resolved','closed') AND tk.priority = 'critical') AS critical_tickets,

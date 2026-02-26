@@ -174,6 +174,7 @@ CREATE TRIGGER trg_tickets_updated
     EXECUTE FUNCTION fn_update_timestamp();
 
 -- Auto-generate ticket_number based on type
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_generate_ticket_number()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -192,6 +193,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_ticket_number
     BEFORE INSERT ON tickets
@@ -292,6 +294,7 @@ CREATE TRIGGER trg_problems_updated
     EXECUTE FUNCTION fn_update_timestamp();
 
 -- Auto-generate problem_number
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_generate_problem_number()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -301,6 +304,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_problem_number
     BEFORE INSERT ON problems

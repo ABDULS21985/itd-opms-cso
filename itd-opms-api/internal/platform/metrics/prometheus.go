@@ -85,3 +85,10 @@ func (r *statusRecorder) WriteHeader(code int) {
 func (r *statusRecorder) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
+
+// Flush preserves http.Flusher for streaming handlers like SSE.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
