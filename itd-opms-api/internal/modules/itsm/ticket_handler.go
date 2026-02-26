@@ -74,6 +74,24 @@ func optionalUUID(r *http.Request, key string) *uuid.UUID {
 }
 
 // ──────────────────────────────────────────────
+// Shared error helper
+// ──────────────────────────────────────────────
+
+// writeAppError maps an application error to the appropriate HTTP response.
+func writeAppError(w http.ResponseWriter, r *http.Request, err error) {
+	status := apperrors.HTTPStatus(err)
+	code := apperrors.Code(err)
+	if status >= 500 {
+		slog.ErrorContext(r.Context(), "internal error",
+			"error", err.Error(),
+			"path", r.URL.Path,
+			"correlation_id", types.GetCorrelationID(r.Context()),
+		)
+	}
+	types.ErrorMessage(w, status, code, err.Error())
+}
+
+// ──────────────────────────────────────────────
 // Handlers
 // ──────────────────────────────────────────────
 
