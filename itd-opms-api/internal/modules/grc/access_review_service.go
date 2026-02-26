@@ -61,9 +61,11 @@ func (s *AccessReviewService) CreateCampaign(ctx context.Context, req CreateAcce
 			reviewer_ids, due_date, completion_rate,
 			created_by, created_at, updated_at`
 
+	initialStatus := AccessReviewStatusPlanned
+
 	var c AccessReviewCampaign
 	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.Title, req.Scope, req.Status,
+		id, auth.TenantID, req.Title, req.Scope, initialStatus,
 		req.ReviewerIDs, req.DueDate, 0.0,
 		auth.UserID, now, now,
 	).Scan(
@@ -258,10 +260,10 @@ func (s *AccessReviewService) CreateEntry(ctx context.Context, campaignID uuid.U
 	query := `
 		INSERT INTO access_review_entries (
 			id, campaign_id, tenant_id, user_id, role_id,
-			reviewer_id, created_at
+			created_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7
+			$6
 		)
 		RETURNING id, campaign_id, tenant_id, user_id, role_id,
 			reviewer_id, decision, justification, exception_expiry,
@@ -270,7 +272,7 @@ func (s *AccessReviewService) CreateEntry(ctx context.Context, campaignID uuid.U
 	var e AccessReviewEntry
 	err := s.pool.QueryRow(ctx, query,
 		id, campaignID, auth.TenantID, req.UserID, req.RoleID,
-		req.ReviewerID, now,
+		now,
 	).Scan(
 		&e.ID, &e.CampaignID, &e.TenantID, &e.UserID, &e.RoleID,
 		&e.ReviewerID, &e.Decision, &e.Justification, &e.ExceptionExpiry,

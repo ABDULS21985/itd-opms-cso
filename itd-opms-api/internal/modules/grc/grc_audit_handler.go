@@ -126,8 +126,8 @@ func (h *AuditMgmtHandler) CreateAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Title == "" || req.AuditType == "" || req.Status == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title, audit type, and status are required")
+	if req.Title == "" || req.AuditType == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title and audit type are required")
 		return
 	}
 
@@ -268,8 +268,8 @@ func (h *AuditMgmtHandler) CreateFinding(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.Title == "" || req.Severity == "" || req.Status == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title, severity, and status are required")
+	if req.Title == "" || req.Severity == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title and severity are required")
 		return
 	}
 
@@ -408,8 +408,8 @@ func (h *AuditMgmtHandler) CreateEvidenceCollection(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if req.Title == "" || req.Status == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title and status are required")
+	if req.Title == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title is required")
 		return
 	}
 

@@ -104,8 +104,8 @@ func (h *AccessReviewHandler) CreateCampaign(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if req.Title == "" || req.Status == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title and status are required")
+	if req.Title == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title is required")
 		return
 	}
 

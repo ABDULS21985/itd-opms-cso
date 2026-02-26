@@ -79,13 +79,18 @@ func (s *RiskService) CreateRisk(ctx context.Context, req CreateRiskRequest) (Ri
 	// Calculate risk score from likelihood * impact mapping
 	riskScore := likelihoodImpactScore(req.Likelihood, req.Impact)
 
+	escalationThreshold := 0
+	if req.EscalationThreshold != nil {
+		escalationThreshold = *req.EscalationThreshold
+	}
+
 	var risk Risk
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, riskNumber, req.Title, req.Description,
 		req.Category, req.Likelihood, req.Impact, riskScore, req.Status,
 		req.TreatmentPlan, req.ContingencyPlan, req.OwnerID, req.ReviewerID,
 		req.ReviewDate, req.NextReviewDate, req.LinkedProjectID, req.LinkedAuditID,
-		req.EscalationThreshold, now, now,
+		escalationThreshold, now, now,
 	).Scan(
 		&risk.ID, &risk.TenantID, &risk.RiskNumber, &risk.Title, &risk.Description,
 		&risk.Category, &risk.Likelihood, &risk.Impact, &risk.RiskScore, &risk.Status,

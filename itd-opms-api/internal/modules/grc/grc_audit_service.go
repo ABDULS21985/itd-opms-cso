@@ -69,10 +69,12 @@ func (s *AuditMgmtService) CreateAudit(ctx context.Context, req CreateAuditReque
 			evidence_requirements, readiness_score,
 			created_by, created_at, updated_at`
 
+	status := AuditStatusPlanned
+
 	var a Audit
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.AuditType, req.Scope,
-		req.Auditor, req.AuditBody, req.Status,
+		req.Auditor, req.AuditBody, status,
 		req.ScheduledStart, req.ScheduledEnd,
 		req.EvidenceRequirements, 0.0,
 		auth.UserID, now, now,
@@ -343,11 +345,13 @@ func (s *AuditMgmtService) CreateFinding(ctx context.Context, auditID uuid.UUID,
 			owner_id, due_date, closed_at, evidence_of_remediation,
 			created_at, updated_at`
 
+	status := FindingStatusOpen
+
 	var f AuditFinding
 	err := s.pool.QueryRow(ctx, query,
 		id, auditID, auth.TenantID, findingNumber, req.Title,
-		req.Description, req.Severity, req.Status, req.RemediationPlan,
-		req.OwnerID, req.DueDate, req.EvidenceOfRemediation,
+		req.Description, req.Severity, status, req.RemediationPlan,
+		req.OwnerID, req.DueDate, []uuid.UUID{},
 		now, now,
 	).Scan(
 		&f.ID, &f.AuditID, &f.TenantID, &f.FindingNumber, &f.Title,
@@ -491,9 +495,8 @@ func (s *AuditMgmtService) UpdateFinding(ctx context.Context, id uuid.UUID, req 
 			remediation_plan = COALESCE($5, remediation_plan),
 			owner_id = COALESCE($6, owner_id),
 			due_date = COALESCE($7, due_date),
-			evidence_of_remediation = COALESCE($8, evidence_of_remediation),
-			updated_at = $9
-		WHERE id = $10 AND tenant_id = $11
+			updated_at = $8
+		WHERE id = $9 AND tenant_id = $10
 		RETURNING id, audit_id, tenant_id, finding_number, title,
 			description, severity, status, remediation_plan,
 			owner_id, due_date, closed_at, evidence_of_remediation,
@@ -503,7 +506,7 @@ func (s *AuditMgmtService) UpdateFinding(ctx context.Context, id uuid.UUID, req 
 	err := s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.Severity,
 		req.Status, req.RemediationPlan,
-		req.OwnerID, req.DueDate, req.EvidenceOfRemediation,
+		req.OwnerID, req.DueDate,
 		now, id, auth.TenantID,
 	).Scan(
 		&f.ID, &f.AuditID, &f.TenantID, &f.FindingNumber, &f.Title,
@@ -588,16 +591,17 @@ func (s *AuditMgmtService) CreateEvidenceCollection(ctx context.Context, auditID
 
 	id := uuid.New()
 	now := time.Now().UTC()
+	initialStatus := EvidenceStatusPending
 
 	query := `
 		INSERT INTO evidence_collections (
 			id, audit_id, tenant_id, title, description,
-			status, evidence_item_ids, collector_id, reviewer_id,
-			checksum, created_at, updated_at
+			status, evidence_item_ids, collector_id,
+			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9,
-			$10, $11, $12
+			$6, $7, $8,
+			$9, $10
 		)
 		RETURNING id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id, reviewer_id,
@@ -606,8 +610,8 @@ func (s *AuditMgmtService) CreateEvidenceCollection(ctx context.Context, auditID
 	var ec EvidenceCollection
 	err := s.pool.QueryRow(ctx, query,
 		id, auditID, auth.TenantID, req.Title, req.Description,
-		req.Status, req.EvidenceItemIDs, req.CollectorID, req.ReviewerID,
-		req.Checksum, now, now,
+		initialStatus, req.EvidenceItemIDs, req.CollectorID,
+		now, now,
 	).Scan(
 		&ec.ID, &ec.AuditID, &ec.TenantID, &ec.Title, &ec.Description,
 		&ec.Status, &ec.EvidenceItemIDs, &ec.CollectorID, &ec.ReviewerID,

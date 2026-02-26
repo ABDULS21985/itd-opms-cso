@@ -156,7 +156,7 @@ func (s *Server) Setup() {
 	itsmHandler := itsm.NewHandler(s.pool, auditService)
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
-	grcHandler := grc.NewHandler()
+	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler()
 
 	// --- Routes ---
