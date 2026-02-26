@@ -120,11 +120,29 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Knowledge",
+    items: [
+      { href: "/dashboard/knowledge", label: "Knowledge Base", icon: Library, permission: "knowledge.view" },
+      { href: "/dashboard/knowledge/search", label: "Search", icon: Search, permission: "knowledge.view" },
+      { href: "/dashboard/knowledge/articles/new", label: "New Article", icon: PenSquare, permission: "knowledge.manage" },
+    ],
+  },
+  {
+    label: "GRC",
+    items: [
+      { href: "/dashboard/grc", label: "GRC Dashboard", icon: ShieldCheck, permission: "grc.view" },
+      { href: "/dashboard/grc/risks", label: "Risks", icon: AlertOctagon, permission: "grc.view" },
+      { href: "/dashboard/grc/audits", label: "Audits", icon: ClipboardCheck, permission: "grc.view" },
+      { href: "/dashboard/grc/compliance", label: "Compliance", icon: Scale, permission: "grc.view" },
+      { href: "/dashboard/grc/access-reviews", label: "Access Reviews", icon: UserCheck, permission: "grc.view" },
+      { href: "/dashboard/grc/reports", label: "Reports", icon: FileBarChart, permission: "grc.view" },
+    ],
+  },
+  {
     label: "System",
     items: [
       { href: "/dashboard/system/audit-logs", label: "Audit Logs", icon: ScrollText, permission: "system.view" },
       { href: "/dashboard/system/settings", label: "Settings", icon: Settings, permission: "system.manage" },
-      { href: "/dashboard/knowledge", label: "Knowledge Base", icon: Library, permission: "knowledge.view" },
     ],
   },
 ];
