@@ -1,0 +1,10 @@
+{
+  "extends": "@digibit/typescript-config/nestjs.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "outDir": "./dist",
+    "target": "ES2021",
+    "strictPropertyInitialization": false
+  },
+  "exclude": ["node_modules", "dist"]
+}

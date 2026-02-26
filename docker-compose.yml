@@ -1,0 +1,71 @@
+services:
+  frontend:
+    image: ${DOCKERHUB_USERNAME}/digibit-frontend:latest
+    container_name: digibit-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - /root/.env/digibit.env
+    depends_on:
+      - backend
+
+  dashboard:
+    image: ${DOCKERHUB_USERNAME}/digibit-dashboard:latest
+    container_name: digibit-dashboard
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    env_file:
+      - /root/.env/digibit.env
+    depends_on:
+      - backend
+
+  backend:
+    image: ${DOCKERHUB_USERNAME}/digibit-backend:latest
+    container_name: digibit-backend
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    env_file:
+      - /root/.env/digibit.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: digiweb-postgres
+    restart: unless-stopped
+    env_file:
+      - /root/.env/digibit.env
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-digiweb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: digiweb-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

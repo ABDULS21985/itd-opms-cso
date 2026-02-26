@@ -1,0 +1,144 @@
+services:
+  talent-portal:
+    image: ${DOCKERHUB_USERNAME}/digibit-talent-portal:${TAG:-latest}
+    container_name: digibit-talent-portal
+    restart: unless-stopped
+    ports:
+      - "${TALENT_PORTAL_PORT:-3002}:3000"
+    env_file:
+      - /root/.env/digibit-talent.env
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      # Server-side only — resolves inside Docker network
+      - TALENT_API_URL=http://talent-api:4002/api/v1
+      # NEXT_PUBLIC_* vars are baked at BUILD time — set these as
+      # build args or in the env_file used during `docker build`.
+      # Listed here as runtime fallback for server components only.
+      - NEXT_PUBLIC_TALENT_API_URL=https://talent.globaldigibit.com/api/v1
+      - NEXT_PUBLIC_TALENT_API_WS_URL=https://talent.globaldigibit.com
+      - NEXT_PUBLIC_MAIN_SITE_URL=https://globaldigibit.com
+    depends_on:
+      talent-api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.50"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  talent-api:
+    image: ${DOCKERHUB_USERNAME}/digibit-talent-api:${TAG:-latest}
+    container_name: digibit-talent-api
+    restart: unless-stopped
+    ports:
+      - "${TALENT_API_PORT:-4002}:4002"
+    env_file:
+      - /root/.env/digibit-talent.env
+    environment:
+      - NODE_ENV=production
+      - PORT=4002
+      - DB_HOST=talent-postgres
+      - DB_PORT=5432
+      - DB_USER=${TALENT_DB_USER:-talent_portal}
+      - DB_PASSWORD=${TALENT_DB_PASSWORD}
+      - DB_NAME=${TALENT_DB_NAME:-talent_portal_db}
+      - REDIS_URL=redis://talent-redis:6379
+      - CORS_WHITELIST=https://talent.globaldigibit.com
+      - ENABLE_SWAGGER=false
+      - APP_URL=https://talent.globaldigibit.com
+      # Email / Notifications (SMTP)
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@globaldigibit.com}
+    depends_on:
+      talent-postgres:
+        condition: service_healthy
+      talent-redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.00"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  talent-postgres:
+    image: postgres:16-alpine
+    container_name: digibit-talent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TALENT_DB_USER:-talent_portal}
+      POSTGRES_PASSWORD: ${TALENT_DB_PASSWORD}
+      POSTGRES_DB: ${TALENT_DB_NAME:-talent_portal_db}
+    ports:
+      - "${TALENT_DB_PORT:-5434}:5432"
+    volumes:
+      - talent_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TALENT_DB_USER:-talent_portal} -d ${TALENT_DB_NAME:-talent_portal_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  talent-redis:
+    image: redis:7-alpine
+    container_name: digibit-talent-redis
+    restart: unless-stopped
+    ports:
+      - "${TALENT_REDIS_PORT:-6380}:6379"
+    volumes:
+      - talent_redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  talent_postgres_data:
+    driver: local
+  talent_redis_data:
+    driver: local
