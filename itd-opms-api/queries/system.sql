@@ -197,3 +197,145 @@ FROM roles r
 LEFT JOIN role_bindings rb ON rb.role_id = r.id AND rb.is_active = true
 GROUP BY r.id, r.name
 ORDER BY user_count DESC;
+
+-- ──────────────────────────────────────────────
+-- System Module: Tenant Management Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListTenants :many
+SELECT t.id, t.name, t.code, t.type::text, t.parent_id,
+       COALESCE(p.name, '') AS parent_name,
+       t.is_active, t.config, t.created_at, t.updated_at,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
+FROM tenants t
+LEFT JOIN tenants p ON p.id = t.parent_id
+ORDER BY t.name ASC;
+
+-- name: SystemGetTenantByID :one
+SELECT t.id, t.name, t.code, t.type::text, t.parent_id,
+       COALESCE(p.name, '') AS parent_name,
+       t.is_active, t.config, t.created_at, t.updated_at,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
+FROM tenants t
+LEFT JOIN tenants p ON p.id = t.parent_id
+WHERE t.id = @tenant_id;
+
+-- name: SystemGetTenantChildren :many
+SELECT t.id, t.name, t.code, t.type::text, t.is_active,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
+FROM tenants t
+WHERE t.parent_id = @parent_id
+ORDER BY t.name ASC;
+
+-- name: SystemCreateTenant :one
+INSERT INTO tenants (name, code, type, parent_id, config)
+VALUES (@name, @code, @type::tenant_type, @parent_id, @config)
+RETURNING id, name, code, type::text, parent_id, is_active, config, created_at, updated_at;
+
+-- name: SystemUpdateTenant :exec
+UPDATE tenants SET
+  name = COALESCE(NULLIF(@name, ''), name),
+  config = CASE WHEN @update_config::boolean THEN @config ELSE config END,
+  is_active = CASE WHEN @update_active::boolean THEN @is_active ELSE is_active END
+WHERE id = @tenant_id;
+
+-- name: SystemDeactivateTenant :exec
+UPDATE tenants SET is_active = false WHERE id = @tenant_id;
+
+-- name: SystemDeactivateChildTenants :exec
+UPDATE tenants SET is_active = false WHERE parent_id = @parent_id;
+
+-- name: SystemGetTenantByCode :one
+SELECT id FROM tenants WHERE code = @code;
+
+-- name: SystemGetTenantHierarchy :many
+SELECT t.id, t.name, t.code, t.type::text, t.parent_id, t.is_active,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
+FROM tenants t
+ORDER BY t.parent_id NULLS FIRST, t.name ASC;
+
+-- ──────────────────────────────────────────────
+-- System Module: Org Unit Management Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListOrgUnits :many
+SELECT o.id, o.tenant_id, o.name, o.code, o.level::text,
+       o.parent_id, COALESCE(p.name, '') AS parent_name,
+       o.manager_user_id, COALESCE(m.display_name, '') AS manager_name,
+       o.is_active, o.metadata, o.created_at, o.updated_at,
+       (SELECT COUNT(*) FROM org_units c WHERE c.parent_id = o.id) AS child_count,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+FROM org_units o
+LEFT JOIN org_units p ON p.id = o.parent_id
+LEFT JOIN users m ON m.id = o.manager_user_id
+WHERE o.tenant_id = @tenant_id
+ORDER BY o.level, o.name ASC
+LIMIT @page_limit OFFSET @page_offset;
+
+-- name: SystemCountOrgUnits :one
+SELECT COUNT(*) FROM org_units WHERE tenant_id = @tenant_id;
+
+-- name: SystemGetOrgUnitByID :one
+SELECT o.id, o.tenant_id, o.name, o.code, o.level::text,
+       o.parent_id, COALESCE(p.name, '') AS parent_name,
+       o.manager_user_id, COALESCE(m.display_name, '') AS manager_name,
+       o.is_active, o.metadata, o.created_at, o.updated_at,
+       (SELECT COUNT(*) FROM org_units c WHERE c.parent_id = o.id) AS child_count,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+FROM org_units o
+LEFT JOIN org_units p ON p.id = o.parent_id
+LEFT JOIN users m ON m.id = o.manager_user_id
+WHERE o.id = @org_unit_id AND o.tenant_id = @tenant_id;
+
+-- name: SystemGetOrgTree :many
+SELECT o.id, o.name, o.code, o.level::text, o.parent_id,
+       COALESCE(m.display_name, '') AS manager_name,
+       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+FROM org_units o
+LEFT JOIN users m ON m.id = o.manager_user_id
+WHERE o.tenant_id = @tenant_id AND o.is_active = true
+ORDER BY o.level, o.name ASC;
+
+-- name: SystemCreateOrgUnit :one
+INSERT INTO org_units (tenant_id, name, code, level, parent_id, manager_user_id, metadata)
+VALUES (@tenant_id, @name, @code, @level::org_level_type, @parent_id, @manager_user_id, COALESCE(@metadata, '{}'))
+RETURNING id, tenant_id, name, code, level::text, parent_id, manager_user_id, is_active, metadata, created_at, updated_at;
+
+-- name: SystemUpdateOrgUnit :exec
+UPDATE org_units SET
+  name = COALESCE(NULLIF(@name, ''), name),
+  manager_user_id = CASE WHEN @update_manager::boolean THEN @manager_user_id ELSE manager_user_id END,
+  is_active = CASE WHEN @update_active::boolean THEN @is_active ELSE is_active END
+WHERE id = @org_unit_id AND tenant_id = @tenant_id;
+
+-- name: SystemGetOrgUnitChildCount :one
+SELECT COUNT(*) FROM org_units WHERE parent_id = @org_unit_id;
+
+-- name: SystemGetOrgUnitUserCount :one
+SELECT COUNT(*) FROM users WHERE tenant_id = @tenant_id AND department = @org_unit_name AND is_active = true;
+
+-- name: SystemDeleteOrgUnit :exec
+UPDATE org_units SET is_active = false WHERE id = @org_unit_id AND tenant_id = @tenant_id;
+
+-- name: SystemMoveOrgUnit :exec
+UPDATE org_units SET parent_id = @new_parent_id WHERE id = @org_unit_id AND tenant_id = @tenant_id;
+
+-- name: SystemDeleteOrgHierarchyDescendants :exec
+DELETE FROM org_hierarchy WHERE descendant_id = @org_unit_id AND ancestor_id != @org_unit_id;
+
+-- name: SystemInsertOrgHierarchyFromParent :exec
+INSERT INTO org_hierarchy (ancestor_id, descendant_id, depth)
+SELECT h.ancestor_id, @org_unit_id, h.depth + 1
+FROM org_hierarchy h
+WHERE h.descendant_id = @new_parent_id;
+
+-- name: SystemGetOrgUnitByCode :one
+SELECT id FROM org_units WHERE tenant_id = @tenant_id AND code = @code;
+
+-- name: SystemGetOrgUnitUsers :many
+SELECT u.id, u.display_name, u.email, u.photo_url, u.department, u.is_active
+FROM users u
+WHERE u.tenant_id = @tenant_id
+  AND u.department = @org_unit_name
+  AND u.is_active = true
+ORDER BY u.display_name ASC;

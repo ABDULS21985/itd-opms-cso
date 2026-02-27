@@ -150,3 +150,104 @@ type PermissionCatalog struct {
 	Module      string   `json:"module"`
 	Permissions []string `json:"permissions"`
 }
+
+// ──────────────────────────────────────────────
+// Tenant Management Types
+// ──────────────────────────────────────────────
+
+// TenantDetail is the full tenant view for admin.
+type TenantDetail struct {
+	ID         uuid.UUID       `json:"id"`
+	Name       string          `json:"name"`
+	Code       string          `json:"code"`
+	Type       string          `json:"type"`
+	ParentID   *uuid.UUID      `json:"parentId"`
+	ParentName string          `json:"parentName"`
+	IsActive   bool            `json:"isActive"`
+	Config     json.RawMessage `json:"config"`
+	CreatedAt  time.Time       `json:"createdAt"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
+	UserCount  int             `json:"userCount"`
+	Children   []TenantSummary `json:"children"`
+}
+
+// TenantSummary is a minimal tenant view for tree/children.
+type TenantSummary struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Code      string    `json:"code"`
+	Type      string    `json:"type"`
+	IsActive  bool      `json:"isActive"`
+	UserCount int       `json:"userCount"`
+}
+
+// CreateTenantRequest is the payload for creating a tenant.
+type CreateTenantRequest struct {
+	Name     string          `json:"name"`
+	Code     string          `json:"code"`
+	Type     string          `json:"type"`
+	ParentID *uuid.UUID      `json:"parentId"`
+	Config   json.RawMessage `json:"config"`
+}
+
+// UpdateTenantRequest is the payload for updating a tenant.
+type UpdateTenantRequest struct {
+	Name     *string          `json:"name"`
+	Config   *json.RawMessage `json:"config"`
+	IsActive *bool            `json:"isActive"`
+}
+
+// ──────────────────────────────────────────────
+// Org Unit Management Types
+// ──────────────────────────────────────────────
+
+// OrgUnitDetail is the full org unit view for admin.
+type OrgUnitDetail struct {
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenantId"`
+	Name          string          `json:"name"`
+	Code          string          `json:"code"`
+	Level         string          `json:"level"`
+	ParentID      *uuid.UUID      `json:"parentId"`
+	ParentName    string          `json:"parentName"`
+	ManagerUserID *uuid.UUID      `json:"managerUserId"`
+	ManagerName   string          `json:"managerName"`
+	IsActive      bool            `json:"isActive"`
+	Metadata      json.RawMessage `json:"metadata"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	ChildCount    int             `json:"childCount"`
+	UserCount     int             `json:"userCount"`
+}
+
+// OrgTreeNode represents a node in the org hierarchy tree.
+type OrgTreeNode struct {
+	ID          uuid.UUID     `json:"id"`
+	Name        string        `json:"name"`
+	Code        string        `json:"code"`
+	Level       string        `json:"level"`
+	ManagerName string        `json:"managerName"`
+	UserCount   int           `json:"userCount"`
+	Children    []OrgTreeNode `json:"children"`
+}
+
+// CreateOrgUnitRequest is the payload for creating an org unit.
+type CreateOrgUnitRequest struct {
+	Name          string     `json:"name"`
+	Code          string     `json:"code"`
+	Level         string     `json:"level"`
+	ParentID      *uuid.UUID `json:"parentId"`
+	ManagerUserID *uuid.UUID `json:"managerUserId"`
+}
+
+// UpdateOrgUnitRequest is the payload for updating an org unit.
+type UpdateOrgUnitRequest struct {
+	Name          *string    `json:"name"`
+	ManagerUserID *uuid.UUID `json:"managerUserId"`
+	IsActive      *bool      `json:"isActive"`
+}
+
+// MoveOrgUnitRequest is the payload for moving an org unit in the hierarchy.
+type MoveOrgUnitRequest struct {
+	NewParentID uuid.UUID `json:"newParentId"`
+}
