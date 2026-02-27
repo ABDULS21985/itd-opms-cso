@@ -17,8 +17,11 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { useBreadcrumbOverrides } from "@/providers/breadcrumb-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /* ------------------------------------------------------------------ */
 /*  Theme Toggle                                                       */
@@ -199,16 +202,29 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const overrides = useBreadcrumbOverrides();
 
-  // Breadcrumbs from pathname
+  // Breadcrumbs — use page overrides when available, otherwise auto-generate from URL
   const breadcrumbs = useMemo(() => {
+    if (overrides && overrides.length > 0) {
+      return overrides.map((item, i) => ({
+        label: item.label,
+        href: item.href,
+        isLast: i === overrides.length - 1,
+      }));
+    }
+
     const segments = pathname.split("/").filter(Boolean);
-    return segments.map((seg, i) => ({
-      label: seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
-      href: "/" + segments.slice(0, i + 1).join("/"),
-      isLast: i === segments.length - 1,
-    }));
-  }, [pathname]);
+    // Skip "dashboard" prefix — it's implied by the layout
+    const display = segments.slice(1);
+    return display
+      .filter((seg) => !UUID_RE.test(seg)) // Hide raw UUID segments
+      .map((seg, i, arr) => ({
+        label: seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
+        href: "/" + segments.slice(0, segments.indexOf(seg) + 1).join("/"),
+        isLast: i === arr.length - 1,
+      }));
+  }, [pathname, overrides]);
 
   return (
     <header className="h-16 bg-[var(--surface-0)] border-b border-[var(--border)] flex items-center justify-between px-4 lg:px-6 sticky top-0 z-10">

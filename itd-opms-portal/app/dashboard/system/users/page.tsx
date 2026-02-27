@@ -13,6 +13,8 @@ import {
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import { useUsers, useDeactivateUser, useRoles } from "@/hooks/use-system";
 import type { UserDetail } from "@/types";
 
@@ -68,6 +70,11 @@ function getUserRoleNames(user: UserDetail): string[] {
 
 export default function UsersPage() {
   const router = useRouter();
+
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Users", href: "/dashboard/system/users" },
+  ]);
 
   /* ---- State ---- */
   const [page, setPage] = useState(1);
@@ -261,6 +268,7 @@ export default function UsersPage() {
   /* ---- Render ---- */
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Page Header */}
       <motion.div
@@ -446,5 +454,6 @@ export default function UsersPage() {
         loading={deactivateMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

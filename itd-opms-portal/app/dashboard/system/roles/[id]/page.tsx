@@ -24,6 +24,8 @@ import {
   usePermissionCatalog,
 } from "@/hooks/use-system";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import type { PermissionCatalog } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -218,6 +220,13 @@ export default function RoleDetailPage({
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState("");
 
+  /* ---- Breadcrumbs ---- */
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Roles", href: "/dashboard/system/roles" },
+    { label: role?.name || "Role Details", href: `/dashboard/system/roles/${id}` },
+  ]);
+
   // Initialize permissions from role data
   useEffect(() => {
     if (role) {
@@ -314,6 +323,7 @@ export default function RoleDetailPage({
   const isSystem = role.isSystem;
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6 pb-8">
       {/* Back link */}
       <motion.div
@@ -638,5 +648,6 @@ export default function RoleDetailPage({
         loading={deleteRoleMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

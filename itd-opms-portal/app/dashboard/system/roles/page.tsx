@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { useRoles, useCreateRole, useDeleteRole } from "@/hooks/use-system";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import type { RoleDetail } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -286,6 +288,12 @@ function RoleCard({
 
 export default function RolesPage() {
   const router = useRouter();
+
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Roles", href: "/dashboard/system/roles" },
+  ]);
+
   const { data: roles, isLoading } = useRoles();
   const createRoleMutation = useCreateRole();
   const deleteRoleMutation = useDeleteRole();
@@ -320,6 +328,7 @@ export default function RolesPage() {
   }
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6 pb-8">
       {/* Header */}
       <motion.div
@@ -446,5 +455,6 @@ export default function RolesPage() {
         loading={deleteRoleMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

@@ -19,6 +19,8 @@ import {
   ArrowDownCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   usePlatformHealth,
   useSystemStats,
@@ -211,6 +213,11 @@ function SyncHistoryRow({ run }: { run: SyncRun }) {
 /* ------------------------------------------------------------------ */
 
 export default function HealthPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Platform Health", href: "/dashboard/system/health" },
+  ]);
+
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = usePlatformHealth();
   const { data: statsData, isLoading: statsLoading } = useSystemStats();
   const [syncPage] = useState(1);
@@ -251,6 +258,7 @@ export default function HealthPage() {
   }
 
   return (
+    <PermissionGate permission="system.view">
     <div className="space-y-6">
       {/* Header */}
       <motion.div
@@ -462,5 +470,6 @@ export default function HealthPage() {
         )}
       </motion.div>
     </div>
+    </PermissionGate>
   );
 }

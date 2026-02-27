@@ -9,6 +9,8 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
 import { JsonDiff } from "@/components/shared/json-diff";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useAuditLogs, useAuditStats, useAuditTimeline,
   useVerifyIntegrity, useExportAuditLogs, useSearchUsers,
@@ -114,6 +116,11 @@ function ActionBadge({ action }: { action: string }) {
 /* ================================================================== */
 
 export default function AuditLogExplorerPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Audit Logs", href: "/dashboard/system/audit-logs" },
+  ]);
+
   /* -- Filter state ------------------------------------------------ */
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -231,6 +238,7 @@ export default function AuditLogExplorerPage() {
   /*  Render                                                            */
   /* ================================================================ */
   return (
+    <PermissionGate permission="system.view">
     <div className="space-y-6 pb-8">
       {/* ============================================================ */}
       {/*  Header                                                       */}
@@ -633,5 +641,6 @@ export default function AuditLogExplorerPage() {
         )}
       </motion.div>
     </div>
+    </PermissionGate>
   );
 }

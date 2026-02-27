@@ -7,6 +7,7 @@ import { Menu, Search, ChevronRight, LogOut, User, Settings } from "lucide-react
 import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
+import { BreadcrumbProvider } from "@/providers/breadcrumb-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { DashboardHeader } from "@/components/layout/header";
 import { MobileNav } from "@/components/layout/mobile-nav";
@@ -102,37 +103,39 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex bg-[var(--surface-1)]">
-      {/* Skip to content -- accessibility */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[var(--primary)] focus:text-white focus:rounded-xl focus:text-sm focus:font-semibold"
-      >
-        Skip to content
-      </a>
+    <BreadcrumbProvider>
+      <div className="min-h-screen flex bg-[var(--surface-1)]">
+        {/* Skip to content -- accessibility */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[var(--primary)] focus:text-white focus:rounded-xl focus:text-sm focus:font-semibold"
+        >
+          Skip to content
+        </a>
 
-      {/* Sidebar */}
-      <Sidebar
-        mobileOpen={mobileOpen}
-        onMobileClose={handleMobileClose}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((c) => !c)}
-      />
-
-      <main className="flex-1 min-w-0">
-        {/* Top Bar */}
-        <DashboardHeader
-          onMenuClick={() => setMobileOpen(true)}
+        {/* Sidebar */}
+        <Sidebar
+          mobileOpen={mobileOpen}
+          onMobileClose={handleMobileClose}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((c) => !c)}
         />
 
-        {/* Page content with transition */}
-        <div id="main-content" className="p-4 lg:p-6">
-          <PageTransition pathname={pathname}>{children}</PageTransition>
-        </div>
-      </main>
+        <main className="flex-1 min-w-0">
+          {/* Top Bar */}
+          <DashboardHeader
+            onMenuClick={() => setMobileOpen(true)}
+          />
 
-      {/* Mobile bottom tab bar */}
-      <MobileNav />
-    </div>
+          {/* Page content with transition */}
+          <div id="main-content" className="p-4 lg:p-6">
+            <PageTransition pathname={pathname}>{children}</PageTransition>
+          </div>
+        </main>
+
+        {/* Mobile bottom tab bar */}
+        <MobileNav />
+      </div>
+    </BreadcrumbProvider>
   );
 }

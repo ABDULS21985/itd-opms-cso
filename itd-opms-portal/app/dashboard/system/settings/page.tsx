@@ -14,6 +14,8 @@ import {
   Building2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import { useSettings, useUpdateSetting, useDeleteSetting } from "@/hooks/use-system";
 import type { SystemSetting } from "@/types";
 
@@ -394,7 +396,13 @@ function SettingsForm({ category, definitions }: { category: string; definitions
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
 
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Settings", href: "/dashboard/system/settings" },
+  ]);
+
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Header */}
       <motion.div
@@ -460,5 +468,6 @@ export default function SettingsPage() {
         />
       </motion.div>
     </div>
+    </PermissionGate>
   );
 }

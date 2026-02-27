@@ -14,6 +14,8 @@ import {
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useEmailTemplates,
   useDeleteTemplate,
@@ -61,6 +63,11 @@ function formatDate(dateStr: string): string {
 
 export default function EmailTemplatesPage() {
   const router = useRouter();
+
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Email Templates", href: "/dashboard/system/email-templates" },
+  ]);
 
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -198,6 +205,7 @@ export default function EmailTemplatesPage() {
   ];
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Header */}
       <motion.div
@@ -331,5 +339,6 @@ export default function EmailTemplatesPage() {
         loading={deleteMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

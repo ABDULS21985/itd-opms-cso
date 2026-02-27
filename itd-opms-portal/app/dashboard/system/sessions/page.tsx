@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useSessions,
   useSessionStats,
@@ -165,6 +167,11 @@ function DeviceDistribution({ sessions }: { sessions: ActiveSession[] }) {
 /* ------------------------------------------------------------------ */
 
 export default function SessionsPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Sessions", href: "/dashboard/system/sessions" },
+  ]);
+
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -331,6 +338,7 @@ export default function SessionsPage() {
   ];
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Header */}
       <motion.div
@@ -451,5 +459,6 @@ export default function SessionsPage() {
         loading={revokeAllMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

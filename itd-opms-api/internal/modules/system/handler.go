@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 )
 
 // Handler is the top-level HTTP handler for the System module.
@@ -60,53 +61,46 @@ func NewHandler(
 	}
 }
 
-// Routes mounts all System sub-routes on the given router.
+// Routes mounts all System sub-routes on the given router, split into
+// read-only (system.view) and admin (system.manage) permission groups.
 func (h *Handler) Routes(r chi.Router) {
-	// User management (SR-004, SR-005, SR-007, SR-008, BR-014)
-	r.Route("/users", func(r chi.Router) {
-		h.user.Routes(r)
+	// Read-only endpoints — requires system.view (SR-004)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RequirePermission("system.view"))
+
+		// Platform health, stats, directory sync (NFR-009, NFR-022-026)
+		r.Route("/health", func(r chi.Router) { h.health.Routes(r) })
+
+		// Audit log explorer (SR-016–SR-020)
+		r.Route("/audit-logs", func(r chi.Router) { h.auditExp.Routes(r) })
+
+		// Permission catalog
+		r.Get("/permissions", h.role.GetPermissionCatalog)
 	})
 
-	// Role management (SR-004, NFR-024)
-	r.Route("/roles", func(r chi.Router) {
-		h.role.Routes(r)
-	})
+	// Admin endpoints — requires system.manage (SR-004)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RequirePermission("system.manage"))
 
-	// Tenant management (BR-007, AP-06, DRA-001)
-	r.Route("/tenants", func(r chi.Router) {
-		h.tenant.Routes(r)
-	})
+		// User management (SR-005, SR-007, SR-008, BR-014)
+		r.Route("/users", func(r chi.Router) { h.user.Routes(r) })
 
-	// Org unit management (FR-A020)
-	r.Route("/org-units", func(r chi.Router) {
-		h.org.Routes(r)
-	})
+		// Role management (NFR-024)
+		r.Route("/roles", func(r chi.Router) { h.role.Routes(r) })
 
-	// Platform health, stats, directory sync (NFR-009, NFR-022-026)
-	r.Route("/health", func(r chi.Router) {
-		h.health.Routes(r)
-	})
+		// Tenant management (BR-007, AP-06, DRA-001)
+		r.Route("/tenants", func(r chi.Router) { h.tenant.Routes(r) })
 
-	// System settings (NFR-024)
-	r.Route("/settings", func(r chi.Router) {
-		h.settings.Routes(r)
-	})
+		// Org unit management (FR-A020)
+		r.Route("/org-units", func(r chi.Router) { h.org.Routes(r) })
 
-	// Audit log explorer (SR-016–SR-020)
-	r.Route("/audit-logs", func(r chi.Router) {
-		h.auditExp.Routes(r)
-	})
+		// Session management (SR-002, SR-003)
+		r.Route("/sessions", func(r chi.Router) { h.session.Routes(r) })
 
-	// Session management (SR-002, SR-003)
-	r.Route("/sessions", func(r chi.Router) {
-		h.session.Routes(r)
-	})
+		// System settings (NFR-024)
+		r.Route("/settings", func(r chi.Router) { h.settings.Routes(r) })
 
-	// Email templates
-	r.Route("/email-templates", func(r chi.Router) {
-		h.template.Routes(r)
+		// Email templates
+		r.Route("/email-templates", func(r chi.Router) { h.template.Routes(r) })
 	})
-
-	// Top-level permission catalog
-	r.Get("/permissions", h.role.GetPermissionCatalog)
 }

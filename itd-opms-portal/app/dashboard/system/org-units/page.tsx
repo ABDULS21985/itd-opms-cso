@@ -18,6 +18,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useOrgTree,
   useOrgUnit,
@@ -932,6 +934,11 @@ function DetailPanel({
 /* ------------------------------------------------------------------ */
 
 export default function OrgUnitsPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Organization Structure", href: "/dashboard/system/org-units" },
+  ]);
+
   const { data: treeNodes, isLoading } = useOrgTree();
   const createMutation = useCreateOrgUnit();
   const updateMutation = useUpdateOrgUnit(undefined);
@@ -1013,6 +1020,7 @@ export default function OrgUnitsPage() {
 
   /* ---- Render ---- */
   return (
+    <PermissionGate permission="system.manage">
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-6">
       {/* Page Header */}
       <motion.div
@@ -1195,5 +1203,6 @@ export default function OrgUnitsPage() {
         loading={deleteMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

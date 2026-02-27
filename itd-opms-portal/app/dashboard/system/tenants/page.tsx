@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useTenants, useCreateTenant, useUpdateTenant, useDeactivateTenant,
 } from "@/hooks/use-system";
@@ -335,6 +337,11 @@ function DetailPanel({ tenant, onEdit, onDeactivate }: {
 /* ------------------------------------------------------------------ */
 
 export default function TenantsPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Tenants", href: "/dashboard/system/tenants" },
+  ]);
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -377,6 +384,7 @@ export default function TenantsPage() {
   }
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
@@ -464,5 +472,6 @@ export default function TenantsPage() {
         loading={deactivateMutation.isPending}
         message={`Are you sure you want to deactivate "${deactivateTarget?.name ?? ""}"? All users under this tenant will lose access until it is reactivated.`} />
     </div>
+    </PermissionGate>
   );
 }

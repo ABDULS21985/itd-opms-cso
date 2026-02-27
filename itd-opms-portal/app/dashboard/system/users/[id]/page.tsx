@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useUser,
   useDeactivateUser,
@@ -183,6 +185,13 @@ export default function UserDetailPage() {
   // Revoke session confirm
   const [revokeSessionTarget, setRevokeSessionTarget] = useState<string | null>(null);
 
+  /* ---- Breadcrumbs ---- */
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Users", href: "/dashboard/system/users" },
+    { label: user?.displayName || "User Details", href: `/dashboard/system/users/${id}` },
+  ]);
+
   /* ---- Handlers ---- */
 
   function handleDeactivate() {
@@ -291,6 +300,7 @@ export default function UserDetailPage() {
   /* ---- Render ---- */
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Back Button */}
       <Link
@@ -834,6 +844,7 @@ export default function UserDetailPage() {
         </div>
       )}
     </div>
+    </PermissionGate>
   );
 }
 

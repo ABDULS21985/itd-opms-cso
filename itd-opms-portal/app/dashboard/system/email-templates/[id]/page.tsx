@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useEmailTemplate,
   useCreateTemplate,
@@ -154,6 +156,13 @@ export default function TemplateEditorPage() {
   const [showDelete, setShowDelete] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  /* ---- Breadcrumbs ---- */
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Email Templates", href: "/dashboard/system/email-templates" },
+    { label: isNew ? "New Template" : (templateData?.name || "Template Details"), href: `/dashboard/system/email-templates/${id}` },
+  ]);
+
   // Load template data
   useEffect(() => {
     if (isNew || !templateData) return;
@@ -265,6 +274,7 @@ export default function TemplateEditorPage() {
   }
 
   return (
+    <PermissionGate permission="system.manage">
     <div className="space-y-6">
       {/* Header */}
       <motion.div
@@ -526,5 +536,6 @@ export default function TemplateEditorPage() {
         loading={deleteMutation.isPending}
       />
     </div>
+    </PermissionGate>
   );
 }

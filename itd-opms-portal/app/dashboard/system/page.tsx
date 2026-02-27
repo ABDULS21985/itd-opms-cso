@@ -36,6 +36,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import { useAuth } from "@/hooks/use-auth";
 import {
   usePlatformHealth,
@@ -285,6 +287,11 @@ export default function SystemOverviewPage() {
   const [auditFilter, setAuditFilter] = useState<AuditFilterKey>("all");
   const [syncingDir, setSyncingDir] = useState(false);
 
+  /* ---- Breadcrumbs ---- */
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+  ]);
+
   // ---------- Data hooks ----------
   const { data: platformHealth, isLoading: healthLoading, isError: healthError } = usePlatformHealth();
   const { data: systemStats, isLoading: statsLoading, isError: statsError } = useSystemStats();
@@ -500,6 +507,7 @@ export default function SystemOverviewPage() {
   ];
 
   return (
+    <PermissionGate permission="system.view">
     <div className="space-y-6 pb-8">
       {/* ============================================================ */}
       {/*  Header                                                       */}
@@ -996,5 +1004,6 @@ export default function SystemOverviewPage() {
         )}
       </motion.div>
     </div>
+    </PermissionGate>
   );
 }

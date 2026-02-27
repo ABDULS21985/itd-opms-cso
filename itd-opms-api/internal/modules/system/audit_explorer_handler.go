@@ -29,12 +29,12 @@ func NewAuditExplorerHandler(svc *AuditExplorerService) *AuditExplorerHandler {
 
 // Routes mounts audit explorer endpoints on the given router.
 func (h *AuditExplorerHandler) Routes(r chi.Router) {
-	r.With(middleware.RequirePermission("audit.view")).Get("/", h.ListEvents)
-	r.With(middleware.RequirePermission("audit.view")).Get("/stats", h.GetStats)
-	r.With(middleware.RequirePermission("audit.view")).Get("/export", h.ExportEvents)
-	r.With(middleware.RequirePermission("audit.manage")).Post("/verify", h.VerifyIntegrity)
-	r.With(middleware.RequirePermission("audit.view")).Get("/entity/{type}/{id}", h.GetEntityTimeline)
-	r.With(middleware.RequirePermission("audit.view")).Get("/{id}", h.GetEvent)
+	r.With(middleware.RequirePermission("system.audit.view")).Get("/", h.ListEvents)
+	r.With(middleware.RequirePermission("system.audit.view")).Get("/stats", h.GetStats)
+	r.With(middleware.RequirePermission("system.audit.export")).Get("/export", h.ExportEvents)
+	r.With(middleware.RequirePermission("system.audit.verify")).Post("/verify", h.VerifyIntegrity)
+	r.With(middleware.RequirePermission("system.audit.view")).Get("/entity/{type}/{id}", h.GetEntityTimeline)
+	r.With(middleware.RequirePermission("system.audit.view")).Get("/{id}", h.GetEvent)
 }
 
 // ──────────────────────────────────────────────

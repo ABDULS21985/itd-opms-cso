@@ -1,6 +1,7 @@
 package system
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -29,6 +30,7 @@ func (h *SystemHealthHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("system.view")).Get("/", h.GetPlatformHealth)
 	r.With(middleware.RequirePermission("system.view")).Get("/stats", h.GetSystemStats)
 	r.With(middleware.RequirePermission("system.view")).Get("/directory-sync", h.GetDirectorySyncStatus)
+	r.With(middleware.RequirePermission("system.manage")).Post("/directory-sync/trigger", h.TriggerDirectorySync)
 }
 
 // GetPlatformHealth returns detailed health status of all infrastructure services.
@@ -75,4 +77,27 @@ func (h *SystemHealthHandler) GetDirectorySyncStatus(w http.ResponseWriter, r *h
 		Total:      total,
 		TotalPages: totalPages,
 	})
+}
+
+// TriggerDirectorySync handles POST /system/health/directory-sync/trigger —
+// publishes a sync request via NATS if available.
+func (h *SystemHealthHandler) TriggerDirectorySync(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	if h.svc.nats != nil && h.svc.nats.IsConnected() {
+		if err := h.svc.nats.Publish("system.dirsync.trigger", []byte(auth.UserID.String())); err != nil {
+			slog.Error("failed to publish directory sync trigger", "error", err, "user_id", auth.UserID)
+			types.ErrorMessage(w, http.StatusInternalServerError, "TRIGGER_FAILED", "Failed to trigger directory sync")
+			return
+		}
+	} else {
+		slog.Warn("directory sync trigger requested but NATS not available", "user_id", auth.UserID)
+	}
+
+	slog.Info("directory sync triggered", "user_id", auth.UserID)
+	types.OK(w, map[string]string{"message": "Directory sync triggered"}, nil)
 }
