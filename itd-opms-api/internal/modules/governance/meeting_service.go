@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,24 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 )
+
+// OverdueStats provides overdue action statistics for the tenant dashboard.
+type OverdueStats struct {
+	TotalOverdue       int                 `json:"totalOverdue"`
+	OverdueByPriority  map[string]int      `json:"overdueByPriority"`
+	OverdueByOwner     []OwnerOverdueCount `json:"overdueByOwner"`
+	OldestOverdueDays  int                 `json:"oldestOverdueDays"`
+	AvgDaysOverdue     float64             `json:"avgDaysOverdue"`
+	DueThisWeek        int                 `json:"dueThisWeek"`
+	CompletedThisMonth int                 `json:"completedThisMonth"`
+}
+
+// OwnerOverdueCount tracks overdue actions per owner.
+type OwnerOverdueCount struct {
+	OwnerID   uuid.UUID `json:"ownerId"`
+	OwnerName string    `json:"ownerName"`
+	Count     int       `json:"count"`
+}
 
 // MeetingService handles business logic for meeting management.
 type MeetingService struct {
@@ -642,4 +661,165 @@ func (s *MeetingService) CompleteActionItem(ctx context.Context, tenantID, actio
 	}
 
 	return nil
+}
+
+// GetOverdueActionStats returns aggregated overdue action item statistics for a tenant.
+func (s *MeetingService) GetOverdueActionStats(ctx context.Context, tenantID uuid.UUID) (*OverdueStats, error) {
+	stats := &OverdueStats{
+		OverdueByPriority: make(map[string]int),
+		OverdueByOwner:    []OwnerOverdueCount{},
+	}
+
+	// Total overdue count.
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE`,
+		tenantID,
+	).Scan(&stats.TotalOverdue)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count overdue actions", err)
+	}
+
+	// Overdue by priority.
+	rows, err := s.pool.Query(ctx, `
+		SELECT priority, COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE
+		GROUP BY priority`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue by priority", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var priority string
+		var count int
+		if err := rows.Scan(&priority, &count); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue by priority", err)
+		}
+		stats.OverdueByPriority[priority] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue by priority", err)
+	}
+
+	// Overdue by owner (top 10).
+	ownerRows, err := s.pool.Query(ctx, `
+		SELECT a.owner_id, u.display_name, COUNT(*)
+		FROM action_items a
+		JOIN users u ON u.id = a.owner_id
+		WHERE a.tenant_id = $1 AND a.status IN ('open', 'in_progress') AND a.due_date < CURRENT_DATE
+		GROUP BY a.owner_id, u.display_name
+		ORDER BY COUNT(*) DESC
+		LIMIT 10`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue by owner", err)
+	}
+	defer ownerRows.Close()
+
+	for ownerRows.Next() {
+		var oc OwnerOverdueCount
+		if err := ownerRows.Scan(&oc.OwnerID, &oc.OwnerName, &oc.Count); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue by owner", err)
+		}
+		stats.OverdueByOwner = append(stats.OverdueByOwner, oc)
+	}
+	if err := ownerRows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue by owner", err)
+	}
+
+	// Oldest overdue days and average days overdue.
+	var oldestDays *int
+	var avgDays *float64
+	err = s.pool.QueryRow(ctx, `
+		SELECT
+			MAX(CURRENT_DATE - due_date),
+			AVG(CURRENT_DATE - due_date)::float8
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE`,
+		tenantID,
+	).Scan(&oldestDays, &avgDays)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue age stats", err)
+	}
+	if oldestDays != nil {
+		stats.OldestOverdueDays = *oldestDays
+	}
+	if avgDays != nil {
+		stats.AvgDaysOverdue = math.Round(*avgDays*100) / 100
+	}
+
+	// Due this week (open/in_progress items due within the next 7 days).
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1
+			AND status IN ('open', 'in_progress')
+			AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
+		tenantID,
+	).Scan(&stats.DueThisWeek)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count due this week", err)
+	}
+
+	// Completed this month.
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1
+			AND status = 'completed'
+			AND completed_at >= date_trunc('month', CURRENT_DATE)`,
+		tenantID,
+	).Scan(&stats.CompletedThisMonth)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count completed this month", err)
+	}
+
+	return stats, nil
+}
+
+// GetOverdueActionsByOwner returns all overdue action items for a specific owner within a tenant.
+func (s *MeetingService) GetOverdueActionsByOwner(ctx context.Context, tenantID, ownerID uuid.UUID) ([]ActionItem, error) {
+	query := `
+		SELECT id, tenant_id, source_type, source_id, title,
+			description, owner_id, due_date, status,
+			completion_evidence, completed_at, priority, created_at
+		FROM action_items
+		WHERE tenant_id = $1 AND owner_id = $2
+			AND status IN ('open', 'in_progress')
+			AND due_date < CURRENT_DATE
+		ORDER BY due_date ASC`
+
+	rows, err := s.pool.Query(ctx, query, tenantID, ownerID)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list overdue actions by owner", err)
+	}
+	defer rows.Close()
+
+	var items []ActionItem
+	for rows.Next() {
+		var a ActionItem
+		if err := rows.Scan(
+			&a.ID, &a.TenantID, &a.SourceType, &a.SourceID, &a.Title,
+			&a.Description, &a.OwnerID, &a.DueDate, &a.Status,
+			&a.CompletionEvidence, &a.CompletedAt, &a.Priority, &a.CreatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue action", err)
+		}
+		items = append(items, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue actions", err)
+	}
+
+	if items == nil {
+		items = []ActionItem{}
+	}
+
+	return items, nil
 }

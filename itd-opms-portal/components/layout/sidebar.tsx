@@ -86,6 +86,7 @@ const navGroups: NavGroup[] = [
       { href: "/dashboard/governance/policies", label: "Policies", icon: FileText, permission: "governance.view" },
       { href: "/dashboard/governance/raci", label: "RACI", icon: GitBranch, permission: "governance.view" },
       { href: "/dashboard/governance/meetings", label: "Meetings", icon: Calendar, permission: "governance.view" },
+      { href: "/dashboard/governance/actions", label: "Action Tracker", icon: ClipboardList, permission: "governance.view" },
       { href: "/dashboard/governance/okrs", label: "OKRs", icon: Target, permission: "governance.view" },
     ],
   },
@@ -105,6 +106,7 @@ const navGroups: NavGroup[] = [
       { href: "/dashboard/planning/projects", label: "Projects", icon: Briefcase, permission: "planning.view" },
       { href: "/dashboard/planning/work-items", label: "Work Items", icon: ListTodo, permission: "planning.view" },
       { href: "/dashboard/planning/risks", label: "Risks & Issues", icon: AlertTriangle, permission: "planning.view" },
+      { href: "/dashboard/planning/pir", label: "PIR Reviews", icon: ClipboardCheck, permission: "planning.view" },
     ],
   },
   {

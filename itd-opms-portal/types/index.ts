@@ -1629,3 +1629,213 @@ export interface EmailTemplate {
   createdAt: string;
   updatedAt: string;
 }
+
+/* ================================================================== */
+/*  FR-A010: RACI Coverage Report                                      */
+/* ================================================================== */
+
+export interface RACICoverageReport {
+  matrixId: string;
+  matrixTitle: string;
+  totalActivities: number;
+  fullyCovered: number;
+  partiallyCovered: number;
+  uncovered: number;
+  coveragePct: number;
+  gaps: RACIGap[];
+  roleSummary: RACIRoleSummary;
+}
+
+export interface RACIGap {
+  entryId: string;
+  activity: string;
+  missingRoles: string[];
+}
+
+export interface RACIRoleSummary {
+  responsibleAssigned: number;
+  accountableAssigned: number;
+  consultedAssigned: number;
+  informedAssigned: number;
+  totalEntries: number;
+}
+
+export interface RACICoverageSummary {
+  totalMatrices: number;
+  avgCoveragePct: number;
+  matricesWithGaps: number;
+  totalGaps: number;
+  fullyCoveredCount: number;
+}
+
+/* ================================================================== */
+/*  FR-A014: Overdue Action Stats                                      */
+/* ================================================================== */
+
+export interface OverdueStats {
+  totalOverdue: number;
+  overdueByPriority: Record<string, number>;
+  overdueByOwner: OwnerOverdueCount[];
+  oldestOverdueDays: number;
+  avgDaysOverdue: number;
+  dueThisWeek: number;
+  completedThisMonth: number;
+}
+
+export interface OwnerOverdueCount {
+  ownerId: string;
+  ownerName: string;
+  count: number;
+}
+
+/* ================================================================== */
+/*  FR-C009: Project Timeline / Gantt                                  */
+/* ================================================================== */
+
+export interface ProjectTimeline {
+  project: TimelineProject;
+  milestones: TimelineMilestone[];
+  workItems: TimelineWorkItem[];
+  dependencies: TimelineDependency[];
+}
+
+export interface TimelineProject {
+  id: string;
+  title: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  completionPct: number;
+  status: string;
+  ragStatus: string;
+}
+
+export interface TimelineMilestone {
+  id: string;
+  title: string;
+  targetDate: string;
+  actualDate?: string;
+  status: string;
+}
+
+export interface TimelineWorkItem {
+  id: string;
+  title: string;
+  type: string;
+  parentId?: string;
+  status: string;
+  priority: string;
+  dueDate?: string;
+  completedAt?: string;
+  estimatedHours?: number;
+  actualHours?: number;
+  assigneeName?: string;
+  sortOrder: number;
+}
+
+export interface TimelineDependency {
+  fromProjectId: string;
+  toProjectId: string;
+  type: string;
+}
+
+export interface PortfolioTimelineItem {
+  id: string;
+  title: string;
+  code: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  completionPct: number;
+  status: string;
+  ragStatus: string;
+}
+
+/* ================================================================== */
+/*  FR-C016: Post-Implementation Review (PIR)                          */
+/* ================================================================== */
+
+export interface PIR {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  projectTitle: string;
+  title: string;
+  status: string;
+  reviewType: string;
+  scheduledDate?: string;
+  completedDate?: string;
+  facilitatorId?: string;
+  facilitatorName?: string;
+  objectivesMet?: string;
+  scopeAdherence?: string;
+  timelineAdherence?: string;
+  budgetAdherence?: string;
+  qualityAssessment?: string;
+  stakeholderSatisfaction?: string;
+  successes: PIRSuccess[];
+  challenges: PIRChallenge[];
+  lessonsLearned: PIRLesson[];
+  recommendations: PIRRecommendation[];
+  overallScore?: number;
+  participants: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PIRSuccess {
+  description: string;
+  category: string;
+  impact?: string;
+}
+
+export interface PIRChallenge {
+  description: string;
+  category: string;
+  rootCause?: string;
+  impact?: string;
+}
+
+export interface PIRLesson {
+  description: string;
+  category: string;
+  recommendation?: string;
+  applicability?: string;
+}
+
+export interface PIRRecommendation {
+  description: string;
+  owner?: string;
+  priority?: string;
+  dueDate?: string;
+  status?: string;
+}
+
+export interface PIRTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  reviewType: string;
+  sections: PIRTemplateSection[];
+  isDefault: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface PIRTemplateSection {
+  key: string;
+  label: string;
+  description: string;
+  required: boolean;
+}
+
+export interface PIRStats {
+  totalPirs: number;
+  completedPirs: number;
+  avgScore: number;
+  pendingPirs: number;
+}

@@ -357,34 +357,197 @@ func (s *RACIService) DeleteEntry(ctx context.Context, entryID uuid.UUID) error 
 	return nil
 }
 
-// GetCoverageReport returns a coverage report for a RACI matrix, including total
-// activities, how many have empty responsible_ids, and overall coverage percentage.
-func (s *RACIService) GetCoverageReport(ctx context.Context, matrixID uuid.UUID) (map[string]any, error) {
-	query := `
-		SELECT
-			COUNT(*) AS total_activities,
-			COUNT(*) FILTER (WHERE cardinality(responsible_ids) = 0) AS unassigned_activities
-		FROM raci_entries
-		WHERE matrix_id = $1`
+// RACICoverageReport contains full gap analysis for a RACI matrix.
+type RACICoverageReport struct {
+	MatrixID         uuid.UUID       `json:"matrixId"`
+	MatrixTitle      string          `json:"matrixTitle"`
+	TotalActivities  int             `json:"totalActivities"`
+	FullyCovered     int             `json:"fullyCovered"`
+	PartiallyCovered int             `json:"partiallyCovered"`
+	Uncovered        int             `json:"uncovered"`
+	CoveragePct      float64         `json:"coveragePct"`
+	Gaps             []RACIGap       `json:"gaps"`
+	RoleSummary      RACIRoleSummary `json:"roleSummary"`
+}
 
-	var totalActivities, unassignedActivities int64
-	err := s.pool.QueryRow(ctx, query, matrixID).Scan(&totalActivities, &unassignedActivities)
+// RACIGap identifies a specific gap in RACI coverage for an activity.
+type RACIGap struct {
+	EntryID      uuid.UUID `json:"entryId"`
+	Activity     string    `json:"activity"`
+	MissingRoles []string  `json:"missingRoles"`
+}
+
+// RACIRoleSummary provides aggregate assignment statistics per RACI role.
+type RACIRoleSummary struct {
+	ResponsibleAssigned int `json:"responsibleAssigned"`
+	AccountableAssigned int `json:"accountableAssigned"`
+	ConsultedAssigned   int `json:"consultedAssigned"`
+	InformedAssigned    int `json:"informedAssigned"`
+	TotalEntries        int `json:"totalEntries"`
+}
+
+// RACICoverageSummary provides tenant-wide RACI coverage stats across all matrices.
+type RACICoverageSummary struct {
+	TotalMatrices     int     `json:"totalMatrices"`
+	AvgCoveragePct    float64 `json:"avgCoveragePct"`
+	MatricesWithGaps  int     `json:"matricesWithGaps"`
+	TotalGaps         int     `json:"totalGaps"`
+	FullyCoveredCount int     `json:"fullyCoveredCount"`
+}
+
+// GetCoverageReport returns a full gap-analysis coverage report for a RACI matrix,
+// checking all 4 roles (R/A/C/I) per entry and identifying specific missing assignments.
+func (s *RACIService) GetCoverageReport(ctx context.Context, tenantID, matrixID uuid.UUID) (*RACICoverageReport, error) {
+	// Get matrix title.
+	var title string
+	err := s.pool.QueryRow(ctx,
+		`SELECT title FROM raci_matrices WHERE id = $1 AND tenant_id = $2`,
+		matrixID, tenantID,
+	).Scan(&title)
 	if err != nil {
-		return nil, apperrors.Internal("failed to get coverage report", err)
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NotFound("RACIMatrix", matrixID.String())
+		}
+		return nil, apperrors.Internal("failed to get matrix title", err)
 	}
 
-	var coveragePct float64
-	if totalActivities > 0 {
-		coveragePct = float64(totalActivities-unassignedActivities) / float64(totalActivities) * 100.0
+	// Fetch all entries.
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, activity, responsible_ids, accountable_id, consulted_ids, informed_ids
+		 FROM raci_entries WHERE matrix_id = $1 ORDER BY activity`,
+		matrixID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query entries", err)
+	}
+	defer rows.Close()
+
+	report := &RACICoverageReport{
+		MatrixID:    matrixID,
+		MatrixTitle: title,
+		Gaps:        []RACIGap{},
 	}
 
-	report := map[string]any{
-		"matrixId":              matrixID,
-		"totalActivities":      totalActivities,
-		"assignedActivities":   totalActivities - unassignedActivities,
-		"unassignedActivities": unassignedActivities,
-		"coveragePct":          coveragePct,
+	for rows.Next() {
+		var (
+			entryID        uuid.UUID
+			activity       string
+			responsibleIDs []uuid.UUID
+			accountableID  uuid.UUID
+			consultedIDs   []uuid.UUID
+			informedIDs    []uuid.UUID
+		)
+		if err := rows.Scan(&entryID, &activity, &responsibleIDs, &accountableID, &consultedIDs, &informedIDs); err != nil {
+			return nil, apperrors.Internal("failed to scan entry", err)
+		}
+
+		report.TotalActivities++
+
+		hasR := len(responsibleIDs) > 0
+		hasA := accountableID != uuid.Nil
+		hasC := len(consultedIDs) > 0
+		hasI := len(informedIDs) > 0
+
+		if hasR {
+			report.RoleSummary.ResponsibleAssigned++
+		}
+		if hasA {
+			report.RoleSummary.AccountableAssigned++
+		}
+		if hasC {
+			report.RoleSummary.ConsultedAssigned++
+		}
+		if hasI {
+			report.RoleSummary.InformedAssigned++
+		}
+
+		if hasR && hasA && hasC && hasI {
+			report.FullyCovered++
+		} else {
+			var missing []string
+			if !hasR {
+				missing = append(missing, "responsible")
+			}
+			if !hasA {
+				missing = append(missing, "accountable")
+			}
+			if !hasC {
+				missing = append(missing, "consulted")
+			}
+			if !hasI {
+				missing = append(missing, "informed")
+			}
+
+			if !hasR || !hasA {
+				report.Uncovered++
+			} else {
+				report.PartiallyCovered++
+			}
+
+			report.Gaps = append(report.Gaps, RACIGap{
+				EntryID:      entryID,
+				Activity:     activity,
+				MissingRoles: missing,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate entries", err)
+	}
+
+	report.RoleSummary.TotalEntries = report.TotalActivities
+
+	if report.TotalActivities > 0 {
+		report.CoveragePct = float64(report.FullyCovered) / float64(report.TotalActivities) * 100.0
 	}
 
 	return report, nil
+}
+
+// GetCoverageSummary returns tenant-wide RACI coverage statistics across all matrices.
+func (s *RACIService) GetCoverageSummary(ctx context.Context, tenantID uuid.UUID) (*RACICoverageSummary, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id FROM raci_matrices WHERE tenant_id = $1`, tenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list matrices", err)
+	}
+	defer rows.Close()
+
+	summary := &RACICoverageSummary{}
+	var matrixIDs []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.Internal("failed to scan matrix id", err)
+		}
+		matrixIDs = append(matrixIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate matrices", err)
+	}
+
+	summary.TotalMatrices = len(matrixIDs)
+	if summary.TotalMatrices == 0 {
+		return summary, nil
+	}
+
+	var totalCoverage float64
+	for _, mid := range matrixIDs {
+		report, err := s.GetCoverageReport(ctx, tenantID, mid)
+		if err != nil {
+			continue
+		}
+		totalCoverage += report.CoveragePct
+		summary.TotalGaps += len(report.Gaps)
+		if len(report.Gaps) > 0 {
+			summary.MatricesWithGaps++
+		} else if report.TotalActivities > 0 {
+			summary.FullyCoveredCount++
+		}
+	}
+
+	summary.AvgCoveragePct = totalCoverage / float64(summary.TotalMatrices)
+
+	return summary, nil
 }

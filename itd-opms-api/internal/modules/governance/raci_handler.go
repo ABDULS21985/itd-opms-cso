@@ -24,6 +24,7 @@ func NewRACIHandler(svc *RACIService) *RACIHandler {
 // Routes mounts RACI matrix endpoints on the given router.
 func (h *RACIHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("governance.view")).Get("/", h.List)
+	r.With(middleware.RequirePermission("governance.view")).Get("/coverage-summary", h.CoverageSummary)
 	r.With(middleware.RequirePermission("governance.manage")).Post("/", h.Create)
 
 	r.Route("/{id}", func(r chi.Router) {
@@ -161,7 +162,7 @@ func (h *RACIHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	types.NoContent(w)
 }
 
-// CoverageReport handles GET /{id}/coverage -- returns coverage analysis for a RACI matrix.
+// CoverageReport handles GET /{id}/coverage -- returns full gap-analysis coverage for a RACI matrix.
 func (h *RACIHandler) CoverageReport(w http.ResponseWriter, r *http.Request) {
 	authCtx := types.GetAuthContext(r.Context())
 	if authCtx == nil {
@@ -175,13 +176,30 @@ func (h *RACIHandler) CoverageReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	report, err := h.svc.GetCoverageReport(r.Context(), matrixID)
+	report, err := h.svc.GetCoverageReport(r.Context(), authCtx.TenantID, matrixID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
 	}
 
 	types.OK(w, report, nil)
+}
+
+// CoverageSummary handles GET /coverage-summary -- returns tenant-wide RACI coverage stats.
+func (h *RACIHandler) CoverageSummary(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	summary, err := h.svc.GetCoverageSummary(r.Context(), authCtx.TenantID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, summary, nil)
 }
 
 // AddEntry handles POST /{id}/entries -- adds a new entry to a RACI matrix.

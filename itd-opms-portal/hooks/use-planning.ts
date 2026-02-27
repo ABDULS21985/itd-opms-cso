@@ -14,6 +14,11 @@ import type {
   Risk,
   ProjectIssue,
   ChangeRequest,
+  ProjectTimeline,
+  PortfolioTimelineItem,
+  PIR,
+  PIRTemplate,
+  PIRStats,
   PaginatedResponse,
 } from "@/types";
 
@@ -994,6 +999,171 @@ export function useDeleteChangeRequest() {
     },
     onError: () => {
       toast.error("Failed to delete change request");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  FR-C009: Project & Portfolio Timeline                              */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/timeline - project timeline data for Gantt chart.
+ */
+export function useProjectTimeline(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project-timeline", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectTimeline>(
+        `/planning/projects/${projectId}/timeline`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/portfolios/{id}/timeline - portfolio timeline for Gantt chart.
+ */
+export function usePortfolioTimeline(portfolioId: string | undefined) {
+  return useQuery({
+    queryKey: ["portfolio-timeline", portfolioId],
+    queryFn: () =>
+      apiClient.get<PortfolioTimelineItem[]>(
+        `/planning/portfolios/${portfolioId}/timeline`,
+      ),
+    enabled: !!portfolioId,
+  });
+}
+
+/* ================================================================== */
+/*  FR-C016: Post-Implementation Reviews (PIR)                         */
+/* ================================================================== */
+
+/**
+ * GET /planning/pir - paginated list of PIRs.
+ */
+export function usePIRs(
+  page = 1,
+  limit = 20,
+  projectId?: string,
+  status?: string,
+) {
+  return useQuery({
+    queryKey: ["pirs", page, limit, projectId, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<PIR>>("/planning/pir", {
+        page,
+        limit,
+        projectId,
+        status,
+      }),
+  });
+}
+
+/**
+ * GET /planning/pir/{id} - single PIR detail.
+ */
+export function usePIR(id: string | undefined) {
+  return useQuery({
+    queryKey: ["pir", id],
+    queryFn: () => apiClient.get<PIR>(`/planning/pir/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /planning/pir/stats - PIR statistics.
+ */
+export function usePIRStats() {
+  return useQuery({
+    queryKey: ["pir-stats"],
+    queryFn: () => apiClient.get<PIRStats>("/planning/pir/stats"),
+  });
+}
+
+/**
+ * GET /planning/pir/templates - PIR templates.
+ */
+export function usePIRTemplates(reviewType?: string) {
+  return useQuery({
+    queryKey: ["pir-templates", reviewType],
+    queryFn: () =>
+      apiClient.get<PIRTemplate[]>("/planning/pir/templates", { reviewType }),
+  });
+}
+
+/**
+ * POST /planning/pir - create a PIR.
+ */
+export function useCreatePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<PIR>) =>
+      apiClient.post<PIR>("/planning/pir", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("Post-Implementation Review created");
+    },
+    onError: () => {
+      toast.error("Failed to create PIR");
+    },
+  });
+}
+
+/**
+ * PUT /planning/pir/{id} - update a PIR.
+ */
+export function useUpdatePIR(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<PIR>) =>
+      apiClient.put<PIR>(`/planning/pir/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir", id] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR updated");
+    },
+    onError: () => {
+      toast.error("Failed to update PIR");
+    },
+  });
+}
+
+/**
+ * POST /planning/pir/{id}/complete - complete a PIR.
+ */
+export function useCompletePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<PIR>(`/planning/pir/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR marked as completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete PIR");
+    },
+  });
+}
+
+/**
+ * DELETE /planning/pir/{id} - delete a PIR.
+ */
+export function useDeletePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/planning/pir/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete PIR");
     },
   });
 }

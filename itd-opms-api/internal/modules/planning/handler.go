@@ -9,13 +9,15 @@ import (
 
 // Handler is the top-level HTTP handler for the planning module.
 // It composes all sub-handlers for portfolios, projects, work-items,
-// milestones, and risks/issues/change-requests.
+// milestones, risks/issues/change-requests, timeline views, and PIRs.
 type Handler struct {
 	portfolio *PortfolioHandler
 	project   *ProjectHandler
 	workItem  *WorkItemHandler
 	milestone *MilestoneHandler
 	risk      *RiskHandler
+	timeline  *TimelineHandler
+	pir       *PIRHandler
 }
 
 // NewHandler creates a new planning Handler with all sub-handlers wired up.
@@ -24,6 +26,8 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 	projectSvc := NewProjectService(pool, auditSvc)
 	workItemSvc := NewWorkItemService(pool, auditSvc)
 	riskSvc := NewRiskService(pool, auditSvc)
+	timelineSvc := NewTimelineService(pool)
+	pirSvc := NewPIRService(pool, auditSvc)
 
 	return &Handler{
 		portfolio: NewPortfolioHandler(portfolioSvc),
@@ -31,6 +35,8 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 		workItem:  NewWorkItemHandler(workItemSvc),
 		milestone: NewMilestoneHandler(workItemSvc),
 		risk:      NewRiskHandler(riskSvc),
+		timeline:  NewTimelineHandler(timelineSvc),
+		pir:       NewPIRHandler(pirSvc),
 	}
 }
 
@@ -58,4 +64,12 @@ func (h *Handler) Routes(r chi.Router) {
 
 	// Risks, Issues & Change Requests (FR-C011 to FR-C016)
 	h.risk.Routes(r)
+
+	// Timeline / Gantt views (FR-C009)
+	h.timeline.Routes(r)
+
+	// Post-Implementation Reviews (FR-C016)
+	r.Route("/pir", func(r chi.Router) {
+		h.pir.Routes(r)
+	})
 }

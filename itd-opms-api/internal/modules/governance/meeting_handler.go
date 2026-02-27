@@ -41,6 +41,8 @@ func (h *MeetingHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("governance.view")).Get("/", h.ListActions)
 		r.With(middleware.RequirePermission("governance.manage")).Post("/", h.CreateAction)
 		r.With(middleware.RequirePermission("governance.view")).Get("/overdue", h.ListOverdue)
+		r.With(middleware.RequirePermission("governance.view")).Get("/overdue/stats", h.OverdueStats)
+		r.With(middleware.RequirePermission("governance.view")).Get("/overdue/mine", h.MyOverdueActions)
 		r.Route("/{actionId}", func(r chi.Router) {
 			r.With(middleware.RequirePermission("governance.view")).Get("/", h.GetAction)
 			r.With(middleware.RequirePermission("governance.manage")).Put("/", h.UpdateAction)
@@ -406,4 +408,38 @@ func (h *MeetingHandler) CompleteAction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	types.NoContent(w)
+}
+
+// OverdueStats handles GET /actions/overdue/stats -- returns aggregated overdue action statistics.
+func (h *MeetingHandler) OverdueStats(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	stats, err := h.svc.GetOverdueActionStats(r.Context(), authCtx.TenantID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, stats, nil)
+}
+
+// MyOverdueActions handles GET /actions/overdue/mine -- returns overdue actions for the authenticated user.
+func (h *MeetingHandler) MyOverdueActions(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	items, err := h.svc.GetOverdueActionsByOwner(r.Context(), authCtx.TenantID, authCtx.UserID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, items, nil)
 }
