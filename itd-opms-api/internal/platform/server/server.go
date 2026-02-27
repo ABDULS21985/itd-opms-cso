@@ -49,11 +49,12 @@ type Server struct {
 	router   chi.Router
 
 	// Background services for graceful shutdown.
-	outboxProcessor    *notification.OutboxProcessor
-	orchestrator       *notification.Orchestrator
-	dashboardRefresh   *reporting.DashboardRefresher
-	reportScheduler    *reporting.ReportScheduler
-	maintenanceWorker  *system.MaintenanceWorker
+	outboxProcessor       *notification.OutboxProcessor
+	orchestrator          *notification.Orchestrator
+	dashboardRefresh      *reporting.DashboardRefresher
+	reportScheduler       *reporting.ReportScheduler
+	maintenanceWorker     *system.MaintenanceWorker
+	actionReminderService *governance.ActionReminderService
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -156,6 +157,11 @@ func (s *Server) Setup() {
 	if s.js != nil {
 		orchestrator := notification.NewOrchestrator(notifService, s.js)
 		s.orchestrator = orchestrator
+	}
+
+	// --- Action reminder service (hourly cron for overdue action notifications) ---
+	if s.js != nil {
+		s.actionReminderService = governance.NewActionReminderService(s.pool, s.js)
 	}
 
 	// --- Module stub handlers ---
@@ -314,6 +320,25 @@ func (s *Server) Start() error {
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)
+	}
+
+	// Start action reminder cron (every hour).
+	if s.actionReminderService != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			// Run once on startup.
+			s.actionReminderService.RunReminders(ctx)
+			for {
+				select {
+				case <-ticker.C:
+					s.actionReminderService.RunReminders(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		slog.Info("action reminder cron started (1h interval)")
 	}
 
 	addr := s.cfg.ListenAddr()
