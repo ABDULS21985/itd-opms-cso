@@ -239,6 +239,25 @@ export function useTriggerReportRun(definitionId: string | undefined) {
 }
 
 /**
+ * POST /reporting/reports/executive-pack/generate - ensures definition and triggers run.
+ */
+export function useGenerateExecutivePack() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<ReportRun>("/reporting/reports/executive-pack/generate", {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
+      queryClient.invalidateQueries({ queryKey: ["report-runs"] });
+      toast.success("Executive pack generation triggered");
+    },
+    onError: () => {
+      toast.error("Failed to generate executive pack");
+    },
+  });
+}
+
+/**
  * GET /reporting/reports/{definitionId}/runs - paginated list of runs.
  */
 export function useReportRuns(

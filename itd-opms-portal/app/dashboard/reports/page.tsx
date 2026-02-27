@@ -22,6 +22,7 @@ import {
   useReportRuns,
   useTriggerReportRun,
   useDeleteReportDefinition,
+  useGenerateExecutivePack,
 } from "@/hooks/use-reporting";
 import type { ReportDefinition, ReportRun } from "@/types";
 
@@ -33,20 +34,18 @@ const REPORT_TYPES = [
   { value: "", label: "All Types" },
   { value: "executive_pack", label: "Executive Pack" },
   { value: "sla_report", label: "SLA Report" },
-  { value: "project_status", label: "Project Status" },
-  { value: "asset_inventory", label: "Asset Inventory" },
-  { value: "risk_register", label: "Risk Register" },
-  { value: "compliance_summary", label: "Compliance Summary" },
+  { value: "pmo_report", label: "PMO Report" },
+  { value: "asset_report", label: "Asset Report" },
+  { value: "grc_report", label: "GRC Report" },
   { value: "custom", label: "Custom" },
 ];
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   executive_pack: { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" },
   sla_report: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
-  project_status: { bg: "rgba(34, 197, 94, 0.1)", text: "#22C55E" },
-  asset_inventory: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
-  risk_register: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
-  compliance_summary: { bg: "rgba(6, 182, 212, 0.1)", text: "#06B6D4" },
+  pmo_report: { bg: "rgba(34, 197, 94, 0.1)", text: "#22C55E" },
+  asset_report: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
+  grc_report: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
   custom: { bg: "rgba(100, 116, 139, 0.1)", text: "#64748B" },
 };
 
@@ -69,6 +68,7 @@ function RunStatusBadge({ status }: { status: string }) {
   const config: Record<string, { icon: typeof CheckCircle2; color: string; bg: string }> = {
     completed: { icon: CheckCircle2, color: "#22C55E", bg: "rgba(34, 197, 94, 0.1)" },
     running: { icon: Loader2, color: "#3B82F6", bg: "rgba(59, 130, 246, 0.1)" },
+    generating: { icon: Loader2, color: "#3B82F6", bg: "rgba(59, 130, 246, 0.1)" },
     failed: { icon: XCircle, color: "#EF4444", bg: "rgba(239, 68, 68, 0.1)" },
     pending: { icon: Clock, color: "#F59E0B", bg: "rgba(245, 158, 11, 0.1)" },
   };
@@ -79,7 +79,7 @@ function RunStatusBadge({ status }: { status: string }) {
       className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
       style={{ backgroundColor: c.bg, color: c.color }}
     >
-      <Icon size={12} className={status === "running" ? "animate-spin" : ""} />
+      <Icon size={12} className={status === "running" || status === "generating" ? "animate-spin" : ""} />
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -298,6 +298,7 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState("");
   const limit = 20;
+  const generateExecutivePack = useGenerateExecutivePack();
 
   const { data: reportsData, isLoading } = useReportDefinitions(
     page,
@@ -359,6 +360,8 @@ export default function ReportsPage() {
             Create Report
           </button>
           <button
+            onClick={() => generateExecutivePack.mutate()}
+            disabled={generateExecutivePack.isPending}
             className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl border transition-colors"
             style={{
               backgroundColor: "var(--surface-0)",
@@ -366,7 +369,11 @@ export default function ReportsPage() {
               color: "var(--text-primary)",
             }}
           >
-            <FileText size={16} />
+            {generateExecutivePack.isPending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <FileText size={16} />
+            )}
             Generate Executive Pack
           </button>
         </div>

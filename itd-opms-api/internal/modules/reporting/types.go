@@ -31,6 +31,12 @@ const (
 	RunStatusFailed     = "failed"
 )
 
+const (
+	RunTriggerManual   = "manual"
+	RunTriggerSchedule = "schedule"
+	RunTriggerSystem   = "system"
+)
+
 // ──────────────────────────────────────────────
 // Domain types
 // ──────────────────────────────────────────────
@@ -53,16 +59,18 @@ type ReportDefinition struct {
 
 // ReportRun represents an individual report generation run.
 type ReportRun struct {
-	ID           uuid.UUID       `json:"id"`
-	DefinitionID uuid.UUID       `json:"definitionId"`
-	TenantID     uuid.UUID       `json:"tenantId"`
-	Status       string          `json:"status"`
-	GeneratedAt  *time.Time      `json:"generatedAt"`
-	CompletedAt  *time.Time      `json:"completedAt"`
-	DocumentID   *uuid.UUID      `json:"documentId"`
-	DataSnapshot json.RawMessage `json:"dataSnapshot"`
-	ErrorMessage *string         `json:"errorMessage"`
-	CreatedAt    time.Time       `json:"createdAt"`
+	ID            uuid.UUID       `json:"id"`
+	DefinitionID  uuid.UUID       `json:"definitionId"`
+	TenantID      uuid.UUID       `json:"tenantId"`
+	Status        string          `json:"status"`
+	TriggerSource string          `json:"triggerSource"`
+	ScheduledFor  *time.Time      `json:"scheduledFor"`
+	GeneratedAt   *time.Time      `json:"generatedAt"`
+	CompletedAt   *time.Time      `json:"completedAt"`
+	DocumentID    *uuid.UUID      `json:"documentId"`
+	DataSnapshot  json.RawMessage `json:"dataSnapshot"`
+	ErrorMessage  *string         `json:"errorMessage"`
+	CreatedAt     time.Time       `json:"createdAt"`
 }
 
 // DashboardCache represents cached dashboard aggregation data.
@@ -90,19 +98,43 @@ type SavedSearch struct {
 
 // ExecutiveSummary represents the materialized view for the executive dashboard.
 type ExecutiveSummary struct {
-	TenantID             uuid.UUID `json:"tenantId"`
-	ActivePolicies       int       `json:"activePolicies"`
-	OverdueActions       int       `json:"overdueActions"`
-	PendingAttestations  int       `json:"pendingAttestations"`
-	AvgOKRProgress       float64   `json:"avgOkrProgress"`
-	OpenTickets          int       `json:"openTickets"`
-	CriticalTickets      int       `json:"criticalTickets"`
-	ActiveProjects       int       `json:"activeProjects"`
-	ActiveAssets         int       `json:"activeAssets"`
-	OverDeployedLicenses int       `json:"overDeployedLicenses"`
-	HighRisks            int       `json:"highRisks"`
-	ExpiringCerts        int       `json:"expiringCerts"`
-	RefreshedAt          time.Time `json:"refreshedAt"`
+	TenantID                   uuid.UUID      `json:"tenantId"`
+	ActivePolicies             int            `json:"activePolicies"`
+	OverdueActions             int            `json:"overdueActions"`
+	PendingAttestations        int            `json:"pendingAttestations"`
+	AvgOKRProgress             float64        `json:"avgOkrProgress"`
+	OpenTickets                int            `json:"openTickets"`
+	CriticalTickets            int            `json:"criticalTickets"`
+	OpenTicketsP1              int            `json:"openTicketsP1"`
+	OpenTicketsP2              int            `json:"openTicketsP2"`
+	OpenTicketsP3              int            `json:"openTicketsP3"`
+	OpenTicketsP4              int            `json:"openTicketsP4"`
+	SLACompliancePct           float64        `json:"slaCompliancePct"`
+	MTTRMinutes                float64        `json:"mttrMinutes"`
+	MTTAMinutes                float64        `json:"mttaMinutes"`
+	BacklogOver30Days          int            `json:"backlogOver30Days"`
+	ActiveProjects             int            `json:"activeProjects"`
+	ProjectsRAGGreen           int            `json:"projectsRagGreen"`
+	ProjectsRAGAmber           int            `json:"projectsRagAmber"`
+	ProjectsRAGRed             int            `json:"projectsRagRed"`
+	OnTimeDeliveryPct          float64        `json:"onTimeDeliveryPct"`
+	MilestoneBurnDownPct       float64        `json:"milestoneBurnDownPct"`
+	ActiveAssets               int            `json:"activeAssets"`
+	AssetCountsByType          map[string]int `json:"assetCountsByType"`
+	AssetCountsByStatus        map[string]int `json:"assetCountsByStatus"`
+	OverDeployedLicenses       int            `json:"overDeployedLicenses"`
+	LicenseCompliancePct       float64        `json:"licenseCompliancePct"`
+	WarrantiesExpiring90Days   int            `json:"warrantiesExpiring90Days"`
+	HighRisks                  int            `json:"highRisks"`
+	CriticalRisks              int            `json:"criticalRisks"`
+	AuditReadinessScore        float64        `json:"auditReadinessScore"`
+	AccessReviewCompletionPct  float64        `json:"accessReviewCompletionPct"`
+	TeamCapacityUtilizationPct float64        `json:"teamCapacityUtilizationPct"`
+	OverdueTrainingCerts       int            `json:"overdueTrainingCerts"`
+	ExpiringCerts              int            `json:"expiringCerts"`
+	OpenP1Incidents            int            `json:"openP1Incidents"`
+	SLABreaches24h             int            `json:"slaBreaches24h"`
+	RefreshedAt                time.Time      `json:"refreshedAt"`
 }
 
 // ChartDataPoint represents a single label-value pair for chart rendering.

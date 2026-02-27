@@ -48,8 +48,10 @@ type Server struct {
 	router   chi.Router
 
 	// Background services for graceful shutdown.
-	outboxProcessor *notification.OutboxProcessor
-	orchestrator    *notification.Orchestrator
+	outboxProcessor  *notification.OutboxProcessor
+	orchestrator     *notification.Orchestrator
+	dashboardRefresh *reporting.DashboardRefresher
+	reportScheduler  *reporting.ReportScheduler
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -163,6 +165,8 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
+	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
+	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
 
 	// --- Routes ---
 	r.Route("/api/v1", func(r chi.Router) {
@@ -296,6 +300,12 @@ func (s *Server) Start() error {
 		if err := s.orchestrator.Start(ctx); err != nil {
 			slog.Error("failed to start notification orchestrator", "error", err)
 		}
+	}
+	if s.dashboardRefresh != nil {
+		s.dashboardRefresh.Start(ctx)
+	}
+	if s.reportScheduler != nil {
+		s.reportScheduler.Start(ctx)
 	}
 
 	addr := s.cfg.ListenAddr()

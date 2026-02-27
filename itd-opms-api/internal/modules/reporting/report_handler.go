@@ -28,6 +28,9 @@ func NewReportHandler(svc *ReportService) *ReportHandler {
 // Routes mounts report endpoints on the given router.
 func (h *ReportHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("reporting.view")).Get("/", h.ListDefinitions)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/executive-pack/definition", h.GetExecutivePackDefinition)
+	r.With(middleware.RequirePermission("reporting.manage")).Post("/executive-pack/ensure", h.EnsureExecutivePackDefinition)
+	r.With(middleware.RequirePermission("reporting.manage")).Post("/executive-pack/generate", h.GenerateExecutivePack)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/{id}", h.GetDefinition)
 	r.With(middleware.RequirePermission("reporting.manage")).Post("/", h.CreateDefinition)
 	r.With(middleware.RequirePermission("reporting.manage")).Put("/{id}", h.UpdateDefinition)
@@ -173,6 +176,57 @@ func (h *ReportHandler) DeleteDefinition(w http.ResponseWriter, r *http.Request)
 	}
 
 	types.NoContent(w)
+}
+
+// GetExecutivePackDefinition handles GET /executive-pack/definition.
+func (h *ReportHandler) GetExecutivePackDefinition(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	def, err := h.svc.GetExecutivePackDefinition(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, def, nil)
+}
+
+// EnsureExecutivePackDefinition handles POST /executive-pack/ensure.
+func (h *ReportHandler) EnsureExecutivePackDefinition(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	def, err := h.svc.EnsureExecutivePackDefinition(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, def, nil)
+}
+
+// GenerateExecutivePack handles POST /executive-pack/generate.
+func (h *ReportHandler) GenerateExecutivePack(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	run, err := h.svc.GenerateExecutivePack(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, run)
 }
 
 // ──────────────────────────────────────────────

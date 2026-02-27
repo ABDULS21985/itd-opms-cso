@@ -19,6 +19,7 @@ import (
 const (
 	executiveSummaryCacheTTL       = 5 * time.Minute
 	executiveSummaryCacheKeyPrefix = "reporting:executive_summary:"
+	executiveSummaryRefreshLockKey = int64(82001501)
 )
 
 // ──────────────────────────────────────────────
@@ -106,29 +107,57 @@ func (s *DashboardService) getExecutiveSummaryByTenant(ctx context.Context, tena
 func (s *DashboardService) queryExecutiveSummaryByTenant(ctx context.Context, tenantID uuid.UUID) (ExecutiveSummary, error) {
 	query := `
 		SELECT
-			tenant_id, active_policies, overdue_actions,
-			avg_okr_progress, open_tickets, critical_tickets,
-			active_projects, active_assets, over_deployed_licenses,
-			high_risks, expiring_certs, refreshed_at
+			tenant_id, active_policies, overdue_actions, pending_attestations,
+			avg_okr_progress, open_tickets, critical_tickets, open_tickets_p1, open_tickets_p2, open_tickets_p3, open_tickets_p4,
+			sla_compliance_pct, mttr_minutes, mtta_minutes, backlog_over_30_days,
+			active_projects, projects_rag_green, projects_rag_amber, projects_rag_red, on_time_delivery_pct, milestone_burn_down_pct,
+			active_assets, asset_counts_by_type, asset_counts_by_status, over_deployed_licenses, license_compliance_pct, warranties_expiring_90_days,
+			high_risks, critical_risks, audit_readiness_score, access_review_completion_pct,
+			team_capacity_utilization_pct, overdue_training_certs, expiring_certs, refreshed_at
 		FROM mv_executive_summary
 		WHERE tenant_id = $1`
 
 	var es ExecutiveSummary
+	var assetCountsByTypeJSON []byte
+	var assetCountsByStatusJSON []byte
 	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
-		&es.TenantID, &es.ActivePolicies, &es.OverdueActions,
-		&es.AvgOKRProgress, &es.OpenTickets, &es.CriticalTickets,
-		&es.ActiveProjects, &es.ActiveAssets, &es.OverDeployedLicenses,
-		&es.HighRisks, &es.ExpiringCerts, &es.RefreshedAt,
+		&es.TenantID, &es.ActivePolicies, &es.OverdueActions, &es.PendingAttestations,
+		&es.AvgOKRProgress, &es.OpenTickets, &es.CriticalTickets, &es.OpenTicketsP1, &es.OpenTicketsP2, &es.OpenTicketsP3, &es.OpenTicketsP4,
+		&es.SLACompliancePct, &es.MTTRMinutes, &es.MTTAMinutes, &es.BacklogOver30Days,
+		&es.ActiveProjects, &es.ProjectsRAGGreen, &es.ProjectsRAGAmber, &es.ProjectsRAGRed, &es.OnTimeDeliveryPct, &es.MilestoneBurnDownPct,
+		&es.ActiveAssets, &assetCountsByTypeJSON, &assetCountsByStatusJSON, &es.OverDeployedLicenses, &es.LicenseCompliancePct, &es.WarrantiesExpiring90Days,
+		&es.HighRisks, &es.CriticalRisks, &es.AuditReadinessScore, &es.AccessReviewCompletionPct,
+		&es.TeamCapacityUtilizationPct, &es.OverdueTrainingCerts, &es.ExpiringCerts, &es.RefreshedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			// Return zeroed summary if view has no data for this tenant.
-			return ExecutiveSummary{
+			es := ExecutiveSummary{
 				TenantID:    tenantID,
 				RefreshedAt: time.Now().UTC(),
-			}, nil
+			}
+			es.AssetCountsByType = map[string]int{}
+			es.AssetCountsByStatus = map[string]int{}
+			return es, nil
 		}
 		return ExecutiveSummary{}, apperrors.Internal("failed to get executive summary", err)
+	}
+
+	if len(assetCountsByTypeJSON) > 0 {
+		if err := json.Unmarshal(assetCountsByTypeJSON, &es.AssetCountsByType); err != nil {
+			return ExecutiveSummary{}, apperrors.Internal("failed to decode asset_counts_by_type", err)
+		}
+	}
+	if len(assetCountsByStatusJSON) > 0 {
+		if err := json.Unmarshal(assetCountsByStatusJSON, &es.AssetCountsByStatus); err != nil {
+			return ExecutiveSummary{}, apperrors.Internal("failed to decode asset_counts_by_status", err)
+		}
+	}
+	if es.AssetCountsByType == nil {
+		es.AssetCountsByType = map[string]int{}
+	}
+	if es.AssetCountsByStatus == nil {
+		es.AssetCountsByStatus = map[string]int{}
 	}
 
 	return es, nil
@@ -149,6 +178,29 @@ func (s *DashboardService) populateExecutiveSummaryLiveMetrics(ctx context.Conte
 		return apperrors.Internal("failed to count pending attestations", err)
 	}
 
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM tickets
+		WHERE tenant_id = $1
+		  AND type = 'incident'
+		  AND priority = 'P1_critical'
+		  AND status NOT IN ('resolved', 'closed', 'cancelled')`,
+		es.TenantID,
+	).Scan(&es.OpenP1Incidents); err != nil {
+		return apperrors.Internal("failed to count open P1 incidents", err)
+	}
+
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM sla_breach_log bl
+		JOIN tickets tk ON tk.id = bl.ticket_id
+		WHERE tk.tenant_id = $1
+		  AND bl.breached_at >= NOW() - INTERVAL '24 hours'`,
+		es.TenantID,
+	).Scan(&es.SLABreaches24h); err != nil {
+		return apperrors.Internal("failed to count recent SLA breaches", err)
+	}
+
 	return nil
 }
 
@@ -159,12 +211,9 @@ func (s *DashboardService) RefreshExecutiveSummary(ctx context.Context) error {
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	_, err := s.pool.Exec(ctx, `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_executive_summary`)
-	if err != nil {
-		return apperrors.Internal("failed to refresh executive summary", err)
+	if err := s.RefreshExecutiveSummarySystem(ctx, RunTriggerManual); err != nil {
+		return err
 	}
-
-	s.invalidateAllExecutiveSummaryCache(ctx)
 
 	// Log audit event.
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
@@ -177,6 +226,32 @@ func (s *DashboardService) RefreshExecutiveSummary(ctx context.Context) error {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
+	return nil
+}
+
+// RefreshExecutiveSummarySystem refreshes the executive summary materialized view
+// for non-request contexts (scheduler/background workers).
+func (s *DashboardService) RefreshExecutiveSummarySystem(ctx context.Context, reason string) error {
+	var locked bool
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, executiveSummaryRefreshLockKey).Scan(&locked); err != nil {
+		return apperrors.Internal("failed to acquire executive summary refresh lock", err)
+	}
+	if !locked {
+		slog.InfoContext(ctx, "executive summary refresh skipped because another refresh is in progress", "reason", reason)
+		return nil
+	}
+	defer func() {
+		if _, err := s.pool.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, executiveSummaryRefreshLockKey); err != nil {
+			slog.Warn("failed to release executive summary refresh lock", "error", err)
+		}
+	}()
+
+	if _, err := s.pool.Exec(ctx, `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_executive_summary`); err != nil {
+		return apperrors.Internal("failed to refresh executive summary", err)
+	}
+
+	s.invalidateAllExecutiveSummaryCache(ctx)
+	slog.InfoContext(ctx, "executive summary materialized view refreshed", "reason", reason)
 	return nil
 }
 
@@ -251,7 +326,7 @@ func (s *DashboardService) GetProjectsByStatus(ctx context.Context) ([]ChartData
 // Chart Data — Assets
 // ──────────────────────────────────────────────
 
-// GetAssetsByType returns asset counts grouped by asset_type.
+// GetAssetsByType returns asset counts grouped by type.
 func (s *DashboardService) GetAssetsByType(ctx context.Context) ([]ChartDataPoint, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -259,10 +334,10 @@ func (s *DashboardService) GetAssetsByType(ctx context.Context) ([]ChartDataPoin
 	}
 
 	query := `
-		SELECT asset_type AS label, COUNT(*)::int AS value
+		SELECT type AS label, COUNT(*)::int AS value
 		FROM assets
 		WHERE tenant_id = $1
-		GROUP BY asset_type
+		GROUP BY type
 		ORDER BY value DESC`
 
 	return s.queryChartData(ctx, query, auth.TenantID)
