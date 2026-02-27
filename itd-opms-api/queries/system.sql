@@ -339,3 +339,321 @@ WHERE u.tenant_id = @tenant_id
   AND u.department = @org_unit_name
   AND u.is_active = true
 ORDER BY u.display_name ASC;
+
+-- ──────────────────────────────────────────────
+-- System Module: Platform Statistics Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemGetUserStats :one
+SELECT
+  (SELECT COUNT(*) FROM users WHERE tenant_id = @tenant_id) AS total_users,
+  (SELECT COUNT(*) FROM users WHERE tenant_id = @tenant_id AND is_active = true) AS active_users,
+  (SELECT COUNT(*) FROM users WHERE tenant_id = @tenant_id AND is_active = false) AS inactive_users,
+  (SELECT COUNT(*) FROM users WHERE tenant_id = @tenant_id AND created_at >= date_trunc('month', CURRENT_DATE)) AS new_this_month;
+
+-- name: SystemGetOnlineUserCount :one
+SELECT COUNT(DISTINCT user_id) AS online_count
+FROM audit_log
+WHERE created_at > NOW() - INTERVAL '15 minutes';
+
+-- name: SystemGetDatabaseSize :one
+SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size;
+
+-- name: SystemGetTableCount :one
+SELECT COUNT(*)::int AS table_count
+FROM information_schema.tables
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
+
+-- name: SystemGetConnectionStats :one
+SELECT
+  (SELECT COUNT(*)::int FROM pg_stat_activity WHERE state = 'active') AS active_connections,
+  (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max_connections;
+
+-- name: SystemGetAuditStats :one
+SELECT
+  (SELECT COUNT(*) FROM audit_log) AS total_events,
+  (SELECT COUNT(*)::int FROM audit_log WHERE created_at >= CURRENT_DATE) AS events_today,
+  (SELECT COUNT(*)::int FROM audit_log WHERE created_at >= date_trunc('week', CURRENT_DATE)) AS events_this_week;
+
+-- name: SystemGetModuleRecordCounts :many
+SELECT module_name, record_count, active_items, last_activity FROM (
+  SELECT 'tickets'::text AS module_name, COUNT(*) AS record_count,
+         COUNT(*) FILTER (WHERE status NOT IN ('closed', 'cancelled'))::int AS active_items,
+         MAX(updated_at) AS last_activity FROM tickets WHERE tenant_id = @tenant_id
+  UNION ALL
+  SELECT 'assets', COUNT(*), COUNT(*) FILTER (WHERE status = 'active')::int, MAX(updated_at) FROM assets WHERE tenant_id = @tenant_id
+  UNION ALL
+  SELECT 'projects', COUNT(*), COUNT(*) FILTER (WHERE status NOT IN ('closed', 'cancelled'))::int, MAX(updated_at) FROM projects WHERE tenant_id = @tenant_id
+  UNION ALL
+  SELECT 'policies', COUNT(*), COUNT(*) FILTER (WHERE status = 'active')::int, MAX(updated_at) FROM policies WHERE tenant_id = @tenant_id
+  UNION ALL
+  SELECT 'risks', COUNT(*), COUNT(*) FILTER (WHERE status = 'open')::int, MAX(updated_at) FROM risks WHERE tenant_id = @tenant_id
+  UNION ALL
+  SELECT 'articles', COUNT(*), COUNT(*) FILTER (WHERE status = 'published')::int, MAX(updated_at) FROM kb_articles WHERE tenant_id = @tenant_id
+) AS module_stats
+ORDER BY module_name;
+
+-- ──────────────────────────────────────────────
+-- System Module: Directory Sync Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListDirectorySyncRuns :many
+SELECT id, started_at, completed_at, users_created, users_updated, users_deactivated,
+       COALESCE(jsonb_array_length(errors), 0)::int AS error_count,
+       errors::text AS error_details, status
+FROM directory_sync_runs
+ORDER BY started_at DESC
+LIMIT @page_limit OFFSET @page_offset;
+
+-- name: SystemCountDirectorySyncRuns :one
+SELECT COUNT(*) FROM directory_sync_runs;
+
+-- name: SystemGetLatestSyncRun :one
+SELECT id, started_at, completed_at, users_created, users_updated, users_deactivated,
+       COALESCE(jsonb_array_length(errors), 0)::int AS error_count,
+       errors::text AS error_details, status
+FROM directory_sync_runs
+ORDER BY started_at DESC
+LIMIT 1;
+
+-- name: SystemCleanExpiredAuditSessions :exec
+DELETE FROM audit_log
+WHERE action = 'session.expired' AND created_at < NOW() - INTERVAL '90 days';
+
+-- ──────────────────────────────────────────────
+-- System Module: Settings Management Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListSettings :many
+-- Returns settings for a category, resolving tenant overrides (tenant-specific > global).
+SELECT s.id, s.tenant_id, s.category, s.key, s.value,
+       s.description, s.is_secret, s.updated_by, s.updated_at, s.created_at
+FROM system_settings s
+WHERE s.category = @category
+  AND (s.tenant_id IS NULL OR s.tenant_id = @tenant_id)
+ORDER BY s.key ASC;
+
+-- name: SystemGetSetting :one
+SELECT s.id, s.tenant_id, s.category, s.key, s.value,
+       s.description, s.is_secret, s.updated_by, s.updated_at, s.created_at
+FROM system_settings s
+WHERE s.category = @category AND s.key = @key
+  AND (s.tenant_id = @tenant_id OR (s.tenant_id IS NULL AND NOT EXISTS (
+       SELECT 1 FROM system_settings s2
+       WHERE s2.category = @category AND s2.key = @key AND s2.tenant_id = @tenant_id)))
+ORDER BY s.tenant_id NULLS LAST
+LIMIT 1;
+
+-- name: SystemUpsertSetting :one
+INSERT INTO system_settings (tenant_id, category, key, value, updated_by, updated_at)
+VALUES (@tenant_id, @category, @key, @value, @updated_by, NOW())
+ON CONFLICT (tenant_id, category, key) DO UPDATE SET
+  value = @value, updated_by = @updated_by, updated_at = NOW()
+RETURNING id, tenant_id, category, key, value, description, is_secret, updated_by, updated_at, created_at;
+
+-- name: SystemDeleteTenantSetting :exec
+DELETE FROM system_settings
+WHERE category = @category AND key = @key AND tenant_id = @tenant_id;
+
+-- name: SystemListSettingCategories :many
+SELECT DISTINCT category FROM system_settings ORDER BY category;
+
+-- ──────────────────────────────────────────────
+-- System Module: Audit Explorer Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemGetAuditEventDetail :one
+SELECT ae.id, ae.tenant_id, ae.actor_id,
+       COALESCE(u.display_name, '') AS actor_name,
+       ae.actor_role, ae.action, ae.entity_type, ae.entity_id,
+       ae.changes, ae.previous_state,
+       COALESCE(ae.ip_address::text, '') AS ip_address,
+       COALESCE(ae.user_agent, '') AS user_agent,
+       COALESCE(ae.correlation_id::text, '') AS correlation_id,
+       ae.checksum, ae.created_at
+FROM audit_events ae
+LEFT JOIN users u ON u.id = ae.actor_id
+WHERE ae.id = @event_id;
+
+-- name: SystemGetAuditEntityTimeline :many
+SELECT ae.id, ae.tenant_id, ae.actor_id,
+       COALESCE(u.display_name, '') AS actor_name,
+       ae.actor_role, ae.action, ae.entity_type, ae.entity_id,
+       ae.changes, ae.previous_state,
+       COALESCE(ae.ip_address::text, '') AS ip_address,
+       COALESCE(ae.user_agent, '') AS user_agent,
+       COALESCE(ae.correlation_id::text, '') AS correlation_id,
+       ae.checksum, ae.created_at
+FROM audit_events ae
+LEFT JOIN users u ON u.id = ae.actor_id
+WHERE ae.entity_type = @entity_type AND ae.entity_id = @entity_id
+ORDER BY ae.created_at DESC;
+
+-- name: SystemGetAuditEventsPerDay :many
+SELECT DATE(ae.created_at)::text AS day, COUNT(*)::int AS event_count
+FROM audit_events ae
+WHERE ae.tenant_id = @tenant_id
+  AND ae.created_at >= @date_from
+  AND ae.created_at <= @date_to
+GROUP BY DATE(ae.created_at)
+ORDER BY day ASC;
+
+-- name: SystemGetAuditTopActors :many
+SELECT ae.actor_id, COALESCE(u.display_name, '') AS actor_name, COUNT(*)::int AS event_count
+FROM audit_events ae
+LEFT JOIN users u ON u.id = ae.actor_id
+WHERE ae.tenant_id = @tenant_id
+  AND ae.created_at >= @date_from
+  AND ae.created_at <= @date_to
+GROUP BY ae.actor_id, u.display_name
+ORDER BY event_count DESC
+LIMIT 10;
+
+-- name: SystemGetAuditTopEntityTypes :many
+SELECT ae.entity_type, COUNT(*)::int AS event_count
+FROM audit_events ae
+WHERE ae.tenant_id = @tenant_id
+  AND ae.created_at >= @date_from
+  AND ae.created_at <= @date_to
+GROUP BY ae.entity_type
+ORDER BY event_count DESC
+LIMIT 10;
+
+-- name: SystemGetAuditTopActions :many
+SELECT ae.action, COUNT(*)::int AS event_count
+FROM audit_events ae
+WHERE ae.tenant_id = @tenant_id
+  AND ae.created_at >= @date_from
+  AND ae.created_at <= @date_to
+GROUP BY ae.action
+ORDER BY event_count DESC
+LIMIT 10;
+
+-- name: SystemCountAllAuditEvents :one
+SELECT COUNT(*) FROM audit_events WHERE tenant_id = @tenant_id;
+
+-- ──────────────────────────────────────────────
+-- System Module: Session Management Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListActiveSessions :many
+SELECT s.id, s.user_id, COALESCE(u.display_name, '') AS user_name,
+       COALESCE(u.email, '') AS user_email,
+       s.tenant_id, COALESCE(s.ip_address::text, '') AS ip_address,
+       COALESCE(s.user_agent, '') AS user_agent,
+       COALESCE(s.device_info, '{}') AS device_info,
+       COALESCE(s.location, '') AS location,
+       s.created_at, s.last_active, s.expires_at, s.is_revoked
+FROM active_sessions s
+JOIN users u ON u.id = s.user_id
+WHERE s.tenant_id = @tenant_id
+  AND NOT s.is_revoked AND s.expires_at > NOW()
+ORDER BY s.last_active DESC
+LIMIT @page_limit OFFSET @page_offset;
+
+-- name: SystemCountActiveSessionRecords :one
+SELECT COUNT(*) FROM active_sessions
+WHERE tenant_id = @tenant_id AND NOT is_revoked AND expires_at > NOW();
+
+-- name: SystemListUserSessions :many
+SELECT s.id, s.user_id, COALESCE(u.display_name, '') AS user_name,
+       COALESCE(u.email, '') AS user_email,
+       s.tenant_id, COALESCE(s.ip_address::text, '') AS ip_address,
+       COALESCE(s.user_agent, '') AS user_agent,
+       COALESCE(s.device_info, '{}') AS device_info,
+       COALESCE(s.location, '') AS location,
+       s.created_at, s.last_active, s.expires_at, s.is_revoked
+FROM active_sessions s
+JOIN users u ON u.id = s.user_id
+WHERE s.user_id = @user_id AND s.tenant_id = @tenant_id
+  AND NOT s.is_revoked AND s.expires_at > NOW()
+ORDER BY s.last_active DESC;
+
+-- name: SystemGetSessionByID :one
+SELECT s.id, s.user_id, COALESCE(u.display_name, '') AS user_name,
+       COALESCE(u.email, '') AS user_email,
+       s.tenant_id, COALESCE(s.ip_address::text, '') AS ip_address,
+       COALESCE(s.user_agent, '') AS user_agent,
+       COALESCE(s.device_info, '{}') AS device_info,
+       COALESCE(s.location, '') AS location,
+       s.created_at, s.last_active, s.expires_at, s.is_revoked
+FROM active_sessions s
+JOIN users u ON u.id = s.user_id
+WHERE s.id = @session_id;
+
+-- name: SystemCreateSession :one
+INSERT INTO active_sessions (user_id, tenant_id, token_hash, ip_address, user_agent, device_info, location, expires_at)
+VALUES (@user_id, @tenant_id, @token_hash, @ip_address::inet, @user_agent, COALESCE(@device_info, '{}'), @location, @expires_at)
+RETURNING id, user_id, tenant_id, created_at, last_active, expires_at;
+
+-- name: SystemUpdateSessionActivity :exec
+UPDATE active_sessions SET last_active = NOW()
+WHERE id = @session_id AND NOT is_revoked;
+
+-- name: SystemRevokeSession :exec
+UPDATE active_sessions SET is_revoked = true, revoked_at = NOW(), revoked_by = @revoked_by
+WHERE id = @session_id AND NOT is_revoked;
+
+-- name: SystemRevokeAllUserSessions :exec
+UPDATE active_sessions SET is_revoked = true, revoked_at = NOW(), revoked_by = @revoked_by
+WHERE user_id = @user_id AND NOT is_revoked;
+
+-- name: SystemCleanExpiredSessionRecords :exec
+DELETE FROM active_sessions WHERE expires_at < NOW() - INTERVAL '30 days';
+
+-- name: SystemGetSessionMgmtStats :one
+SELECT
+  (SELECT COUNT(*) FROM active_sessions WHERE tenant_id = @tenant_id AND NOT is_revoked AND expires_at > NOW()) AS active_sessions,
+  (SELECT COUNT(DISTINCT user_id) FROM active_sessions WHERE tenant_id = @tenant_id AND NOT is_revoked AND expires_at > NOW()) AS unique_users;
+
+-- ──────────────────────────────────────────────
+-- System Module: Email Template Queries
+-- ──────────────────────────────────────────────
+
+-- name: SystemListEmailTemplates :many
+SELECT id, tenant_id, name, subject, body_html, body_text,
+       variables, category, is_active, updated_by, created_at, updated_at
+FROM email_templates
+WHERE (tenant_id IS NULL OR tenant_id = @tenant_id)
+  AND (CAST(@category_filter AS TEXT) = '' OR category = CAST(@category_filter AS TEXT))
+ORDER BY category, name ASC
+LIMIT @page_limit OFFSET @page_offset;
+
+-- name: SystemCountEmailTemplates :one
+SELECT COUNT(*) FROM email_templates
+WHERE (tenant_id IS NULL OR tenant_id = @tenant_id)
+  AND (CAST(@category_filter AS TEXT) = '' OR category = CAST(@category_filter AS TEXT));
+
+-- name: SystemGetEmailTemplateByID :one
+SELECT id, tenant_id, name, subject, body_html, body_text,
+       variables, category, is_active, updated_by, created_at, updated_at
+FROM email_templates
+WHERE id = @template_id;
+
+-- name: SystemGetEmailTemplateByName :one
+SELECT id, tenant_id, name, subject, body_html, body_text,
+       variables, category, is_active, updated_by, created_at, updated_at
+FROM email_templates
+WHERE name = @name AND (tenant_id = @tenant_id OR (tenant_id IS NULL AND NOT EXISTS (
+      SELECT 1 FROM email_templates e2 WHERE e2.name = @name AND e2.tenant_id = @tenant_id)))
+ORDER BY tenant_id NULLS LAST
+LIMIT 1;
+
+-- name: SystemCreateEmailTemplate :one
+INSERT INTO email_templates (tenant_id, name, subject, body_html, body_text, variables, category, updated_by)
+VALUES (@tenant_id, @name, @subject, @body_html, @body_text, COALESCE(@variables, '[]'), @category, @updated_by)
+RETURNING id, tenant_id, name, subject, body_html, body_text, variables, category, is_active, updated_by, created_at, updated_at;
+
+-- name: SystemUpdateEmailTemplate :exec
+UPDATE email_templates SET
+  subject = COALESCE(NULLIF(@subject, ''), subject),
+  body_html = COALESCE(NULLIF(@body_html, ''), body_html),
+  body_text = CASE WHEN @update_body_text::boolean THEN @body_text ELSE body_text END,
+  variables = CASE WHEN @update_variables::boolean THEN @variables ELSE variables END,
+  is_active = CASE WHEN @update_active::boolean THEN @is_active ELSE is_active END,
+  updated_by = @updated_by,
+  updated_at = NOW()
+WHERE id = @template_id;
+
+-- name: SystemDeleteEmailTemplate :exec
+DELETE FROM email_templates WHERE id = @template_id;

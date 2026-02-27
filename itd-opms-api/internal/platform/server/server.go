@@ -49,10 +49,11 @@ type Server struct {
 	router   chi.Router
 
 	// Background services for graceful shutdown.
-	outboxProcessor  *notification.OutboxProcessor
-	orchestrator     *notification.Orchestrator
-	dashboardRefresh *reporting.DashboardRefresher
-	reportScheduler  *reporting.ReportScheduler
+	outboxProcessor    *notification.OutboxProcessor
+	orchestrator       *notification.Orchestrator
+	dashboardRefresh   *reporting.DashboardRefresher
+	reportScheduler    *reporting.ReportScheduler
+	maintenanceWorker  *system.MaintenanceWorker
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -166,7 +167,8 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio)
+	s.maintenanceWorker = systemHandler.Maintenance
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
 
@@ -310,6 +312,9 @@ func (s *Server) Start() error {
 	if s.reportScheduler != nil {
 		s.reportScheduler.Start(ctx)
 	}
+	if s.maintenanceWorker != nil {
+		s.maintenanceWorker.Start(ctx)
+	}
 
 	addr := s.cfg.ListenAddr()
 	srv := &http.Server{
@@ -346,6 +351,9 @@ func (s *Server) Start() error {
 	}
 	if s.orchestrator != nil {
 		s.orchestrator.Stop()
+	}
+	if s.maintenanceWorker != nil {
+		s.maintenanceWorker.Stop()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

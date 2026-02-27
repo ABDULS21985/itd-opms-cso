@@ -3,31 +3,47 @@ package system
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
+	"github.com/nats-io/nats.go"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
 
 // Handler is the top-level HTTP handler for the System module.
-// It composes sub-handlers for user, role, tenant, and org unit management.
+// It composes sub-handlers for user, role, tenant, org unit, and health management.
 type Handler struct {
 	user   *UserHandler
 	role   *RoleHandler
 	tenant *TenantHandler
 	org    *OrgHandler
+	health *SystemHealthHandler
+
+	// Maintenance exposes the background worker for lifecycle management.
+	Maintenance *MaintenanceWorker
 }
 
 // NewHandler creates a new System Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(
+	pool *pgxpool.Pool,
+	auditSvc *audit.AuditService,
+	redisClient *redis.Client,
+	natsConn *nats.Conn,
+	minioClient *minio.Client,
+) *Handler {
 	userSvc := NewUserService(pool, auditSvc)
 	roleSvc := NewRoleService(pool, auditSvc)
 	tenantSvc := NewTenantService(pool, auditSvc)
 	orgSvc := NewOrgService(pool, auditSvc)
+	healthSvc := NewHealthService(pool, redisClient, natsConn, minioClient)
 
 	return &Handler{
-		user:   NewUserHandler(userSvc),
-		role:   NewRoleHandler(roleSvc),
-		tenant: NewTenantHandler(tenantSvc),
-		org:    NewOrgHandler(orgSvc),
+		user:        NewUserHandler(userSvc),
+		role:        NewRoleHandler(roleSvc),
+		tenant:      NewTenantHandler(tenantSvc),
+		org:         NewOrgHandler(orgSvc),
+		health:      NewSystemHealthHandler(healthSvc),
+		Maintenance: NewMaintenanceWorker(pool),
 	}
 }
 
@@ -51,6 +67,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// Org unit management (FR-A020)
 	r.Route("/org-units", func(r chi.Router) {
 		h.org.Routes(r)
+	})
+
+	// Platform health, stats, directory sync (NFR-009, NFR-022-026)
+	r.Route("/health", func(r chi.Router) {
+		h.health.Routes(r)
 	})
 
 	// Top-level permission catalog
