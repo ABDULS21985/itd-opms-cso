@@ -122,21 +122,21 @@ export default function LoginPage() {
           >
             <div className="inline-flex items-center gap-3">
               <div className="relative">
-                <div className="absolute -inset-2 bg-white/10 rounded-2xl blur-lg" />
+                <div className="absolute -inset-3 bg-white/10 rounded-3xl blur-lg" />
                 <Image
                   src="/logo.jpeg"
                   alt="CBN Logo"
-                  width={48}
-                  height={48}
-                  className="rounded-2xl border border-white/20 relative z-10"
+                  width={72}
+                  height={72}
+                  className="rounded-2xl border-2 border-white/20 relative z-10"
                 />
               </div>
               <div>
-                <span className="text-xl font-bold block leading-tight">
+                <span className="text-2xl font-bold block leading-tight">
                   Central Bank of Nigeria
                 </span>
-                <span className="text-xs text-green-200/70">
-                  IT Department -- OPMS
+                <span className="text-sm text-green-200/70">
+                  IT Department — OPMS
                 </span>
               </div>
             </div>
@@ -257,15 +257,15 @@ export default function LoginPage() {
               <Image
                 src="/logo.jpeg"
                 alt="CBN Logo"
-                width={48}
-                height={48}
+                width={64}
+                height={64}
                 className="rounded-2xl shadow-lg"
               />
               <div className="text-left">
-                <span className="text-lg font-bold text-[var(--foreground)] block leading-tight">
+                <span className="text-xl font-bold text-[var(--foreground)] block leading-tight">
                   CBN IT Department
                 </span>
-                <span className="text-xs text-[var(--neutral-gray)]">
+                <span className="text-sm text-[var(--neutral-gray)]">
                   Operations & Project Management
                 </span>
               </div>
@@ -281,13 +281,13 @@ export default function LoginPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
             >
-              <motion.div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5 bg-[#1B7340]/10">
+              <motion.div className="inline-flex items-center justify-center mb-5">
                 <Image
                   src="/logo.jpeg"
                   alt="CBN Logo"
-                  width={40}
-                  height={40}
-                  className="rounded-xl"
+                  width={112}
+                  height={112}
+                  className="rounded-2xl"
                 />
               </motion.div>
               <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight">

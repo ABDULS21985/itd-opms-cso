@@ -27,6 +27,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/people"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -165,6 +166,7 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
+	systemHandler := system.NewHandler(s.pool, auditService)
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
 
@@ -274,6 +276,7 @@ func (s *Server) Setup() {
 			r.Route("/knowledge", func(r chi.Router) { knowledgeHandler.Routes(r) })
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
+			r.Route("/system", func(r chi.Router) { systemHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })
