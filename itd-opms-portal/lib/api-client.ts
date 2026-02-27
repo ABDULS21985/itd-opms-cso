@@ -132,6 +132,20 @@ class ApiClient {
         result = result.data;
       }
     }
+    // Preserve pagination meta from the response envelope.
+    // The Go backend sends meta as { page, limit, total, totalPages }.
+    // Normalize to the frontend convention { page, pageSize, totalItems, totalPages }.
+    if (data.meta) {
+      return {
+        data: result,
+        meta: {
+          page: data.meta.page,
+          pageSize: data.meta.limit ?? data.meta.pageSize,
+          totalItems: data.meta.total ?? data.meta.totalItems,
+          totalPages: data.meta.totalPages,
+        },
+      } as T;
+    }
     return result;
   }
 
@@ -210,6 +224,17 @@ class ApiClient {
       if (keys.length === 1 && keys[0] === "data") {
         result = result.data;
       }
+    }
+    if (data.meta) {
+      return {
+        data: result,
+        meta: {
+          page: data.meta.page,
+          pageSize: data.meta.limit ?? data.meta.pageSize,
+          totalItems: data.meta.total ?? data.meta.totalItems,
+          totalPages: data.meta.totalPages,
+        },
+      } as T;
     }
     return result;
   }

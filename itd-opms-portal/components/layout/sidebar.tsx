@@ -165,15 +165,19 @@ const navGroups: NavGroup[] = [
 /* ------------------------------------------------------------------ */
 
 function getRoleBadge(roles: string[] | undefined) {
-  if (roles?.includes("super_admin"))
-    return { label: "Super Admin", className: "bg-red-500/20 text-red-400" };
-  if (roles?.includes("department_head"))
-    return { label: "Dept Head", className: "bg-blue-500/20 text-blue-400" };
-  if (roles?.includes("team_lead"))
-    return { label: "Team Lead", className: "bg-purple-500/20 text-purple-400" };
-  if (roles?.includes("manager"))
-    return { label: "Manager", className: "bg-amber-500/20 text-amber-400" };
-  return { label: "Officer", className: "bg-emerald-500/20 text-emerald-400" };
+  if (roles?.includes("global_admin") || roles?.includes("super_admin"))
+    return { label: "Global Admin", className: "bg-red-500/20 text-red-400" };
+  if (roles?.includes("itd_director"))
+    return { label: "ITD Director", className: "bg-blue-500/20 text-blue-400" };
+  if (roles?.includes("head_of_division") || roles?.includes("department_head"))
+    return { label: "Head of Division", className: "bg-purple-500/20 text-purple-400" };
+  if (roles?.includes("supervisor") || roles?.includes("team_lead") || roles?.includes("manager"))
+    return { label: "Supervisor", className: "bg-amber-500/20 text-amber-400" };
+  if (roles?.includes("auditor"))
+    return { label: "Auditor", className: "bg-cyan-500/20 text-cyan-400" };
+  if (roles?.includes("service_desk_agent"))
+    return { label: "Service Desk", className: "bg-orange-500/20 text-orange-400" };
+  return { label: "Staff", className: "bg-emerald-500/20 text-emerald-400" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -249,7 +253,8 @@ export function Sidebar({
     router.push("/auth/login");
   };
 
-  // Filter groups based on permissions (show all if no permissions defined yet)
+  // Filter groups based on permissions (show all if wildcard or no permissions defined yet)
+  const hasWildcard = userPermissions.includes("*");
   const visibleGroups = navGroups
     .map((group) => ({
       ...group,
@@ -257,6 +262,7 @@ export function Sidebar({
         (item) =>
           !item.permission ||
           userPermissions.length === 0 ||
+          hasWildcard ||
           userPermissions.includes(item.permission),
       ),
     }))

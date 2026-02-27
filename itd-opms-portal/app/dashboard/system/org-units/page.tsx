@@ -36,19 +36,23 @@ import type { OrgTreeNode, OrgUnitDetail, UserSearchResult } from "@/types";
 /* ------------------------------------------------------------------ */
 
 const LEVEL_OPTIONS = [
+  { value: "directorate", label: "Directorate" },
   { value: "department", label: "Department" },
   { value: "division", label: "Division" },
+  { value: "office", label: "Office" },
   { value: "unit", label: "Unit" },
-  { value: "section", label: "Section" },
   { value: "team", label: "Team" },
+  { value: "section", label: "Section" },
 ];
 
 const LEVEL_COLORS: Record<string, { bg: string; text: string }> = {
+  directorate: { bg: "rgba(220, 38, 38, 0.12)", text: "#DC2626" },
   department: { bg: "rgba(99, 102, 241, 0.12)", text: "#6366F1" },
   division: { bg: "rgba(59, 130, 246, 0.12)", text: "#3B82F6" },
+  office: { bg: "rgba(139, 92, 246, 0.12)", text: "#8B5CF6" },
   unit: { bg: "rgba(16, 185, 129, 0.12)", text: "#10B981" },
-  section: { bg: "rgba(245, 158, 11, 0.12)", text: "#F59E0B" },
-  team: { bg: "rgba(107, 114, 128, 0.12)", text: "#6B7280" },
+  team: { bg: "rgba(245, 158, 11, 0.12)", text: "#F59E0B" },
+  section: { bg: "rgba(107, 114, 128, 0.12)", text: "#6B7280" },
 };
 
 function getLevelColor(level: string) {

@@ -215,8 +215,12 @@ func (s *OrgService) CreateOrgUnit(ctx context.Context, tenantID uuid.UUID, req 
 	if req.Level == "" {
 		return nil, apperrors.BadRequest("level is required")
 	}
-	if req.Level != "department" && req.Level != "division" && req.Level != "office" && req.Level != "unit" {
-		return nil, apperrors.BadRequest("level must be one of: department, division, office, unit")
+	validLevels := map[string]bool{
+		"directorate": true, "department": true, "division": true,
+		"office": true, "unit": true, "team": true, "section": true,
+	}
+	if !validLevels[req.Level] {
+		return nil, apperrors.BadRequest("level must be one of: directorate, department, division, office, unit, team, section")
 	}
 
 	// Check for duplicate code within tenant.
