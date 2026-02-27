@@ -1268,6 +1268,7 @@ export interface ExecutiveSummary {
   tenantId: string;
   activePolicies: number;
   overdueActions: number;
+  pendingAttestations?: number;
   avgOkrProgress: number;
   openTickets: number;
   criticalTickets: number;
@@ -1282,6 +1283,10 @@ export interface ExecutiveSummary {
 export interface ChartDataPoint {
   label: string;
   value: number;
+}
+
+export interface SLAComplianceRate {
+  rate: number;
 }
 
 export interface SavedSearch {
@@ -1301,4 +1306,13 @@ export interface GlobalSearchResults {
   assets?: { results: Array<{ id: string; name: string; assetTag: string }>; count: number };
   projects?: { results: Array<{ id: string; name: string; status: string }>; count: number };
   policies?: { results: Array<{ id: string; title: string; status: string }>; count: number };
+  users?: {
+    results: Array<{ id: string; displayName: string; email: string; department?: string; jobTitle?: string }>;
+    count: number;
+  };
+  meetings?: { results: Array<{ id: string; title: string; status: string; scheduledAt: string }>; count: number };
+  decisions?: {
+    results: Array<{ id: string; meetingId: string; decisionNumber: string; title: string; status: string }>;
+    count: number;
+  };
 }

@@ -3,6 +3,7 @@ package reporting
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
@@ -16,9 +17,9 @@ type Handler struct {
 }
 
 // NewHandler creates a new Reporting Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(pool *pgxpool.Pool, redisClient *redis.Client, auditSvc *audit.AuditService) *Handler {
 	return &Handler{
-		dashboard: NewDashboardHandler(NewDashboardService(pool, auditSvc)),
+		dashboard: NewDashboardHandler(NewDashboardService(pool, redisClient, auditSvc)),
 		report:    NewReportHandler(NewReportService(pool, auditSvc)),
 		search:    NewSearchHandler(NewSearchService(pool, auditSvc)),
 	}
@@ -34,4 +35,14 @@ func (h *Handler) Routes(r chi.Router) {
 
 	// Global search
 	r.Route("/search", func(r chi.Router) { h.search.Routes(r) })
+}
+
+// DashboardRoutes mounts only dashboard endpoints.
+func (h *Handler) DashboardRoutes(r chi.Router) {
+	h.dashboard.Routes(r)
+}
+
+// SearchRoutes mounts only search endpoints.
+func (h *Handler) SearchRoutes(r chi.Router) {
+	h.search.Routes(r)
 }

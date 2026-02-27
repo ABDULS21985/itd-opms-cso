@@ -56,14 +56,24 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	likePattern := "%" + query + "%"
 	result := map[string]any{}
+	entityLimit := params.Limit
+	if entityLimit <= 0 {
+		entityLimit = 5
+	}
+	if entityLimit > 20 {
+		entityLimit = 20
+	}
 
 	// Define which entity types to search. If entityTypes is empty, search all.
 	allTypes := map[string]bool{
-		"tickets":  true,
-		"articles": true,
-		"assets":   true,
-		"projects": true,
-		"policies": true,
+		"tickets":   true,
+		"articles":  true,
+		"assets":    true,
+		"projects":  true,
+		"policies":  true,
+		"users":     true,
+		"meetings":  true,
+		"decisions": true,
 	}
 
 	// If specific entity types were requested, filter to just those.
@@ -76,7 +86,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search tickets.
 	if allTypes["tickets"] {
-		ticketResult, err := s.searchTickets(ctx, auth.TenantID, likePattern)
+		ticketResult, err := s.searchTickets(ctx, auth.TenantID, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search tickets", "error", err)
 			result["tickets"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -87,7 +97,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search kb_articles.
 	if allTypes["articles"] {
-		articleResult, err := s.searchArticles(ctx, auth.TenantID, likePattern)
+		articleResult, err := s.searchArticles(ctx, auth.TenantID, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search articles", "error", err)
 			result["articles"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -98,7 +108,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search assets.
 	if allTypes["assets"] {
-		assetResult, err := s.searchAssets(ctx, auth.TenantID, likePattern)
+		assetResult, err := s.searchAssets(ctx, auth.TenantID, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search assets", "error", err)
 			result["assets"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -109,7 +119,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search projects.
 	if allTypes["projects"] {
-		projectResult, err := s.searchProjects(ctx, auth.TenantID, likePattern)
+		projectResult, err := s.searchProjects(ctx, auth.TenantID, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search projects", "error", err)
 			result["projects"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -120,7 +130,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search policies.
 	if allTypes["policies"] {
-		policyResult, err := s.searchPolicies(ctx, auth.TenantID, likePattern)
+		policyResult, err := s.searchPolicies(ctx, auth.TenantID, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search policies", "error", err)
 			result["policies"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -129,11 +139,44 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 		}
 	}
 
+	// Search users.
+	if allTypes["users"] {
+		userResult, err := s.searchUsers(ctx, auth.TenantID, likePattern, entityLimit)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to search users", "error", err)
+			result["users"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
+		} else {
+			result["users"] = userResult
+		}
+	}
+
+	// Search meetings.
+	if allTypes["meetings"] {
+		meetingResult, err := s.searchMeetings(ctx, auth.TenantID, likePattern, entityLimit)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to search meetings", "error", err)
+			result["meetings"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
+		} else {
+			result["meetings"] = meetingResult
+		}
+	}
+
+	// Search meeting decisions.
+	if allTypes["decisions"] {
+		decisionResult, err := s.searchMeetingDecisions(ctx, auth.TenantID, likePattern, entityLimit)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to search meeting decisions", "error", err)
+			result["decisions"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
+		} else {
+			result["decisions"] = decisionResult
+		}
+	}
+
 	return result, nil
 }
 
 // searchTickets searches the tickets table.
-func (s *SearchService) searchTickets(ctx context.Context, tenantID uuid.UUID, pattern string) (searchEntityResult, error) {
+func (s *SearchService) searchTickets(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
 	// Count total matches.
 	var count int
 	err := s.pool.QueryRow(ctx, `
@@ -147,15 +190,15 @@ func (s *SearchService) searchTickets(ctx context.Context, tenantID uuid.UUID, p
 		return searchEntityResult{}, err
 	}
 
-	// Fetch top 5 results.
+	// Fetch top results.
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, ticket_number, title, status, priority, created_at
 		FROM tickets
 		WHERE tenant_id = $1
 			AND (title ILIKE $2 OR description ILIKE $2)
 		ORDER BY created_at DESC
-		LIMIT 5`,
-		tenantID, pattern,
+		LIMIT $3`,
+		tenantID, pattern, limit,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -194,7 +237,7 @@ func (s *SearchService) searchTickets(ctx context.Context, tenantID uuid.UUID, p
 }
 
 // searchArticles searches the kb_articles table.
-func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, pattern string) (searchEntityResult, error) {
+func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
@@ -209,14 +252,14 @@ func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, 
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, title, status, created_at
+		SELECT id, title, slug, status, created_at
 		FROM kb_articles
 		WHERE tenant_id = $1
 			AND status = 'published'
 			AND (title ILIKE $2 OR content ILIKE $2)
 		ORDER BY created_at DESC
-		LIMIT 5`,
-		tenantID, pattern,
+		LIMIT $3`,
+		tenantID, pattern, limit,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -228,15 +271,17 @@ func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, 
 		var (
 			id        uuid.UUID
 			title     string
+			slug      string
 			status    string
 			createdAt time.Time
 		)
-		if err := rows.Scan(&id, &title, &status, &createdAt); err != nil {
+		if err := rows.Scan(&id, &title, &slug, &status, &createdAt); err != nil {
 			return searchEntityResult{}, err
 		}
 		results = append(results, map[string]any{
 			"id":         id,
 			"title":      title,
+			"slug":       slug,
 			"status":     status,
 			"createdAt":  createdAt,
 			"entityType": "article",
@@ -251,7 +296,7 @@ func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, 
 }
 
 // searchAssets searches the assets table.
-func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pattern string) (searchEntityResult, error) {
+func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
@@ -270,8 +315,8 @@ func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pa
 		WHERE tenant_id = $1
 			AND (name ILIKE $2 OR asset_tag ILIKE $2)
 		ORDER BY created_at DESC
-		LIMIT 5`,
-		tenantID, pattern,
+		LIMIT $3`,
+		tenantID, pattern, limit,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -310,13 +355,13 @@ func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pa
 }
 
 // searchProjects searches the projects table.
-func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, pattern string) (searchEntityResult, error) {
+func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM projects
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR description ILIKE $2)`,
+			AND (title ILIKE $2 OR description ILIKE $2)`,
 		tenantID, pattern,
 	).Scan(&count)
 	if err != nil {
@@ -324,13 +369,13 @@ func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, 
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, status, priority, created_at
+		SELECT id, title AS name, status, priority, created_at
 		FROM projects
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR description ILIKE $2)
+			AND (title ILIKE $2 OR description ILIKE $2)
 		ORDER BY created_at DESC
-		LIMIT 5`,
-		tenantID, pattern,
+		LIMIT $3`,
+		tenantID, pattern, limit,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -367,7 +412,7 @@ func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, 
 }
 
 // searchPolicies searches the policies table.
-func (s *SearchService) searchPolicies(ctx context.Context, tenantID uuid.UUID, pattern string) (searchEntityResult, error) {
+func (s *SearchService) searchPolicies(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
@@ -386,8 +431,8 @@ func (s *SearchService) searchPolicies(ctx context.Context, tenantID uuid.UUID, 
 		WHERE tenant_id = $1
 			AND title ILIKE $2
 		ORDER BY created_at DESC
-		LIMIT 5`,
-		tenantID, pattern,
+		LIMIT $3`,
+		tenantID, pattern, limit,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -411,6 +456,183 @@ func (s *SearchService) searchPolicies(ctx context.Context, tenantID uuid.UUID, 
 			"status":     status,
 			"createdAt":  createdAt,
 			"entityType": "policy",
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return searchEntityResult{}, err
+	}
+
+	return searchEntityResult{Results: results, Count: count}, nil
+}
+
+// searchUsers searches users within the authenticated tenant scope.
+func (s *SearchService) searchUsers(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM users
+		WHERE tenant_id = $1
+		  AND is_active = true
+		  AND (display_name ILIKE $2 OR email ILIKE $2 OR COALESCE(job_title, '') ILIKE $2)`,
+		tenantID, pattern,
+	).Scan(&count)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, display_name, email, department, job_title, created_at
+		FROM users
+		WHERE tenant_id = $1
+		  AND is_active = true
+		  AND (display_name ILIKE $2 OR email ILIKE $2 OR COALESCE(job_title, '') ILIKE $2)
+		ORDER BY created_at DESC
+		LIMIT $3`,
+		tenantID, pattern, limit,
+	)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+	defer rows.Close()
+
+	results := []map[string]any{}
+	for rows.Next() {
+		var (
+			id         uuid.UUID
+			display    string
+			email      string
+			department *string
+			jobTitle   *string
+			createdAt  time.Time
+		)
+		if err := rows.Scan(&id, &display, &email, &department, &jobTitle, &createdAt); err != nil {
+			return searchEntityResult{}, err
+		}
+		results = append(results, map[string]any{
+			"id":          id,
+			"displayName": display,
+			"email":       email,
+			"department":  department,
+			"jobTitle":    jobTitle,
+			"createdAt":   createdAt,
+			"entityType":  "user",
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return searchEntityResult{}, err
+	}
+
+	return searchEntityResult{Results: results, Count: count}, nil
+}
+
+// searchMeetings searches governance meetings.
+func (s *SearchService) searchMeetings(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM meetings
+		WHERE tenant_id = $1
+		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)`,
+		tenantID, pattern,
+	).Scan(&count)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, title, status, scheduled_at, created_at
+		FROM meetings
+		WHERE tenant_id = $1
+		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)
+		ORDER BY scheduled_at DESC NULLS LAST, created_at DESC
+		LIMIT $3`,
+		tenantID, pattern, limit,
+	)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+	defer rows.Close()
+
+	results := []map[string]any{}
+	for rows.Next() {
+		var (
+			id          uuid.UUID
+			title       string
+			status      string
+			scheduledAt time.Time
+			createdAt   time.Time
+		)
+		if err := rows.Scan(&id, &title, &status, &scheduledAt, &createdAt); err != nil {
+			return searchEntityResult{}, err
+		}
+		results = append(results, map[string]any{
+			"id":          id,
+			"title":       title,
+			"status":      status,
+			"scheduledAt": scheduledAt,
+			"createdAt":   createdAt,
+			"entityType":  "meeting",
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return searchEntityResult{}, err
+	}
+
+	return searchEntityResult{Results: results, Count: count}, nil
+}
+
+// searchMeetingDecisions searches governance meeting decisions.
+func (s *SearchService) searchMeetingDecisions(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM meeting_decisions
+		WHERE tenant_id = $1
+		  AND (title ILIKE $2 OR description ILIKE $2 OR COALESCE(decision_number, '') ILIKE $2)`,
+		tenantID, pattern,
+	).Scan(&count)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, meeting_id, decision_number, title, status, created_at
+		FROM meeting_decisions
+		WHERE tenant_id = $1
+		  AND (title ILIKE $2 OR description ILIKE $2 OR COALESCE(decision_number, '') ILIKE $2)
+		ORDER BY created_at DESC
+		LIMIT $3`,
+		tenantID, pattern, limit,
+	)
+	if err != nil {
+		return searchEntityResult{}, err
+	}
+	defer rows.Close()
+
+	results := []map[string]any{}
+	for rows.Next() {
+		var (
+			id             uuid.UUID
+			meetingID      uuid.UUID
+			decisionNumber string
+			title          string
+			status         string
+			createdAt      time.Time
+		)
+		if err := rows.Scan(&id, &meetingID, &decisionNumber, &title, &status, &createdAt); err != nil {
+			return searchEntityResult{}, err
+		}
+		results = append(results, map[string]any{
+			"id":             id,
+			"meetingId":      meetingID,
+			"decisionNumber": decisionNumber,
+			"title":          title,
+			"status":         status,
+			"createdAt":      createdAt,
+			"entityType":     "decision",
 		})
 	}
 

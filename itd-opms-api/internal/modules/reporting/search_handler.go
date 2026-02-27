@@ -55,10 +55,28 @@ func (h *SearchHandler) GlobalSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional entity_types filter (comma-separated).
+	// Optional tenant_id is accepted for API contract compatibility, but access remains scoped.
+	if v := r.URL.Query().Get("tenant_id"); v != "" {
+		requestedTenantID, err := uuid.Parse(v)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid tenant_id")
+			return
+		}
+		if requestedTenantID != auth.TenantID && !auth.HasRole("global_admin") && !auth.HasPermission("*") {
+			types.ErrorMessage(w, http.StatusForbidden, "FORBIDDEN", "Cross-tenant search access denied")
+			return
+		}
+	}
+
+	// Parse optional entity_types/types filter (comma-separated).
 	var entityTypes []string
-	if v := r.URL.Query().Get("entity_types"); v != "" {
-		entityTypes = strings.Split(v, ",")
+	if v := r.URL.Query().Get("entity_types"); v == "" {
+		v = r.URL.Query().Get("types")
+		if v != "" {
+			entityTypes = normalizeCSVQueryParam(v)
+		}
+	} else {
+		entityTypes = normalizeCSVQueryParam(v)
 	}
 
 	params := types.ParsePagination(r)
@@ -70,6 +88,19 @@ func (h *SearchHandler) GlobalSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, results, nil)
+}
+
+func normalizeCSVQueryParam(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // ListSavedSearches handles GET /saved/ — returns the user's saved searches.

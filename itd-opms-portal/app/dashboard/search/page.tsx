@@ -13,6 +13,9 @@ import {
   HardDrive,
   FolderKanban,
   Shield,
+  Users,
+  Calendar,
+  Scale,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,6 +39,9 @@ const TABS = [
   { key: "assets", label: "Assets", icon: HardDrive },
   { key: "projects", label: "Projects", icon: FolderKanban },
   { key: "policies", label: "Policies", icon: Shield },
+  { key: "users", label: "Users", icon: Users },
+  { key: "meetings", label: "Meetings", icon: Calendar },
+  { key: "decisions", label: "Decisions", icon: Scale },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -169,6 +175,101 @@ function PolicyResult({ item }: { item: { id: string; title: string; status: str
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</p>
         <p className="text-xs text-[var(--text-secondary)]">Policy</p>
+      </div>
+      <span
+        className="text-xs font-medium rounded-full px-2 py-0.5 capitalize shrink-0"
+        style={{ backgroundColor: "rgba(100, 116, 139, 0.1)", color: "#64748B" }}
+      >
+        {item.status}
+      </span>
+    </a>
+  );
+}
+
+function UserResult({
+  item,
+}: {
+  item: { id: string; displayName: string; email: string; department?: string; jobTitle?: string };
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 p-3 rounded-lg border"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
+      >
+        <Users size={16} style={{ color: "#3B82F6" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.displayName}</p>
+        <p className="text-xs text-[var(--text-secondary)] truncate">
+          {item.email}
+          {item.jobTitle ? ` · ${item.jobTitle}` : ""}
+          {item.department ? ` · ${item.department}` : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MeetingResult({
+  item,
+}: {
+  item: { id: string; title: string; status: string; scheduledAt?: string };
+}) {
+  return (
+    <a
+      href={`/dashboard/governance/meetings/${item.id}`}
+      className="flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-[var(--surface-1)]"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
+      >
+        <Calendar size={16} style={{ color: "#1B7340" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</p>
+        <p className="text-xs text-[var(--text-secondary)]">
+          Meeting
+          {item.scheduledAt ? ` · ${new Date(item.scheduledAt).toLocaleDateString()}` : ""}
+        </p>
+      </div>
+      <span
+        className="text-xs font-medium rounded-full px-2 py-0.5 capitalize shrink-0"
+        style={{ backgroundColor: "rgba(100, 116, 139, 0.1)", color: "#64748B" }}
+      >
+        {item.status}
+      </span>
+    </a>
+  );
+}
+
+function DecisionResult({
+  item,
+}: {
+  item: { id: string; meetingId: string; decisionNumber: string; title: string; status: string };
+}) {
+  return (
+    <a
+      href={`/dashboard/governance/meetings/${item.meetingId}`}
+      className="flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-[var(--surface-1)]"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "rgba(139, 92, 246, 0.1)" }}
+      >
+        <Scale size={16} style={{ color: "#8B5CF6" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</p>
+        <p className="text-xs text-[var(--text-secondary)] truncate">
+          Decision · {item.decisionNumber}
+        </p>
       </div>
       <span
         className="text-xs font-medium rounded-full px-2 py-0.5 capitalize shrink-0"
@@ -336,13 +437,38 @@ export default function SearchPage() {
 
   // Count results per tab
   const counts = useMemo(() => {
-    if (!results) return { all: 0, tickets: 0, articles: 0, assets: 0, projects: 0, policies: 0 };
+    if (!results) {
+      return {
+        all: 0,
+        tickets: 0,
+        articles: 0,
+        assets: 0,
+        projects: 0,
+        policies: 0,
+        users: 0,
+        meetings: 0,
+        decisions: 0,
+      };
+    }
     const t = results.tickets?.count || 0;
     const ar = results.articles?.count || 0;
     const as = results.assets?.count || 0;
     const p = results.projects?.count || 0;
     const po = results.policies?.count || 0;
-    return { all: t + ar + as + p + po, tickets: t, articles: ar, assets: as, projects: p, policies: po };
+    const u = results.users?.count || 0;
+    const m = results.meetings?.count || 0;
+    const d = results.decisions?.count || 0;
+    return {
+      all: t + ar + as + p + po + u + m + d,
+      tickets: t,
+      articles: ar,
+      assets: as,
+      projects: p,
+      policies: po,
+      users: u,
+      meetings: m,
+      decisions: d,
+    };
   }, [results]);
 
   // Render results for active tab
@@ -405,6 +531,36 @@ export default function SearchPage() {
       });
     }
 
+    if ((activeTab === "all" || activeTab === "users") && results.users?.results.length) {
+      sections.push({
+        key: "users",
+        label: "Users",
+        items: results.users.results.map((item) => (
+          <UserResult key={item.id} item={item} />
+        )),
+      });
+    }
+
+    if ((activeTab === "all" || activeTab === "meetings") && results.meetings?.results.length) {
+      sections.push({
+        key: "meetings",
+        label: "Meetings",
+        items: results.meetings.results.map((item) => (
+          <MeetingResult key={item.id} item={item} />
+        )),
+      });
+    }
+
+    if ((activeTab === "all" || activeTab === "decisions") && results.decisions?.results.length) {
+      sections.push({
+        key: "decisions",
+        label: "Decisions",
+        items: results.decisions.results.map((item) => (
+          <DecisionResult key={item.id} item={item} />
+        )),
+      });
+    }
+
     if (sections.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-16">
@@ -451,7 +607,7 @@ export default function SearchPage() {
               Global Search
             </h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Search across tickets, articles, assets, projects, and policies.
+              Search across tickets, articles, assets, projects, policies, users, meetings, and decisions.
             </p>
           </div>
         </div>

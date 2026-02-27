@@ -162,7 +162,7 @@ func (s *Server) Setup() {
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
-	reportingHandler := reporting.NewHandler(s.pool, auditService)
+	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
 
 	// --- Routes ---
 	r.Route("/api/v1", func(r chi.Router) {
@@ -270,6 +270,9 @@ func (s *Server) Setup() {
 			r.Route("/knowledge", func(r chi.Router) { knowledgeHandler.Routes(r) })
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
+			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
+			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
+			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })
 		})
 	})
 

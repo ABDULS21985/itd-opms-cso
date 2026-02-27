@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/api-client";
 import type {
   ExecutiveSummary,
   ChartDataPoint,
+  SLAComplianceRate,
   ReportDefinition,
   ReportRun,
   GlobalSearchResults,
@@ -109,7 +110,7 @@ export function useSLACompliance(since?: string) {
   return useQuery({
     queryKey: ["chart-sla-compliance", since],
     queryFn: () =>
-      apiClient.get<ChartDataPoint[]>(
+      apiClient.get<SLAComplianceRate>(
         "/reporting/dashboards/charts/sla-compliance",
         { since },
       ),

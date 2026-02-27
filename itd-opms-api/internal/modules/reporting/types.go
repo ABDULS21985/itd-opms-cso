@@ -93,6 +93,7 @@ type ExecutiveSummary struct {
 	TenantID             uuid.UUID `json:"tenantId"`
 	ActivePolicies       int       `json:"activePolicies"`
 	OverdueActions       int       `json:"overdueActions"`
+	PendingAttestations  int       `json:"pendingAttestations"`
 	AvgOKRProgress       float64   `json:"avgOkrProgress"`
 	OpenTickets          int       `json:"openTickets"`
 	CriticalTickets      int       `json:"criticalTickets"`

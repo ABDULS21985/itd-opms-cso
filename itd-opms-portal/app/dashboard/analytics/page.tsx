@@ -20,7 +20,7 @@ import {
   useAssetsByType,
   useSLACompliance,
 } from "@/hooks/use-reporting";
-import type { ChartDataPoint } from "@/types";
+import type { ChartDataPoint, SLAComplianceRate } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Chart Color Palette                                                 */
@@ -171,13 +171,12 @@ function SLAGauge({
   data,
   isLoading,
 }: {
-  data: ChartDataPoint[] | undefined;
+  data: SLAComplianceRate | undefined;
   isLoading: boolean;
 }) {
   const overallPct = useMemo(() => {
-    if (!data || data.length === 0) return 0;
-    const total = data.reduce((sum, d) => sum + d.value, 0);
-    return Math.round(total / data.length);
+    if (!data || typeof data.rate !== "number") return 0;
+    return Math.max(0, Math.min(100, Math.round(data.rate)));
   }, [data]);
 
   const gaugeColor = useMemo(() => {
@@ -194,7 +193,7 @@ function SLAGauge({
     );
   }
 
-  if (!data || data.length === 0) {
+  if (!data || typeof data.rate !== "number") {
     return (
       <div className="flex items-center justify-center py-8">
         <p className="text-xs text-[var(--text-secondary)]">No SLA data available.</p>
@@ -245,35 +244,30 @@ function SLAGauge({
         </div>
       </div>
 
-      {/* Breakdown bars */}
+      {/* Overall compliance bar */}
       <div className="space-y-2">
-        {data.map((point, index) => {
-          const color = point.value >= 90 ? "#22C55E" : point.value >= 75 ? "#F59E0B" : "#EF4444";
-          return (
-            <div key={point.label} className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[var(--text-primary)] capitalize">
-                  {point.label}
-                </span>
-                <span className="text-xs font-bold tabular-nums" style={{ color }}>
-                  {point.value}%
-                </span>
-              </div>
-              <div
-                className="w-full h-2 rounded-full overflow-hidden"
-                style={{ backgroundColor: "var(--surface-2)" }}
-              >
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: color }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${point.value}%` }}
-                  transition={{ duration: 0.8, delay: 0.4 + index * 0.1, ease: "easeOut" }}
-                />
-              </div>
-            </div>
-          );
-        })}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[var(--text-primary)]">
+              Resolution SLA Compliance (Last 30 Days)
+            </span>
+            <span className="text-xs font-bold tabular-nums" style={{ color: gaugeColor }}>
+              {overallPct}%
+            </span>
+          </div>
+          <div
+            className="w-full h-2 rounded-full overflow-hidden"
+            style={{ backgroundColor: "var(--surface-2)" }}
+          >
+            <motion.div
+              className="h-full rounded-full"
+              style={{ backgroundColor: gaugeColor }}
+              initial={{ width: 0 }}
+              animate={{ width: `${overallPct}%` }}
+              transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -452,7 +446,7 @@ export default function AnalyticsPage() {
         {/* SLA Compliance Rate */}
         <ChartSection title="SLA Compliance Rate" delay={0.35}>
           <SLAGauge
-            data={slaCompliance as ChartDataPoint[] | undefined}
+            data={slaCompliance}
             isLoading={slaLoading}
           />
         </ChartSection>

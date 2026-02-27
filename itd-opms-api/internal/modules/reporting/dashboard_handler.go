@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
-	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
+	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -29,6 +30,7 @@ func NewDashboardHandler(svc *DashboardService) *DashboardHandler {
 // Routes mounts dashboard endpoints on the given router.
 func (h *DashboardHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("reporting.view")).Get("/executive", h.GetExecutiveSummary)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/tenant/{tenantId}", h.GetTenantExecutiveSummary)
 	r.With(middleware.RequirePermission("reporting.manage")).Post("/executive/refresh", h.RefreshExecutiveSummary)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/my", h.GetMyDashboard)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/tickets-by-priority", h.GetTicketsByPriority)
@@ -70,6 +72,29 @@ func (h *DashboardHandler) GetExecutiveSummary(w http.ResponseWriter, r *http.Re
 	}
 
 	summary, err := h.svc.GetExecutiveSummary(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, summary, nil)
+}
+
+// GetTenantExecutiveSummary handles GET /tenant/{tenantId} — tenant-scoped executive summary.
+func (h *DashboardHandler) GetTenantExecutiveSummary(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	tenantID, err := uuid.Parse(chi.URLParam(r, "tenantId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid tenant ID")
+		return
+	}
+
+	summary, err := h.svc.GetExecutiveSummaryForTenant(r.Context(), tenantID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

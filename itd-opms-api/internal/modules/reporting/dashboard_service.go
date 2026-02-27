@@ -2,15 +2,23 @@ package reporting
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
+)
+
+const (
+	executiveSummaryCacheTTL       = 5 * time.Minute
+	executiveSummaryCacheKeyPrefix = "reporting:executive_summary:"
 )
 
 // ──────────────────────────────────────────────
@@ -20,13 +28,15 @@ import (
 // DashboardService provides dashboard aggregation and chart data queries.
 type DashboardService struct {
 	pool     *pgxpool.Pool
+	redis    *redis.Client
 	auditSvc *audit.AuditService
 }
 
 // NewDashboardService creates a new DashboardService.
-func NewDashboardService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *DashboardService {
+func NewDashboardService(pool *pgxpool.Pool, redisClient *redis.Client, auditSvc *audit.AuditService) *DashboardService {
 	return &DashboardService{
 		pool:     pool,
+		redis:    redisClient,
 		auditSvc: auditSvc,
 	}
 }
@@ -42,6 +52,58 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context) (ExecutiveSu
 		return ExecutiveSummary{}, apperrors.Unauthorized("authentication required")
 	}
 
+	return s.getExecutiveSummaryByTenant(ctx, auth.TenantID)
+}
+
+// GetExecutiveSummaryForTenant returns the executive summary for a specific tenant.
+func (s *DashboardService) GetExecutiveSummaryForTenant(ctx context.Context, tenantID uuid.UUID) (ExecutiveSummary, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ExecutiveSummary{}, apperrors.Unauthorized("authentication required")
+	}
+	if tenantID == uuid.Nil {
+		return ExecutiveSummary{}, apperrors.BadRequest("tenantId is required")
+	}
+	if tenantID != auth.TenantID && !auth.HasRole("global_admin") && !auth.HasPermission("*") {
+		return ExecutiveSummary{}, apperrors.Forbidden("tenant-scoped dashboard access denied")
+	}
+
+	return s.getExecutiveSummaryByTenant(ctx, tenantID)
+}
+
+func (s *DashboardService) getExecutiveSummaryByTenant(ctx context.Context, tenantID uuid.UUID) (ExecutiveSummary, error) {
+	if s.redis != nil {
+		if cached, err := s.redis.Get(ctx, executiveSummaryCacheKey(tenantID)).Bytes(); err == nil {
+			var es ExecutiveSummary
+			if err := json.Unmarshal(cached, &es); err == nil {
+				return es, nil
+			}
+			slog.WarnContext(ctx, "failed to unmarshal cached executive summary", "tenant_id", tenantID, "error", err)
+		} else if err != redis.Nil {
+			slog.WarnContext(ctx, "failed to read executive summary cache", "tenant_id", tenantID, "error", err)
+		}
+	}
+
+	es, err := s.queryExecutiveSummaryByTenant(ctx, tenantID)
+	if err != nil {
+		return ExecutiveSummary{}, err
+	}
+	if err := s.populateExecutiveSummaryLiveMetrics(ctx, &es); err != nil {
+		return ExecutiveSummary{}, err
+	}
+
+	if s.redis != nil {
+		if payload, err := json.Marshal(es); err == nil {
+			if err := s.redis.Set(ctx, executiveSummaryCacheKey(tenantID), payload, executiveSummaryCacheTTL).Err(); err != nil {
+				slog.WarnContext(ctx, "failed to cache executive summary", "tenant_id", tenantID, "error", err)
+			}
+		}
+	}
+
+	return es, nil
+}
+
+func (s *DashboardService) queryExecutiveSummaryByTenant(ctx context.Context, tenantID uuid.UUID) (ExecutiveSummary, error) {
 	query := `
 		SELECT
 			tenant_id, active_policies, overdue_actions,
@@ -52,7 +114,7 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context) (ExecutiveSu
 		WHERE tenant_id = $1`
 
 	var es ExecutiveSummary
-	err := s.pool.QueryRow(ctx, query, auth.TenantID).Scan(
+	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
 		&es.TenantID, &es.ActivePolicies, &es.OverdueActions,
 		&es.AvgOKRProgress, &es.OpenTickets, &es.CriticalTickets,
 		&es.ActiveProjects, &es.ActiveAssets, &es.OverDeployedLicenses,
@@ -62,7 +124,7 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context) (ExecutiveSu
 		if err == pgx.ErrNoRows {
 			// Return zeroed summary if view has no data for this tenant.
 			return ExecutiveSummary{
-				TenantID:    auth.TenantID,
+				TenantID:    tenantID,
 				RefreshedAt: time.Now().UTC(),
 			}, nil
 		}
@@ -70,6 +132,24 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context) (ExecutiveSu
 	}
 
 	return es, nil
+}
+
+func (s *DashboardService) populateExecutiveSummaryLiveMetrics(ctx context.Context, es *ExecutiveSummary) error {
+	if es == nil || es.TenantID == uuid.Nil {
+		return nil
+	}
+
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM policy_attestations
+		WHERE tenant_id = $1
+		  AND status = 'pending'`,
+		es.TenantID,
+	).Scan(&es.PendingAttestations); err != nil {
+		return apperrors.Internal("failed to count pending attestations", err)
+	}
+
+	return nil
 }
 
 // RefreshExecutiveSummary refreshes the materialized view concurrently.
@@ -83,6 +163,8 @@ func (s *DashboardService) RefreshExecutiveSummary(ctx context.Context) error {
 	if err != nil {
 		return apperrors.Internal("failed to refresh executive summary", err)
 	}
+
+	s.invalidateAllExecutiveSummaryCache(ctx)
 
 	// Log audit event.
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
@@ -114,15 +196,15 @@ func (s *DashboardService) GetTicketsByPriority(ctx context.Context) ([]ChartDat
 		FROM tickets
 		WHERE tenant_id = $1
 			AND status NOT IN ('closed', 'cancelled')
-		GROUP BY priority
-		ORDER BY
-			CASE priority
-				WHEN 'P1' THEN 1
-				WHEN 'P2' THEN 2
-				WHEN 'P3' THEN 3
-				WHEN 'P4' THEN 4
-				ELSE 5
-			END`
+			GROUP BY priority
+			ORDER BY
+				CASE priority
+					WHEN 'P1_critical' THEN 1
+					WHEN 'P2_high' THEN 2
+					WHEN 'P3_medium' THEN 3
+					WHEN 'P4_low' THEN 4
+					ELSE 5
+				END`
 
 	return s.queryChartData(ctx, query, auth.TenantID)
 }
@@ -267,7 +349,7 @@ func (s *DashboardService) GetMyDashboard(ctx context.Context) (map[string]any, 
 		SELECT COUNT(*)
 		FROM projects
 		WHERE tenant_id = $1
-			AND (owner_id = $2 OR manager_id = $2)
+			AND (project_manager_id = $2 OR sponsor_id = $2)
 			AND status NOT IN ('completed', 'cancelled', 'closed')`,
 		auth.TenantID, auth.UserID,
 	).Scan(&myProjects)
@@ -282,7 +364,7 @@ func (s *DashboardService) GetMyDashboard(ctx context.Context) (map[string]any, 
 		SELECT COUNT(*)
 		FROM action_items
 		WHERE tenant_id = $1
-			AND assignee_id = $2
+			AND owner_id = $2
 			AND status = 'pending'`,
 		auth.TenantID, auth.UserID,
 	).Scan(&myApprovals)
@@ -297,7 +379,7 @@ func (s *DashboardService) GetMyDashboard(ctx context.Context) (map[string]any, 
 		SELECT COUNT(*)
 		FROM action_items
 		WHERE tenant_id = $1
-			AND assignee_id = $2
+			AND owner_id = $2
 			AND status NOT IN ('completed', 'cancelled')
 			AND due_date < NOW()`,
 		auth.TenantID, auth.UserID,
@@ -340,4 +422,32 @@ func (s *DashboardService) queryChartData(ctx context.Context, query string, arg
 	}
 
 	return points, nil
+}
+
+func executiveSummaryCacheKey(tenantID uuid.UUID) string {
+	return executiveSummaryCacheKeyPrefix + tenantID.String()
+}
+
+func (s *DashboardService) invalidateAllExecutiveSummaryCache(ctx context.Context) {
+	if s.redis == nil {
+		return
+	}
+
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redis.Scan(ctx, cursor, executiveSummaryCacheKeyPrefix+"*", 100).Result()
+		if err != nil {
+			slog.WarnContext(ctx, "failed to scan executive summary cache keys", "error", err)
+			return
+		}
+		if len(keys) > 0 {
+			if err := s.redis.Del(ctx, keys...).Err(); err != nil {
+				slog.WarnContext(ctx, "failed to clear executive summary cache keys", "count", len(keys), "error", err)
+			}
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			return
+		}
+	}
 }
