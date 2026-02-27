@@ -77,7 +77,7 @@ INSERT INTO pir_templates (id, tenant_id, name, description, review_type, sectio
    {"key": "quality_assessment", "label": "Quality Assessment", "description": "Assess the quality of deliverables against acceptance criteria.", "required": true},
    {"key": "stakeholder_satisfaction", "label": "Stakeholder Satisfaction", "description": "Summary of stakeholder feedback and satisfaction levels.", "required": false}
  ]'::jsonb,
- true, '00000000-0000-0000-0000-000000000099');
+ true, '20000000-0000-0000-0000-000000000001');
 
 -- +goose Down
 DROP TABLE IF EXISTS pir_templates;
