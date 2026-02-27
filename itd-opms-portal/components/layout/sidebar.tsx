@@ -44,6 +44,11 @@ import {
   User,
   HelpCircle,
   X,
+  Building2,
+  Network,
+  MonitorSmartphone,
+  Mail,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -141,8 +146,16 @@ const navGroups: NavGroup[] = [
   {
     label: "System",
     items: [
+      { href: "/dashboard/system", label: "Overview", icon: LayoutDashboard, permission: "system.view" },
+      { href: "/dashboard/system/users", label: "Users", icon: Users, permission: "system.manage" },
+      { href: "/dashboard/system/roles", label: "Roles & Permissions", icon: Shield, permission: "system.manage" },
+      { href: "/dashboard/system/tenants", label: "Tenants", icon: Building2, permission: "system.manage" },
+      { href: "/dashboard/system/org-units", label: "Org Structure", icon: Network, permission: "system.manage" },
       { href: "/dashboard/system/audit-logs", label: "Audit Logs", icon: ScrollText, permission: "system.view" },
+      { href: "/dashboard/system/sessions", label: "Sessions", icon: MonitorSmartphone, permission: "system.manage" },
       { href: "/dashboard/system/settings", label: "Settings", icon: Settings, permission: "system.manage" },
+      { href: "/dashboard/system/email-templates", label: "Email Templates", icon: Mail, permission: "system.manage" },
+      { href: "/dashboard/system/health", label: "Platform Health", icon: Activity, permission: "system.view" },
     ],
   },
 ];
@@ -249,9 +262,10 @@ export function Sidebar({
     }))
     .filter((group) => group.items.length > 0);
 
+  const exactMatchRoutes = ["/dashboard", "/dashboard/system"];
   const isActive = (href: string) =>
-    href === "/dashboard"
-      ? pathname === "/dashboard"
+    exactMatchRoutes.includes(href)
+      ? pathname === href
       : pathname === href || pathname.startsWith(href + "/");
 
   /* ---------------------------------------------------------------- */

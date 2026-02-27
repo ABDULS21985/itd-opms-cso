@@ -11,13 +11,18 @@ import (
 )
 
 // Handler is the top-level HTTP handler for the System module.
-// It composes sub-handlers for user, role, tenant, org unit, and health management.
+// It composes sub-handlers for user, role, tenant, org unit, health,
+// settings, audit explorer, session, and email template management.
 type Handler struct {
-	user   *UserHandler
-	role   *RoleHandler
-	tenant *TenantHandler
-	org    *OrgHandler
-	health *SystemHealthHandler
+	user     *UserHandler
+	role     *RoleHandler
+	tenant   *TenantHandler
+	org      *OrgHandler
+	health   *SystemHealthHandler
+	settings *SettingsHandler
+	auditExp *AuditExplorerHandler
+	session  *SessionHandler
+	template *EmailTemplateHandler
 
 	// Maintenance exposes the background worker for lifecycle management.
 	Maintenance *MaintenanceWorker
@@ -36,6 +41,10 @@ func NewHandler(
 	tenantSvc := NewTenantService(pool, auditSvc)
 	orgSvc := NewOrgService(pool, auditSvc)
 	healthSvc := NewHealthService(pool, redisClient, natsConn, minioClient)
+	settingsSvc := NewSettingsService(pool, auditSvc)
+	auditExpSvc := NewAuditExplorerService(pool, auditSvc)
+	sessionSvc := NewSessionService(pool, auditSvc)
+	templateSvc := NewEmailTemplateService(pool, auditSvc)
 
 	return &Handler{
 		user:        NewUserHandler(userSvc),
@@ -43,6 +52,10 @@ func NewHandler(
 		tenant:      NewTenantHandler(tenantSvc),
 		org:         NewOrgHandler(orgSvc),
 		health:      NewSystemHealthHandler(healthSvc),
+		settings:    NewSettingsHandler(settingsSvc),
+		auditExp:    NewAuditExplorerHandler(auditExpSvc),
+		session:     NewSessionHandler(sessionSvc),
+		template:    NewEmailTemplateHandler(templateSvc),
 		Maintenance: NewMaintenanceWorker(pool),
 	}
 }
@@ -72,6 +85,26 @@ func (h *Handler) Routes(r chi.Router) {
 	// Platform health, stats, directory sync (NFR-009, NFR-022-026)
 	r.Route("/health", func(r chi.Router) {
 		h.health.Routes(r)
+	})
+
+	// System settings (NFR-024)
+	r.Route("/settings", func(r chi.Router) {
+		h.settings.Routes(r)
+	})
+
+	// Audit log explorer (SR-016–SR-020)
+	r.Route("/audit-logs", func(r chi.Router) {
+		h.auditExp.Routes(r)
+	})
+
+	// Session management (SR-002, SR-003)
+	r.Route("/sessions", func(r chi.Router) {
+		h.session.Routes(r)
+	})
+
+	// Email templates
+	r.Route("/email-templates", func(r chi.Router) {
+		h.template.Routes(r)
 	})
 
 	// Top-level permission catalog

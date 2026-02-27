@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // appStartTime records when the application started for uptime calculation.
@@ -147,8 +147,11 @@ func (s *HealthService) checkMinIO(ctx context.Context) ServiceHealth {
 
 // GetSystemStats aggregates cross-module statistics.
 func (s *HealthService) GetSystemStats(ctx context.Context) (*SystemStats, error) {
-	claims := middleware.ClaimsFromContext(ctx)
-	tenantID := claims.TenantID
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, fmt.Errorf("authentication required")
+	}
+	tenantID := auth.TenantID
 
 	stats := &SystemStats{
 		Sessions: SessionStats{ByDevice: map[string]int{}},

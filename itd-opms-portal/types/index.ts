@@ -1342,3 +1342,290 @@ export interface GlobalSearchResults {
     count: number;
   };
 }
+
+/* ====================================================================== */
+/*  System Administration Types                                              */
+/* ====================================================================== */
+
+export interface UserDetail {
+  id: string;
+  entraId?: string;
+  email: string;
+  displayName: string;
+  jobTitle?: string;
+  department?: string;
+  office?: string;
+  unit?: string;
+  tenantId: string;
+  tenantName: string;
+  photoUrl?: string;
+  phone?: string;
+  isActive: boolean;
+  lastLoginAt?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  roles: RoleBinding[];
+  delegations: Delegation[];
+}
+
+export interface UserSearchResult {
+  id: string;
+  displayName: string;
+  email: string;
+  photoUrl?: string;
+  department?: string;
+  isActive: boolean;
+}
+
+export interface RoleDetail {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt: string;
+  userCount: number;
+}
+
+export interface RoleBinding {
+  id: string;
+  userId: string;
+  roleId: string;
+  roleName: string;
+  tenantId: string;
+  scopeType: string;
+  scopeId?: string;
+  grantedBy?: string;
+  grantedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
+export interface Delegation {
+  id: string;
+  delegatorId: string;
+  delegatorName: string;
+  delegateId: string;
+  delegateName: string;
+  roleId: string;
+  roleName: string;
+  tenantId: string;
+  reason: string;
+  approvedBy?: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface PermissionCatalog {
+  module: string;
+  permissions: string[];
+}
+
+export interface TenantDetail {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  parentId?: string;
+  parentName: string;
+  isActive: boolean;
+  config?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  userCount: number;
+  children: TenantSummary[];
+}
+
+export interface TenantSummary {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  isActive: boolean;
+  userCount: number;
+}
+
+export interface OrgUnitDetail {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  level: string;
+  parentId?: string;
+  parentName: string;
+  managerUserId?: string;
+  managerName: string;
+  isActive: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  childCount: number;
+  userCount: number;
+}
+
+export interface OrgTreeNode {
+  id: string;
+  name: string;
+  code: string;
+  level: string;
+  managerName: string;
+  userCount: number;
+  children: OrgTreeNode[];
+}
+
+export interface SystemSetting {
+  id: string;
+  tenantId?: string;
+  category: string;
+  key: string;
+  value: unknown;
+  description?: string;
+  isSecret: boolean;
+  updatedBy?: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface AuditEventDetail {
+  id: string;
+  tenantId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  changes?: Record<string, unknown>;
+  previousState?: Record<string, unknown>;
+  ipAddress: string;
+  userAgent: string;
+  correlationId: string;
+  checksum: string;
+  createdAt: string;
+}
+
+export interface AuditStatsResponse {
+  eventsPerDay: Array<{ date: string; count: number }>;
+  topActors: Array<{ actorId: string; actorName: string; count: number }>;
+  topEntities: Array<{ entityType: string; count: number }>;
+  topActions: Array<{ action: string; count: number }>;
+  totalEvents: number;
+}
+
+export interface ActiveSession {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  tenantId: string;
+  ipAddress: string;
+  userAgent: string;
+  deviceInfo?: Record<string, unknown>;
+  location: string;
+  createdAt: string;
+  lastActive: string;
+  expiresAt: string;
+  isRevoked: boolean;
+}
+
+export interface SessionMgmtStats {
+  activeSessions: number;
+  uniqueUsers: number;
+}
+
+export interface PlatformHealth {
+  status: string;
+  uptime: string;
+  version: string;
+  goVersion: string;
+  services: ServiceHealth[];
+  timestamp: string;
+}
+
+export interface ServiceHealth {
+  name: string;
+  status: string;
+  latency: string;
+  details: string;
+}
+
+export interface SystemStats {
+  users: {
+    totalUsers: number;
+    activeUsers: number;
+    inactiveUsers: number;
+    onlineNow: number;
+    newThisMonth: number;
+  };
+  sessions: {
+    activeSessions: number;
+    uniqueUsers: number;
+    byDevice: Record<string, number>;
+  };
+  auditEvents: {
+    totalEvents: number;
+    eventsToday: number;
+    eventsThisWeek: number;
+    integrityStatus: string;
+    lastVerified?: string;
+  };
+  storage: {
+    totalObjects: number;
+    totalSize: string;
+    evidenceItems: number;
+    attachments: number;
+  };
+  database: {
+    size: string;
+    tableCount: number;
+    activeConnections: number;
+    maxConnections: number;
+  };
+  modules: Array<{
+    name: string;
+    recordCount: number;
+    activeItems: number;
+    lastActivity?: string;
+  }>;
+}
+
+export interface DirectorySyncStatus {
+  enabled: boolean;
+  lastSync?: string;
+  lastSyncStatus: string;
+  nextScheduled?: string;
+  usersAdded: number;
+  usersUpdated: number;
+  usersRemoved: number;
+  syncHistory: SyncRun[];
+}
+
+export interface SyncRun {
+  id: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  usersAdded: number;
+  usersUpdated: number;
+  usersRemoved: number;
+  errors: number;
+  errorDetails: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  tenantId?: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText?: string;
+  variables: unknown[];
+  category: string;
+  isActive: boolean;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
