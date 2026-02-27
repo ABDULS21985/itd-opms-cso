@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Eye,
@@ -122,9 +123,13 @@ export default function LoginPage() {
             <div className="inline-flex items-center gap-3">
               <div className="relative">
                 <div className="absolute -inset-2 bg-white/10 rounded-2xl blur-lg" />
-                <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 relative z-10">
-                  <Landmark className="w-6 h-6 text-[#C4A962]" />
-                </div>
+                <Image
+                  src="/logo.jpeg"
+                  alt="CBN Logo"
+                  width={48}
+                  height={48}
+                  className="rounded-2xl border border-white/20 relative z-10"
+                />
               </div>
               <div>
                 <span className="text-xl font-bold block leading-tight">
@@ -249,9 +254,13 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="inline-flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1B7340] to-[#0E5A2D] flex items-center justify-center shadow-lg">
-                <Landmark className="w-6 h-6 text-[#C4A962]" />
-              </div>
+              <Image
+                src="/logo.jpeg"
+                alt="CBN Logo"
+                width={48}
+                height={48}
+                className="rounded-2xl shadow-lg"
+              />
               <div className="text-left">
                 <span className="text-lg font-bold text-[var(--foreground)] block leading-tight">
                   CBN IT Department
@@ -273,9 +282,13 @@ export default function LoginPage() {
               transition={{ duration: 0.5, delay: 0.1 }}
             >
               <motion.div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5 bg-[#1B7340]/10">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#1B7340] to-[#0E5A2D]">
-                  <Shield className="w-4 h-4 text-white" />
-                </div>
+                <Image
+                  src="/logo.jpeg"
+                  alt="CBN Logo"
+                  width={40}
+                  height={40}
+                  className="rounded-xl"
+                />
               </motion.div>
               <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight">
                 Sign in to OPMS

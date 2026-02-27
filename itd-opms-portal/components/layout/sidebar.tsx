@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -43,7 +44,6 @@ import {
   User,
   HelpCircle,
   X,
-  Landmark,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -295,9 +295,13 @@ export function Sidebar({
             href="/dashboard"
             className={`flex items-center gap-2.5 group ${collapsed ? "lg:hidden" : ""}`}
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1B7340] to-[#0E5A2D] flex items-center justify-center shadow-lg shadow-[#1B7340]/20 group-hover:shadow-[#1B7340]/40 transition-shadow">
-              <Landmark size={16} className="text-[#C4A962]" />
-            </div>
+            <Image
+              src="/logo.jpeg"
+              alt="CBN Logo"
+              width={32}
+              height={32}
+              className="rounded-lg shadow-lg shadow-[#1B7340]/20 group-hover:shadow-[#1B7340]/40 transition-shadow"
+            />
             <div className="flex items-center gap-2">
               <span className="font-semibold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 CBN OPMS
@@ -311,9 +315,13 @@ export function Sidebar({
           {/* Collapsed logo */}
           {collapsed && (
             <Link href="/dashboard" className="hidden lg:flex mx-auto">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1B7340] to-[#0E5A2D] flex items-center justify-center shadow-lg shadow-[#1B7340]/20">
-                <Landmark size={16} className="text-[#C4A962]" />
-              </div>
+              <Image
+                src="/logo.jpeg"
+                alt="CBN Logo"
+                width={32}
+                height={32}
+                className="rounded-lg shadow-lg shadow-[#1B7340]/20"
+              />
             </Link>
           )}
 
