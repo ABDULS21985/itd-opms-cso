@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/helpers"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -78,7 +81,28 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create session record for tracking.
+	tokenHash := helpers.SHA256Checksum([]byte(resp.AccessToken))
+	expiresAt := time.Now().Add(h.service.jwtCfg.RefreshExpiry)
+	h.service.CreateSession(r.Context(), resp.User.ID, resp.User.TenantID, tokenHash, realIP(r), r.Header.Get("User-Agent"), expiresAt)
+
 	types.OK(w, resp, nil)
+}
+
+// realIP extracts the client IP from X-Forwarded-For, X-Real-IP, or RemoteAddr.
+func realIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.SplitN(xff, ",", 2)[0]
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	// RemoteAddr is "ip:port" — strip the port.
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
 }
 
 // Refresh handles POST /api/v1/auth/refresh.

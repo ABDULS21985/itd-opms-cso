@@ -17,6 +17,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/helpers"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -97,6 +98,12 @@ func (h *OIDCHandler) ExchangeCode(w http.ResponseWriter, r *http.Request) {
 		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to provision user account")
 		return
 	}
+
+	// Create session record for tracking.
+	authSvc := &AuthService{pool: h.pool}
+	tokenHash := helpers.SHA256Checksum([]byte(tokens.AccessToken))
+	expiresAt := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
+	authSvc.CreateSession(r.Context(), user.ID, user.TenantID, tokenHash, realIP(r), r.Header.Get("User-Agent"), expiresAt)
 
 	types.OK(w, map[string]any{
 		"accessToken":  tokens.AccessToken,
