@@ -136,7 +136,7 @@ const quickLinks: QuickLink[] = [
   {
     label: "Org Structure",
     description: "Organizational hierarchy",
-    href: "/dashboard/system/org-structure",
+    href: "/dashboard/system/org-units",
     icon: Network,
   },
 ];

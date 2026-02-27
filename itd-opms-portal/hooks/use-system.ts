@@ -592,6 +592,24 @@ export function useMoveOrgUnit() {
   });
 }
 
+/**
+ * DELETE /system/org-units/{id} - delete an org unit.
+ */
+export function useDeleteOrgUnit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/system/org-units/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-org-units"] });
+      queryClient.invalidateQueries({ queryKey: ["system-org-tree"] });
+      toast.success("Org unit deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete org unit");
+    },
+  });
+}
+
 /* ================================================================== */
 /*  Platform Health — Queries                                           */
 /* ================================================================== */
@@ -835,6 +853,46 @@ export function useVerifyIntegrity() {
     },
     onError: () => {
       toast.error("Failed to verify audit integrity");
+    },
+  });
+}
+
+/**
+ * POST /system/audit-logs/export - export filtered audit logs as CSV or JSON.
+ */
+export function useExportAuditLogs() {
+  return useMutation({
+    mutationFn: async (params: {
+      format: "csv" | "json";
+      dateFrom?: string;
+      dateTo?: string;
+      actorId?: string;
+      entityType?: string;
+      entityId?: string;
+      action?: string;
+      search?: string;
+    }) => {
+      const { format, ...filters } = params;
+      const res = await apiClient.post<{ url: string }>(
+        "/system/audit-logs/export",
+        { format, ...filters },
+      );
+      // Trigger browser download
+      if (res?.url) {
+        const a = document.createElement("a");
+        a.href = res.url;
+        a.download = `audit-logs.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      return res;
+    },
+    onSuccess: () => {
+      toast.success("Audit logs exported");
+    },
+    onError: () => {
+      toast.error("Failed to export audit logs");
     },
   });
 }
