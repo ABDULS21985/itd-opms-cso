@@ -67,6 +67,9 @@ import {
   PieChart,
   TrendingUp,
   ShieldAlert,
+  Milestone,
+  AlertCircle,
+  FileEdit,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -232,6 +235,30 @@ const navGroups: NavGroup[] = [
         icon: ClipboardList,
         permission: "people.view",
       },
+      {
+        href: "/dashboard/people/offboarding",
+        label: "Offboarding",
+        icon: LogOut,
+        permission: "people.view",
+      },
+      {
+        href: "/dashboard/people/training",
+        label: "Training",
+        icon: BookOpen,
+        permission: "people.view",
+      },
+      {
+        href: "/dashboard/people/capacity",
+        label: "Capacity",
+        icon: Activity,
+        permission: "people.view",
+      },
+      {
+        href: "/dashboard/people/analytics",
+        label: "People Analytics",
+        icon: BarChart3,
+        permission: "people.view",
+      },
     ],
   },
   {
@@ -256,9 +283,27 @@ const navGroups: NavGroup[] = [
         permission: "planning.view",
       },
       {
+        href: "/dashboard/planning/milestones",
+        label: "Milestones",
+        icon: Milestone,
+        permission: "planning.view",
+      },
+      {
         href: "/dashboard/planning/risks",
-        label: "Risks & Issues",
+        label: "Risks",
         icon: AlertTriangle,
+        permission: "planning.view",
+      },
+      {
+        href: "/dashboard/planning/issues",
+        label: "Issues",
+        icon: AlertCircle,
+        permission: "planning.view",
+      },
+      {
+        href: "/dashboard/planning/change-requests",
+        label: "Change Requests",
+        icon: FileEdit,
         permission: "planning.view",
       },
       {
@@ -296,27 +341,51 @@ const navGroups: NavGroup[] = [
         icon: Bug,
         permission: "itsm.view",
       },
+      {
+        href: "/dashboard/itsm/sla-dashboard",
+        label: "SLA Dashboard",
+        icon: Activity,
+        permission: "itsm.view",
+      },
     ],
   },
   {
     label: "Assets",
     items: [
       {
-        href: "/dashboard/assets/inventory",
-        label: "Inventory",
+        href: "/dashboard/cmdb/assets",
+        label: "Asset Inventory",
         icon: HardDrive,
         permission: "assets.view",
       },
       {
-        href: "/dashboard/assets/cmdb",
-        label: "CMDB",
-        icon: Server,
+        href: "/dashboard/cmdb/topology",
+        label: "Topology",
+        icon: Network,
         permission: "assets.view",
       },
       {
-        href: "/dashboard/assets/licenses",
+        href: "/dashboard/cmdb/licenses",
         label: "Licenses",
         icon: KeyRound,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/warranties",
+        label: "Warranties",
+        icon: ShieldCheck,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/reconciliation",
+        label: "Reconciliation",
+        icon: Layers,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/reports",
+        label: "Asset Reports",
+        icon: FileBarChart,
         permission: "assets.view",
       },
     ],
