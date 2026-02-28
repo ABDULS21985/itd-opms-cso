@@ -156,6 +156,18 @@ const navGroups: NavGroup[] = [
         icon: Shield,
         permission: "reporting.view",
       },
+      {
+        href: "/dashboard/analytics/offices",
+        label: "Office Analytics",
+        icon: Building2,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/collaboration",
+        label: "Collaboration & Dependencies",
+        icon: GitBranch,
+        permission: "reporting.view",
+      },
     ],
   },
   {

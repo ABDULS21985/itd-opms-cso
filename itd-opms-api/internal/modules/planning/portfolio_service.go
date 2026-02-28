@@ -434,17 +434,17 @@ func (s *ProjectService) CreateProject(ctx context.Context, req CreateProjectReq
 
 	query := `
 		INSERT INTO projects (
-			id, tenant_id, portfolio_id, title, code, description, charter, scope, business_case,
+			id, tenant_id, portfolio_id, division_id, title, code, description, charter, scope, business_case,
 			sponsor_id, project_manager_id, status, rag_status, priority,
 			planned_start, planned_end, budget_approved, metadata,
 			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9,
-			$10, $11, $12, $13, $14,
-			$15, $16, $17, $18,
-			$19, $20
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, $12, $13, $14, $15,
+			$16, $17, $18, $19,
+			$20, $21
 		)
-		RETURNING id, tenant_id, portfolio_id, title, code, description, charter, scope, business_case,
+		RETURNING id, tenant_id, portfolio_id, division_id, title, code, description, charter, scope, business_case,
 			sponsor_id, project_manager_id, status, rag_status, priority,
 			planned_start, planned_end, actual_start, actual_end,
 			budget_approved, budget_spent, completion_pct, metadata,
@@ -452,12 +452,12 @@ func (s *ProjectService) CreateProject(ctx context.Context, req CreateProjectReq
 
 	var p Project
 	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.PortfolioID, req.Title, req.Code, req.Description, req.Charter, req.Scope, req.BusinessCase,
+		id, auth.TenantID, req.PortfolioID, req.DivisionID, req.Title, req.Code, req.Description, req.Charter, req.Scope, req.BusinessCase,
 		req.SponsorID, req.ProjectManagerID, "proposed", "green", priority,
 		req.PlannedStart, req.PlannedEnd, req.BudgetApproved, req.Metadata,
 		now, now,
 	).Scan(
-		&p.ID, &p.TenantID, &p.PortfolioID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
+		&p.ID, &p.TenantID, &p.PortfolioID, &p.DivisionID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
 		&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 		&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
 		&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct, &p.Metadata,
@@ -496,21 +496,24 @@ func (s *ProjectService) GetProject(ctx context.Context, id uuid.UUID) (Project,
 	}
 
 	query := `
-		SELECT id, tenant_id, portfolio_id, title, code, description, charter, scope, business_case,
-			sponsor_id, project_manager_id, status, rag_status, priority,
-			planned_start, planned_end, actual_start, actual_end,
-			budget_approved, budget_spent, completion_pct, metadata,
-			created_at, updated_at
-		FROM projects
-		WHERE id = $1 AND tenant_id = $2`
+		SELECT p.id, p.tenant_id, p.portfolio_id, p.division_id, p.title, p.code, p.description, p.charter, p.scope, p.business_case,
+			p.sponsor_id, p.project_manager_id, p.status, p.rag_status, p.priority,
+			p.planned_start, p.planned_end, p.actual_start, p.actual_end,
+			p.budget_approved, p.budget_spent, p.completion_pct,
+			COALESCE(o.name, '') AS division_name,
+			p.metadata, p.created_at, p.updated_at
+		FROM projects p
+		LEFT JOIN org_units o ON o.id = p.division_id
+		WHERE p.id = $1 AND p.tenant_id = $2`
 
 	var p Project
 	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
-		&p.ID, &p.TenantID, &p.PortfolioID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
+		&p.ID, &p.TenantID, &p.PortfolioID, &p.DivisionID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
 		&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 		&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
-		&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct, &p.Metadata,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct,
+		&p.DivisionName,
+		&p.Metadata, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -546,17 +549,19 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 
 	// Fetch paginated results.
 	dataQuery := `
-		SELECT id, tenant_id, portfolio_id, title, code, description, charter, scope, business_case,
-			sponsor_id, project_manager_id, status, rag_status, priority,
-			planned_start, planned_end, actual_start, actual_end,
-			budget_approved, budget_spent, completion_pct, metadata,
-			created_at, updated_at
-		FROM projects
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR portfolio_id = $2)
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::text IS NULL OR rag_status = $4)
-		ORDER BY created_at DESC
+		SELECT p.id, p.tenant_id, p.portfolio_id, p.division_id, p.title, p.code, p.description, p.charter, p.scope, p.business_case,
+			p.sponsor_id, p.project_manager_id, p.status, p.rag_status, p.priority,
+			p.planned_start, p.planned_end, p.actual_start, p.actual_end,
+			p.budget_approved, p.budget_spent, p.completion_pct,
+			COALESCE(o.name, '') AS division_name,
+			p.metadata, p.created_at, p.updated_at
+		FROM projects p
+		LEFT JOIN org_units o ON o.id = p.division_id
+		WHERE p.tenant_id = $1
+			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
+			AND ($3::text IS NULL OR p.status = $3)
+			AND ($4::text IS NULL OR p.rag_status = $4)
+		ORDER BY p.created_at DESC
 		LIMIT $5 OFFSET $6`
 
 	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, portfolioID, status, ragStatus, limit, offset)
@@ -569,11 +574,12 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 	for rows.Next() {
 		var p Project
 		if err := rows.Scan(
-			&p.ID, &p.TenantID, &p.PortfolioID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
+			&p.ID, &p.TenantID, &p.PortfolioID, &p.DivisionID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
 			&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 			&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
-			&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct, &p.Metadata,
-			&p.CreatedAt, &p.UpdatedAt,
+			&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct,
+			&p.DivisionName,
+			&p.Metadata, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan project", err)
 		}
@@ -615,22 +621,23 @@ func (s *ProjectService) UpdateProject(ctx context.Context, id uuid.UUID, req Up
 			scope = COALESCE($5, scope),
 			business_case = COALESCE($6, business_case),
 			portfolio_id = COALESCE($7, portfolio_id),
-			sponsor_id = COALESCE($8, sponsor_id),
-			project_manager_id = COALESCE($9, project_manager_id),
-			status = COALESCE($10, status),
-			rag_status = COALESCE($11, rag_status),
-			priority = COALESCE($12, priority),
-			planned_start = COALESCE($13, planned_start),
-			planned_end = COALESCE($14, planned_end),
-			actual_start = COALESCE($15, actual_start),
-			actual_end = COALESCE($16, actual_end),
-			budget_approved = COALESCE($17, budget_approved),
-			budget_spent = COALESCE($18, budget_spent),
-			completion_pct = COALESCE($19, completion_pct),
-			metadata = COALESCE($20, metadata),
-			updated_at = $21
-		WHERE id = $22 AND tenant_id = $23
-		RETURNING id, tenant_id, portfolio_id, title, code, description, charter, scope, business_case,
+			division_id = COALESCE($8, division_id),
+			sponsor_id = COALESCE($9, sponsor_id),
+			project_manager_id = COALESCE($10, project_manager_id),
+			status = COALESCE($11, status),
+			rag_status = COALESCE($12, rag_status),
+			priority = COALESCE($13, priority),
+			planned_start = COALESCE($14, planned_start),
+			planned_end = COALESCE($15, planned_end),
+			actual_start = COALESCE($16, actual_start),
+			actual_end = COALESCE($17, actual_end),
+			budget_approved = COALESCE($18, budget_approved),
+			budget_spent = COALESCE($19, budget_spent),
+			completion_pct = COALESCE($20, completion_pct),
+			metadata = COALESCE($21, metadata),
+			updated_at = $22
+		WHERE id = $23 AND tenant_id = $24
+		RETURNING id, tenant_id, portfolio_id, division_id, title, code, description, charter, scope, business_case,
 			sponsor_id, project_manager_id, status, rag_status, priority,
 			planned_start, planned_end, actual_start, actual_end,
 			budget_approved, budget_spent, completion_pct, metadata,
@@ -639,14 +646,14 @@ func (s *ProjectService) UpdateProject(ctx context.Context, id uuid.UUID, req Up
 	var p Project
 	err = s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Code, req.Description, req.Charter, req.Scope, req.BusinessCase,
-		req.PortfolioID, req.SponsorID, req.ProjectManagerID,
+		req.PortfolioID, req.DivisionID, req.SponsorID, req.ProjectManagerID,
 		req.Status, req.RAGStatus, req.Priority,
 		req.PlannedStart, req.PlannedEnd, req.ActualStart, req.ActualEnd,
 		req.BudgetApproved, req.BudgetSpent, req.CompletionPct,
 		req.Metadata,
 		now, id, auth.TenantID,
 	).Scan(
-		&p.ID, &p.TenantID, &p.PortfolioID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
+		&p.ID, &p.TenantID, &p.PortfolioID, &p.DivisionID, &p.Title, &p.Code, &p.Description, &p.Charter, &p.Scope, &p.BusinessCase,
 		&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 		&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
 		&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct, &p.Metadata,
@@ -1042,6 +1049,243 @@ func (s *ProjectService) RemoveProjectStakeholder(ctx context.Context, projectID
 		Action:     "delete:project_stakeholder",
 		EntityType: "project_stakeholder",
 		EntityID:   stakeholderID,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return nil
+}
+
+// ──────────────────────────────────────────────
+// Division Assignment
+// ──────────────────────────────────────────────
+
+// AssignProjectDivision assigns a division to a project (primary or collaborator).
+func (s *ProjectService) AssignProjectDivision(ctx context.Context, projectID uuid.UUID, req AssignDivisionRequest) (ProjectDivisionAssignment, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ProjectDivisionAssignment{}, apperrors.Unauthorized("authentication required")
+	}
+
+	// Verify the project exists.
+	_, err := s.GetProject(ctx, projectID)
+	if err != nil {
+		return ProjectDivisionAssignment{}, err
+	}
+
+	assignmentType := "collaborator"
+	if req.AssignmentType == "primary" {
+		assignmentType = "primary"
+	}
+
+	// If assigning as primary, also update the project's division_id.
+	if assignmentType == "primary" {
+		_, err := s.pool.Exec(ctx,
+			`UPDATE projects SET division_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
+			req.DivisionID, projectID, auth.TenantID,
+		)
+		if err != nil {
+			return ProjectDivisionAssignment{}, apperrors.Internal("failed to update project division", err)
+		}
+	}
+
+	query := `
+		INSERT INTO project_division_assignments (
+			project_id, division_id, assignment_type, assigned_by, notes, status
+		) VALUES ($1, $2, $3, $4, $5, 'active')
+		ON CONFLICT (project_id, division_id, assignment_type) WHERE status = 'active'
+		DO UPDATE SET notes = COALESCE(EXCLUDED.notes, project_division_assignments.notes)
+		RETURNING id, project_id, division_id, assignment_type, assigned_by, assigned_at, unassigned_at, notes, status, created_at`
+
+	var a ProjectDivisionAssignment
+	err = s.pool.QueryRow(ctx, query,
+		projectID, req.DivisionID, assignmentType, auth.UserID, req.Notes,
+	).Scan(
+		&a.ID, &a.ProjectID, &a.DivisionID, &a.AssignmentType, &a.AssignedBy, &a.AssignedAt, &a.UnassignedAt, &a.Notes, &a.Status, &a.CreatedAt,
+	)
+	if err != nil {
+		return ProjectDivisionAssignment{}, apperrors.Internal("failed to assign division", err)
+	}
+
+	// Fetch division name.
+	_ = s.pool.QueryRow(ctx, `SELECT name, code FROM org_units WHERE id = $1`, req.DivisionID).Scan(&a.DivisionName, &a.DivisionCode)
+
+	// Log assignment audit trail.
+	s.pool.Exec(ctx, `INSERT INTO division_assignment_log (entity_type, entity_id, action, to_division_id, performed_by, notes) VALUES ('project', $1, 'assigned', $2, $3, $4)`,
+		projectID, req.DivisionID, auth.UserID, req.Notes)
+
+	// Audit event.
+	changes, _ := json.Marshal(map[string]any{
+		"division_id":     req.DivisionID,
+		"assignment_type": assignmentType,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "assign:project_division",
+		EntityType: "project",
+		EntityID:   projectID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return a, nil
+}
+
+// UnassignProjectDivision removes a division from a project.
+func (s *ProjectService) UnassignProjectDivision(ctx context.Context, projectID, divisionID uuid.UUID) error {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return apperrors.Unauthorized("authentication required")
+	}
+
+	_, err := s.pool.Exec(ctx,
+		`UPDATE project_division_assignments SET status = 'removed', unassigned_at = now() WHERE project_id = $1 AND division_id = $2 AND status = 'active'`,
+		projectID, divisionID,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to unassign division", err)
+	}
+
+	// Log audit trail.
+	s.pool.Exec(ctx, `INSERT INTO division_assignment_log (entity_type, entity_id, action, from_division_id, performed_by) VALUES ('project', $1, 'unassigned', $2, $3)`,
+		projectID, divisionID, auth.UserID)
+
+	return nil
+}
+
+// ListProjectDivisions returns the active division assignments for a project.
+func (s *ProjectService) ListProjectDivisions(ctx context.Context, projectID uuid.UUID) ([]ProjectDivisionAssignment, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT pda.id, pda.project_id, pda.division_id, o.name, o.code,
+			pda.assignment_type, pda.assigned_by, pda.assigned_at, pda.unassigned_at, pda.notes, pda.status, pda.created_at
+		FROM project_division_assignments pda
+		JOIN org_units o ON o.id = pda.division_id
+		WHERE pda.project_id = $1 AND pda.status = 'active'
+		ORDER BY pda.assignment_type, pda.assigned_at`
+
+	rows, err := s.pool.Query(ctx, query, projectID)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list project divisions", err)
+	}
+	defer rows.Close()
+
+	var assignments []ProjectDivisionAssignment
+	for rows.Next() {
+		var a ProjectDivisionAssignment
+		if err := rows.Scan(
+			&a.ID, &a.ProjectID, &a.DivisionID, &a.DivisionName, &a.DivisionCode,
+			&a.AssignmentType, &a.AssignedBy, &a.AssignedAt, &a.UnassignedAt, &a.Notes, &a.Status, &a.CreatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan division assignment", err)
+		}
+		assignments = append(assignments, a)
+	}
+	if assignments == nil {
+		assignments = []ProjectDivisionAssignment{}
+	}
+
+	return assignments, nil
+}
+
+// GetDivisionAssignmentHistory returns the full assignment history for a project.
+func (s *ProjectService) GetDivisionAssignmentHistory(ctx context.Context, entityType string, entityID uuid.UUID) ([]DivisionAssignmentLog, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT dal.id, dal.entity_type, dal.entity_id, dal.action,
+			dal.from_division_id, dal.to_division_id, dal.performed_by,
+			COALESCE(u.display_name, '') AS performer_name,
+			dal.notes, dal.created_at
+		FROM division_assignment_log dal
+		LEFT JOIN users u ON u.id = dal.performed_by
+		WHERE dal.entity_type = $1 AND dal.entity_id = $2
+		ORDER BY dal.created_at DESC`
+
+	rows, err := s.pool.Query(ctx, query, entityType, entityID)
+	if err != nil {
+		return nil, apperrors.Internal("failed to get assignment history", err)
+	}
+	defer rows.Close()
+
+	var logs []DivisionAssignmentLog
+	for rows.Next() {
+		var l DivisionAssignmentLog
+		if err := rows.Scan(
+			&l.ID, &l.EntityType, &l.EntityID, &l.Action,
+			&l.FromDivisionID, &l.ToDivisionID, &l.PerformedBy,
+			&l.PerformerName,
+			&l.Notes, &l.CreatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan assignment log", err)
+		}
+		logs = append(logs, l)
+	}
+	if logs == nil {
+		logs = []DivisionAssignmentLog{}
+	}
+
+	return logs, nil
+}
+
+// ReassignProjectDivision moves a project from one division to another.
+func (s *ProjectService) ReassignProjectDivision(ctx context.Context, projectID uuid.UUID, req ReassignDivisionRequest) error {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return apperrors.Unauthorized("authentication required")
+	}
+
+	// Unassign old division.
+	_, err := s.pool.Exec(ctx,
+		`UPDATE project_division_assignments SET status = 'removed', unassigned_at = now() WHERE project_id = $1 AND division_id = $2 AND status = 'active'`,
+		projectID, req.FromDivisionID,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to unassign old division", err)
+	}
+
+	// Assign new division.
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO project_division_assignments (project_id, division_id, assignment_type, assigned_by, notes, status) VALUES ($1, $2, 'primary', $3, $4, 'active') ON CONFLICT DO NOTHING`,
+		projectID, req.ToDivisionID, auth.UserID, req.Notes,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to assign new division", err)
+	}
+
+	// Update project's primary division.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE projects SET division_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
+		req.ToDivisionID, projectID, auth.TenantID,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to update project division", err)
+	}
+
+	// Log reassignment.
+	s.pool.Exec(ctx, `INSERT INTO division_assignment_log (entity_type, entity_id, action, from_division_id, to_division_id, performed_by, notes) VALUES ('project', $1, 'reassigned', $2, $3, $4, $5)`,
+		projectID, req.FromDivisionID, req.ToDivisionID, auth.UserID, req.Notes)
+
+	changes, _ := json.Marshal(map[string]any{
+		"from_division_id": req.FromDivisionID,
+		"to_division_id":   req.ToDivisionID,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "reassign:project_division",
+		EntityType: "project",
+		EntityID:   projectID,
+		Changes:    changes,
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}

@@ -43,6 +43,8 @@ func (h *DashboardHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/projects-by-priority", h.GetProjectsByPriority)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/risks-by-category", h.GetRisksByCategory)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/work-items-by-status", h.GetWorkItemsByStatus)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/office-analytics", h.GetOfficeAnalytics)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/projects-by-office", h.GetProjectsByOffice)
 }
 
 // ──────────────────────────────────────────────
@@ -319,4 +321,38 @@ func (h *DashboardHandler) GetSLAComplianceRate(w http.ResponseWriter, r *http.R
 	}
 
 	types.OK(w, SLAComplianceRate{Rate: rate}, nil)
+}
+
+// GetOfficeAnalytics handles GET /charts/office-analytics.
+func (h *DashboardHandler) GetOfficeAnalytics(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	analytics, err := h.svc.GetOfficeAnalytics(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, analytics, nil)
+}
+
+// GetProjectsByOffice handles GET /charts/projects-by-office.
+func (h *DashboardHandler) GetProjectsByOffice(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	points, err := h.svc.GetProjectsByOffice(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, points, nil)
 }

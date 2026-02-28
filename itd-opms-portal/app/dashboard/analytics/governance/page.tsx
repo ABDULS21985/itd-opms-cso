@@ -34,6 +34,8 @@ const analyticsPages = [
   { label: "Risks & Issues", href: "/dashboard/analytics/risks" },
   { label: "Resources", href: "/dashboard/analytics/resources" },
   { label: "Governance", href: "/dashboard/analytics/governance", active: true },
+  { label: "Office Analytics", href: "/dashboard/analytics/offices" },
+  { label: "Collaboration", href: "/dashboard/analytics/collaboration" },
 ];
 
 const CHART_COLORS = [

@@ -10,6 +10,8 @@ import type {
   GlobalSearchResults,
   SavedSearch,
   PaginatedResponse,
+  ProjectDivisionAssignment,
+  DivisionAssignmentLog,
 } from "@/types";
 
 /* ================================================================== */
@@ -166,6 +168,146 @@ export function useWorkItemsByStatus() {
       apiClient.get<ChartDataPoint[]>(
         "/reporting/dashboards/charts/work-items-by-status",
       ),
+  });
+}
+
+/* ================================================================== */
+/*  Office Analytics — Queries                                            */
+/* ================================================================== */
+
+export interface OfficeAnalyticsData {
+  divisionId: string;
+  divisionName: string;
+  divisionCode: string;
+  totalProjects: number;
+  activeProjects: number;
+  completedProjects: number;
+  avgCompletionPct: number;
+  budgetApproved: number;
+  budgetSpent: number;
+  ragGreen: number;
+  ragAmber: number;
+  ragRed: number;
+  openRisks: number;
+  openIssues: number;
+  totalWorkItems: number;
+  completedWorkItems: number;
+  overdueWorkItems: number;
+  staffCount: number;
+}
+
+/**
+ * GET /reporting/dashboards/charts/office-analytics - aggregated analytics per office.
+ */
+export function useOfficeAnalytics() {
+  return useQuery({
+    queryKey: ["chart-office-analytics"],
+    queryFn: () =>
+      apiClient.get<OfficeAnalyticsData[]>(
+        "/reporting/dashboards/charts/office-analytics",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/projects-by-office - project counts per office.
+ */
+export function useProjectsByOffice() {
+  return useQuery({
+    queryKey: ["chart-projects-by-office"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-office",
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Division Assignment — Queries & Mutations                             */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/divisions - active division assignments for a project.
+ */
+export function useProjectDivisionAssignments(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project-divisions", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectDivisionAssignment[]>(
+        `/planning/projects/${projectId}/divisions`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/divisions/history - assignment history.
+ */
+export function useDivisionAssignmentHistory(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["division-assignment-history", projectId],
+    queryFn: () =>
+      apiClient.get<DivisionAssignmentLog[]>(
+        `/planning/projects/${projectId}/divisions/history`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * POST /planning/projects/{id}/divisions - assign a division.
+ */
+export function useAssignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { divisionId: string; assignmentType?: string; notes?: string }) =>
+      apiClient.post<ProjectDivisionAssignment>(
+        `/planning/projects/${projectId}/divisions`,
+        data,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Division assigned successfully");
+    },
+    onError: () => toast.error("Failed to assign division"),
+  });
+}
+
+/**
+ * DELETE /planning/projects/{id}/divisions/{divisionId} - unassign a division.
+ */
+export function useUnassignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (divisionId: string) =>
+      apiClient.delete(`/planning/projects/${projectId}/divisions/${divisionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Division unassigned successfully");
+    },
+    onError: () => toast.error("Failed to unassign division"),
+  });
+}
+
+/**
+ * POST /planning/projects/{id}/divisions/reassign - reassign from one division to another.
+ */
+export function useReassignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { fromDivisionId: string; toDivisionId: string; notes?: string }) =>
+      apiClient.post(`/planning/projects/${projectId}/divisions/reassign`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project reassigned successfully");
+    },
+    onError: () => toast.error("Failed to reassign project"),
   });
 }
 

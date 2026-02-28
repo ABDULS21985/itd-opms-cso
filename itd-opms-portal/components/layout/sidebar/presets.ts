@@ -18,19 +18,19 @@ export const SIDEBAR_PRESETS: Record<PresetId, SidebarPreset> = {
     id: "essentials",
     label: "Essentials",
     description: "Core modules for daily operations",
-    visibleSections: ["Overview", "ITSM", "Planning", "Knowledge"],
+    visibleSections: ["Overview", "ITSM", "Planning", "Knowledge", "Analytics"],
   },
   manager: {
     id: "manager",
     label: "Manager View",
     description: "Governance, planning, and people management",
-    visibleSections: ["Overview", "Governance", "People", "Planning", "GRC"],
+    visibleSections: ["Overview", "Governance", "People", "Planning", "GRC", "Analytics"],
   },
   technical: {
     id: "technical",
     label: "Technical",
     description: "ITSM, assets, and infrastructure",
-    visibleSections: ["Overview", "ITSM", "Assets", "Knowledge"],
+    visibleSections: ["Overview", "ITSM", "Assets", "Knowledge", "Analytics"],
   },
   custom: {
     id: "custom",

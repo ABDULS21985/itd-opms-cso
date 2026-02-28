@@ -556,6 +556,146 @@ func (s *DashboardService) GetWorkItemsByStatus(ctx context.Context) ([]ChartDat
 }
 
 // ──────────────────────────────────────────────
+// Chart Data — Office Analytics
+// ──────────────────────────────────────────────
+
+// OfficeAnalytics holds aggregated analytics for a single office/division.
+type OfficeAnalytics struct {
+	DivisionID    uuid.UUID `json:"divisionId"`
+	DivisionName  string    `json:"divisionName"`
+	DivisionCode  string    `json:"divisionCode"`
+	TotalProjects int       `json:"totalProjects"`
+	ActiveProjects int      `json:"activeProjects"`
+	CompletedProjects int   `json:"completedProjects"`
+	AvgCompletionPct float64 `json:"avgCompletionPct"`
+	BudgetApproved  float64 `json:"budgetApproved"`
+	BudgetSpent     float64 `json:"budgetSpent"`
+	RAGGreen       int      `json:"ragGreen"`
+	RAGAmber       int      `json:"ragAmber"`
+	RAGRed         int      `json:"ragRed"`
+	OpenRisks      int      `json:"openRisks"`
+	OpenIssues     int      `json:"openIssues"`
+	TotalWorkItems int      `json:"totalWorkItems"`
+	CompletedWorkItems int  `json:"completedWorkItems"`
+	OverdueWorkItems   int  `json:"overdueWorkItems"`
+	StaffCount     int      `json:"staffCount"`
+}
+
+// GetOfficeAnalytics returns analytics aggregated by office/division.
+func (s *DashboardService) GetOfficeAnalytics(ctx context.Context) ([]OfficeAnalytics, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT
+			o.id AS division_id,
+			o.name AS division_name,
+			o.code AS division_code,
+			COUNT(DISTINCT p.id)::int AS total_projects,
+			COUNT(DISTINCT p.id) FILTER (WHERE p.status IN ('active','approved','kick-off','in-development','implementation','project-mode','requirement-management','solution-architecture'))::int AS active_projects,
+			COUNT(DISTINCT p.id) FILTER (WHERE p.status = 'completed')::int AS completed_projects,
+			COALESCE(AVG(p.completion_pct), 0)::float8 AS avg_completion_pct,
+			COALESCE(SUM(p.budget_approved), 0)::float8 AS budget_approved,
+			COALESCE(SUM(p.budget_spent), 0)::float8 AS budget_spent,
+			COUNT(DISTINCT p.id) FILTER (WHERE p.rag_status = 'green')::int AS rag_green,
+			COUNT(DISTINCT p.id) FILTER (WHERE p.rag_status = 'amber')::int AS rag_amber,
+			COUNT(DISTINCT p.id) FILTER (WHERE p.rag_status = 'red')::int AS rag_red
+		FROM org_units o
+		LEFT JOIN projects p ON p.division_id = o.id AND p.tenant_id = $1
+		WHERE o.tenant_id = $1
+			AND o.level IN ('office', 'division')
+			AND o.is_active = true
+		GROUP BY o.id, o.name, o.code
+		ORDER BY total_projects DESC`
+
+	rows, err := s.pool.Query(ctx, query, auth.TenantID)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query office analytics", err)
+	}
+	defer rows.Close()
+
+	var results []OfficeAnalytics
+	for rows.Next() {
+		var a OfficeAnalytics
+		if err := rows.Scan(
+			&a.DivisionID, &a.DivisionName, &a.DivisionCode,
+			&a.TotalProjects, &a.ActiveProjects, &a.CompletedProjects,
+			&a.AvgCompletionPct, &a.BudgetApproved, &a.BudgetSpent,
+			&a.RAGGreen, &a.RAGAmber, &a.RAGRed,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan office analytics", err)
+		}
+		results = append(results, a)
+	}
+
+	// Enrich with risk, issue, work item counts and staff counts per office.
+	for i := range results {
+		divID := results[i].DivisionID
+
+		// Open risks for this office's projects.
+		s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM risk_register r
+			JOIN projects p ON p.id = r.project_id
+			WHERE r.tenant_id = $1 AND p.division_id = $2 AND r.status NOT IN ('closed','accepted')`,
+			auth.TenantID, divID,
+		).Scan(&results[i].OpenRisks)
+
+		// Open issues for this office's projects.
+		s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM issues i
+			JOIN projects p ON p.id = i.project_id
+			WHERE i.tenant_id = $1 AND p.division_id = $2 AND i.status NOT IN ('closed','resolved')`,
+			auth.TenantID, divID,
+		).Scan(&results[i].OpenIssues)
+
+		// Work item stats for this office's projects.
+		s.pool.QueryRow(ctx, `
+			SELECT
+				COUNT(*)::int,
+				COUNT(*) FILTER (WHERE wi.status IN ('done','completed'))::int,
+				COUNT(*) FILTER (WHERE wi.due_date < NOW() AND wi.status NOT IN ('done','completed'))::int
+			FROM work_items wi
+			JOIN projects p ON p.id = wi.project_id
+			WHERE wi.tenant_id = $1 AND p.division_id = $2`,
+			auth.TenantID, divID,
+		).Scan(&results[i].TotalWorkItems, &results[i].CompletedWorkItems, &results[i].OverdueWorkItems)
+
+		// Staff count (users assigned to this office via role_bindings).
+		s.pool.QueryRow(ctx, `
+			SELECT COUNT(DISTINCT rb.user_id)::int FROM role_bindings rb
+			WHERE rb.tenant_id = $1 AND rb.scope_id = $2 AND rb.is_active = true`,
+			auth.TenantID, divID,
+		).Scan(&results[i].StaffCount)
+	}
+
+	if results == nil {
+		results = []OfficeAnalytics{}
+	}
+
+	return results, nil
+}
+
+// GetProjectsByOffice returns project counts grouped by office/division.
+func (s *DashboardService) GetProjectsByOffice(ctx context.Context) ([]ChartDataPoint, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT COALESCE(o.name, 'Unassigned') AS label, COUNT(*)::int AS value
+		FROM projects p
+		LEFT JOIN org_units o ON o.id = p.division_id
+		WHERE p.tenant_id = $1
+		GROUP BY o.name
+		ORDER BY value DESC`
+
+	return s.queryChartData(ctx, query, auth.TenantID)
+}
+
+// ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
 

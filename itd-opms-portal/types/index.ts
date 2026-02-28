@@ -323,6 +323,7 @@ export interface Project {
   id: string;
   tenantId: string;
   portfolioId?: string;
+  divisionId?: string;
   title: string;
   code: string;
   description?: string;
@@ -341,9 +342,38 @@ export interface Project {
   budgetApproved?: number;
   budgetSpent?: number;
   completionPct?: number;
+  divisionName?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectDivisionAssignment {
+  id: string;
+  projectId: string;
+  divisionId: string;
+  divisionName: string;
+  divisionCode: string;
+  assignmentType: string;
+  assignedBy?: string;
+  assignedAt: string;
+  unassignedAt?: string;
+  notes?: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface DivisionAssignmentLog {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  fromDivisionId?: string;
+  toDivisionId?: string;
+  performedBy: string;
+  performerName?: string;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface ProjectDependency {

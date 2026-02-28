@@ -144,6 +144,7 @@ type Project struct {
 	ID               uuid.UUID       `json:"id"`
 	TenantID         uuid.UUID       `json:"tenantId"`
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            string          `json:"title"`
 	Code             string          `json:"code"`
 	Description      *string         `json:"description"`
@@ -162,9 +163,40 @@ type Project struct {
 	BudgetApproved   *float64        `json:"budgetApproved"`
 	BudgetSpent      *float64        `json:"budgetSpent"`
 	CompletionPct    *float64        `json:"completionPct"`
+	DivisionName     string          `json:"divisionName,omitempty"`
 	Metadata         json.RawMessage `json:"metadata"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
+}
+
+// ProjectDivisionAssignment represents a division assigned to collaborate on a project.
+type ProjectDivisionAssignment struct {
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	DivisionID     uuid.UUID  `json:"divisionId"`
+	DivisionName   string     `json:"divisionName"`
+	DivisionCode   string     `json:"divisionCode"`
+	AssignmentType string     `json:"assignmentType"`
+	AssignedBy     *uuid.UUID `json:"assignedBy"`
+	AssignedAt     time.Time  `json:"assignedAt"`
+	UnassignedAt   *time.Time `json:"unassignedAt"`
+	Notes          *string    `json:"notes"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+// DivisionAssignmentLog represents a history entry for division assignments.
+type DivisionAssignmentLog struct {
+	ID             uuid.UUID  `json:"id"`
+	EntityType     string     `json:"entityType"`
+	EntityID       uuid.UUID  `json:"entityId"`
+	Action         string     `json:"action"`
+	FromDivisionID *uuid.UUID `json:"fromDivisionId"`
+	ToDivisionID   *uuid.UUID `json:"toDivisionId"`
+	PerformedBy    uuid.UUID  `json:"performedBy"`
+	PerformerName  string     `json:"performerName,omitempty"`
+	Notes          *string    `json:"notes"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 // ProjectDependency represents a dependency link between two projects.
@@ -345,6 +377,7 @@ type UpdatePortfolioRequest struct {
 // CreateProjectRequest is the payload for creating a new project.
 type CreateProjectRequest struct {
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            string          `json:"title" validate:"required"`
 	Code             string          `json:"code" validate:"required"`
 	Description      *string         `json:"description"`
@@ -365,6 +398,7 @@ type CreateProjectRequest struct {
 // UpdateProjectRequest is the payload for updating an existing project.
 type UpdateProjectRequest struct {
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            *string         `json:"title"`
 	Code             *string         `json:"code"`
 	Description      *string         `json:"description"`
@@ -384,6 +418,20 @@ type UpdateProjectRequest struct {
 	BudgetSpent      *float64        `json:"budgetSpent"`
 	CompletionPct    *float64        `json:"completionPct"`
 	Metadata         json.RawMessage `json:"metadata"`
+}
+
+// AssignDivisionRequest is the payload for assigning a project to a division.
+type AssignDivisionRequest struct {
+	DivisionID     uuid.UUID `json:"divisionId" validate:"required"`
+	AssignmentType string    `json:"assignmentType"` // "primary" or "collaborator"
+	Notes          *string   `json:"notes"`
+}
+
+// ReassignDivisionRequest is the payload for reassigning a project to a different division.
+type ReassignDivisionRequest struct {
+	FromDivisionID uuid.UUID `json:"fromDivisionId" validate:"required"`
+	ToDivisionID   uuid.UUID `json:"toDivisionId" validate:"required"`
+	Notes          *string   `json:"notes"`
 }
 
 // ApproveProjectRequest is the payload for approving a project proposal.

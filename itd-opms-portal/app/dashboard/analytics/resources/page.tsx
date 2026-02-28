@@ -37,6 +37,8 @@ const analyticsPages = [
   { label: "Risks & Issues", href: "/dashboard/analytics/risks" },
   { label: "Resources", href: "/dashboard/analytics/resources", active: true },
   { label: "Governance", href: "/dashboard/analytics/governance" },
+  { label: "Office Analytics", href: "/dashboard/analytics/offices" },
+  { label: "Collaboration", href: "/dashboard/analytics/collaboration" },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
