@@ -174,13 +174,17 @@ export default function ResourceWorkloadPage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KPIStatCard label="Capacity Utilization" value={summaryLoading ? undefined : summary?.teamCapacityUtilizationPct ?? 0}
-          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={summaryLoading} index={0} suffix="%" />
+          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={summaryLoading} index={0} suffix="%"
+          href="/dashboard/people/capacity" />
         <KPIStatCard label="Overdue Training" value={summaryLoading ? undefined : summary?.overdueTrainingCerts ?? 0}
-          icon={Award} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1} />
+          icon={Award} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
+          href="/dashboard/people/training" />
         <KPIStatCard label="Expiring Certs" value={summaryLoading ? undefined : summary?.expiringCerts ?? 0}
-          icon={Award} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2} />
+          icon={Award} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
+          href="/dashboard/people/training" />
         <KPIStatCard label="Active Tasks" value={workItemsLoading ? undefined : totalAssigned}
-          icon={ClipboardList} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={workItemsLoading} index={3} />
+          icon={ClipboardList} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={workItemsLoading} index={3}
+          href="/dashboard/planning/work-items" />
       </div>
 
       {/* Capacity Gauge + Status Donut */}

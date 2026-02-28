@@ -354,7 +354,7 @@ export default function OfficeAnalyticsPage() {
 
   const kpis: Array<{
     label: string; value: number | string | undefined; icon: LucideIcon;
-    color: string; bgColor: string; suffix?: string; subtitle?: string;
+    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
   }> = [
     {
       label: "Offices Tracked", value: anyLoading ? undefined : OFFICES.length,
@@ -365,10 +365,12 @@ export default function OfficeAnalyticsPage() {
       label: "Total Projects", value: anyLoading ? undefined : totalProjectsAllOffices,
       icon: FolderKanban, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)",
       subtitle: `Across all offices`,
+      href: "/dashboard/planning/projects",
     },
     {
       label: "Avg Completion", value: anyLoading ? undefined : avgCompletionAll,
       icon: Activity, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
+      href: "/dashboard/planning/projects",
     },
     {
       label: "Avg Health Score", value: anyLoading ? undefined : avgHealthAll,
@@ -378,6 +380,7 @@ export default function OfficeAnalyticsPage() {
       label: "Total Budget", value: anyLoading ? undefined : formatCurrency(totalBudgetAll),
       icon: DollarSign, color: "#F59E0B", bgColor: "rgba(245,158,11,0.1)",
       subtitle: totalBudgetAll > 0 ? `${Math.round((totalSpentAll / totalBudgetAll) * 100)}% utilised` : undefined,
+      href: "/dashboard/planning/projects",
     },
   ];
 

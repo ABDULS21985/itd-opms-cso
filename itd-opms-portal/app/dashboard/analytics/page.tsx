@@ -223,36 +223,42 @@ export default function ExecutiveAnalyticsPage() {
 
   const kpis: Array<{
     label: string; value: number | string | undefined; icon: LucideIcon;
-    color: string; bgColor: string; suffix?: string; subtitle?: string;
+    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
   }> = [
     {
       label: "Total Projects", value: anyLoading ? undefined : totalProjects,
       icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
       subtitle: `${completedProjects} completed`,
+      href: "/dashboard/planning/projects",
     },
     {
       label: "Completed", value: anyLoading ? undefined : completedProjects,
       icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
       subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
+      href: "/dashboard/planning/projects",
     },
     {
       label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
       icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
+      href: "/dashboard/planning/projects",
     },
     {
       label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
       icon: DollarSign, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
       subtitle: totalBudgetApproved > 0
         ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
+      href: "/dashboard/planning/projects",
     },
     {
       label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
       icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
+      href: "/dashboard/planning/milestones",
     },
     {
       label: "Active Risks", value: summary?.highRisks,
       icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
       subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
+      href: "/dashboard/planning/risks",
     },
   ];
 

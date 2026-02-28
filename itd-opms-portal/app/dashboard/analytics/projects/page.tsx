@@ -231,17 +231,23 @@ export default function ProjectPerformancePage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <KPIStatCard label="Active Projects" value={isLoading ? undefined : activeProjects}
-          icon={FolderKanban} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={0} />
+          icon={FolderKanban} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={0}
+          href="/dashboard/planning/projects" />
         <KPIStatCard label="Avg Completion" value={isLoading ? undefined : avgCompletion}
-          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={1} suffix="%" />
+          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={1} suffix="%"
+          href="/dashboard/planning/projects" />
         <KPIStatCard label="Overdue Tasks" value={workItemsLoading ? undefined : overdueWorkItems}
-          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={workItemsLoading} index={2} />
+          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={workItemsLoading} index={2}
+          href="/dashboard/planning/work-items" />
         <KPIStatCard label="Change Requests" value={changeReqCount || 0}
-          icon={FileText} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={isLoading} index={3} />
+          icon={FileText} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={isLoading} index={3}
+          href="/dashboard/planning/change-requests" />
         <KPIStatCard label="Est. Hours" value={workItemsLoading ? undefined : totalEstimated.toLocaleString()}
-          icon={Timer} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={workItemsLoading} index={4} />
+          icon={Timer} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={workItemsLoading} index={4}
+          href="/dashboard/planning/work-items" />
         <KPIStatCard label="Actual Hours" value={workItemsLoading ? undefined : totalActual.toLocaleString()}
-          icon={ClipboardList} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={workItemsLoading} index={5} />
+          icon={ClipboardList} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={workItemsLoading} index={5}
+          href="/dashboard/planning/work-items" />
       </div>
 
       {/* Primary Charts */}

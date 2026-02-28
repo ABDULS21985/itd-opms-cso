@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus, type LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ExternalLink, type LucideIcon } from "lucide-react";
 
 interface KPIStatCardProps {
   label: string;
@@ -15,6 +16,7 @@ interface KPIStatCardProps {
   trend?: "up" | "down" | "flat";
   trendValue?: string;
   subtitle?: string;
+  href?: string;
 }
 
 export function KPIStatCard({
@@ -29,16 +31,17 @@ export function KPIStatCard({
   trend,
   trendValue,
   subtitle,
+  href,
 }: KPIStatCardProps) {
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
   const trendColor = trend === "up" ? "#22C55E" : trend === "down" ? "#EF4444" : "var(--text-muted)";
 
-  return (
+  const card = (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.1 + index * 0.05 }}
-      className="rounded-xl border p-4"
+      className={`rounded-xl border p-4 ${href ? "transition-all hover:shadow-md hover:border-[var(--primary)]/30 cursor-pointer group" : ""}`}
       style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
     >
       <div className="flex items-center justify-between mb-2">
@@ -48,16 +51,24 @@ export function KPIStatCard({
         >
           <Icon size={16} style={{ color }} />
         </div>
-        {trend && (
-          <div className="flex items-center gap-1">
-            <TrendIcon size={12} style={{ color: trendColor }} />
-            {trendValue && (
-              <span className="text-[10px] font-medium" style={{ color: trendColor }}>
-                {trendValue}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          {trend && (
+            <>
+              <TrendIcon size={12} style={{ color: trendColor }} />
+              {trendValue && (
+                <span className="text-[10px] font-medium" style={{ color: trendColor }}>
+                  {trendValue}
+                </span>
+              )}
+            </>
+          )}
+          {href && (
+            <ExternalLink
+              size={12}
+              className="text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+            />
+          )}
+        </div>
       </div>
       <span className="text-[10px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">
         {label}
@@ -74,4 +85,10 @@ export function KPIStatCard({
       )}
     </motion.div>
   );
+
+  if (href) {
+    return <Link href={href}>{card}</Link>;
+  }
+
+  return card;
 }

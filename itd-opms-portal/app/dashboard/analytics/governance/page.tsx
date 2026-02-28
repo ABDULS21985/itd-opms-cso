@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import {
   Shield,
   FileCheck,
@@ -125,15 +126,20 @@ export default function GovernanceCompliancePage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPIStatCard label="Active Policies" value={summaryLoading ? undefined : summary?.activePolicies ?? 0}
-          icon={Shield} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={summaryLoading} index={0} />
+          icon={Shield} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={summaryLoading} index={0}
+          href="/dashboard/governance/policies" />
         <KPIStatCard label="Overdue Actions" value={summaryLoading ? undefined : summary?.overdueActions ?? 0}
-          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1} />
+          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
+          href="/dashboard/governance/actions" />
         <KPIStatCard label="Pending Attestations" value={summaryLoading ? undefined : summary?.pendingAttestations ?? 0}
-          icon={FileCheck} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2} />
+          icon={FileCheck} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
+          href="/dashboard/governance/policies" />
         <KPIStatCard label="OKR Progress" value={summaryLoading ? undefined : summary?.avgOkrProgress ?? 0}
-          icon={Target} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={summaryLoading} index={3} suffix="%" />
+          icon={Target} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={summaryLoading} index={3} suffix="%"
+          href="/dashboard/governance/okrs" />
         <KPIStatCard label="Audit Readiness" value={summaryLoading ? undefined : summary?.auditReadinessScore ?? 0}
-          icon={ClipboardCheck} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={summaryLoading} index={4} suffix="%" />
+          icon={ClipboardCheck} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={summaryLoading} index={4} suffix="%"
+          href="/dashboard/governance/policies" />
       </div>
 
       {/* Row 1 — OKR + Audit Gauges */}
@@ -194,17 +200,23 @@ export default function GovernanceCompliancePage() {
       <ChartCard title="Cross-Module Metrics" delay={0.55}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
-            { label: "Open Tickets", value: summary?.openTickets ?? 0, color: "#F59E0B" },
-            { label: "Critical Tickets", value: summary?.criticalTickets ?? 0, color: "#EF4444" },
-            { label: "Active Assets", value: summary?.activeAssets ?? 0, color: "#3B82F6" },
-            { label: "License Compliance", value: `${summary?.licenseCompliancePct ?? 0}%`, color: "#22C55E" },
-            { label: "Warranties (90d)", value: summary?.warrantiesExpiring90Days ?? 0, color: "#F97316" },
+            { label: "Open Tickets", value: summary?.openTickets ?? 0, color: "#F59E0B", href: "/dashboard/itsm/tickets" },
+            { label: "Critical Tickets", value: summary?.criticalTickets ?? 0, color: "#EF4444", href: "/dashboard/itsm/tickets" },
+            { label: "Active Assets", value: summary?.activeAssets ?? 0, color: "#3B82F6", href: "/dashboard/cmdb/assets" },
+            { label: "License Compliance", value: `${summary?.licenseCompliancePct ?? 0}%`, color: "#22C55E", href: "/dashboard/cmdb/licenses" },
+            { label: "Warranties (90d)", value: summary?.warrantiesExpiring90Days ?? 0, color: "#F97316", href: "/dashboard/cmdb/warranties" },
           ].map((metric, i) => (
-            <motion.div key={metric.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 + i * 0.05 }} className="text-center">
-              <p className="text-2xl font-bold tabular-nums" style={{ color: metric.color }}>{metric.value}</p>
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mt-1">{metric.label}</p>
-            </motion.div>
+            <Link key={metric.label} href={metric.href}>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 + i * 0.05 }}
+                className="text-center group cursor-pointer rounded-lg p-2 transition-all hover:bg-[var(--surface-1)]">
+                <p className="text-2xl font-bold tabular-nums" style={{ color: metric.color }}>{metric.value}</p>
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mt-1 flex items-center justify-center gap-1">
+                  {metric.label}
+                  <ExternalLink size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                </p>
+              </motion.div>
+            </Link>
           ))}
         </div>
       </ChartCard>

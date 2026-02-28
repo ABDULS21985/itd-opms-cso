@@ -192,15 +192,20 @@ export default function RiskIssuesPage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPIStatCard label="Open Risks" value={risksLoading ? undefined : openRisks}
-          icon={AlertTriangle} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={risksLoading} index={0} />
+          icon={AlertTriangle} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={risksLoading} index={0}
+          href="/dashboard/planning/risks" />
         <KPIStatCard label="Critical Risks" value={risksLoading ? undefined : criticalRisks}
-          icon={AlertOctagon} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={risksLoading} index={1} />
+          icon={AlertOctagon} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={risksLoading} index={1}
+          href="/dashboard/planning/risks" />
         <KPIStatCard label="High Risks" value={risksLoading ? undefined : highRisks}
-          icon={ShieldAlert} color="#F97316" bgColor="rgba(249,115,22,0.1)" isLoading={risksLoading} index={2} />
+          icon={ShieldAlert} color="#F97316" bgColor="rgba(249,115,22,0.1)" isLoading={risksLoading} index={2}
+          href="/dashboard/planning/risks" />
         <KPIStatCard label="Open Issues" value={issuesLoading ? undefined : openIssues}
-          icon={Bug} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={issuesLoading} index={3} />
+          icon={Bug} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={issuesLoading} index={3}
+          href="/dashboard/planning/issues" />
         <KPIStatCard label="Avg Risk Score" value={risksLoading ? undefined : avgRiskScore}
-          icon={TrendingDown} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={risksLoading} index={4} />
+          icon={TrendingDown} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={risksLoading} index={4}
+          href="/dashboard/planning/risks" />
       </div>
 
       {/* Primary Charts */}

@@ -491,6 +491,7 @@ export default function CollaborationDashboardPage() {
           isLoading={anyLoading}
           index={0}
           subtitle="Shared portfolio links"
+          href="/dashboard/planning/projects"
         />
         <KPIStatCard
           label="Active Dependencies"
@@ -501,6 +502,7 @@ export default function CollaborationDashboardPage() {
           isLoading={anyLoading}
           index={1}
           subtitle="Cross-office links"
+          href="/dashboard/planning/projects"
         />
         <KPIStatCard
           label="Blocked Items"
@@ -511,6 +513,7 @@ export default function CollaborationDashboardPage() {
           isLoading={anyLoading}
           index={2}
           subtitle="On-hold or red RAG"
+          href="/dashboard/planning/projects"
         />
         <KPIStatCard
           label="Pending Escalations"
@@ -521,6 +524,7 @@ export default function CollaborationDashboardPage() {
           isLoading={anyLoading}
           index={3}
           subtitle={`${escalatedIssues.filter((i) => i.escalationLevel >= 2).length} at level 2+`}
+          href="/dashboard/planning/issues"
         />
         <KPIStatCard
           label="Shared Risk Count"
@@ -531,6 +535,7 @@ export default function CollaborationDashboardPage() {
           isLoading={anyLoading}
           index={4}
           subtitle="Multi-office risk exposure"
+          href="/dashboard/planning/risks"
         />
       </div>
 

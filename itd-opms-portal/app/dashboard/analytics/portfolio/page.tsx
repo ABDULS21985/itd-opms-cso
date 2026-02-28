@@ -176,16 +176,21 @@ export default function PortfolioAnalyticsPage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPIStatCard label="Total Projects" value={isLoading ? undefined : analytics?.totalProjects ?? projects.length}
-          icon={Briefcase} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={isLoading} index={0} />
+          icon={Briefcase} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={isLoading} index={0}
+          href="/dashboard/planning/projects" />
         <KPIStatCard label="Active Projects" value={isLoading ? undefined : analytics?.activeProjects ?? 0}
           icon={TrendingUp} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={1}
-          subtitle={analytics ? `${analytics.completedProjects} completed` : undefined} />
+          subtitle={analytics ? `${analytics.completedProjects} completed` : undefined}
+          href="/dashboard/planning/projects" />
         <KPIStatCard label="Total Budget" value={isLoading ? undefined : `${((analytics?.totalBudgetApproved || 0) / 1e6).toFixed(1)}M`}
-          icon={DollarSign} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={isLoading} index={2} />
+          icon={DollarSign} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={isLoading} index={2}
+          href="/dashboard/planning/portfolios" />
         <KPIStatCard label="Avg Completion" value={isLoading ? undefined : analytics?.avgCompletionPct ?? 0}
-          icon={Target} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={3} suffix="%" />
+          icon={Target} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={3} suffix="%"
+          href="/dashboard/planning/projects" />
         <KPIStatCard label="On-Time Delivery" value={isLoading ? undefined : analytics?.onTimeDeliveryPct ?? 0}
-          icon={Clock} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={isLoading} index={4} suffix="%" />
+          icon={Clock} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={isLoading} index={4} suffix="%"
+          href="/dashboard/planning/milestones" />
       </div>
 
       {/* Primary Charts 2-col */}
