@@ -369,7 +369,9 @@ export interface DivisionAssignmentLog {
   entityId: string;
   action: string;
   fromDivisionId?: string;
+  fromDivisionName?: string;
   toDivisionId?: string;
+  toDivisionName?: string;
   performedBy: string;
   performerName?: string;
   notes?: string;

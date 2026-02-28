@@ -20,6 +20,10 @@ import {
   TrendingUp,
   Plus,
   X,
+  Building2,
+  ArrowRightLeft,
+  History,
+  Clock,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
@@ -36,7 +40,20 @@ import {
   useRemoveProjectDependency,
   useProjects,
 } from "@/hooks/use-planning";
-import type { ProjectStakeholder, ProjectDependency } from "@/types";
+import {
+  useProjectDivisionAssignments,
+  useDivisionAssignmentHistory,
+  useAssignProjectDivision,
+  useUnassignProjectDivision,
+  useReassignProjectDivision,
+} from "@/hooks/use-reporting";
+import { useOrgUnits } from "@/hooks/use-system";
+import type {
+  ProjectStakeholder,
+  ProjectDependency,
+  ProjectDivisionAssignment,
+  DivisionAssignmentLog,
+} from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  RAG color mapping                                                  */
@@ -78,7 +95,41 @@ export default function ProjectDetailPage({
   const addDependency = useAddProjectDependency(id);
   const removeDependency = useRemoveProjectDependency(id);
 
+  /* ---- Division assignment hooks ---- */
+  const { data: divisionAssignments } = useProjectDivisionAssignments(id);
+  const { data: divisionHistory } = useDivisionAssignmentHistory(id);
+  const { data: orgUnitsData } = useOrgUnits(1, 100);
+  const assignDivision = useAssignProjectDivision(id);
+  const unassignDivision = useUnassignProjectDivision(id);
+  const reassignDivision = useReassignProjectDivision(id);
+
+  const orgUnits = Array.isArray(orgUnitsData)
+    ? orgUnitsData
+    : orgUnitsData?.data ?? [];
+
+  /* Filter org units to offices/divisions (not the root) */
+  const divisionOptions = orgUnits
+    .filter(
+      (ou) =>
+        ou.level === "office" ||
+        ou.level === "division" ||
+        ou.level === "department",
+    )
+    .map((ou) => ({ value: ou.id, label: `${ou.code} — ${ou.name}` }));
+
   /* ---- Local state for inline forms ---- */
+  const [showDivisionForm, setShowDivisionForm] = useState(false);
+  const [divFormDivisionId, setDivFormDivisionId] = useState("");
+  const [divFormType, setDivFormType] = useState("primary");
+  const [divFormNotes, setDivFormNotes] = useState("");
+
+  const [showReassignForm, setShowReassignForm] = useState(false);
+  const [reassignFromId, setReassignFromId] = useState("");
+  const [reassignToId, setReassignToId] = useState("");
+  const [reassignNotes, setReassignNotes] = useState("");
+
+  const [showDivisionHistory, setShowDivisionHistory] = useState(false);
+
   const [showStakeholderForm, setShowStakeholderForm] = useState(false);
   const [stUserId, setStUserId] = useState("");
   const [stRole, setStRole] = useState("");
@@ -188,6 +239,46 @@ export default function ProjectDetailPage({
           setDepProjectId("");
           setDepType("finish_to_start");
           setDepDescription("");
+        },
+      },
+    );
+  }
+
+  function handleAssignDivision(e: React.FormEvent) {
+    e.preventDefault();
+    if (!divFormDivisionId) return;
+    assignDivision.mutate(
+      {
+        divisionId: divFormDivisionId,
+        assignmentType: divFormType,
+        notes: divFormNotes.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowDivisionForm(false);
+          setDivFormDivisionId("");
+          setDivFormType("primary");
+          setDivFormNotes("");
+        },
+      },
+    );
+  }
+
+  function handleReassignDivision(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reassignFromId || !reassignToId) return;
+    reassignDivision.mutate(
+      {
+        fromDivisionId: reassignFromId,
+        toDivisionId: reassignToId,
+        notes: reassignNotes.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowReassignForm(false);
+          setReassignFromId("");
+          setReassignToId("");
+          setReassignNotes("");
         },
       },
     );
@@ -801,6 +892,306 @@ export default function ProjectDetailPage({
         )}
       </motion.div>
 
+      {/* Division / Office Assignment Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.28 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Building2 size={16} className="text-[var(--primary)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Division / Office Assignment
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {divisionAssignments && divisionAssignments.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowReassignForm((f) => !f)}
+                className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:underline"
+              >
+                <ArrowRightLeft size={14} />
+                Reassign
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowDivisionForm((f) => !f)}
+              className="flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline"
+            >
+              <Plus size={14} />
+              Assign Division
+            </button>
+          </div>
+        </div>
+
+        {/* Primary Division (from project.divisionId) */}
+        {project.divisionName && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--primary)]/20 bg-[rgba(27,115,64,0.06)] px-3 py-2">
+            <Building2 size={14} className="text-[var(--primary)]" />
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              Primary: {project.divisionName}
+            </span>
+          </div>
+        )}
+
+        {/* Assign Division Form */}
+        {showDivisionForm && (
+          <motion.form
+            onSubmit={handleAssignDivision}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="mb-4 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-4"
+          >
+            <FormField
+              label="Division / Office"
+              name="divFormDivisionId"
+              type="select"
+              value={divFormDivisionId}
+              onChange={setDivFormDivisionId}
+              options={divisionOptions}
+              placeholder="Select division or office"
+              required
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField
+                label="Assignment Type"
+                name="divFormType"
+                type="select"
+                value={divFormType}
+                onChange={setDivFormType}
+                options={[
+                  { value: "primary", label: "Primary Owner" },
+                  { value: "collaborator", label: "Collaborator" },
+                  { value: "stakeholder", label: "Stakeholder" },
+                  { value: "reviewer", label: "Reviewer" },
+                ]}
+              />
+              <FormField
+                label="Notes"
+                name="divFormNotes"
+                value={divFormNotes}
+                onChange={setDivFormNotes}
+                placeholder="Optional assignment notes"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={assignDivision.isPending}
+                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {assignDivision.isPending && (
+                  <Loader2 size={12} className="animate-spin" />
+                )}
+                Assign
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDivisionForm(false)}
+                className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+
+        {/* Reassign Division Form */}
+        {showReassignForm && (
+          <motion.form
+            onSubmit={handleReassignDivision}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="mb-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4"
+          >
+            <p className="text-xs font-medium text-amber-700 mb-2">
+              Transfer project ownership from one division to another
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField
+                label="From Division"
+                name="reassignFromId"
+                type="select"
+                value={reassignFromId}
+                onChange={setReassignFromId}
+                options={
+                  divisionAssignments
+                    ?.filter(
+                      (da: ProjectDivisionAssignment) =>
+                        da.status === "active",
+                    )
+                    .map((da: ProjectDivisionAssignment) => ({
+                      value: da.divisionId,
+                      label: `${da.divisionCode} — ${da.divisionName}`,
+                    })) ?? []
+                }
+                placeholder="Select current division"
+                required
+              />
+              <FormField
+                label="To Division"
+                name="reassignToId"
+                type="select"
+                value={reassignToId}
+                onChange={setReassignToId}
+                options={divisionOptions}
+                placeholder="Select new division"
+                required
+              />
+            </div>
+            <FormField
+              label="Reason for Reassignment"
+              name="reassignNotes"
+              value={reassignNotes}
+              onChange={setReassignNotes}
+              placeholder="e.g. Division restructuring, project scope change"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={reassignDivision.isPending}
+                className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {reassignDivision.isPending && (
+                  <Loader2 size={12} className="animate-spin" />
+                )}
+                Reassign
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReassignForm(false)}
+                className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+
+        {/* Division Assignments List */}
+        {!divisionAssignments || divisionAssignments.length === 0 ? (
+          <p className="text-sm text-[var(--neutral-gray)] py-4 text-center">
+            No division assignments yet. Assign this project to a division or
+            office.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {divisionAssignments.map((da: ProjectDivisionAssignment) => (
+              <div
+                key={da.id}
+                className="flex items-center justify-between rounded-xl border border-[var(--border)] p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-lg"
+                    style={{
+                      backgroundColor:
+                        da.assignmentType === "primary"
+                          ? "rgba(27,115,64,0.1)"
+                          : "var(--surface-2)",
+                    }}
+                  >
+                    <Building2
+                      size={14}
+                      style={{
+                        color:
+                          da.assignmentType === "primary"
+                            ? "#1B7340"
+                            : "var(--neutral-gray)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {da.divisionName || da.divisionCode || da.divisionId.slice(0, 8) + "..."}
+                    </p>
+                    <p className="text-xs text-[var(--neutral-gray)]">
+                      <span className="capitalize">{da.assignmentType}</span>
+                      {da.status !== "active" && (
+                        <span className="ml-1 text-amber-600">
+                          ({da.status})
+                        </span>
+                      )}
+                      {da.notes && ` — ${da.notes}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => unassignDivision.mutate(da.divisionId)}
+                  disabled={unassignDivision.isPending}
+                  className="rounded-lg p-1.5 text-[var(--neutral-gray)] transition-colors hover:bg-red-50 hover:text-red-600"
+                  title="Remove assignment"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Assignment History Toggle */}
+        <div className="mt-4 border-t border-[var(--border)] pt-3">
+          <button
+            type="button"
+            onClick={() => setShowDivisionHistory((f) => !f)}
+            className="flex items-center gap-1.5 text-xs font-medium text-[var(--neutral-gray)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <History size={14} />
+            {showDivisionHistory ? "Hide" : "Show"} Assignment History
+          </button>
+
+          {showDivisionHistory && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="mt-3 space-y-2"
+            >
+              {!divisionHistory || divisionHistory.length === 0 ? (
+                <p className="text-xs text-[var(--neutral-gray)] py-2 text-center">
+                  No assignment history available.
+                </p>
+              ) : (
+                divisionHistory.map((log: DivisionAssignmentLog) => (
+                  <div
+                    key={log.id}
+                    className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-2.5"
+                  >
+                    <Clock
+                      size={12}
+                      className="mt-0.5 text-[var(--neutral-gray)] flex-shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[var(--text-primary)] capitalize">
+                        {log.action.replace(/_/g, " ")}
+                      </p>
+                      <p className="text-xs text-[var(--neutral-gray)]">
+                        {log.performerName || log.performedBy.slice(0, 8) + "..."}
+                        {log.fromDivisionName &&
+                          ` — from ${log.fromDivisionName}`}
+                        {log.toDivisionName && ` to ${log.toDivisionName}`}
+                      </p>
+                      {log.notes && (
+                        <p className="text-xs text-[var(--neutral-gray)] italic mt-0.5">
+                          {log.notes}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-[var(--neutral-gray)] mt-1">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
+
       {/* Metadata */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -826,6 +1217,14 @@ export default function ProjectDetailPage({
             </dt>
             <dd className="text-[var(--text-primary)]">
               {project.portfolioId || "Not assigned"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-[var(--neutral-gray)]">
+              Division / Office
+            </dt>
+            <dd className="text-[var(--text-primary)]">
+              {project.divisionName || "Not assigned"}
             </dd>
           </div>
           <div>

@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Calendar,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useProjects, usePortfolios } from "@/hooks/use-planning";
@@ -324,6 +325,19 @@ export default function ProjectsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Division */}
+                  {project.divisionName && (
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Building2
+                        size={12}
+                        className="text-[var(--primary)]"
+                      />
+                      <span className="text-xs font-medium text-[var(--primary)]">
+                        {project.divisionName}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Dates */}
                   <div className="flex items-center gap-3 text-xs text-[var(--neutral-gray)]">

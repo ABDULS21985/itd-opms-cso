@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { useCreateProject, usePortfolios } from "@/hooks/use-planning";
+import { useOrgUnits } from "@/hooks/use-system";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -27,16 +28,31 @@ export default function NewProjectPage() {
   const createProject = useCreateProject();
   const { data: portfoliosData } = usePortfolios(1, 100);
   const portfolios = portfoliosData?.data ?? [];
+  const { data: orgUnitsData } = useOrgUnits(1, 100);
+
+  const orgUnits = Array.isArray(orgUnitsData)
+    ? orgUnitsData
+    : orgUnitsData?.data ?? [];
 
   const portfolioOptions = portfolios.map((p) => ({
     value: p.id,
     label: p.name,
   }));
 
+  const divisionOptions = orgUnits
+    .filter(
+      (ou) =>
+        ou.level === "office" ||
+        ou.level === "division" ||
+        ou.level === "department",
+    )
+    .map((ou) => ({ value: ou.id, label: `${ou.code} — ${ou.name}` }));
+
   /* ---- Form state ---- */
   const [title, setTitle] = useState("");
   const [code, setCode] = useState("");
   const [portfolioId, setPortfolioId] = useState("");
+  const [divisionId, setDivisionId] = useState("");
   const [description, setDescription] = useState("");
   const [charter, setCharter] = useState("");
   const [scope, setScope] = useState("");
@@ -67,6 +83,7 @@ export default function NewProjectPage() {
         title: title.trim(),
         code: code.trim(),
         portfolioId: portfolioId || undefined,
+        divisionId: divisionId || undefined,
         description: description.trim() || undefined,
         charter: charter.trim() || undefined,
         scope: scope.trim() || undefined,
@@ -146,15 +163,26 @@ export default function NewProjectPage() {
               />
             </div>
 
-            <FormField
-              label="Portfolio"
-              name="portfolioId"
-              type="select"
-              value={portfolioId}
-              onChange={setPortfolioId}
-              options={portfolioOptions}
-              placeholder="Select portfolio (optional)"
-            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                label="Portfolio"
+                name="portfolioId"
+                type="select"
+                value={portfolioId}
+                onChange={setPortfolioId}
+                options={portfolioOptions}
+                placeholder="Select portfolio (optional)"
+              />
+              <FormField
+                label="Division / Office"
+                name="divisionId"
+                type="select"
+                value={divisionId}
+                onChange={setDivisionId}
+                options={divisionOptions}
+                placeholder="Select division (optional)"
+              />
+            </div>
 
             <FormField
               label="Description"
