@@ -468,6 +468,94 @@ func (s *DashboardService) GetMyDashboard(ctx context.Context) (map[string]any, 
 }
 
 // ──────────────────────────────────────────────
+// Chart Data — Projects (extended)
+// ──────────────────────────────────────────────
+
+// GetProjectsByRAG returns project counts grouped by RAG status.
+func (s *DashboardService) GetProjectsByRAG(ctx context.Context) ([]ChartDataPoint, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT rag_status AS label, COUNT(*)::int AS value
+		FROM projects
+		WHERE tenant_id = $1
+		GROUP BY rag_status
+		ORDER BY value DESC`
+
+	return s.queryChartData(ctx, query, auth.TenantID)
+}
+
+// GetProjectsByPriority returns project counts grouped by priority.
+func (s *DashboardService) GetProjectsByPriority(ctx context.Context) ([]ChartDataPoint, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT priority AS label, COUNT(*)::int AS value
+		FROM projects
+		WHERE tenant_id = $1
+		GROUP BY priority
+		ORDER BY
+			CASE priority
+				WHEN 'critical' THEN 1
+				WHEN 'high' THEN 2
+				WHEN 'medium' THEN 3
+				WHEN 'low' THEN 4
+				ELSE 5
+			END`
+
+	return s.queryChartData(ctx, query, auth.TenantID)
+}
+
+// ──────────────────────────────────────────────
+// Chart Data — Risks
+// ──────────────────────────────────────────────
+
+// GetRisksByCategory returns open risk counts grouped by category.
+func (s *DashboardService) GetRisksByCategory(ctx context.Context) ([]ChartDataPoint, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT COALESCE(category, 'uncategorized') AS label, COUNT(*)::int AS value
+		FROM risk_register
+		WHERE tenant_id = $1
+			AND status = 'open'
+		GROUP BY category
+		ORDER BY value DESC`
+
+	return s.queryChartData(ctx, query, auth.TenantID)
+}
+
+// ──────────────────────────────────────────────
+// Chart Data — Work Items
+// ──────────────────────────────────────────────
+
+// GetWorkItemsByStatus returns work item counts grouped by status.
+func (s *DashboardService) GetWorkItemsByStatus(ctx context.Context) ([]ChartDataPoint, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT status AS label, COUNT(*)::int AS value
+		FROM work_items
+		WHERE tenant_id = $1
+		GROUP BY status
+		ORDER BY value DESC`
+
+	return s.queryChartData(ctx, query, auth.TenantID)
+}
+
+// ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
 

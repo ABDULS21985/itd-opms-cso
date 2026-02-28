@@ -39,6 +39,10 @@ func (h *DashboardHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/assets-by-type", h.GetAssetsByType)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/assets-by-status", h.GetAssetsByStatus)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/sla-compliance", h.GetSLAComplianceRate)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/projects-by-rag", h.GetProjectsByRAG)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/projects-by-priority", h.GetProjectsByPriority)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/risks-by-category", h.GetRisksByCategory)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/work-items-by-status", h.GetWorkItemsByStatus)
 }
 
 // ──────────────────────────────────────────────
@@ -213,6 +217,74 @@ func (h *DashboardHandler) GetAssetsByStatus(w http.ResponseWriter, r *http.Requ
 	}
 
 	points, err := h.svc.GetAssetsByStatus(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, points, nil)
+}
+
+// GetProjectsByRAG handles GET /charts/projects-by-rag.
+func (h *DashboardHandler) GetProjectsByRAG(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	points, err := h.svc.GetProjectsByRAG(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, points, nil)
+}
+
+// GetProjectsByPriority handles GET /charts/projects-by-priority.
+func (h *DashboardHandler) GetProjectsByPriority(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	points, err := h.svc.GetProjectsByPriority(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, points, nil)
+}
+
+// GetRisksByCategory handles GET /charts/risks-by-category.
+func (h *DashboardHandler) GetRisksByCategory(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	points, err := h.svc.GetRisksByCategory(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, points, nil)
+}
+
+// GetWorkItemsByStatus handles GET /charts/work-items-by-status.
+func (h *DashboardHandler) GetWorkItemsByStatus(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	points, err := h.svc.GetWorkItemsByStatus(r.Context())
 	if err != nil {
 		writeAppError(w, r, err)
 		return

@@ -117,6 +117,58 @@ export function useSLACompliance(since?: string) {
   });
 }
 
+/**
+ * GET /reporting/dashboards/charts/projects-by-rag - project distribution by RAG status.
+ */
+export function useProjectsByRAG() {
+  return useQuery({
+    queryKey: ["chart-projects-by-rag"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-rag",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/projects-by-priority - project distribution by priority.
+ */
+export function useProjectsByPriority() {
+  return useQuery({
+    queryKey: ["chart-projects-by-priority"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-priority",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/risks-by-category - open risk distribution by category.
+ */
+export function useRisksByCategory() {
+  return useQuery({
+    queryKey: ["chart-risks-by-category"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/risks-by-category",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/work-items-by-status - work item distribution by status.
+ */
+export function useWorkItemsByStatus() {
+  return useQuery({
+    queryKey: ["chart-work-items-by-status"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/work-items-by-status",
+      ),
+  });
+}
+
 /* ================================================================== */
 /*  Report Definitions — Queries                                         */
 /* ================================================================== */

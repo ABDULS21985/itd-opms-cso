@@ -63,6 +63,10 @@ import {
   Layers,
   ChevronsUpDown,
   Minus,
+  BarChart3,
+  PieChart,
+  TrendingUp,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -111,6 +115,47 @@ const navGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      {
+        href: "/dashboard/analytics",
+        label: "Executive Overview",
+        icon: BarChart3,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/portfolio",
+        label: "Portfolio Analytics",
+        icon: PieChart,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/projects",
+        label: "Project Performance",
+        icon: TrendingUp,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/risks",
+        label: "Risk & Issues",
+        icon: ShieldAlert,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/resources",
+        label: "Resource & Workload",
+        icon: Users,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/analytics/governance",
+        label: "Governance & Compliance",
+        icon: Shield,
+        permission: "reporting.view",
+      },
     ],
   },
   {
