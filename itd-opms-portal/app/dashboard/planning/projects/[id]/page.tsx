@@ -431,7 +431,7 @@ export default function ProjectDetailPage({
           <button
             type="button"
             onClick={() =>
-              router.push(`/dashboard/planning/projects/${id}`)
+              router.push(`/dashboard/planning/projects/${id}/edit`)
             }
             className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
           >
@@ -1216,7 +1216,7 @@ export default function ProjectDetailPage({
               Portfolio
             </dt>
             <dd className="text-[var(--text-primary)]">
-              {project.portfolioId || "Not assigned"}
+              {project.portfolioName || "Not assigned"}
             </dd>
           </div>
           <div>
@@ -1232,7 +1232,7 @@ export default function ProjectDetailPage({
               Sponsor
             </dt>
             <dd className="text-[var(--text-primary)]">
-              {project.sponsorId || "Not assigned"}
+              {project.sponsorName || "Not assigned"}
             </dd>
           </div>
           <div>
@@ -1240,7 +1240,7 @@ export default function ProjectDetailPage({
               Project Manager
             </dt>
             <dd className="text-[var(--text-primary)]">
-              {project.projectManagerId || "Not assigned"}
+              {project.projectManagerName || "Not assigned"}
             </dd>
           </div>
           <div>

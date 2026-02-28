@@ -343,6 +343,9 @@ export interface Project {
   budgetSpent?: number;
   completionPct?: number;
   divisionName?: string;
+  portfolioName?: string;
+  sponsorName?: string;
+  projectManagerName?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

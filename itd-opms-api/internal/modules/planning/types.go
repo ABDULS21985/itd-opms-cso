@@ -163,8 +163,11 @@ type Project struct {
 	BudgetApproved   *float64        `json:"budgetApproved"`
 	BudgetSpent      *float64        `json:"budgetSpent"`
 	CompletionPct    *float64        `json:"completionPct"`
-	DivisionName     string          `json:"divisionName,omitempty"`
-	Metadata         json.RawMessage `json:"metadata"`
+	DivisionName       string          `json:"divisionName,omitempty"`
+	PortfolioName      string          `json:"portfolioName,omitempty"`
+	SponsorName        string          `json:"sponsorName,omitempty"`
+	ProjectManagerName string          `json:"projectManagerName,omitempty"`
+	Metadata           json.RawMessage `json:"metadata"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
 }

@@ -501,9 +501,15 @@ func (s *ProjectService) GetProject(ctx context.Context, id uuid.UUID) (Project,
 			p.planned_start, p.planned_end, p.actual_start, p.actual_end,
 			p.budget_approved, p.budget_spent, p.completion_pct,
 			COALESCE(o.name, '') AS division_name,
+			COALESCE(pf.name, '') AS portfolio_name,
+			COALESCE(sp.display_name, '') AS sponsor_name,
+			COALESCE(pm.display_name, '') AS project_manager_name,
 			p.metadata, p.created_at, p.updated_at
 		FROM projects p
 		LEFT JOIN org_units o ON o.id = p.division_id
+		LEFT JOIN portfolios pf ON pf.id = p.portfolio_id
+		LEFT JOIN users sp ON sp.id = p.sponsor_id
+		LEFT JOIN users pm ON pm.id = p.project_manager_id
 		WHERE p.id = $1 AND p.tenant_id = $2`
 
 	var p Project
@@ -512,7 +518,7 @@ func (s *ProjectService) GetProject(ctx context.Context, id uuid.UUID) (Project,
 		&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 		&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
 		&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct,
-		&p.DivisionName,
+		&p.DivisionName, &p.PortfolioName, &p.SponsorName, &p.ProjectManagerName,
 		&p.Metadata, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -554,9 +560,15 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 			p.planned_start, p.planned_end, p.actual_start, p.actual_end,
 			p.budget_approved, p.budget_spent, p.completion_pct,
 			COALESCE(o.name, '') AS division_name,
+			COALESCE(pf.name, '') AS portfolio_name,
+			COALESCE(sp.display_name, '') AS sponsor_name,
+			COALESCE(pm.display_name, '') AS project_manager_name,
 			p.metadata, p.created_at, p.updated_at
 		FROM projects p
 		LEFT JOIN org_units o ON o.id = p.division_id
+		LEFT JOIN portfolios pf ON pf.id = p.portfolio_id
+		LEFT JOIN users sp ON sp.id = p.sponsor_id
+		LEFT JOIN users pm ON pm.id = p.project_manager_id
 		WHERE p.tenant_id = $1
 			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
 			AND ($3::text IS NULL OR p.status = $3)
@@ -578,7 +590,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 			&p.SponsorID, &p.ProjectManagerID, &p.Status, &p.RAGStatus, &p.Priority,
 			&p.PlannedStart, &p.PlannedEnd, &p.ActualStart, &p.ActualEnd,
 			&p.BudgetApproved, &p.BudgetSpent, &p.CompletionPct,
-			&p.DivisionName,
+			&p.DivisionName, &p.PortfolioName, &p.SponsorName, &p.ProjectManagerName,
 			&p.Metadata, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan project", err)
@@ -1147,6 +1159,12 @@ func (s *ProjectService) UnassignProjectDivision(ctx context.Context, projectID,
 	if err != nil {
 		return apperrors.Internal("failed to unassign division", err)
 	}
+
+	// Clear the project's division_id if it matches the unassigned division.
+	s.pool.Exec(ctx,
+		`UPDATE projects SET division_id = NULL, updated_at = now() WHERE id = $1 AND tenant_id = $2 AND division_id = $3`,
+		projectID, auth.TenantID, divisionID,
+	)
 
 	// Log audit trail.
 	s.pool.Exec(ctx, `INSERT INTO division_assignment_log (entity_type, entity_id, action, from_division_id, performed_by) VALUES ('project', $1, 'unassigned', $2, $3)`,

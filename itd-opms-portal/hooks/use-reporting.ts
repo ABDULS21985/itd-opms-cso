@@ -268,6 +268,7 @@ export function useAssignProjectDivision(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
       queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Division assigned successfully");
     },
@@ -286,6 +287,7 @@ export function useUnassignProjectDivision(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
       queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Division unassigned successfully");
     },
@@ -304,6 +306,7 @@ export function useReassignProjectDivision(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
       queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project reassigned successfully");
     },
