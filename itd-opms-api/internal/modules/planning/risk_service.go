@@ -66,9 +66,9 @@ func (s *RiskService) CreateRisk(ctx context.Context, req CreateRiskRequest) (Ri
 
 	query := `
 		INSERT INTO risks (
-			id, tenant_id, project_id, title, description,
+			id, tenant_id, linked_project_id, title, description,
 			category, likelihood, impact, status,
-			mitigation_plan, contingency_plan, owner_id, review_date,
+			treatment_plan, contingency_plan, owner_id, review_date,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
@@ -76,9 +76,9 @@ func (s *RiskService) CreateRisk(ctx context.Context, req CreateRiskRequest) (Ri
 			$10, $11, $12, $13,
 			$14, $15
 		)
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			category, likelihood, impact, risk_score, status,
-			mitigation_plan, contingency_plan, owner_id, review_date,
+			treatment_plan, contingency_plan, owner_id, review_date,
 			created_at, updated_at`
 
 	var risk Risk
@@ -126,9 +126,9 @@ func (s *RiskService) GetRisk(ctx context.Context, id uuid.UUID) (Risk, error) {
 	}
 
 	query := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_project_id, title, description,
 			category, likelihood, impact, risk_score, status,
-			mitigation_plan, contingency_plan, owner_id, review_date,
+			treatment_plan, contingency_plan, owner_id, review_date,
 			created_at, updated_at
 		FROM risks
 		WHERE id = $1 AND tenant_id = $2`
@@ -162,7 +162,7 @@ func (s *RiskService) ListRisks(ctx context.Context, projectID *uuid.UUID, statu
 		SELECT COUNT(*)
 		FROM risks
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::text IS NULL OR category = $4)`
 
@@ -174,13 +174,13 @@ func (s *RiskService) ListRisks(ctx context.Context, projectID *uuid.UUID, statu
 
 	// Fetch paginated results.
 	dataQuery := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_linked_project_id, title, description,
 			category, likelihood, impact, risk_score, status,
-			mitigation_plan, contingency_plan, owner_id, review_date,
+			treatment_plan, contingency_plan, owner_id, review_date,
 			created_at, updated_at
 		FROM risks
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::text IS NULL OR category = $4)
 		ORDER BY risk_score DESC, created_at DESC
@@ -241,15 +241,15 @@ func (s *RiskService) UpdateRisk(ctx context.Context, id uuid.UUID, req UpdateRi
 			likelihood = COALESCE($4, likelihood),
 			impact = COALESCE($5, impact),
 			status = COALESCE($6, status),
-			mitigation_plan = COALESCE($7, mitigation_plan),
+			treatment_plan = COALESCE($7, treatment_plan),
 			contingency_plan = COALESCE($8, contingency_plan),
 			owner_id = COALESCE($9, owner_id),
 			review_date = COALESCE($10, review_date),
 			updated_at = $11
 		WHERE id = $12 AND tenant_id = $13
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			category, likelihood, impact, risk_score, status,
-			mitigation_plan, contingency_plan, owner_id, review_date,
+			treatment_plan, contingency_plan, owner_id, review_date,
 			created_at, updated_at`
 
 	var risk Risk
@@ -343,7 +343,7 @@ func (s *RiskService) CreateIssue(ctx context.Context, req CreateIssueRequest) (
 
 	query := `
 		INSERT INTO issues (
-			id, tenant_id, project_id, title, description,
+			id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, due_date,
 			escalation_level, created_at, updated_at
 		) VALUES (
@@ -351,7 +351,7 @@ func (s *RiskService) CreateIssue(ctx context.Context, req CreateIssueRequest) (
 			$6, $7, $8, $9, $10,
 			$11, $12, $13
 		)
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, resolution,
 			escalation_level, escalated_to_id, due_date,
 			created_at, updated_at`
@@ -399,7 +399,7 @@ func (s *RiskService) GetIssue(ctx context.Context, id uuid.UUID) (Issue, error)
 	}
 
 	query := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, resolution,
 			escalation_level, escalated_to_id, due_date,
 			created_at, updated_at
@@ -435,7 +435,7 @@ func (s *RiskService) ListIssues(ctx context.Context, projectID *uuid.UUID, stat
 		SELECT COUNT(*)
 		FROM issues
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::text IS NULL OR severity = $4)`
 
@@ -447,13 +447,13 @@ func (s *RiskService) ListIssues(ctx context.Context, projectID *uuid.UUID, stat
 
 	// Fetch paginated results.
 	dataQuery := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, resolution,
 			escalation_level, escalated_to_id, due_date,
 			created_at, updated_at
 		FROM issues
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::text IS NULL OR severity = $4)
 		ORDER BY escalation_level DESC, created_at DESC
@@ -519,7 +519,7 @@ func (s *RiskService) UpdateIssue(ctx context.Context, id uuid.UUID, req UpdateI
 			due_date = COALESCE($10, due_date),
 			updated_at = $11
 		WHERE id = $12 AND tenant_id = $13
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, resolution,
 			escalation_level, escalated_to_id, due_date,
 			created_at, updated_at`
@@ -578,7 +578,7 @@ func (s *RiskService) EscalateIssue(ctx context.Context, id uuid.UUID, escalated
 			escalated_to_id = $2,
 			updated_at = $3
 		WHERE id = $4 AND tenant_id = $5
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			category, severity, status, assignee_id, resolution,
 			escalation_level, escalated_to_id, due_date,
 			created_at, updated_at`
@@ -667,7 +667,7 @@ func (s *RiskService) CreateChangeRequest(ctx context.Context, req CreateChangeR
 
 	query := `
 		INSERT INTO change_requests (
-			id, tenant_id, project_id, title, description,
+			id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, created_at, updated_at
 		) VALUES (
@@ -675,7 +675,7 @@ func (s *RiskService) CreateChangeRequest(ctx context.Context, req CreateChangeR
 			$6, $7, $8,
 			$9, $10, $11
 		)
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, reviewed_by, approval_chain_id,
 			created_at, updated_at`
@@ -722,7 +722,7 @@ func (s *RiskService) GetChangeRequest(ctx context.Context, id uuid.UUID) (Chang
 	}
 
 	query := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, reviewed_by, approval_chain_id,
 			created_at, updated_at
@@ -758,7 +758,7 @@ func (s *RiskService) ListChangeRequests(ctx context.Context, projectID *uuid.UU
 		SELECT COUNT(*)
 		FROM change_requests
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)`
 
 	var total int64
@@ -769,13 +769,13 @@ func (s *RiskService) ListChangeRequests(ctx context.Context, projectID *uuid.UU
 
 	// Fetch paginated results.
 	dataQuery := `
-		SELECT id, tenant_id, project_id, title, description,
+		SELECT id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, reviewed_by, approval_chain_id,
 			created_at, updated_at
 		FROM change_requests
 		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
+			AND ($2::uuid IS NULL OR linked_project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 		ORDER BY created_at DESC
 		LIMIT $4 OFFSET $5`
@@ -837,7 +837,7 @@ func (s *RiskService) UpdateChangeRequest(ctx context.Context, id uuid.UUID, req
 			approval_chain_id = COALESCE($7, approval_chain_id),
 			updated_at = $8
 		WHERE id = $9 AND tenant_id = $10
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, reviewed_by, approval_chain_id,
 			created_at, updated_at`
@@ -912,7 +912,7 @@ func (s *RiskService) UpdateChangeRequestStatus(ctx context.Context, id uuid.UUI
 			reviewed_by = COALESCE($2, reviewed_by),
 			updated_at = $3
 		WHERE id = $4 AND tenant_id = $5
-		RETURNING id, tenant_id, project_id, title, description,
+		RETURNING id, tenant_id, linked_project_id, title, description,
 			justification, impact_assessment, status,
 			requested_by, reviewed_by, approval_chain_id,
 			created_at, updated_at`

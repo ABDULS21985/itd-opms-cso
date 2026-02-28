@@ -125,16 +125,14 @@ func (h *WorkItemHandler) ListOverdue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectIDStr := r.URL.Query().Get("project_id")
-	if projectIDStr == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "project_id query parameter is required")
-		return
-	}
-
-	projectID, err := uuid.Parse(projectIDStr)
-	if err != nil {
-		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project_id")
-		return
+	var projectID *uuid.UUID
+	if projectIDStr := r.URL.Query().Get("project_id"); projectIDStr != "" {
+		parsed, err := uuid.Parse(projectIDStr)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project_id")
+			return
+		}
+		projectID = &parsed
 	}
 
 	items, err := h.svc.ListOverdueWorkItems(r.Context(), projectID)

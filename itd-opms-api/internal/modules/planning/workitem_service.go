@@ -556,7 +556,7 @@ func (s *WorkItemService) GetWorkItemStatusCounts(ctx context.Context, projectID
 }
 
 // ListOverdueWorkItems returns work items that are past due and not yet completed.
-func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID uuid.UUID) ([]WorkItem, error) {
+func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID *uuid.UUID) ([]WorkItem, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Unauthorized("authentication required")
@@ -568,7 +568,7 @@ func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID uu
 			estimated_hours, actual_hours, due_date, completed_at,
 			sort_order, tags, metadata, created_at, updated_at
 		FROM work_items
-		WHERE project_id = $1
+		WHERE ($1::uuid IS NULL OR project_id = $1)
 			AND tenant_id = $2
 			AND due_date < NOW()
 			AND status IN ('todo', 'in_progress')

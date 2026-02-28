@@ -23,9 +23,12 @@ CREATE TABLE IF NOT EXISTS project_division_assignments (
     unassigned_at   TIMESTAMPTZ,                          -- NULL = currently active
     notes           TEXT,
     status          TEXT NOT NULL DEFAULT 'active',        -- 'active', 'removed'
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (project_id, division_id, assignment_type) WHERE status = 'active'
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pda_unique_active
+    ON project_division_assignments (project_id, division_id, assignment_type)
+    WHERE status = 'active';
 
 CREATE INDEX IF NOT EXISTS idx_pda_project_id ON project_division_assignments(project_id);
 CREATE INDEX IF NOT EXISTS idx_pda_division_id ON project_division_assignments(division_id);
