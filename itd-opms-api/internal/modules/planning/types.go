@@ -619,3 +619,89 @@ type UpdateChangeRequestStatusRequest struct {
 type EscalateIssueRequest struct {
 	EscalatedToID uuid.UUID `json:"escalatedToId" validate:"required"`
 }
+
+// ──────────────────────────────────────────────
+// Project Document category constants
+// ──────────────────────────────────────────────
+
+// ValidDocumentCategories is the set of allowed project document categories.
+var ValidDocumentCategories = map[string]bool{
+	"project_charter":        true,
+	"project_approval":       true,
+	"business_case":          true,
+	"business_requirements":  true,
+	"solution_architecture":  true,
+	"solution_design":        true,
+	"solution_brief":         true,
+	"technical_specification": true,
+	"test_plan":              true,
+	"test_results":           true,
+	"user_manual":            true,
+	"training_material":      true,
+	"deployment_guide":       true,
+	"meeting_minutes":        true,
+	"status_report":          true,
+	"risk_register":          true,
+	"change_request":         true,
+	"sign_off":               true,
+	"closure_report":         true,
+	"other":                  true,
+}
+
+// ──────────────────────────────────────────────
+// Project Document domain types
+// ──────────────────────────────────────────────
+
+// ProjectDocument represents a document linked to a project with enrichment metadata.
+type ProjectDocument struct {
+	ID           uuid.UUID `json:"id"`
+	TenantID     uuid.UUID `json:"tenantId"`
+	ProjectID    uuid.UUID `json:"projectId"`
+	DocumentID   uuid.UUID `json:"documentId"`
+	Category     string    `json:"category"`
+	Label        *string   `json:"label"`
+	Version      string    `json:"version"`
+	DisplayOrder int       `json:"displayOrder"`
+	Status       string    `json:"status"`
+	UploadedBy   uuid.UUID `json:"uploadedBy"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+
+	// Joined fields from documents table
+	Title        string  `json:"title"`
+	Description  *string `json:"description"`
+	FileName     string  `json:"fileName"`
+	ContentType  string  `json:"contentType"`
+	SizeBytes    int64   `json:"sizeBytes"`
+	UploaderName string  `json:"uploaderName,omitempty"`
+}
+
+// ProjectDocumentCategoryCount holds a count of documents per category.
+type ProjectDocumentCategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}
+
+// ──────────────────────────────────────────────
+// Project Document request types
+// ──────────────────────────────────────────────
+
+// UploadProjectDocumentRequest is parsed from multipart form fields.
+type UploadProjectDocumentRequest struct {
+	Title       string  `json:"title"`
+	Description *string `json:"description"`
+	Category    string  `json:"category"`
+	Label       *string `json:"label"`
+	Version     *string `json:"version"`
+}
+
+// UpdateProjectDocumentRequest is the payload for updating document metadata.
+type UpdateProjectDocumentRequest struct {
+	Category     *string `json:"category"`
+	Label        *string `json:"label"`
+	Version      *string `json:"version"`
+	DisplayOrder *int    `json:"displayOrder"`
+	Status       *string `json:"status"`
+	Title        *string `json:"title"`
+	Description  *string `json:"description"`
+}

@@ -26,6 +26,7 @@ import {
   Clock,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ProjectDocuments } from "@/components/planning/project-documents";
 import { FormField } from "@/components/shared/form-field";
 import {
   useProject,
@@ -1192,11 +1193,21 @@ export default function ProjectDetailPage({
         </div>
       </motion.div>
 
+      {/* Project Documents */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.32 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <ProjectDocuments projectId={id} />
+      </motion.div>
+
       {/* Metadata */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.3 }}
+        transition={{ duration: 0.4, delay: 0.34 }}
         className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
       >
         <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">

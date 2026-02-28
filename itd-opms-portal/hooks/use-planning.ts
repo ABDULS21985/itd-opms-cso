@@ -20,6 +20,9 @@ import type {
   PIRTemplate,
   PIRStats,
   PaginatedResponse,
+  ProjectDocument,
+  ProjectDocumentCategoryCount,
+  DocumentDownloadResponse,
 } from "@/types";
 
 /* ================================================================== */
@@ -1164,6 +1167,160 @@ export function useDeletePIR() {
     },
     onError: () => {
       toast.error("Failed to delete PIR");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Project Documents — Queries                                        */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/documents - paginated list of project documents.
+ */
+export function useProjectDocuments(
+  projectId: string | undefined,
+  page = 1,
+  limit = 20,
+  category?: string,
+  status?: string,
+  search?: string,
+) {
+  return useQuery({
+    queryKey: [
+      "project-documents",
+      projectId,
+      page,
+      limit,
+      category,
+      status,
+      search,
+    ],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ProjectDocument>>(
+        `/planning/projects/${projectId}/documents`,
+        { page, limit, category, status, search },
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/documents/categories - category counts.
+ */
+export function useProjectDocumentCategories(
+  projectId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["project-document-categories", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectDocumentCategoryCount[]>(
+        `/planning/projects/${projectId}/documents/categories`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/* ================================================================== */
+/*  Project Documents — Mutations                                      */
+/* ================================================================== */
+
+/**
+ * POST /planning/projects/{id}/documents - upload a document (multipart).
+ */
+export function useUploadProjectDocument(projectId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<ProjectDocument>(
+        `/planning/projects/${projectId}/documents`,
+        formData,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document uploaded successfully");
+    },
+    onError: () => {
+      toast.error("Failed to upload document");
+    },
+  });
+}
+
+/**
+ * PUT /planning/projects/{id}/documents/{docId} - update document metadata.
+ */
+export function useUpdateProjectDocument(
+  projectId: string | undefined,
+  docId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<ProjectDocument>) =>
+      apiClient.put<ProjectDocument>(
+        `/planning/projects/${projectId}/documents/${docId}`,
+        body,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update document");
+    },
+  });
+}
+
+/**
+ * DELETE /planning/projects/{id}/documents/{docId} - delete a document.
+ */
+export function useDeleteProjectDocument(projectId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (docId: string) =>
+      apiClient.delete(
+        `/planning/projects/${projectId}/documents/${docId}`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete document");
+    },
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/documents/{docId}/download - get download URL.
+ */
+export function useDownloadProjectDocument(
+  projectId: string | undefined,
+) {
+  return useMutation({
+    mutationFn: (docId: string) =>
+      apiClient.get<DocumentDownloadResponse>(
+        `/planning/projects/${projectId}/documents/${docId}/download`,
+      ),
+    onSuccess: (data) => {
+      window.open(data.url, "_blank");
+    },
+    onError: () => {
+      toast.error("Failed to download document");
     },
   });
 }

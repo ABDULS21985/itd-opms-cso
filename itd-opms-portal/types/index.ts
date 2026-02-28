@@ -1874,3 +1874,60 @@ export interface PIRStats {
   avgScore: number;
   pendingPirs: number;
 }
+
+/* ================================================================== */
+/*  Project Documents                                                  */
+/* ================================================================== */
+
+export type ProjectDocumentCategory =
+  | "project_charter"
+  | "project_approval"
+  | "business_case"
+  | "business_requirements"
+  | "solution_architecture"
+  | "solution_design"
+  | "solution_brief"
+  | "technical_specification"
+  | "test_plan"
+  | "test_results"
+  | "user_manual"
+  | "training_material"
+  | "deployment_guide"
+  | "meeting_minutes"
+  | "status_report"
+  | "risk_register"
+  | "change_request"
+  | "sign_off"
+  | "closure_report"
+  | "other";
+
+export interface ProjectDocument {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  documentId: string;
+  category: ProjectDocumentCategory;
+  label?: string;
+  version: string;
+  displayOrder: number;
+  status: string;
+  uploadedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  description?: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploaderName?: string;
+}
+
+export interface ProjectDocumentCategoryCount {
+  category: ProjectDocumentCategory;
+  count: number;
+}
+
+export interface DocumentDownloadResponse {
+  url: string;
+  fileName: string;
+}

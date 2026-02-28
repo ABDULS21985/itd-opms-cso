@@ -225,6 +225,7 @@ func (h *PortfolioHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) 
 // ProjectHandler handles HTTP requests for project management.
 type ProjectHandler struct {
 	svc *ProjectService
+	doc *DocumentHandler
 }
 
 // NewProjectHandler creates a new ProjectHandler.
@@ -262,6 +263,17 @@ func (h *ProjectHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("planning.manage")).Delete("/divisions/{divisionId}", h.UnassignProjectDivision)
 		r.With(middleware.RequirePermission("planning.manage")).Post("/divisions/reassign", h.ReassignProjectDivision)
 		r.With(middleware.RequirePermission("planning.view")).Get("/divisions/history", h.GetDivisionAssignmentHistory)
+
+		// Documents
+		r.Route("/documents", func(r chi.Router) {
+			r.With(middleware.RequirePermission("planning.view")).Get("/", h.doc.ListDocuments)
+			r.With(middleware.RequirePermission("planning.manage")).Post("/", h.doc.UploadDocument)
+			r.With(middleware.RequirePermission("planning.view")).Get("/categories", h.doc.GetCategoryCounts)
+			r.With(middleware.RequirePermission("planning.view")).Get("/{docId}", h.doc.GetDocument)
+			r.With(middleware.RequirePermission("planning.manage")).Put("/{docId}", h.doc.UpdateDocument)
+			r.With(middleware.RequirePermission("planning.manage")).Delete("/{docId}", h.doc.DeleteDocument)
+			r.With(middleware.RequirePermission("planning.view")).Get("/{docId}/download", h.doc.GetDownloadURL)
+		})
 	})
 }
 

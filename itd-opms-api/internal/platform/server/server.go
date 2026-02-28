@@ -167,7 +167,7 @@ func (s *Server) Setup() {
 	// --- Module stub handlers ---
 	governanceHandler := governance.NewHandler(s.pool, auditService)
 	peopleHandler := people.NewHandler(s.pool, auditService)
-	planningHandler := planning.NewHandler(s.pool, auditService)
+	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
 	itsmHandler := itsm.NewHandler(s.pool, auditService)
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)

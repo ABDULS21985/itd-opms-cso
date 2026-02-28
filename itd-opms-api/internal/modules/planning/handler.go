@@ -3,8 +3,10 @@ package planning
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 )
 
 // Handler is the top-level HTTP handler for the planning module.
@@ -21,17 +23,21 @@ type Handler struct {
 }
 
 // NewHandler creates a new planning Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *minio.Client, minioCfg config.MinIOConfig) *Handler {
 	portfolioSvc := NewPortfolioService(pool, auditSvc)
 	projectSvc := NewProjectService(pool, auditSvc)
 	workItemSvc := NewWorkItemService(pool, auditSvc)
 	riskSvc := NewRiskService(pool, auditSvc)
 	timelineSvc := NewTimelineService(pool)
 	pirSvc := NewPIRService(pool, auditSvc)
+	documentSvc := NewDocumentService(pool, minioClient, minioCfg, auditSvc)
+
+	projectHandler := NewProjectHandler(projectSvc)
+	projectHandler.doc = NewDocumentHandler(documentSvc)
 
 	return &Handler{
 		portfolio: NewPortfolioHandler(portfolioSvc),
-		project:   NewProjectHandler(projectSvc),
+		project:   projectHandler,
 		workItem:  NewWorkItemHandler(workItemSvc),
 		milestone: NewMilestoneHandler(workItemSvc),
 		risk:      NewRiskHandler(riskSvc),
