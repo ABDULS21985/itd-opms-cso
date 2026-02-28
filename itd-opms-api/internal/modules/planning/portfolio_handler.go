@@ -224,8 +224,9 @@ func (h *PortfolioHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) 
 
 // ProjectHandler handles HTTP requests for project management.
 type ProjectHandler struct {
-	svc *ProjectService
-	doc *DocumentHandler
+	svc    *ProjectService
+	doc    *DocumentHandler
+	budget *BudgetHandler
 }
 
 // NewProjectHandler creates a new ProjectHandler.
@@ -274,6 +275,13 @@ func (h *ProjectHandler) Routes(r chi.Router) {
 			r.With(middleware.RequirePermission("planning.manage")).Delete("/{docId}", h.doc.DeleteDocument)
 			r.With(middleware.RequirePermission("planning.view")).Get("/{docId}/download", h.doc.GetDownloadURL)
 		})
+
+		// Budget & Cost Tracking
+		if h.budget != nil {
+			r.Route("/budget", func(r chi.Router) {
+				h.budget.Routes(r)
+			})
+		}
 	})
 }
 

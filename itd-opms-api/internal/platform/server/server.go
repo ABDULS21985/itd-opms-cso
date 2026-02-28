@@ -19,7 +19,11 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/approval"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/automation"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/calendar"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/cmdb"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/customfields"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/governance"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/grc"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/itsm"
@@ -28,6 +32,8 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/vault"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/vendor"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -174,6 +180,12 @@ func (s *Server) Setup() {
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
 	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio)
+	approvalHandler := approval.NewHandler(s.pool, auditService)
+	calendarHandler := calendar.NewHandler(s.pool, auditService)
+	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
+	vendorHandler := vendor.NewHandler(s.pool, auditService)
+	automationHandler := automation.NewHandler(s.pool, auditService)
+	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
@@ -285,6 +297,12 @@ func (s *Server) Setup() {
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
 			r.Route("/system", func(r chi.Router) { systemHandler.Routes(r) })
+			r.Route("/approvals", func(r chi.Router) { approvalHandler.Routes(r) })
+			r.Route("/calendar", func(r chi.Router) { calendarHandler.Routes(r) })
+			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
+			r.Route("/vendors", func(r chi.Router) { vendorHandler.Routes(r) })
+			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
+			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })

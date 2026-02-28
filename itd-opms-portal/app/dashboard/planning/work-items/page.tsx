@@ -31,10 +31,19 @@ import {
   Calendar,
   User,
 } from "lucide-react";
-import { DataTable, type Column } from "@/components/shared/data-table";
+import { DataTable, type Column, type BulkAction } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { useWorkItems, useWorkItemStatusCounts } from "@/hooks/use-planning";
+import { InlineText, InlineSelect, InlineDate } from "@/components/shared/inline-edit";
+import { ExportDropdown } from "@/components/shared/export-dropdown";
+import { useWorkItems, useWorkItemStatusCounts, useBulkUpdateWorkItems } from "@/hooks/use-planning";
+import { useAuth } from "@/providers/auth-provider";
+import { exportToCSV } from "@/lib/export-utils";
 import { apiClient } from "@/lib/api-client";
+import {
+  CheckCircle,
+  UserCheck,
+  Download,
+} from "lucide-react";
 import type { WorkItem } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -399,6 +408,49 @@ export default function WorkItemsPage() {
     [workItems],
   );
 
+  const { user } = useAuth();
+  const bulkUpdate = useBulkUpdateWorkItems();
+  const hasManage = user?.permissions?.includes("*") || user?.permissions?.includes("planning.manage");
+
+  const exportColumns = useMemo(() => [
+    { key: "title", header: "Title" },
+    { key: "type", header: "Type" },
+    { key: "priority", header: "Priority" },
+    { key: "status", header: "Status" },
+    { key: "dueDate", header: "Due Date", format: (v: any) => v ? new Date(v).toLocaleDateString() : "" },
+  ], []);
+
+  const bulkActions: BulkAction[] = useMemo(() => [
+    {
+      id: "done",
+      label: "Mark Done",
+      icon: CheckCircle,
+      onExecute: async (ids) => {
+        await bulkUpdate.mutateAsync({ ids, fields: { status: "done" } });
+        toast.success(`${ids.length} item(s) marked done`);
+      },
+    },
+    {
+      id: "assign",
+      label: "Assign to Me",
+      icon: UserCheck,
+      onExecute: async (ids) => {
+        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user?.id } });
+        toast.success(`${ids.length} item(s) assigned`);
+      },
+    },
+    {
+      id: "export",
+      label: "Export Selected",
+      icon: Download,
+      onExecute: (ids) => {
+        const selected = workItems.filter((w) => ids.includes(w.id));
+        exportToCSV(selected, exportColumns, "work-items-selected");
+        toast.success("Exported selected items");
+      },
+    },
+  ], [bulkUpdate, workItems, user?.id, exportColumns]);
+
   /* ---- Table Columns ---- */
 
   const columns: Column<WorkItem>[] = [
@@ -448,24 +500,51 @@ export default function WorkItemsPage() {
       key: "priority",
       header: "Priority",
       sortable: true,
-      render: (item) => <PriorityBadge priority={item.priority} />,
+      render: (item) => (
+        <InlineSelect
+          value={item.priority}
+          options={[
+            { value: "critical", label: "Critical" },
+            { value: "high", label: "High" },
+            { value: "medium", label: "Medium" },
+            { value: "low", label: "Low" },
+          ]}
+          editable={!!hasManage}
+          onSave={async (val) => {
+            await apiClient.put(`/planning/work-items/${item.id}`, { priority: val });
+          }}
+          renderValue={(val) => <PriorityBadge priority={val} />}
+        />
+      ),
     },
     {
       key: "status",
       header: "Status",
       sortable: true,
-      render: (item) => <StatusBadge status={item.status} />,
+      render: (item) => (
+        <InlineSelect
+          value={item.status}
+          options={STATUSES.filter((s) => s.value !== "").map((s) => ({ value: s.value, label: s.label }))}
+          editable={!!hasManage}
+          onSave={async (val) => {
+            await apiClient.put(`/planning/work-items/${item.id}`, { status: val });
+          }}
+          renderValue={(val) => <StatusBadge status={val} />}
+        />
+      ),
     },
     {
       key: "dueDate",
       header: "Due Date",
       sortable: true,
       render: (item) => (
-        <span className="text-sm text-[var(--text-secondary)]">
-          {item.dueDate
-            ? new Date(item.dueDate).toLocaleDateString()
-            : "--"}
-        </span>
+        <InlineDate
+          value={item.dueDate ? item.dueDate.slice(0, 10) : ""}
+          editable={!!hasManage}
+          onSave={async (val) => {
+            await apiClient.put(`/planning/work-items/${item.id}`, { dueDate: val || null });
+          }}
+        />
       ),
     },
   ];
@@ -530,6 +609,12 @@ export default function WorkItemsPage() {
             <Filter size={16} />
             Filters
           </button>
+          <ExportDropdown
+            data={workItems}
+            columns={exportColumns}
+            filename="work-items"
+            title="Work Items"
+          />
           <button
             type="button"
             onClick={() =>
@@ -634,6 +719,8 @@ export default function WorkItemsPage() {
             data={workItems}
             keyExtractor={(item) => item.id}
             loading={isLoading}
+            selectable={!!hasManage}
+            bulkActions={hasManage ? bulkActions : undefined}
             emptyTitle="No work items found"
             emptyDescription="Get started by creating your first work item."
             emptyAction={

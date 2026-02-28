@@ -24,6 +24,9 @@ import {
   Clock,
   ChevronsUpDown,
   Minus,
+  LayoutDashboard,
+  Search,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";

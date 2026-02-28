@@ -1931,3 +1931,561 @@ export interface DocumentDownloadResponse {
   url: string;
   fileName: string;
 }
+
+/* =============================================================================
+   Approval Workflow Engine Types
+   ============================================================================= */
+
+export type StepMode = "sequential" | "parallel" | "any_of";
+
+export interface WorkflowStepDef {
+  stepOrder: number;
+  name: string;
+  mode: StepMode;
+  quorum: number;
+  approverType: string;
+  approverIds: string[];
+  timeoutHours: number;
+  allowDelegation: boolean;
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string;
+  entityType: string;
+  steps: WorkflowStepDef[];
+  isActive: boolean;
+  version: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApprovalChain {
+  id: string;
+  entityType: string;
+  entityId: string;
+  tenantId: string;
+  workflowDefinitionId?: string;
+  status: string;
+  currentStep: number;
+  urgency: string;
+  deadline?: string;
+  createdBy: string;
+  createdAt: string;
+  completedAt?: string;
+  steps?: ApprovalStep[];
+}
+
+export interface ApprovalStep {
+  id: string;
+  chainId: string;
+  stepOrder: number;
+  approverId: string;
+  approverName?: string;
+  decision: string;
+  comments: string;
+  decidedAt?: string;
+  delegatedFrom?: string;
+  deadline?: string;
+  createdAt: string;
+}
+
+export interface PendingApprovalItem {
+  chainId: string;
+  stepId: string;
+  entityType: string;
+  entityId: string;
+  entityTitle: string;
+  stepName: string;
+  urgency: string;
+  deadline?: string;
+  requestedBy: string;
+  requestedAt: string;
+}
+
+export interface ApprovalHistoryItem {
+  id: string;
+  chainId: string;
+  entityType: string;
+  entityId: string;
+  entityTitle: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+/* =============================================================================
+   Change Calendar Types
+   ============================================================================= */
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  eventType: string;
+  status: string;
+  impactLevel?: string;
+  source: string;
+  sourceId: string;
+  sourceUrl: string;
+  color: string;
+  createdBy?: string;
+}
+
+export interface MaintenanceWindow {
+  id: string;
+  tenantId: string;
+  title: string;
+  description?: string;
+  windowType: string;
+  status: string;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  recurrenceRule?: string;
+  affectedServices: string[];
+  impactLevel: string;
+  changeRequestId?: string;
+  ticketId?: string;
+  projectId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChangeFreezePeriod {
+  id: string;
+  tenantId: string;
+  name: string;
+  reason?: string;
+  startTime: string;
+  endTime: string;
+  exceptions: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ConflictResult {
+  overlappingEvents: CalendarEvent[];
+  freezePeriods: ChangeFreezePeriod[];
+}
+
+/* =============================================================================
+   Resource Heatmap Types
+   ============================================================================= */
+
+export interface HeatmapResponse {
+  periods: string[];
+  rows: HeatmapRow[];
+  summary: HeatmapSummary;
+}
+
+export interface HeatmapRow {
+  id: string;
+  label: string;
+  cells: HeatmapCell[];
+  averageLoad: number;
+}
+
+export interface HeatmapCell {
+  period: string;
+  allocationPct: number;
+  projectCount: number;
+  projects?: HeatmapProject[];
+}
+
+export interface HeatmapProject {
+  id: string;
+  title: string;
+  pct: number;
+}
+
+export interface HeatmapSummary {
+  totalUsers: number;
+  overAllocatedUsers: number;
+  underUtilizedUsers: number;
+  averageUtilization: number;
+}
+
+export interface AllocationEntry {
+  id: string;
+  tenantId: string;
+  userId: string;
+  userName?: string;
+  projectId: string;
+  projectTitle?: string;
+  allocationPct: number;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* =============================================================================
+   Budget & Cost Tracking Types
+   ============================================================================= */
+
+export interface CostCategory {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  code?: string;
+  parentId?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CostEntry {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  categoryId?: string;
+  categoryName?: string;
+  description: string;
+  amount: number;
+  entryType: "actual" | "committed" | "forecast";
+  entryDate: string;
+  vendorName?: string;
+  invoiceRef?: string;
+  documentId?: string;
+  createdBy: string;
+  creatorName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BudgetSummary {
+  projectId: string;
+  approvedBudget: number;
+  actualSpend: number;
+  committedSpend: number;
+  forecastTotal: number;
+  remainingBudget: number;
+  variancePct: number;
+  burnRate: number;
+  monthsRemaining: number;
+  estimatedAtCompletion: number;
+  costPerformanceIndex: number;
+  byCategory: CategorySpend[];
+}
+
+export interface CategorySpend {
+  categoryId: string;
+  categoryName: string;
+  actual: number;
+  committed: number;
+  forecast: number;
+}
+
+export interface BurnRatePoint {
+  period: string;
+  actual: number;
+  committed: number;
+  forecast: number;
+  cumulativeActual: number;
+  budgetLine: number;
+}
+
+export interface BudgetSnapshot {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  snapshotDate: string;
+  approvedBudget: number;
+  actualSpend: number;
+  committedSpend: number;
+  forecastTotal: number;
+  completionPct?: number;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface PortfolioBudgetItem {
+  projectId: string;
+  projectTitle: string;
+  status: string;
+  approvedBudget: number;
+  actualSpend: number;
+  remainingBudget: number;
+  variancePct: number;
+}
+
+/* =============================================================================
+   Vendor/Contract Management Types
+   ============================================================================= */
+
+export interface Vendor {
+  id: string;
+  tenantId: string;
+  name: string;
+  code?: string;
+  vendorType: string;
+  status: string;
+  primaryContactName?: string;
+  primaryContactEmail?: string;
+  primaryContactPhone?: string;
+  accountManagerName?: string;
+  accountManagerEmail?: string;
+  website?: string;
+  address?: string;
+  taxId?: string;
+  paymentTerms?: string;
+  notes?: string;
+  tags: string[];
+  metadata?: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Contract {
+  id: string;
+  tenantId: string;
+  vendorId: string;
+  vendorName?: string;
+  contractNumber: string;
+  title: string;
+  description?: string;
+  contractType: string;
+  status: string;
+  startDate: string;
+  endDate?: string;
+  autoRenew: boolean;
+  renewalNoticeDays: number;
+  totalValue?: number;
+  annualValue?: number;
+  currency: string;
+  paymentSchedule?: string;
+  slaTerms?: Record<string, unknown>;
+  documentIds: string[];
+  ownerId?: string;
+  approvalChainId?: string;
+  tags: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VendorScorecard {
+  id: string;
+  tenantId: string;
+  vendorId: string;
+  contractId?: string;
+  reviewPeriod: string;
+  qualityScore?: number;
+  deliveryScore?: number;
+  responsivenessScore?: number;
+  costScore?: number;
+  complianceScore?: number;
+  overallScore?: number;
+  strengths?: string;
+  weaknesses?: string;
+  improvementAreas?: string;
+  notes?: string;
+  slaMetrics?: Record<string, unknown>;
+  reviewedBy: string;
+  createdAt: string;
+}
+
+export interface ContractRenewal {
+  id: string;
+  contractId: string;
+  tenantId: string;
+  renewalType: string;
+  newStartDate?: string;
+  newEndDate?: string;
+  newValue?: number;
+  changeNotes?: string;
+  approvalChainId?: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface VendorSummary {
+  totalContracts: number;
+  activeContracts: number;
+  totalAnnualValue: number;
+  avgScore: number;
+}
+
+export interface ContractDashboard {
+  totalContracts: number;
+  activeValue: number;
+  expiringIn30: number;
+  expiringIn60: number;
+  expiringIn90: number;
+}
+
+/* =============================================================================
+   Document Vault Types
+   ============================================================================= */
+
+export interface VaultDocument {
+  id: string;
+  tenantId: string;
+  title: string;
+  description?: string;
+  fileKey: string;
+  contentType: string;
+  sizeBytes: number;
+  checksumSha256: string;
+  classification: string;
+  retentionUntil?: string;
+  tags: string[];
+  folderId?: string;
+  folderName?: string;
+  version: number;
+  parentDocumentId?: string;
+  isLatest: boolean;
+  lockedBy?: string;
+  lockedAt?: string;
+  status: string;
+  accessLevel: string;
+  uploadedBy: string;
+  uploaderName?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DocumentFolder {
+  id: string;
+  tenantId: string;
+  parentId?: string;
+  name: string;
+  description?: string;
+  path: string;
+  color?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  children?: DocumentFolder[];
+}
+
+export interface DocumentAccessLogEntry {
+  id: string;
+  documentId: string;
+  userId: string;
+  userName?: string;
+  action: string;
+  ipAddress?: string;
+  createdAt: string;
+}
+
+export interface DocumentShare {
+  id: string;
+  documentId: string;
+  sharedWithUserId?: string;
+  sharedWithUserName?: string;
+  sharedWithRole?: string;
+  permission: string;
+  sharedBy: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+export interface VaultStats {
+  totalDocuments: number;
+  totalSizeBytes: number;
+  byClassification: Record<string, number>;
+}
+
+/* =============================================================================
+   Workflow Automation Types
+   ============================================================================= */
+
+export type AutomationTriggerType = "event" | "schedule" | "condition";
+
+export interface AutomationRule {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  triggerType: AutomationTriggerType;
+  triggerConfig: Record<string, unknown>;
+  conditionConfig: Record<string, unknown>;
+  actions: Record<string, unknown>[];
+  maxExecutionsPerHour: number;
+  cooldownMinutes: number;
+  executionCount: number;
+  lastExecutedAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationExecution {
+  id: string;
+  ruleId: string;
+  ruleName?: string;
+  tenantId: string;
+  triggerEvent?: Record<string, unknown>;
+  entityType?: string;
+  entityId?: string;
+  actionsTaken: Record<string, unknown>[];
+  status: "success" | "partial" | "failed";
+  errorMessage?: string;
+  durationMs?: number;
+  executedAt: string;
+}
+
+export interface AutomationStats {
+  totalRules: number;
+  activeRules: number;
+  executionsToday: number;
+  failuresToday: number;
+}
+
+/* =============================================================================
+   Custom Fields Types
+   ============================================================================= */
+
+export type CustomFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "decimal"
+  | "boolean"
+  | "date"
+  | "datetime"
+  | "select"
+  | "multiselect"
+  | "url"
+  | "email"
+  | "phone"
+  | "user_reference";
+
+export interface CustomFieldDefinition {
+  id: string;
+  tenantId: string;
+  entityType: string;
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType: CustomFieldType;
+  description?: string;
+  isRequired: boolean;
+  isFilterable: boolean;
+  isVisibleInList: boolean;
+  displayOrder: number;
+  validationRules: Record<string, unknown>;
+  defaultValue?: string;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomFieldOption {
+  value: string;
+  label: string;
+}

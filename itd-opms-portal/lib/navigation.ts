@@ -46,6 +46,15 @@ import {
   AlertCircle,
   FileEdit,
   LogOut,
+  CheckSquare,
+  CalendarDays,
+  Thermometer,
+  DollarSign,
+  Store,
+  FolderOpen,
+  Zap,
+  SlidersHorizontal,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -154,6 +163,12 @@ export const navGroups: NavGroup[] = [
         icon: Target,
         permission: "governance.view",
       },
+      {
+        href: "/dashboard/governance/approvals",
+        label: "Approvals",
+        icon: CheckSquare,
+        permission: "approval.view",
+      },
     ],
   },
   {
@@ -193,6 +208,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/people/capacity",
         label: "Capacity",
         icon: Activity,
+        permission: "people.view",
+      },
+      {
+        href: "/dashboard/people/capacity/heatmap",
+        label: "Resource Heatmap",
+        icon: Thermometer,
         permission: "people.view",
       },
       {
@@ -252,6 +273,18 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/planning/pir",
         label: "PIR Reviews",
         icon: ClipboardCheck,
+        permission: "planning.view",
+      },
+      {
+        href: "/dashboard/planning/calendar",
+        label: "Change Calendar",
+        icon: CalendarDays,
+        permission: "planning.view",
+      },
+      {
+        href: "/dashboard/planning/budget",
+        label: "Budget Overview",
+        icon: DollarSign,
         permission: "planning.view",
       },
     ],
@@ -330,6 +363,18 @@ export const navGroups: NavGroup[] = [
         icon: FileBarChart,
         permission: "assets.view",
       },
+      {
+        href: "/dashboard/cmdb/vendors",
+        label: "Vendors",
+        icon: Store,
+        permission: "vendor.view",
+      },
+      {
+        href: "/dashboard/cmdb/contracts",
+        label: "Contracts",
+        icon: Handshake,
+        permission: "vendor.view",
+      },
     ],
   },
   {
@@ -352,6 +397,17 @@ export const navGroups: NavGroup[] = [
         label: "New Article",
         icon: PenSquare,
         permission: "knowledge.manage",
+      },
+    ],
+  },
+  {
+    label: "Document Vault",
+    items: [
+      {
+        href: "/dashboard/vault",
+        label: "Document Vault",
+        icon: FolderOpen,
+        permission: "documents.view",
       },
     ],
   },
@@ -458,6 +514,24 @@ export const navGroups: NavGroup[] = [
         label: "Platform Health",
         icon: Activity,
         permission: "system.view",
+      },
+      {
+        href: "/dashboard/system/workflows",
+        label: "Workflows",
+        icon: GitBranch,
+        permission: "approval.manage",
+      },
+      {
+        href: "/dashboard/system/automation",
+        label: "Automation",
+        icon: Zap,
+        permission: "automation.manage",
+      },
+      {
+        href: "/dashboard/system/custom-fields",
+        label: "Custom Fields",
+        icon: SlidersHorizontal,
+        permission: "custom_fields.manage",
       },
     ],
   },

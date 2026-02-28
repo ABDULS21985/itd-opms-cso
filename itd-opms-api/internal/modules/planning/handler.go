@@ -13,13 +13,15 @@ import (
 // It composes all sub-handlers for portfolios, projects, work-items,
 // milestones, risks/issues/change-requests, timeline views, and PIRs.
 type Handler struct {
-	portfolio *PortfolioHandler
-	project   *ProjectHandler
-	workItem  *WorkItemHandler
-	milestone *MilestoneHandler
-	risk      *RiskHandler
-	timeline  *TimelineHandler
-	pir       *PIRHandler
+	portfolio    *PortfolioHandler
+	project      *ProjectHandler
+	workItem     *WorkItemHandler
+	milestone    *MilestoneHandler
+	risk         *RiskHandler
+	timeline     *TimelineHandler
+	pir          *PIRHandler
+	budget       *BudgetHandler
+	costCategory *CostCategoryHandler
 }
 
 // NewHandler creates a new planning Handler with all sub-handlers wired up.
@@ -31,18 +33,22 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *m
 	timelineSvc := NewTimelineService(pool)
 	pirSvc := NewPIRService(pool, auditSvc)
 	documentSvc := NewDocumentService(pool, minioClient, minioCfg, auditSvc)
+	budgetSvc := NewBudgetService(pool, auditSvc)
 
 	projectHandler := NewProjectHandler(projectSvc)
 	projectHandler.doc = NewDocumentHandler(documentSvc)
+	projectHandler.budget = NewBudgetHandler(budgetSvc)
 
 	return &Handler{
-		portfolio: NewPortfolioHandler(portfolioSvc),
-		project:   projectHandler,
-		workItem:  NewWorkItemHandler(workItemSvc),
-		milestone: NewMilestoneHandler(workItemSvc),
-		risk:      NewRiskHandler(riskSvc),
-		timeline:  NewTimelineHandler(timelineSvc),
-		pir:       NewPIRHandler(pirSvc),
+		portfolio:    NewPortfolioHandler(portfolioSvc),
+		project:      projectHandler,
+		workItem:     NewWorkItemHandler(workItemSvc),
+		milestone:    NewMilestoneHandler(workItemSvc),
+		risk:         NewRiskHandler(riskSvc),
+		timeline:     NewTimelineHandler(timelineSvc),
+		pir:          NewPIRHandler(pirSvc),
+		budget:       NewBudgetHandler(budgetSvc),
+		costCategory: NewCostCategoryHandler(budgetSvc),
 	}
 }
 
@@ -77,5 +83,10 @@ func (h *Handler) Routes(r chi.Router) {
 	// Post-Implementation Reviews (FR-C016)
 	r.Route("/pir", func(r chi.Router) {
 		h.pir.Routes(r)
+	})
+
+	// Budget — cost categories & portfolio summary
+	r.Route("/budget", func(r chi.Router) {
+		h.costCategory.Routes(r)
 	})
 }

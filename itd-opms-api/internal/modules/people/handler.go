@@ -8,12 +8,13 @@ import (
 )
 
 // Handler is the top-level HTTP handler for the People & Workforce module.
-// It composes all sub-handlers for skills, checklists, rosters, and training.
+// It composes all sub-handlers for skills, checklists, rosters, training, and heatmap.
 type Handler struct {
 	skill     *SkillHandler
 	checklist *ChecklistHandler
 	roster    *RosterHandler
 	training  *TrainingHandler
+	heatmap   *HeatmapHandler
 }
 
 // NewHandler creates a new People Handler with all sub-handlers wired up.
@@ -22,12 +23,14 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 	checklistSvc := NewChecklistService(pool, auditSvc)
 	rosterSvc := NewRosterService(pool, auditSvc)
 	trainingSvc := NewTrainingService(pool, auditSvc)
+	heatmapSvc := NewHeatmapService(pool, auditSvc)
 
 	return &Handler{
 		skill:     NewSkillHandler(skillSvc),
 		checklist: NewChecklistHandler(checklistSvc),
 		roster:    NewRosterHandler(rosterSvc),
 		training:  NewTrainingHandler(trainingSvc),
+		heatmap:   NewHeatmapHandler(heatmapSvc),
 	}
 }
 
@@ -43,8 +46,11 @@ func (h *Handler) Routes(r chi.Router) {
 		h.checklist.Routes(r)
 	})
 
-	// Rosters, Leave Records, Capacity Allocations
-	h.roster.Routes(r) // mounts /rosters, /leave, /capacity
+	// Rosters, Leave Records, Capacity Allocations, and Heatmap
+	h.roster.Routes(r) // mounts /rosters, /leave, /capacity (basic CRUD)
+
+	// Capacity Heatmap & Enriched Allocations (mounted under /capacity via heatmap handler)
+	h.heatmap.MountRoutes(r) // adds /capacity/heatmap, /capacity/allocations
 
 	// Training Records
 	r.Route("/training", func(r chi.Router) {
