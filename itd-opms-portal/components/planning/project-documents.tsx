@@ -277,7 +277,7 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
   const { data: categoryCounts } = useProjectDocumentCategories(projectId);
 
   const documents = documentsResponse?.data ?? [];
-  const totalDocs = documentsResponse?.total ?? 0;
+  const totalDocs = documentsResponse?.meta?.totalItems ?? 0;
   const totalPages = Math.ceil(totalDocs / PAGE_LIMIT);
 
   /* ---- Mutations ---- */

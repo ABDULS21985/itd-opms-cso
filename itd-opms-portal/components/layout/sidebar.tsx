@@ -212,7 +212,7 @@ const navGroups: NavGroup[] = [
     label: "People",
     items: [
       {
-        href: "/dashboard/people/directory",
+        href: "/dashboard/people/roster",
         label: "Directory",
         icon: Users,
         permission: "people.view",
@@ -1163,7 +1163,7 @@ export function Sidebar({
           {/* Collapse toggle -- desktop only */}
           <button
             onClick={onToggleCollapse}
-            className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200 flex-shrink-0"
+            className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-all duration-200 flex-shrink-0"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
@@ -1191,7 +1191,7 @@ export function Sidebar({
             <div className="relative">
               <Search
                 size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"
               />
               <input
                 ref={searchInputRef}
@@ -1208,12 +1208,12 @@ export function Sidebar({
                     setSearchQuery("");
                     searchInputRef.current?.focus();
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-white transition-colors"
                 >
                   <X size={14} />
                 </button>
               ) : (
-                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 border border-[#A8893D]/20 rounded px-1 py-0.5 font-mono">
+                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 border border-[#A8893D]/20 rounded px-1 py-0.5 font-mono">
                   /
                 </kbd>
               )}
@@ -1227,7 +1227,7 @@ export function Sidebar({
                 // Focus search after expanding
                 setTimeout(() => searchInputRef.current?.focus(), 350);
               }}
-              className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-500 hover:text-gray-300 transition-all duration-200"
+              className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-300 hover:text-white transition-all duration-200"
               title="Search navigation"
             >
               <Search size={18} />
@@ -1255,18 +1255,18 @@ export function Sidebar({
                 <div className="px-3 py-8 text-center">
                   <Search
                     size={32}
-                    className="mx-auto text-gray-600 mb-3"
+                    className="mx-auto text-gray-400 mb-3"
                   />
                   <p className="text-sm text-gray-500">
                     No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Try a different search term
                   </p>
                 </div>
               ) : (
                 <>
-                  <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                  <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-300">
                     Results ({flatSearchResults.length})
                   </p>
                   <div className="space-y-0.5">
@@ -1290,20 +1290,20 @@ export function Sidebar({
                                 ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
                                 : focused
                                   ? "border-[#A8893D]/50 bg-white/5 text-white"
-                                  : "border-transparent text-gray-400 hover:bg-white/5 hover:text-white"
+                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
                             }
                           `}
                         >
                           <Icon
                             size={18}
-                            className={`flex-shrink-0 ${active ? "text-white" : "text-gray-500"}`}
+                            className={`flex-shrink-0 ${active ? "text-white" : "text-gray-300"}`}
                           />
                           <div className="flex-1 min-w-0">
                             <HighlightedText
                               text={result.item.label}
                               matchedIndices={result.matchedIndices}
                             />
-                            <span className="text-[10px] text-gray-600 ml-2">
+                            <span className="text-[10px] text-gray-400 ml-2">
                               {result.group}
                             </span>
                           </div>
@@ -1319,7 +1319,7 @@ export function Sidebar({
               {/* ------- Favorites section ------- */}
               {!collapsed && favorites.length > 0 && (
                 <div className="mb-3">
-                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
+                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
                     <Star size={10} className="text-[#C4A962]" />
                     Favorites
                   </p>
@@ -1340,7 +1340,7 @@ export function Sidebar({
                               ${
                                 active
                                   ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
-                                  : "border-transparent text-gray-400 hover:bg-white/5 hover:text-white"
+                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
                               }
                             `}
                           >
@@ -1367,7 +1367,7 @@ export function Sidebar({
                 <div className="mb-3">
                   <button
                     onClick={() => setRecentSectionOpen((v) => !v)}
-                    className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-500 flex items-center gap-1.5 hover:text-gray-400 transition-colors"
+                    className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5 hover:text-gray-200 transition-colors"
                   >
                     <Clock size={10} />
                     Recently Visited
@@ -1395,7 +1395,7 @@ export function Sidebar({
                               <Link
                                 key={recent.path}
                                 href={recent.path}
-                                className="flex items-center gap-2.5 rounded-xl text-xs text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all duration-200 px-3 py-1.5"
+                                className="flex items-center gap-2.5 rounded-xl text-xs text-gray-300 hover:text-white hover:bg-white/5 transition-all duration-200 px-3 py-1.5"
                               >
                                 <RecentIcon
                                   size={13}
@@ -1418,7 +1418,7 @@ export function Sidebar({
                 <div className="px-3 mb-2 flex items-center justify-end">
                   <button
                     onClick={cycleCollapseMode}
-                    className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors rounded px-1.5 py-0.5 hover:bg-white/5"
+                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-400 transition-colors rounded px-1.5 py-0.5 hover:bg-white/5"
                     title={collapseModeConfig[collapseMode].tooltip}
                   >
                     {(() => {
@@ -1454,20 +1454,20 @@ export function Sidebar({
                             ${
                               hasActiveItem
                                 ? "bg-gradient-to-r from-[#A8893D] to-[#C4A962] bg-clip-text text-transparent"
-                                : "text-gray-500 hover:text-gray-400"
+                                : "text-gray-300 hover:text-gray-100"
                             }
                           `}
                         >
                           <motion.span
                             animate={{ rotate: expanded ? 0 : -90 }}
                             transition={{ duration: dur }}
-                            className="flex-shrink-0 text-gray-600"
+                            className="flex-shrink-0 text-gray-400"
                           >
                             <ChevronDown size={11} />
                           </motion.span>
                           <span>{group.label}</span>
                           {!expanded && (
-                            <span className="text-[9px] text-gray-600 ml-1 font-normal">
+                            <span className="text-[9px] text-gray-400 ml-1 font-normal">
                               ({group.items.length})
                             </span>
                           )}
@@ -1480,7 +1480,7 @@ export function Sidebar({
                             ${
                               pinned
                                 ? "opacity-100 text-[#A8893D]"
-                                : "opacity-0 group-hover/header:opacity-100 text-gray-600 hover:text-gray-400"
+                                : "opacity-0 group-hover/header:opacity-100 text-gray-400 hover:text-gray-400"
                             }
                           `}
                           title={
@@ -1560,7 +1560,7 @@ export function Sidebar({
                                           ? "bg-[#A8893D]/15 text-white"
                                           : isFocused
                                             ? "bg-white/5 text-white"
-                                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                                            : "text-gray-200 hover:bg-white/5 hover:text-white"
                                       }
                                     `}
                                   >
@@ -1582,7 +1582,7 @@ export function Sidebar({
                                       className={`flex-shrink-0 transition-all duration-200 group-hover:${hoverClass} ${
                                         active
                                           ? "text-white"
-                                          : "text-gray-500 group-hover:text-gray-300"
+                                          : "text-gray-300 group-hover:text-white"
                                       }`}
                                     />
                                     <span className="flex-1 truncate">
@@ -1627,7 +1627,7 @@ export function Sidebar({
                                 ${
                                   active
                                     ? "bg-[#A8893D]/15 text-white"
-                                    : "text-gray-400 hover:bg-white/5 hover:text-white"
+                                    : "text-gray-200 hover:bg-white/5 hover:text-white"
                                 }
                               `}
                             >
@@ -1645,7 +1645,7 @@ export function Sidebar({
                                 className={`flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
                                   active
                                     ? "text-white"
-                                    : "text-gray-500 group-hover:text-gray-300"
+                                    : "text-gray-300 group-hover:text-white"
                                 }`}
                               />
                             </Link>
@@ -1662,7 +1662,7 @@ export function Sidebar({
                 <div className="mt-4 px-3">
                   <button
                     onClick={() => setWizardOpen(true)}
-                    className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                    className="text-xs text-gray-400 hover:text-gray-400 transition-colors"
                   >
                     {hiddenSectionCount} more section
                     {hiddenSectionCount > 1 ? "s" : ""} hidden
@@ -1709,7 +1709,7 @@ export function Sidebar({
               >
                 <Link
                   href="/dashboard/system/settings"
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors"
                   onClick={() => setUserMenuOpen(false)}
                 >
                   <User size={16} />
@@ -1717,7 +1717,7 @@ export function Sidebar({
                 </Link>
                 <Link
                   href="/dashboard/system/settings"
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors"
                   onClick={() => setUserMenuOpen(false)}
                 >
                   <HelpCircle size={16} />
@@ -1730,7 +1730,7 @@ export function Sidebar({
                     setWizardOpen(true);
                     setUserMenuOpen(false);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
                 >
                   <Layers size={16} />
                   Sidebar Layout
@@ -1790,7 +1790,7 @@ export function Sidebar({
         <div className={`px-3 pb-2 ${collapsed ? "lg:hidden" : ""}`}>
           <div className="flex items-center gap-1.5 px-2">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-medium text-gray-600">
+            <span className="text-[10px] font-medium text-gray-400">
               Development
             </span>
           </div>
@@ -1821,7 +1821,7 @@ export function Sidebar({
                 });
                 setContextMenu(null);
               }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors text-left"
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors text-left"
             >
               <Star
                 size={14}
