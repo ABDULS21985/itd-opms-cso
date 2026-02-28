@@ -980,3 +980,85 @@ func (s *WorkItemService) GetTimeSum(ctx context.Context, workItemID uuid.UUID) 
 
 	return total, nil
 }
+
+// ──────────────────────────────────────────────
+// Bulk Operations
+// ──────────────────────────────────────────────
+
+// workItemColumnForField maps a JSON field name to its database column name for work items.
+// Returns empty string if the field is not allowed for bulk update.
+func workItemColumnForField(field string) string {
+	switch field {
+	case "status":
+		return "status"
+	case "priority":
+		return "priority"
+	case "assigneeId":
+		return "assignee_id"
+	case "dueDate":
+		return "due_date"
+	default:
+		return ""
+	}
+}
+
+// BulkUpdateWorkItems updates multiple work items matching the given IDs with the provided field values.
+// Only allowed fields (status, priority, assigneeId, dueDate) are accepted.
+func (s *WorkItemService) BulkUpdateWorkItems(ctx context.Context, ids []uuid.UUID, fields map[string]string) (int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return 0, apperrors.Unauthorized("authentication required")
+	}
+
+	if len(ids) == 0 {
+		return 0, apperrors.BadRequest("ids must not be empty")
+	}
+
+	if len(fields) == 0 {
+		return 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	// Build dynamic SET clause.
+	setClauses := []string{}
+	args := []any{auth.TenantID, ids}
+	argIdx := 3
+
+	for field, value := range fields {
+		col := workItemColumnForField(field)
+		if col == "" {
+			return 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, argIdx))
+		args = append(args, value)
+		argIdx++
+	}
+
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
+	args = append(args, time.Now().UTC())
+
+	query := fmt.Sprintf(`
+		UPDATE work_items
+		SET %s
+		WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		joinWorkItemStrings(setClauses, ", "),
+	)
+
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, apperrors.Internal("failed to bulk update work items", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// joinWorkItemStrings joins a slice of strings with a separator.
+func joinWorkItemStrings(elems []string, sep string) string {
+	if len(elems) == 0 {
+		return ""
+	}
+	result := elems[0]
+	for _, e := range elems[1:] {
+		result += sep + e
+	}
+	return result
+}

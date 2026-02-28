@@ -1324,3 +1324,17 @@ export function useDownloadProjectDocument(
     },
   });
 }
+
+/**
+ * POST /planning/work-items/bulk/update - bulk update work items.
+ */
+export function useBulkUpdateWorkItems() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; fields: Record<string, unknown> }) =>
+      apiClient.post("/planning/work-items/bulk/update", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work-items"] });
+    },
+  });
+}

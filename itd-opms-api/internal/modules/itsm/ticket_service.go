@@ -1161,3 +1161,118 @@ func (s *TicketService) GetCSATStats(ctx context.Context) (CSATStats, error) {
 func strPtr(s string) *string {
 	return &s
 }
+
+// ──────────────────────────────────────────────
+// Bulk Operations
+// ──────────────────────────────────────────────
+
+// columnForField maps a JSON field name to its database column name for tickets.
+// Returns empty string if the field is not allowed for bulk update.
+func ticketColumnForField(field string) string {
+	switch field {
+	case "status":
+		return "status"
+	case "priority":
+		return "priority"
+	case "assigneeId":
+		return "assignee_id"
+	default:
+		return ""
+	}
+}
+
+// BulkUpdateTickets updates multiple tickets matching the given IDs with the provided field values.
+// Only allowed fields (status, priority, assigneeId) are accepted.
+func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, fields map[string]string) (int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return 0, apperrors.Unauthorized("authentication required")
+	}
+
+	if len(ids) == 0 {
+		return 0, apperrors.BadRequest("ids must not be empty")
+	}
+
+	if len(fields) == 0 {
+		return 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	// Build dynamic SET clause.
+	setClauses := []string{}
+	args := []any{auth.TenantID, ids}
+	argIdx := 3
+
+	for field, value := range fields {
+		col := ticketColumnForField(field)
+		if col == "" {
+			return 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, argIdx))
+		args = append(args, value)
+		argIdx++
+	}
+
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
+	args = append(args, time.Now().UTC())
+
+	query := fmt.Sprintf(`
+		UPDATE tickets
+		SET %s
+		WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		joinStrings(setClauses, ", "),
+	)
+
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, apperrors.Internal("failed to bulk update tickets", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// ListTicketsForExport returns up to maxRows tickets matching the given filters, for CSV export.
+func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priority, ticketType *string, maxRows int) ([]Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	if maxRows <= 0 || maxRows > 10000 {
+		maxRows = 10000
+	}
+
+	query := `
+		SELECT ` + ticketColumns + `
+		FROM tickets
+		WHERE tenant_id = $1
+			AND ($2::text IS NULL OR status = $2)
+			AND ($3::text IS NULL OR priority = $3)
+			AND ($4::text IS NULL OR type = $4)
+		ORDER BY created_at DESC
+		LIMIT $5`
+
+	rows, err := s.pool.Query(ctx, query, auth.TenantID, status, priority, ticketType, maxRows)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list tickets for export", err)
+	}
+	defer rows.Close()
+
+	tickets, err := scanTickets(rows)
+	if err != nil {
+		return nil, apperrors.Internal("failed to scan tickets for export", err)
+	}
+
+	return tickets, nil
+}
+
+// joinStrings joins a slice of strings with a separator.
+func joinStrings(elems []string, sep string) string {
+	if len(elems) == 0 {
+		return ""
+	}
+	result := elems[0]
+	for _, e := range elems[1:] {
+		result += sep + e
+	}
+	return result
+}

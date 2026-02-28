@@ -2,6 +2,7 @@ package planning
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -40,6 +41,9 @@ func (h *WorkItemHandler) Routes(r chi.Router) {
 	// Time entries
 	r.With(middleware.RequirePermission("planning.manage")).Post("/{id}/time-entries", h.LogTimeEntry)
 	r.With(middleware.RequirePermission("planning.view")).Get("/{id}/time-entries", h.ListTimeEntries)
+
+	// Bulk operations.
+	r.With(middleware.RequirePermission("planning.manage")).Post("/bulk/update", h.BulkUpdate)
 }
 
 // ListWorkItems handles GET / — returns a filtered, paginated list of work items.
@@ -369,6 +373,68 @@ func (h *WorkItemHandler) ListTimeEntries(w http.ResponseWriter, r *http.Request
 	}
 
 	types.OK(w, entries, nil)
+}
+
+// ──────────────────────────────────────────────
+// Bulk Operations
+// ──────────────────────────────────────────────
+
+// BulkUpdate handles POST /bulk/update — bulk updates multiple work items.
+func (h *WorkItemHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req struct {
+		IDs    []string          `json:"ids"`
+		Fields map[string]string `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "ids must not be empty")
+		return
+	}
+
+	if len(req.Fields) == 0 {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "fields must not be empty")
+		return
+	}
+
+	// Validate allowed fields.
+	allowedFields := map[string]bool{"status": true, "priority": true, "assigneeId": true, "dueDate": true}
+	for field := range req.Fields {
+		if !allowedFields[field] {
+			types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR",
+				fmt.Sprintf("field %q is not allowed for bulk update", field))
+			return
+		}
+	}
+
+	// Parse UUIDs.
+	ids := make([]uuid.UUID, 0, len(req.IDs))
+	for _, raw := range req.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST",
+				fmt.Sprintf("invalid UUID: %s", raw))
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	updated, err := h.svc.BulkUpdateWorkItems(r.Context(), ids, req.Fields)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]int64{"updated": updated, "failed": 0}, nil)
 }
 
 // ──────────────────────────────────────────────

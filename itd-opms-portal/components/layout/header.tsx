@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import { useTheme } from "@/providers/theme-provider";
 import { useBreadcrumbOverrides } from "@/providers/breadcrumb-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
+import { CommandPalette } from "@/components/shared/command-palette";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -202,7 +203,20 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const overrides = useBreadcrumbOverrides();
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Breadcrumbs — use page overrides when available, otherwise auto-generate from URL
   const breadcrumbs = useMemo(() => {
@@ -276,6 +290,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       <div className="flex items-center gap-2 lg:gap-3">
         {/* Search bar placeholder */}
         <button
+          onClick={() => setCommandPaletteOpen(true)}
           className="hidden md:flex items-center gap-2 px-3 py-2 bg-[var(--surface-1)] border border-[var(--border)] rounded-xl text-sm text-[var(--neutral-gray)] min-w-[200px] lg:min-w-[260px] cursor-pointer hover:border-[var(--primary)]/30 transition-colors"
         >
           <Search size={16} />
@@ -287,6 +302,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
 
         {/* Mobile search button */}
         <button
+          onClick={() => setCommandPaletteOpen(true)}
           className="md:hidden p-2 rounded-xl hover:bg-[var(--surface-2)] text-[var(--neutral-gray)] transition-colors"
           aria-label="Search"
         >
@@ -311,6 +327,12 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       <NotificationPanel
         open={notificationPanelOpen}
         onOpenChange={setNotificationPanelOpen}
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
       />
     </header>
   );

@@ -1,8 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 import {
   LayoutGrid,
   List,
@@ -15,6 +34,7 @@ import {
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useWorkItems, useWorkItemStatusCounts } from "@/hooks/use-planning";
+import { apiClient } from "@/lib/api-client";
 import type { WorkItem } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -143,6 +163,46 @@ function KanbanCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sortable Kanban Card (drag-and-drop wrapper)                       */
+/* ------------------------------------------------------------------ */
+
+function SortableKanbanCard({ item, onClick }: { item: WorkItem; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    data: { type: "card", status: item.status },
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <KanbanCard item={item} onClick={onClick} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Droppable Column                                                   */
+/* ------------------------------------------------------------------ */
+
+function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id, data: { type: "column", status: id } });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-h-[120px] flex flex-col gap-2 transition-all rounded-xl p-1 ${
+        isOver ? "ring-2 ring-[var(--primary)]/20" : ""
+      }`}
+      style={isOver ? { backgroundColor: "rgba(27,115,64,0.05)" } : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Kanban Board                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -150,57 +210,132 @@ function KanbanBoard({
   items,
   statusCounts,
   onCardClick,
+  onStatusChange,
 }: {
   items: WorkItem[];
   statusCounts: { status: string; count: number }[];
   onCardClick: (id: string) => void;
+  onStatusChange: (itemId: string, newStatus: string) => void;
 }) {
+  const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const columnItemsMap = useMemo(() => {
+    const map: Record<string, WorkItem[]> = {};
+    for (const col of KANBAN_COLUMNS) {
+      map[col.status] = items.filter(
+        (i) => i.status.toLowerCase() === col.status,
+      );
+    }
+    return map;
+  }, [items]);
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const { active } = event;
+      const found = items.find((i) => i.id === active.id);
+      setActiveItem(found ?? null);
+    },
+    [items],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveItem(null);
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeId = active.id as string;
+      const activeData = active.data.current as { type: string; status: string } | undefined;
+      const overData = over.data.current as { type: string; status: string } | undefined;
+
+      // Determine the target column status
+      let targetStatus: string | undefined;
+      if (overData?.type === "column") {
+        targetStatus = overData.status;
+      } else if (overData?.type === "card") {
+        targetStatus = overData.status;
+      }
+
+      if (!targetStatus) return;
+
+      const sourceStatus = activeData?.status?.toLowerCase();
+      if (sourceStatus === targetStatus) return;
+
+      onStatusChange(activeId, targetStatus);
+    },
+    [onStatusChange],
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
-      {KANBAN_COLUMNS.map((col) => {
-        const columnItems = items.filter(
-          (i) => i.status.toLowerCase() === col.status,
-        );
-        const countObj = statusCounts.find(
-          (c) => c.status.toLowerCase() === col.status,
-        );
-        const count = countObj?.count ?? columnItems.length;
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
+        {KANBAN_COLUMNS.map((col) => {
+          const columnItems = columnItemsMap[col.status] ?? [];
+          const countObj = statusCounts.find(
+            (c) => c.status.toLowerCase() === col.status,
+          );
+          const count = countObj?.count ?? columnItems.length;
 
-        return (
-          <div key={col.status} className="flex flex-col gap-3">
-            {/* Column Header */}
-            <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-1)] px-3 py-2">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: col.color }}
-              />
-              <span className="text-sm font-semibold text-[var(--text-primary)]">
-                {col.label}
-              </span>
-              <span className="ml-auto rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--neutral-gray)]">
-                {count}
-              </span>
-            </div>
-
-            {/* Column Body */}
-            <div className="flex flex-col gap-2 min-h-[120px]">
-              {columnItems.map((item) => (
-                <KanbanCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => onCardClick(item.id)}
+          return (
+            <div key={col.status} className="flex flex-col gap-3">
+              {/* Column Header */}
+              <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-1)] px-3 py-2">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: col.color }}
                 />
-              ))}
-              {columnItems.length === 0 && (
-                <div className="flex items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-8 text-xs text-[var(--neutral-gray)]">
-                  No items
-                </div>
-              )}
+                <span className="text-sm font-semibold text-[var(--text-primary)]">
+                  {col.label}
+                </span>
+                <span className="ml-auto rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--neutral-gray)]">
+                  {count}
+                </span>
+              </div>
+
+              {/* Column Body */}
+              <DroppableColumn id={col.status}>
+                <SortableContext
+                  items={columnItems.map((i) => i.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {columnItems.map((item) => (
+                    <SortableKanbanCard
+                      key={item.id}
+                      item={item}
+                      onClick={() => onCardClick(item.id)}
+                    />
+                  ))}
+                  {columnItems.length === 0 && (
+                    <div className="flex items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-8 text-xs text-[var(--neutral-gray)]">
+                      No items
+                    </div>
+                  )}
+                </SortableContext>
+              </DroppableColumn>
             </div>
+          );
+        })}
+      </div>
+
+      {/* Drag Overlay — ghost card shown while dragging */}
+      <DragOverlay>
+        {activeItem ? (
+          <div style={{ transform: "rotate(3deg)", opacity: 0.9 }}>
+            <KanbanCard item={activeItem} onClick={() => {}} />
           </div>
-        );
-      })}
-    </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -235,6 +370,34 @@ export default function WorkItemsPage() {
 
   const workItems = data?.data ?? [];
   const meta = data?.meta;
+
+  /* ---- Local items for optimistic drag-and-drop updates ---- */
+
+  const [localItems, setLocalItems] = useState<WorkItem[]>([]);
+  useEffect(() => {
+    setLocalItems(workItems);
+  }, [workItems]);
+
+  const updateWorkItemStatus = useCallback(
+    async (itemId: string, newStatus: string) => {
+      // Optimistic update
+      setLocalItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId ? { ...item, status: newStatus } : item,
+        ),
+      );
+      try {
+        await apiClient.put(`/planning/work-items/${itemId}`, {
+          status: newStatus,
+        });
+        toast.success("Status updated");
+      } catch {
+        setLocalItems(workItems); // Revert on failure
+        toast.error("Failed to update status");
+      }
+    },
+    [workItems],
+  );
 
   /* ---- Table Columns ---- */
 
@@ -458,11 +621,12 @@ export default function WorkItemsPage() {
       >
         {viewMode === "kanban" ? (
           <KanbanBoard
-            items={workItems}
+            items={localItems}
             statusCounts={statusCounts ?? []}
             onCardClick={(id) =>
               router.push(`/dashboard/planning/work-items/${id}`)
             }
+            onStatusChange={updateWorkItemStatus}
           />
         ) : (
           <DataTable

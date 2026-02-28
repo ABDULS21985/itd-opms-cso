@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -9,10 +9,19 @@ import {
   Filter,
   AlertTriangle,
   Clock,
+  CheckCircle,
+  UserCheck,
+  Download,
 } from "lucide-react";
-import { DataTable, type Column } from "@/components/shared/data-table";
+import { DataTable, type Column, type BulkAction } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { useTickets, useTicketStats } from "@/hooks/use-itsm";
+import { InlineSelect } from "@/components/shared/inline-edit";
+import { ExportDropdown } from "@/components/shared/export-dropdown";
+import { useTickets, useTicketStats, useBulkUpdateTickets } from "@/hooks/use-itsm";
+import { useAuth } from "@/providers/auth-provider";
+import { exportToCSV } from "@/lib/export-utils";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api-client";
 import type { Ticket } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -113,6 +122,7 @@ function getSLAColor(ticket: Ticket): { color: string; label: string } {
 
 export default function TicketsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
@@ -125,9 +135,52 @@ export default function TicketsPage() {
     type: type || undefined,
   });
   const { data: stats } = useTicketStats();
+  const bulkUpdate = useBulkUpdateTickets();
 
   const tickets = data?.data ?? [];
   const meta = data?.meta;
+
+  const hasManage = user?.permissions?.includes("*") || user?.permissions?.includes("itsm.manage");
+
+  const bulkActions: BulkAction[] = useMemo(() => [
+    {
+      id: "close",
+      label: "Close",
+      icon: CheckCircle,
+      onExecute: async (ids) => {
+        await bulkUpdate.mutateAsync({ ids, fields: { status: "closed" } });
+        toast.success(`${ids.length} ticket(s) closed`);
+      },
+    },
+    {
+      id: "assign",
+      label: "Assign to Me",
+      icon: UserCheck,
+      onExecute: async (ids) => {
+        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user?.id } });
+        toast.success(`${ids.length} ticket(s) assigned`);
+      },
+    },
+    {
+      id: "export",
+      label: "Export Selected",
+      icon: Download,
+      onExecute: (ids) => {
+        const selected = tickets.filter((t) => ids.includes(t.id));
+        exportToCSV(selected, exportColumns, "tickets-selected");
+        toast.success("Exported selected tickets");
+      },
+    },
+  ], [bulkUpdate, tickets, user?.id]);
+
+  const exportColumns = useMemo(() => [
+    { key: "ticketNumber", header: "Ticket #" },
+    { key: "title", header: "Title" },
+    { key: "type", header: "Type" },
+    { key: "priority", header: "Priority" },
+    { key: "status", header: "Status" },
+    { key: "createdAt", header: "Created", format: (v: any) => v ? new Date(v).toLocaleDateString() : "" },
+  ], []);
 
   /* ---- Columns ---- */
 
@@ -186,12 +239,23 @@ export default function TicketsPage() {
           text: "var(--neutral-gray)",
         };
         return (
-          <span
-            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold"
-            style={{ backgroundColor: color.bg, color: color.text }}
-          >
-            {getPriorityLabel(item.priority)}
-          </span>
+          <InlineSelect
+            value={item.priority}
+            options={TICKET_PRIORITIES.filter((p) => p.value).map((p) => ({ value: p.value, label: p.label }))}
+            onSave={async (newPriority) => {
+              await apiClient.put(`/itsm/tickets/${item.id}`, { priority: newPriority });
+              toast.success("Priority updated");
+            }}
+            renderValue={() => (
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold"
+                style={{ backgroundColor: color.bg, color: color.text }}
+              >
+                {getPriorityLabel(item.priority)}
+              </span>
+            )}
+            editable={!!hasManage}
+          />
         );
       },
     },
@@ -199,7 +263,18 @@ export default function TicketsPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      render: (item) => <StatusBadge status={item.status} />,
+      render: (item) => (
+        <InlineSelect
+          value={item.status}
+          options={TICKET_STATUSES.filter((s) => s.value).map((s) => ({ value: s.value, label: s.label }))}
+          onSave={async (newStatus) => {
+            await apiClient.post(`/itsm/tickets/${item.id}/transition`, { status: newStatus });
+            toast.success("Status updated");
+          }}
+          renderValue={() => <StatusBadge status={item.status} />}
+          editable={!!hasManage}
+        />
+      ),
     },
     {
       key: "assigneeId",
@@ -314,6 +389,18 @@ export default function TicketsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <ExportDropdown
+            data={tickets}
+            columns={exportColumns}
+            filename="tickets"
+            title="ITSM Tickets"
+            serverExportUrl="/itsm/tickets/export"
+            serverExportParams={{
+              ...(status ? { status } : {}),
+              ...(priority ? { priority } : {}),
+              ...(type ? { type } : {}),
+            }}
+          />
           <button
             type="button"
             onClick={() => setShowFilters((f) => !f)}
@@ -414,6 +501,8 @@ export default function TicketsPage() {
           data={tickets}
           keyExtractor={(item) => item.id}
           loading={isLoading}
+          selectable={!!hasManage}
+          bulkActions={hasManage ? bulkActions : undefined}
           emptyTitle="No tickets found"
           emptyDescription="Create your first ticket to get started."
           emptyAction={
