@@ -86,9 +86,9 @@ export function WaterfallChart({
             fontSize: 12,
             color: "var(--text-primary)",
           }}
-          formatter={(value: number, name: string) => {
+          formatter={(value, name) => {
             if (name === "invisible") return [null, null];
-            return [formatValue(value), "Amount"];
+            return [formatValue(Number(value)), "Amount"];
           }}
         />
         <ReferenceLine y={0} stroke="var(--border)" />

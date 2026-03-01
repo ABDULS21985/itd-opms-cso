@@ -213,7 +213,7 @@ export default function PortfolioAnalyticsPage() {
                     tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
                   <Tooltip contentStyle={{ backgroundColor: "var(--surface-1)", border: "1px solid var(--border)",
                     borderRadius: 8, fontSize: 12, color: "var(--text-primary)" }}
-                    formatter={(v: number) => `${(v / 1e6).toFixed(2)}M`} />
+                    formatter={(v) => `${(Number(v) / 1e6).toFixed(2)}M`} />
                   <Legend iconType="circle" iconSize={8} formatter={(v) => (
                     <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{v}</span>)} />
                   <Bar dataKey="Approved" fill="#3B82F6" radius={[4, 4, 0, 0]} animationDuration={600} />

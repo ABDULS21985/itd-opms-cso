@@ -262,7 +262,7 @@ export default function PortfolioBudgetPage() {
                   borderRadius: "8px",
                   fontSize: "13px",
                 }}
-                formatter={(value: number) => NGN_FULL.format(value)}
+                formatter={(value) => NGN_FULL.format(Number(value))}
               />
               <Legend />
               <Bar

@@ -48,10 +48,10 @@ export function DonutChart({
     );
   }
 
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius: ir, outerRadius: or, percent }: {
-    cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number;
-  }) => {
-    if (!showLabel || percent < 0.05) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderCustomLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius: ir, outerRadius: or, percent } = props;
+    if (!showLabel || !percent || percent < 0.05) return null;
     const RADIAN = Math.PI / 180;
     const radius = ir + (or - ir) * 0.5;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -97,9 +97,9 @@ export function DonutChart({
               fontSize: 12,
               color: "var(--text-primary)",
             }}
-            formatter={(value: number, name: string) => [
-              `${value} (${total > 0 ? ((value / total) * 100).toFixed(1) : 0}%)`,
-              name,
+            formatter={(value, name) => [
+              `${Number(value)} (${total > 0 ? ((Number(value) / total) * 100).toFixed(1) : 0}%)`,
+              String(name),
             ]}
           />
           {showLegend && (
