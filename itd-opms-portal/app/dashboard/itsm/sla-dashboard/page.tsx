@@ -6,9 +6,7 @@ import {
   Gauge,
   CheckCircle2,
   Clock,
-  AlertTriangle,
   ShieldCheck,
-  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSLAComplianceStats, useSLAPolicies } from "@/hooks/use-itsm";

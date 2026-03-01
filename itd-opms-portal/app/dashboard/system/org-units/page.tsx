@@ -945,7 +945,7 @@ export default function OrgUnitsPage() {
 
   const { data: treeNodes, isLoading } = useOrgTree();
   const createMutation = useCreateOrgUnit();
-  const updateMutation = useUpdateOrgUnit(undefined);
+  const _updateMutation = useUpdateOrgUnit(undefined);
   const moveMutation = useMoveOrgUnit();
   const deleteMutation = useDeleteOrgUnit();
 
