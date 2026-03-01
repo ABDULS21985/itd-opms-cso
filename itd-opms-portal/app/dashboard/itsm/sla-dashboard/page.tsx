@@ -8,7 +8,6 @@ import {
   Clock,
   ShieldCheck,
 } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
 import { useSLAComplianceStats, useSLAPolicies } from "@/hooks/use-itsm";
 import type { SLAPolicy } from "@/types";
 
@@ -155,8 +154,6 @@ function PolicyTargetsTable({ policy }: { policy: SLAPolicy }) {
 /* ------------------------------------------------------------------ */
 
 export default function SLADashboardPage() {
-  const { user } = useAuth();
-
   const { data: compliance, isLoading: complianceLoading } =
     useSLAComplianceStats();
   const { data: policiesData, isLoading: policiesLoading } =

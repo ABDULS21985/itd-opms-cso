@@ -10,7 +10,6 @@ import {
   CheckCircle,
   XCircle,
   UserPlus,
-  ArrowUpCircle,
   ArrowRightCircle,
   MessageSquare,
   History,

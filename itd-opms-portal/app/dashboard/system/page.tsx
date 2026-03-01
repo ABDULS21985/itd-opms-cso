@@ -18,7 +18,6 @@ import {
 } from "recharts";
 import {
   Users,
-  Shield,
   ScrollText,
   Settings,
   Activity,
@@ -29,7 +28,6 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  TrendingUp,
   RefreshCw,
   Download,
   Zap,
