@@ -1,0 +1,636 @@
+package reporting
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// ──────────────────────────────────────────────
+// Constant value tests
+// ──────────────────────────────────────────────
+
+func TestReportTypeConstants(t *testing.T) {
+	expected := map[string]string{
+		"ExecutivePack": "executive_pack",
+		"SLAReport":     "sla_report",
+		"AssetReport":   "asset_report",
+		"GRCReport":     "grc_report",
+		"PMOReport":     "pmo_report",
+		"Custom":        "custom",
+	}
+	actual := map[string]string{
+		"ExecutivePack": ReportTypeExecutivePack,
+		"SLAReport":     ReportTypeSLAReport,
+		"AssetReport":   ReportTypeAssetReport,
+		"GRCReport":     ReportTypeGRCReport,
+		"PMOReport":     ReportTypePMOReport,
+		"Custom":        ReportTypeCustom,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("ReportType%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+func TestRunStatusConstants(t *testing.T) {
+	expected := map[string]string{
+		"Pending":    "pending",
+		"Generating": "generating",
+		"Completed":  "completed",
+		"Failed":     "failed",
+	}
+	actual := map[string]string{
+		"Pending":    RunStatusPending,
+		"Generating": RunStatusGenerating,
+		"Completed":  RunStatusCompleted,
+		"Failed":     RunStatusFailed,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("RunStatus%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+func TestRunTriggerConstants(t *testing.T) {
+	expected := map[string]string{
+		"Manual":   "manual",
+		"Schedule": "schedule",
+		"System":   "system",
+	}
+	actual := map[string]string{
+		"Manual":   RunTriggerManual,
+		"Schedule": RunTriggerSchedule,
+		"System":   RunTriggerSystem,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("RunTrigger%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// JSON round-trip tests
+// ──────────────────────────────────────────────
+
+func TestReportDefinitionJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+	tenantID := uuid.New()
+	createdBy := uuid.New()
+	recipientID := uuid.New()
+	desc := "Monthly executive pack report"
+	cron := "0 0 1 * *"
+
+	original := ReportDefinition{
+		ID:           id,
+		TenantID:     tenantID,
+		Name:         "Executive Pack Report",
+		Description:  &desc,
+		Type:         ReportTypeExecutivePack,
+		Template:     json.RawMessage(`{"sections":["summary","tickets","projects"]}`),
+		ScheduleCron: &cron,
+		Recipients:   []uuid.UUID{recipientID},
+		IsActive:     true,
+		CreatedBy:    createdBy,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ReportDefinition: %v", err)
+	}
+
+	var decoded ReportDefinition
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ReportDefinition: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if decoded.TenantID != original.TenantID {
+		t.Errorf("TenantID mismatch: got %s, want %s", decoded.TenantID, original.TenantID)
+	}
+	if decoded.Name != original.Name {
+		t.Errorf("Name mismatch: got %q, want %q", decoded.Name, original.Name)
+	}
+	if decoded.Description == nil || *decoded.Description != desc {
+		t.Errorf("Description mismatch: got %v, want %q", decoded.Description, desc)
+	}
+	if decoded.Type != original.Type {
+		t.Errorf("Type mismatch: got %q, want %q", decoded.Type, original.Type)
+	}
+	if decoded.ScheduleCron == nil || *decoded.ScheduleCron != cron {
+		t.Errorf("ScheduleCron mismatch: got %v, want %q", decoded.ScheduleCron, cron)
+	}
+	if len(decoded.Recipients) != 1 {
+		t.Errorf("Recipients length mismatch: got %d, want 1", len(decoded.Recipients))
+	}
+	if decoded.IsActive != original.IsActive {
+		t.Errorf("IsActive mismatch: got %v, want %v", decoded.IsActive, original.IsActive)
+	}
+	if decoded.CreatedBy != original.CreatedBy {
+		t.Errorf("CreatedBy mismatch: got %s, want %s", decoded.CreatedBy, original.CreatedBy)
+	}
+}
+
+func TestReportDefinitionJSON_FieldNames(t *testing.T) {
+	def := ReportDefinition{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Name:      "Test",
+		Type:      ReportTypeCustom,
+		Template:  json.RawMessage(`{}`),
+		IsActive:  true,
+		CreatedBy: uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(def)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "name", "description", "type", "template",
+		"scheduleCron", "recipients", "isActive", "createdBy",
+		"createdAt", "updatedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized ReportDefinition", field)
+		}
+	}
+}
+
+func TestReportRunJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+	defID := uuid.New()
+	tenantID := uuid.New()
+	docID := uuid.New()
+	errMsg := "timeout"
+
+	original := ReportRun{
+		ID:            id,
+		DefinitionID:  defID,
+		TenantID:      tenantID,
+		Status:        RunStatusFailed,
+		TriggerSource: RunTriggerManual,
+		ScheduledFor:  &now,
+		GeneratedAt:   &now,
+		CompletedAt:   &now,
+		DocumentID:    &docID,
+		DataSnapshot:  json.RawMessage(`{"key":"value"}`),
+		ErrorMessage:  &errMsg,
+		CreatedAt:     now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ReportRun: %v", err)
+	}
+
+	var decoded ReportRun
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ReportRun: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if decoded.DefinitionID != original.DefinitionID {
+		t.Errorf("DefinitionID mismatch: got %s, want %s", decoded.DefinitionID, original.DefinitionID)
+	}
+	if decoded.Status != original.Status {
+		t.Errorf("Status mismatch: got %q, want %q", decoded.Status, original.Status)
+	}
+	if decoded.TriggerSource != original.TriggerSource {
+		t.Errorf("TriggerSource mismatch: got %q, want %q", decoded.TriggerSource, original.TriggerSource)
+	}
+	if decoded.DocumentID == nil || *decoded.DocumentID != docID {
+		t.Errorf("DocumentID mismatch: got %v, want %v", decoded.DocumentID, &docID)
+	}
+	if decoded.ErrorMessage == nil || *decoded.ErrorMessage != errMsg {
+		t.Errorf("ErrorMessage mismatch: got %v, want %q", decoded.ErrorMessage, errMsg)
+	}
+	if decoded.ScheduledFor == nil {
+		t.Error("ScheduledFor should not be nil")
+	}
+	if decoded.GeneratedAt == nil {
+		t.Error("GeneratedAt should not be nil")
+	}
+	if decoded.CompletedAt == nil {
+		t.Error("CompletedAt should not be nil")
+	}
+}
+
+func TestDashboardCacheJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+	tenantID := uuid.New()
+	expiresAt := now.Add(5 * time.Minute)
+
+	original := DashboardCache{
+		ID:        id,
+		TenantID:  tenantID,
+		CacheKey:  "executive_summary:tenant1",
+		Data:      json.RawMessage(`{"openTickets":42}`),
+		ExpiresAt: expiresAt,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal DashboardCache: %v", err)
+	}
+
+	var decoded DashboardCache
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal DashboardCache: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if decoded.CacheKey != original.CacheKey {
+		t.Errorf("CacheKey mismatch: got %q, want %q", decoded.CacheKey, original.CacheKey)
+	}
+}
+
+func TestSavedSearchJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+	tenantID := uuid.New()
+	userID := uuid.New()
+
+	original := SavedSearch{
+		ID:          id,
+		TenantID:    tenantID,
+		UserID:      userID,
+		Query:       "server outage",
+		EntityTypes: []string{"ticket", "article"},
+		IsSaved:     true,
+		LastUsedAt:  now,
+		CreatedAt:   now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal SavedSearch: %v", err)
+	}
+
+	var decoded SavedSearch
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal SavedSearch: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if decoded.TenantID != original.TenantID {
+		t.Errorf("TenantID mismatch: got %s, want %s", decoded.TenantID, original.TenantID)
+	}
+	if decoded.UserID != original.UserID {
+		t.Errorf("UserID mismatch: got %s, want %s", decoded.UserID, original.UserID)
+	}
+	if decoded.Query != original.Query {
+		t.Errorf("Query mismatch: got %q, want %q", decoded.Query, original.Query)
+	}
+	if len(decoded.EntityTypes) != 2 {
+		t.Errorf("EntityTypes length mismatch: got %d, want 2", len(decoded.EntityTypes))
+	}
+	if decoded.IsSaved != original.IsSaved {
+		t.Errorf("IsSaved mismatch: got %v, want %v", decoded.IsSaved, original.IsSaved)
+	}
+}
+
+func TestSavedSearchJSON_FieldNames(t *testing.T) {
+	search := SavedSearch{
+		ID:         uuid.New(),
+		TenantID:   uuid.New(),
+		UserID:     uuid.New(),
+		Query:      "test",
+		IsSaved:    false,
+		LastUsedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(search)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "userId", "query", "entityTypes",
+		"isSaved", "lastUsedAt", "createdAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized SavedSearch", field)
+		}
+	}
+}
+
+func TestExecutiveSummaryJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	tenantID := uuid.New()
+
+	original := ExecutiveSummary{
+		TenantID:                   tenantID,
+		ActivePolicies:             12,
+		OverdueActions:             3,
+		PendingAttestations:        5,
+		AvgOKRProgress:             0.72,
+		OpenTickets:                45,
+		CriticalTickets:            2,
+		OpenTicketsP1:              2,
+		OpenTicketsP2:              8,
+		OpenTicketsP3:              20,
+		OpenTicketsP4:              15,
+		SLACompliancePct:           95.5,
+		MTTRMinutes:                120.3,
+		MTTAMinutes:                15.7,
+		BacklogOver30Days:          7,
+		ActiveProjects:             10,
+		ProjectsRAGGreen:           6,
+		ProjectsRAGAmber:           3,
+		ProjectsRAGRed:             1,
+		OnTimeDeliveryPct:          85.0,
+		MilestoneBurnDownPct:       60.5,
+		ActiveAssets:               500,
+		AssetCountsByType:          map[string]int{"laptop": 200, "server": 50, "network": 100},
+		AssetCountsByStatus:        map[string]int{"active": 400, "retired": 100},
+		OverDeployedLicenses:       5,
+		LicenseCompliancePct:       98.2,
+		WarrantiesExpiring90Days:   12,
+		HighRisks:                  3,
+		CriticalRisks:              1,
+		AuditReadinessScore:        87.5,
+		AccessReviewCompletionPct:  92.0,
+		TeamCapacityUtilizationPct: 78.3,
+		OverdueTrainingCerts:       4,
+		ExpiringCerts:              8,
+		OpenP1Incidents:            2,
+		SLABreaches24h:             1,
+		RefreshedAt:                now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ExecutiveSummary: %v", err)
+	}
+
+	var decoded ExecutiveSummary
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ExecutiveSummary: %v", err)
+	}
+
+	if decoded.TenantID != original.TenantID {
+		t.Errorf("TenantID mismatch: got %s, want %s", decoded.TenantID, original.TenantID)
+	}
+	if decoded.ActivePolicies != original.ActivePolicies {
+		t.Errorf("ActivePolicies mismatch: got %d, want %d", decoded.ActivePolicies, original.ActivePolicies)
+	}
+	if decoded.OpenTickets != original.OpenTickets {
+		t.Errorf("OpenTickets mismatch: got %d, want %d", decoded.OpenTickets, original.OpenTickets)
+	}
+	if decoded.CriticalTickets != original.CriticalTickets {
+		t.Errorf("CriticalTickets mismatch: got %d, want %d", decoded.CriticalTickets, original.CriticalTickets)
+	}
+	if decoded.SLACompliancePct != original.SLACompliancePct {
+		t.Errorf("SLACompliancePct mismatch: got %f, want %f", decoded.SLACompliancePct, original.SLACompliancePct)
+	}
+	if decoded.MTTRMinutes != original.MTTRMinutes {
+		t.Errorf("MTTRMinutes mismatch: got %f, want %f", decoded.MTTRMinutes, original.MTTRMinutes)
+	}
+	if decoded.ActiveProjects != original.ActiveProjects {
+		t.Errorf("ActiveProjects mismatch: got %d, want %d", decoded.ActiveProjects, original.ActiveProjects)
+	}
+	if decoded.ProjectsRAGGreen != original.ProjectsRAGGreen {
+		t.Errorf("ProjectsRAGGreen mismatch: got %d, want %d", decoded.ProjectsRAGGreen, original.ProjectsRAGGreen)
+	}
+	if decoded.ActiveAssets != original.ActiveAssets {
+		t.Errorf("ActiveAssets mismatch: got %d, want %d", decoded.ActiveAssets, original.ActiveAssets)
+	}
+	if len(decoded.AssetCountsByType) != 3 {
+		t.Errorf("AssetCountsByType length mismatch: got %d, want 3", len(decoded.AssetCountsByType))
+	}
+	if len(decoded.AssetCountsByStatus) != 2 {
+		t.Errorf("AssetCountsByStatus length mismatch: got %d, want 2", len(decoded.AssetCountsByStatus))
+	}
+	if decoded.HighRisks != original.HighRisks {
+		t.Errorf("HighRisks mismatch: got %d, want %d", decoded.HighRisks, original.HighRisks)
+	}
+	if decoded.CriticalRisks != original.CriticalRisks {
+		t.Errorf("CriticalRisks mismatch: got %d, want %d", decoded.CriticalRisks, original.CriticalRisks)
+	}
+	if decoded.OpenP1Incidents != original.OpenP1Incidents {
+		t.Errorf("OpenP1Incidents mismatch: got %d, want %d", decoded.OpenP1Incidents, original.OpenP1Incidents)
+	}
+	if decoded.SLABreaches24h != original.SLABreaches24h {
+		t.Errorf("SLABreaches24h mismatch: got %d, want %d", decoded.SLABreaches24h, original.SLABreaches24h)
+	}
+}
+
+func TestExecutiveSummaryJSON_FieldNames(t *testing.T) {
+	summary := ExecutiveSummary{
+		TenantID:    uuid.New(),
+		RefreshedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"tenantId", "activePolicies", "overdueActions", "pendingAttestations",
+		"avgOkrProgress", "openTickets", "criticalTickets",
+		"openTicketsP1", "openTicketsP2", "openTicketsP3", "openTicketsP4",
+		"slaCompliancePct", "mttrMinutes", "mttaMinutes", "backlogOver30Days",
+		"activeProjects", "projectsRagGreen", "projectsRagAmber", "projectsRagRed",
+		"onTimeDeliveryPct", "milestoneBurnDownPct",
+		"activeAssets", "assetCountsByType", "assetCountsByStatus",
+		"overDeployedLicenses", "licenseCompliancePct", "warrantiesExpiring90Days",
+		"highRisks", "criticalRisks", "auditReadinessScore", "accessReviewCompletionPct",
+		"teamCapacityUtilizationPct", "overdueTrainingCerts", "expiringCerts",
+		"openP1Incidents", "slaBreaches24h", "refreshedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized ExecutiveSummary", field)
+		}
+	}
+}
+
+func TestChartDataPointJSON_RoundTrip(t *testing.T) {
+	original := ChartDataPoint{
+		Label: "P1_critical",
+		Value: 5,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ChartDataPoint: %v", err)
+	}
+
+	var decoded ChartDataPoint
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ChartDataPoint: %v", err)
+	}
+
+	if decoded.Label != original.Label {
+		t.Errorf("Label mismatch: got %q, want %q", decoded.Label, original.Label)
+	}
+	if decoded.Value != original.Value {
+		t.Errorf("Value mismatch: got %d, want %d", decoded.Value, original.Value)
+	}
+}
+
+func TestSLAComplianceRateJSON_RoundTrip(t *testing.T) {
+	original := SLAComplianceRate{Rate: 95.7}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal SLAComplianceRate: %v", err)
+	}
+
+	var decoded SLAComplianceRate
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal SLAComplianceRate: %v", err)
+	}
+
+	if decoded.Rate != original.Rate {
+		t.Errorf("Rate mismatch: got %f, want %f", decoded.Rate, original.Rate)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Request type JSON tests
+// ──────────────────────────────────────────────
+
+func TestCreateReportDefinitionRequestJSON_RoundTrip(t *testing.T) {
+	recipientID := uuid.New()
+	desc := "Monthly SLA report"
+	cron := "0 0 * * 1"
+
+	original := CreateReportDefinitionRequest{
+		Name:         "SLA Report",
+		Description:  &desc,
+		Type:         ReportTypeSLAReport,
+		Template:     json.RawMessage(`{"format":"pdf"}`),
+		ScheduleCron: &cron,
+		Recipients:   []uuid.UUID{recipientID},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded CreateReportDefinitionRequest
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.Name != original.Name {
+		t.Errorf("Name mismatch: got %q, want %q", decoded.Name, original.Name)
+	}
+	if decoded.Type != original.Type {
+		t.Errorf("Type mismatch: got %q, want %q", decoded.Type, original.Type)
+	}
+	if decoded.Description == nil || *decoded.Description != desc {
+		t.Errorf("Description mismatch")
+	}
+	if decoded.ScheduleCron == nil || *decoded.ScheduleCron != cron {
+		t.Errorf("ScheduleCron mismatch")
+	}
+	if len(decoded.Recipients) != 1 {
+		t.Errorf("Recipients length mismatch: got %d, want 1", len(decoded.Recipients))
+	}
+}
+
+func TestCreateSavedSearchRequestJSON_RoundTrip(t *testing.T) {
+	original := CreateSavedSearchRequest{
+		Query:       "network outage",
+		EntityTypes: []string{"ticket", "project"},
+		IsSaved:     true,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded CreateSavedSearchRequest
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.Query != original.Query {
+		t.Errorf("Query mismatch: got %q, want %q", decoded.Query, original.Query)
+	}
+	if len(decoded.EntityTypes) != 2 {
+		t.Errorf("EntityTypes length mismatch: got %d, want 2", len(decoded.EntityTypes))
+	}
+	if decoded.IsSaved != original.IsSaved {
+		t.Errorf("IsSaved mismatch: got %v, want %v", decoded.IsSaved, original.IsSaved)
+	}
+}
+
+func TestReportDefinitionJSON_NilOptionalFields(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	original := ReportDefinition{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Name:      "Minimal",
+		Type:      ReportTypeCustom,
+		Template:  json.RawMessage(`{}`),
+		IsActive:  false,
+		CreatedBy: uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded ReportDefinition
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.Description != nil {
+		t.Errorf("expected nil Description, got %v", decoded.Description)
+	}
+	if decoded.ScheduleCron != nil {
+		t.Errorf("expected nil ScheduleCron, got %v", decoded.ScheduleCron)
+	}
+}
