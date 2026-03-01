@@ -179,12 +179,14 @@ export default function ExecutiveAnalyticsPage() {
   const { data: milestonesRaw, isLoading: milestonesLoading } = useMilestones();
 
   // Normalise paginated / array responses
-  const projects = useMemo<Project[]>(() => {
-    if (!projectsRaw) return [];
-    if (Array.isArray(projectsRaw)) return projectsRaw;
-    if ("data" in projectsRaw && Array.isArray((projectsRaw as { data: Project[] }).data))
-      return (projectsRaw as { data: Project[] }).data;
-    return [];
+  const { items: projects, totalFromMeta: projectsTotalFromMeta } = useMemo<{ items: Project[]; totalFromMeta: number | null }>(() => {
+    if (!projectsRaw) return { items: [], totalFromMeta: null };
+    if (Array.isArray(projectsRaw)) return { items: projectsRaw, totalFromMeta: null };
+    if ("data" in projectsRaw && Array.isArray((projectsRaw as { data: Project[]; meta?: { total?: number; totalItems?: number } }).data)) {
+      const typed = projectsRaw as { data: Project[]; meta?: { total?: number; totalItems?: number } };
+      return { items: typed.data, totalFromMeta: typed.meta?.total ?? typed.meta?.totalItems ?? null };
+    }
+    return { items: [], totalFromMeta: null };
   }, [projectsRaw]);
 
   const risks = useMemo<Risk[]>(() => {
@@ -212,7 +214,7 @@ export default function ExecutiveAnalyticsPage() {
   const riskHeatData = useMemo(() => computeRiskHeatMap(risks), [risks]);
   const milestoneTrend = useMemo(() => computeMilestoneTrend(milestones), [milestones]);
 
-  const totalProjects = projects.length;
+  const totalProjects = projectsTotalFromMeta ?? projects.length;
   const completedProjects = projects.filter((p) => p.status === "completed").length;
   const avgCompletion = totalProjects > 0
     ? Math.round(projects.reduce((s, p) => s + (p.completionPct || 0), 0) / totalProjects) : 0;

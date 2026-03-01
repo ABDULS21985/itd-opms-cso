@@ -10,6 +10,8 @@ import {
   FileText,
   Timer,
   ClipboardList,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   useProjects,
@@ -61,6 +63,8 @@ const RAG_COLORS: Record<string, string> = {
 export default function ProjectPerformancePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [ragFilter, setRagFilter] = useState("");
+  const [tablePage, setTablePage] = useState(1);
+  const tablePageSize = 15;
 
   const { data: projectsRaw, isLoading: projectsLoading } = useProjects(1, 200, undefined, statusFilter || undefined, ragFilter || undefined);
   const { data: workItemsRaw, isLoading: workItemsLoading } = useWorkItems(1, 500);
@@ -141,18 +145,18 @@ export default function ProjectPerformancePage() {
     return projects
       .filter((p) => (p.budgetApproved || 0) > 0)
       .map((p) => ({
-        name: p.code || p.title.substring(0, 20),
+        name: p.title || p.code || "Untitled",
         value: p.budgetApproved || 0,
       }));
   }, [projects]);
 
   // Work item velocity by project
   const workItemVelocity = useMemo(() => {
-    const projectMap: Record<string, { name: string; completed: number; total: number }> = {};
+    const projectMap: Record<string, { id: string; name: string; completed: number; total: number }> = {};
     for (const wi of workItems) {
       if (!projectMap[wi.projectId]) {
         const proj = projects.find((p) => p.id === wi.projectId);
-        projectMap[wi.projectId] = { name: proj?.code || wi.projectId.substring(0, 8), completed: 0, total: 0 };
+        projectMap[wi.projectId] = { id: wi.projectId, name: proj?.title || proj?.code || wi.projectId.substring(0, 8), completed: 0, total: 0 };
       }
       projectMap[wi.projectId].total++;
       if (wi.status === "done" || wi.status === "completed") projectMap[wi.projectId].completed++;
@@ -283,8 +287,11 @@ export default function ProjectPerformancePage() {
             : (
               <div className="space-y-2 max-h-52 overflow-y-auto">
                 {workItemVelocity.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <span className="text-[10px] text-[var(--text-secondary)] w-16 truncate">{item.name}</span>
+                  <div key={item.id} className="flex items-center gap-2">
+                    <Link href={`/dashboard/planning/projects/${item.id}`}
+                      className="text-[10px] text-[var(--text-secondary)] w-16 truncate hover:text-[var(--primary)] hover:underline transition-colors">
+                      {item.name}
+                    </Link>
                     <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
                       <motion.div className="h-full rounded-full bg-[#22C55E]"
                         initial={{ width: 0 }} animate={{ width: `${item.total > 0 ? (item.completed / item.total) * 100 : 0}%` }}
@@ -319,11 +326,16 @@ export default function ProjectPerformancePage() {
               </tr>
             </thead>
             <tbody>
-              {projects.slice(0, 15).map((p) => {
+              {projects.slice((tablePage - 1) * tablePageSize, tablePage * tablePageSize).map((p) => {
                 const budgetPct = p.budgetApproved ? Math.round(((p.budgetSpent || 0) / p.budgetApproved) * 100) : 0;
                 return (
                   <tr key={p.id} className="border-b hover:bg-[var(--surface-1)] transition-colors" style={{ borderColor: "var(--border)" }}>
-                    <td className="py-2 px-3 font-medium text-[var(--text-primary)]">{p.code || p.title}</td>
+                    <td className="py-2 px-3 font-medium">
+                      <Link href={`/dashboard/planning/projects/${p.id}`}
+                        className="text-[var(--text-primary)] hover:text-[var(--primary)] hover:underline transition-colors">
+                        {p.title || p.code}
+                      </Link>
+                    </td>
                     <td className="py-2 px-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-white"
                         style={{ backgroundColor: STATUS_COLORS[p.status] || "#9CA3AF" }}>
@@ -353,6 +365,39 @@ export default function ProjectPerformancePage() {
           </table>
           {projects.length === 0 && !isLoading && (
             <p className="text-xs text-[var(--text-muted)] text-center py-8">No projects found</p>
+          )}
+          {projects.length > tablePageSize && (
+            <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                Showing {(tablePage - 1) * tablePageSize + 1}–{Math.min(tablePage * tablePageSize, projects.length)} of {projects.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                  disabled={tablePage === 1}
+                  className="p-1 rounded-md hover:bg-[var(--surface-2)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} className="text-[var(--text-secondary)]" />
+                </button>
+                {Array.from({ length: Math.ceil(projects.length / tablePageSize) }, (_, i) => i + 1).map((pg) => (
+                  <button key={pg} onClick={() => setTablePage(pg)}
+                    className={`w-6 h-6 rounded-md text-[11px] font-medium transition-colors ${
+                      pg === tablePage
+                        ? "bg-[var(--primary)] text-white"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"
+                    }`}>
+                    {pg}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setTablePage((p) => Math.min(Math.ceil(projects.length / tablePageSize), p + 1))}
+                  disabled={tablePage >= Math.ceil(projects.length / tablePageSize)}
+                  className="p-1 rounded-md hover:bg-[var(--surface-2)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={14} className="text-[var(--text-secondary)]" />
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </ChartCard>

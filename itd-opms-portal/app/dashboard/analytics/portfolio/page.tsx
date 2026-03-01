@@ -60,10 +60,10 @@ export default function PortfolioAnalyticsPage() {
     return [];
   }, [portfoliosRaw]);
 
-  const activePortfolioId = selectedPortfolioId || portfolios[0]?.id;
+  const activePortfolioId = selectedPortfolioId || undefined;
 
   const { data: analytics, isLoading: analyticsLoading } = usePortfolioAnalytics(activePortfolioId);
-  const { data: projectsRaw, isLoading: projectsLoading } = useProjects(1, 100, activePortfolioId);
+  const { data: projectsRaw, isLoading: projectsLoading } = useProjects(1, 200, activePortfolioId);
 
   const projects = useMemo<Project[]>(() => {
     if (!projectsRaw) return [];
