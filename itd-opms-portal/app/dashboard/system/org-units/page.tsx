@@ -1185,7 +1185,7 @@ export default function OrgUnitsPage() {
       {/* Move Unit Dialog */}
       {moveTarget && (
         <MoveUnitDialog
-          open={moveTarget !== null}
+          open={true}
           onClose={() => setMoveTarget(null)}
           onSubmit={handleMove}
           loading={moveMutation.isPending}
