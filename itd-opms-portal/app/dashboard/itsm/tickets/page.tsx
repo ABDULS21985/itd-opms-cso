@@ -63,17 +63,6 @@ const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
   P4_low: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  new: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
-  assigned: { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" },
-  in_progress: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
-  pending_user: { bg: "rgba(249, 115, 22, 0.1)", text: "#F97316" },
-  pending_vendor: { bg: "rgba(249, 115, 22, 0.1)", text: "#F97316" },
-  resolved: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" },
-  closed: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280" },
-  cancelled: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
-};
-
 function getPriorityLabel(priority: string): string {
   const map: Record<string, string> = {
     P1_critical: "P1",
