@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -86,7 +86,6 @@ function LevelBadge({ level }: { level: string }) {
 
 export default function OKRDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const okrId = params.id as string;
 
   const { data: okr, isLoading } = useOKR(okrId);

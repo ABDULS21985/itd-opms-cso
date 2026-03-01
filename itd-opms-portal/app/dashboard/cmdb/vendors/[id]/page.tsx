@@ -13,7 +13,6 @@ import {
   FileText,
   DollarSign,
   Star,
-  TrendingUp,
   Calendar,
   ExternalLink,
 } from "lucide-react";
@@ -39,7 +38,6 @@ import {
   useVendorScorecards,
   type Vendor,
   type Contract,
-  type VendorScorecard,
 } from "@/hooks/use-vendors";
 import { apiClient } from "@/lib/api-client";
 import { useQuery } from "@tanstack/react-query";
@@ -331,7 +329,7 @@ function OverviewTab({ vendor }: { vendor: Vendor }) {
 
 function ContractsTab({ vendorId }: { vendorId: string }) {
   const router = useRouter();
-  const [contractPage, setContractPage] = useState(1);
+  const [contractPage, _setContractPage] = useState(1);
   const { data, isLoading } = useVendorContracts(vendorId, contractPage);
   const contracts = data?.data ?? [];
 

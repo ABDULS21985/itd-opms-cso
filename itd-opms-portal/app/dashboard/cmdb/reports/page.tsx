@@ -6,16 +6,10 @@ import {
   Package,
   FileKey,
   Shield,
-  Server,
-  Monitor,
-  Cloud,
-  HardDrive,
-  Network as NetworkIcon,
   CheckCircle,
   XCircle,
   AlertTriangle,
   Clock,
-  Loader2,
 } from "lucide-react";
 import {
   useAssetStats,

@@ -161,7 +161,7 @@ export default function CollaborationDashboardPage() {
   const { data: projectsRaw, isLoading: projectsLoading } = useProjects(1, 200);
   const { data: risksRaw, isLoading: risksLoading } = useRisks(1, 200);
   const { data: issuesRaw, isLoading: issuesLoading } = useIssues(1, 200);
-  const { data: summary } = useExecutiveSummary();
+  const { data: _summary } = useExecutiveSummary();
 
   // Normalise paginated / array responses
   const projects = useMemo<Project[]>(() => {

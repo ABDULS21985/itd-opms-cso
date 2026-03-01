@@ -12,12 +12,10 @@ import {
   HardDrive,
   Globe,
   Link as LinkIcon,
-  ChevronDown,
-  ChevronUp,
   Loader2,
 } from "lucide-react";
 import { useCMDBItems, useCMDBRelationships } from "@/hooks/use-cmdb";
-import type { CMDBItem, CMDBRelationship } from "@/types";
+import type { CMDBItem } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */

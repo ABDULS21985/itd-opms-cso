@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GitBranch, Plus, Pencil, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";

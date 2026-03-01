@@ -48,7 +48,7 @@ export default function GovernanceCompliancePage() {
   const { data: summary, isLoading: summaryLoading } = useExecutiveSummary();
   const { data: ticketsByPriority, isLoading: ticketsPriorityLoading } = useTicketsByPriority();
   const { data: ticketsByStatus, isLoading: ticketsStatusLoading } = useTicketsByStatus();
-  const { data: slaCompliance, isLoading: slaLoading } = useSLACompliance();
+  const { data: slaCompliance, isLoading: _slaLoading } = useSLACompliance();
   const { data: assetsByType, isLoading: assetsTypeLoading } = useAssetsByType();
   const { data: assetsByStatus, isLoading: assetsStatusLoading } = useAssetsByStatus();
 
