@@ -160,7 +160,7 @@ func (s *WorkItemService) GetWorkItem(ctx context.Context, id uuid.UUID) (WorkIt
 }
 
 // ListWorkItems returns a filtered, paginated list of work items for a project.
-func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID uuid.UUID, status, assignee, priority, wiType *string, limit, offset int) ([]WorkItem, int64, error) {
+func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUID, status, assignee, priority, wiType *string, limit, offset int) ([]WorkItem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -171,7 +171,7 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID uuid.UUID
 		SELECT COUNT(*)
 		FROM work_items
 		WHERE tenant_id = $1
-			AND project_id = $2
+			AND ($2::uuid IS NULL OR project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::uuid IS NULL OR assignee_id = $4)
 			AND ($5::text IS NULL OR priority = $5)
@@ -199,7 +199,7 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID uuid.UUID
 			sort_order, tags, metadata, created_at, updated_at
 		FROM work_items
 		WHERE tenant_id = $1
-			AND project_id = $2
+			AND ($2::uuid IS NULL OR project_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::uuid IS NULL OR assignee_id = $4)
 			AND ($5::text IS NULL OR priority = $5)

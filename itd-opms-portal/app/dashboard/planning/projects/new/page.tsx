@@ -186,8 +186,8 @@ export default function NewProjectPage() {
         sponsorId: sponsorId.trim() || undefined,
         projectManagerId: projectManagerId.trim() || undefined,
         priority,
-        plannedStart: plannedStart || undefined,
-        plannedEnd: plannedEnd || undefined,
+        plannedStart: plannedStart ? `${plannedStart}T00:00:00Z` : undefined,
+        plannedEnd: plannedEnd ? `${plannedEnd}T00:00:00Z` : undefined,
         budgetApproved: budgetApproved ? Number(budgetApproved) : undefined,
       },
       {
