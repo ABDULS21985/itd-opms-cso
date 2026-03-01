@@ -1117,7 +1117,7 @@ function WeekView({
                   return evStart < dayEnd && evEnd > dayStart;
                 })
                 .map((ev) => {
-                  const { top, height } = getEventTopAndHeight(ev, wd);
+                  const { top, height } = getEventTopAndHeight(ev);
                   return (
                     <div
                       key={ev.id}
@@ -1280,7 +1280,7 @@ function DayView({
 
             {/* Positioned timed events — as detailed cards */}
             {timedEvents.map((ev) => {
-              const { top, height } = getEventTopAndHeight(ev, date);
+              const { top, height } = getEventTopAndHeight(ev);
               return (
                 <div
                   key={ev.id}

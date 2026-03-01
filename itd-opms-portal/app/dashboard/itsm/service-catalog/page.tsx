@@ -12,7 +12,6 @@ import {
   Layers,
   Package,
 } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
 import {
   useCatalogCategories,
   useEntitledCatalogItems,

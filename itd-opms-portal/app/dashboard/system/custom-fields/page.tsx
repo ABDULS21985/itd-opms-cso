@@ -733,7 +733,7 @@ export default function CustomFieldsPage() {
     (index: number) => {
       if (!definitions || index <= 0) return;
       const items = definitions.map(
-        (d: CustomFieldDefinition, i: number) => ({
+        (d: CustomFieldDefinition, _i: number) => ({
           id: d.id,
           displayOrder: d.displayOrder,
         }),
@@ -751,7 +751,7 @@ export default function CustomFieldsPage() {
     (index: number) => {
       if (!definitions || index >= definitions.length - 1) return;
       const items = definitions.map(
-        (d: CustomFieldDefinition, i: number) => ({
+        (d: CustomFieldDefinition, _i: number) => ({
           id: d.id,
           displayOrder: d.displayOrder,
         }),
