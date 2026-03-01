@@ -122,7 +122,7 @@ func (s *BudgetService) GetBudgetSummary(ctx context.Context, projectID uuid.UUI
 	// Category breakdown.
 	catQuery := `
 		SELECT
-			COALESCE(ce.category_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(ce.category_id, '00000000-0000-0000-0000-000000000000'::uuid),
 			COALESCE(cc.name, 'Uncategorised'),
 			COALESCE(SUM(CASE WHEN ce.entry_type = 'actual' THEN ce.amount ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ce.entry_type = 'committed' THEN ce.amount ELSE 0 END), 0),

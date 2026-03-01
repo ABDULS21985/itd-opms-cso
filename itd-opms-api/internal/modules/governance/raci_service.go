@@ -12,6 +12,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // RACIService handles business logic for RACI matrix management.
@@ -235,8 +236,11 @@ func (s *RACIService) DeleteMatrix(ctx context.Context, tenantID, matrixID uuid.
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_matrix.deleted",
 		EntityType: "raci_matrix",
 		EntityID:   matrixID,
@@ -272,11 +276,15 @@ func (s *RACIService) AddEntry(ctx context.Context, matrixID uuid.UUID, req Crea
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"activity":  req.Activity,
 		"matrix_id": matrixID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.created",
 		EntityType: "raci_entry",
 		EntityID:   id,
@@ -319,10 +327,14 @@ func (s *RACIService) UpdateEntry(ctx context.Context, entryID uuid.UUID, req Up
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"entry_id": entryID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.updated",
 		EntityType: "raci_entry",
 		EntityID:   entryID,
@@ -346,7 +358,11 @@ func (s *RACIService) DeleteEntry(ctx context.Context, entryID uuid.UUID) error 
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.deleted",
 		EntityType: "raci_entry",
 		EntityID:   entryID,

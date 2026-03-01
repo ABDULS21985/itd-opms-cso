@@ -13,6 +13,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // PolicyService handles business logic for policy management.
@@ -609,7 +610,13 @@ func (s *PolicyService) AttestPolicy(ctx context.Context, attestationID, userID 
 		"attestation_id": attestationID,
 		"status":         "attested",
 	})
+	authAttest := types.GetAuthContext(ctx)
+	attestTenantID := uuid.Nil
+	if authAttest != nil {
+		attestTenantID = authAttest.TenantID
+	}
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   attestTenantID,
 		ActorID:    userID,
 		Action:     "policy.attested",
 		EntityType: "policy_attestation",
