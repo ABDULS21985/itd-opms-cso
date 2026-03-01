@@ -11,7 +11,6 @@ import {
 } from "react";
 import { apiClient } from "@/lib/api-client";
 import {
-  getToken,
   setToken,
   removeToken,
   setRefreshToken,

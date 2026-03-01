@@ -311,7 +311,7 @@ export default function VaultPage() {
   const lockMutation = useLockDocument();
   const unlockMutation = useUnlockDocument();
   const createFolderMutation = useCreateFolder();
-  const _deleteFolderMutation = useDeleteFolder();
+  useDeleteFolder();
 
   // ── Derived ──────────────────────────────────
   const documents: VaultDocument[] = useMemo(() => {

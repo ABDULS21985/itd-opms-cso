@@ -32,14 +32,13 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { fuzzyMatch, getHighlightSegments } from "@/lib/fuzzy-match";
-import { navGroups, type NavItem, type NavGroup } from "@/lib/navigation";
+import { navGroups, type NavItem } from "@/lib/navigation";
 import {
   useSidebarSections,
   type CollapseMode,
 } from "@/hooks/use-sidebar-sections";
 import {
   useSidebarFavorites,
-  type FavoriteItem,
 } from "@/hooks/use-sidebar-favorites";
 import { useRecentlyVisited } from "@/hooks/use-sidebar-recently-visited";
 import { useSidebarScroll } from "@/hooks/use-sidebar-scroll";
@@ -357,7 +356,7 @@ export function Sidebar({
   );
 
   const {
-    expandedSections,
+    expandedSections: _expandedSections,
     pinnedSections,
     collapseMode,
     toggleSection,
@@ -389,7 +388,7 @@ export function Sidebar({
 
   const {
     scrollProgress,
-    scrollToSection,
+    scrollToSection: _scrollToSection,
     setScrollRef,
     onScroll: handleNavScroll,
   } = useSidebarScroll(activeSectionTitle, activeItemText);

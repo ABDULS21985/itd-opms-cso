@@ -878,7 +878,7 @@ export function useEscalateIssue() {
       escalatedToId: string;
     }) =>
       apiClient.put(`/planning/issues/${id}/escalate`, { escalatedToId }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       toast.success("Issue escalated");
     },

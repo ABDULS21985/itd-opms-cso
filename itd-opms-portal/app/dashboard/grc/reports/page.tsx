@@ -96,11 +96,10 @@ function StatCard({
 
 export default function GRCReportsPage() {
   const { data: risksData, isLoading: risksLoading } = useRisks(1, 1000);
-  const { data: heatMap } = useRiskHeatMap();
+  useRiskHeatMap();
   const { data: auditsData, isLoading: auditsLoading } = useGRCAudits(1, 1000);
   const { data: statsData, isLoading: statsLoading } = useComplianceStats();
-  const { data: controlsData, isLoading: _controlsLoading } =
-    useComplianceControls(1, 1);
+  useComplianceControls(1, 1);
 
   const risks = risksData?.data ?? [];
   const audits = auditsData?.data ?? [];
@@ -137,9 +136,6 @@ export default function GRCReportsPage() {
   for (const risk of risks) {
     riskByStatus[risk.status] = (riskByStatus[risk.status] || 0) + 1;
   }
-
-  // Finding severity summary from heat map
-  const heatMapEntries = heatMap ?? [];
 
   return (
     <div className="space-y-6 pb-8">
