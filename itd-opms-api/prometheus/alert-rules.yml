@@ -1,0 +1,69 @@
+groups:
+  - name: itd-opms-critical
+    rules:
+      - alert: APIDown
+        expr: up{job="itd-opms-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ITD-OPMS API is down"
+          description: "The API service has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes."
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "High API latency"
+          description: "P95 latency is above 2 seconds for the last 5 minutes."
+
+  - name: itd-opms-high
+    rules:
+      - alert: SLABreachSpike
+        expr: rate(sla_breaches_total[1h]) > 5
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "SLA breach spike detected"
+          description: "More than 5 SLA breaches in the last hour."
+
+      - alert: HighActiveConnections
+        expr: http_active_connections > 150
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "High concurrent connections"
+          description: "Active connections exceed 150 for 5+ minutes."
+
+  - name: itd-opms-medium
+    rules:
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        for: 10m
+        labels:
+          severity: medium
+        annotations:
+          summary: "Slow database queries"
+          description: "P95 database query duration is above 1 second."
+
+      - alert: HighNATSBacklog
+        expr: nats_messages_published_total - nats_messages_consumed_total > 1000
+        for: 15m
+        labels:
+          severity: medium
+        annotations:
+          summary: "NATS message backlog growing"
+          description: "Unprocessed messages exceed 1000."
