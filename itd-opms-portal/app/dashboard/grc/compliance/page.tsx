@@ -7,10 +7,8 @@ import {
   Scale,
   Plus,
   Filter,
-  CheckCircle,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
 import {
   useComplianceControls,
   useComplianceStats,

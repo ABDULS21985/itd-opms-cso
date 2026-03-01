@@ -21,7 +21,6 @@ import {
 import type { PendingApprovalItem } from "@/hooks/use-approvals";
 import { DataTable } from "@/components/shared/data-table";
 import type { Column } from "@/components/shared/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { PermissionGate } from "@/components/shared/permission-gate";
 
 /* ------------------------------------------------------------------ */

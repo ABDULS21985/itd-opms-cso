@@ -2,7 +2,7 @@
 
 import { use, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   DollarSign,
@@ -10,12 +10,10 @@ import {
   TrendingDown,
   BarChart3,
   Plus,
-  Edit,
   Trash2,
   Loader2,
   X,
   Camera,
-  Calendar,
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -31,7 +29,6 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
-  ReferenceLine,
 } from "recharts";
 import { toast } from "sonner";
 import { FormField } from "@/components/shared/form-field";
@@ -71,12 +68,6 @@ function varianceColor(pct: number): string {
   if (pct > 20) return "#22C55E";
   if (pct > 0) return "#F59E0B";
   return "#EF4444";
-}
-
-function varianceBg(pct: number): string {
-  if (pct > 20) return "bg-green-50 text-green-700 border-green-200";
-  if (pct > 0) return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-red-50 text-red-700 border-red-200";
 }
 
 function cpiColor(cpi: number): string {

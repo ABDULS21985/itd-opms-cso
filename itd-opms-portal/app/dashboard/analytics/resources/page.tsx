@@ -52,10 +52,6 @@ const TYPE_COLORS: Record<string, string> = {
   subtask: "#06B6D4", bug: "#EF4444",
 };
 
-const PRIORITY_COLORS: Record<string, string> = {
-  low: "#84CC16", medium: "#F59E0B", high: "#F97316", critical: "#EF4444",
-};
-
 export default function ResourceWorkloadPage() {
   const { data: summary, isLoading: summaryLoading } = useExecutiveSummary();
   const { data: workItemsRaw, isLoading: workItemsLoading } = useWorkItems(1, 500);

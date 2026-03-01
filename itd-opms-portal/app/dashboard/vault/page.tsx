@@ -19,15 +19,12 @@ import {
   Grid3X3,
   List,
   Search,
-  Plus,
   ChevronRight,
-  MoreVertical,
   X,
   Clock,
   Shield,
   Tag,
   FolderPlus,
-  ArrowLeft,
   History,
   type LucideIcon,
 } from "lucide-react";
@@ -36,7 +33,6 @@ import {
   useDocuments,
   useDocument,
   useUploadDocument,
-  useUpdateDocument,
   useDeleteDocument,
   useLockDocument,
   useUnlockDocument,
@@ -315,7 +311,7 @@ export default function VaultPage() {
   const lockMutation = useLockDocument();
   const unlockMutation = useUnlockDocument();
   const createFolderMutation = useCreateFolder();
-  const deleteFolderMutation = useDeleteFolder();
+  useDeleteFolder();
 
   // ── Derived ──────────────────────────────────
   const documents: VaultDocument[] = useMemo(() => {

@@ -14,10 +14,7 @@ import {
   Pencil,
   CheckCircle2,
   X,
-  ChevronRight,
-  FileText,
 } from "lucide-react";
-import { toast } from "sonner";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";

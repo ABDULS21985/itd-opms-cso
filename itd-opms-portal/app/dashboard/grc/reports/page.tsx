@@ -4,10 +4,8 @@ import { motion } from "framer-motion";
 import {
   BarChart3,
   ShieldAlert,
-  AlertTriangle,
   CheckCircle,
   TrendingUp,
-  Clock,
   Scale,
   FileSearch,
 } from "lucide-react";
@@ -98,11 +96,10 @@ function StatCard({
 
 export default function GRCReportsPage() {
   const { data: risksData, isLoading: risksLoading } = useRisks(1, 1000);
-  const { data: heatMap } = useRiskHeatMap();
+  useRiskHeatMap();
   const { data: auditsData, isLoading: auditsLoading } = useGRCAudits(1, 1000);
   const { data: statsData, isLoading: statsLoading } = useComplianceStats();
-  const { data: controlsData, isLoading: controlsLoading } =
-    useComplianceControls(1, 1);
+  useComplianceControls(1, 1);
 
   const risks = risksData?.data ?? [];
   const audits = auditsData?.data ?? [];
@@ -120,8 +117,6 @@ export default function GRCReportsPage() {
     (_, a) => a.status !== "completed" && a.status !== "cancelled" ? _ + 1 : _,
     0,
   );
-  const totalControls = controlsData?.meta?.totalItems ?? 0;
-
   // Compliance rate
   const totalCompliant = stats.reduce((sum, s) => sum + s.compliantCount, 0);
   const totalControlsFromStats = stats.reduce((sum, s) => sum + s.total, 0);
@@ -141,13 +136,6 @@ export default function GRCReportsPage() {
   for (const risk of risks) {
     riskByStatus[risk.status] = (riskByStatus[risk.status] || 0) + 1;
   }
-
-  // Finding severity summary from heat map
-  const heatMapEntries = heatMap ?? [];
-  const totalHeatMapCount = heatMapEntries.reduce(
-    (sum, e) => sum + e.count,
-    0,
-  );
 
   return (
     <div className="space-y-6 pb-8">

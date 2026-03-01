@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
@@ -362,7 +361,6 @@ function CreateContractModal({
 /* ------------------------------------------------------------------ */
 
 export default function ContractsPage() {
-  const router = useRouter();
   const [page, setPage] = useState(1);
   const [contractType, setContractType] = useState("");
   const [status, setStatus] = useState("");

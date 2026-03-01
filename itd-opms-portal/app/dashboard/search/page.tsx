@@ -26,7 +26,7 @@ import {
   useSaveSearch,
   useDeleteSavedSearch,
 } from "@/hooks/use-reporting";
-import type { GlobalSearchResults, SavedSearch } from "@/types";
+import type { SavedSearch } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */

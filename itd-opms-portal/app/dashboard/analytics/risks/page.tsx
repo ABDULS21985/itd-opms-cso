@@ -39,15 +39,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   compliance: "#14B8A6", strategic: "#6366F1",
 };
 
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: "#EF4444", high: "#F97316", medium: "#F59E0B", low: "#84CC16",
-};
-
 export default function RiskIssuesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
-  const { data: summary } = useExecutiveSummary();
+  const { data: _summary } = useExecutiveSummary();
   const { data: risksRaw, isLoading: risksLoading } = useRisks(1, 200, undefined, statusFilter || undefined, categoryFilter || undefined);
   const { data: issuesRaw, isLoading: issuesLoading } = useIssues(1, 200);
 

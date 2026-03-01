@@ -60,8 +60,6 @@ function EvidenceCard({
   onApprove: () => void;
   approving: boolean;
 }) {
-  const statusColor = getStatusColor(collection.status);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}

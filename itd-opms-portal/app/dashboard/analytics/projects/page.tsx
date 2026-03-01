@@ -23,7 +23,6 @@ import {
   ChartCard,
   DonutChart,
   TreemapChart,
-  StackedBarChart,
   FilterBar,
 } from "@/components/dashboard/charts";
 import {

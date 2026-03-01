@@ -21,7 +21,6 @@ import {
   ChartCard,
   DonutChart,
   RadarChart,
-  ProgressRing,
 } from "@/components/dashboard/charts";
 import {
   BarChart,

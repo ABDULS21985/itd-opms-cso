@@ -133,7 +133,7 @@ function BooleanInput({
 }
 
 function DateInput({
-  definition,
+  definition: _definition,
   value,
   onChange,
   readOnly,

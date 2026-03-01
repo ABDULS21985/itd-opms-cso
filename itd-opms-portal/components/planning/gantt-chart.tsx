@@ -2,7 +2,7 @@
 
 import { useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Diamond, ChevronRight, User, Calendar, Clock } from "lucide-react";
+import { Diamond, User, Calendar, Clock } from "lucide-react";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -502,7 +502,7 @@ export function GanttChart({
               className="shrink-0 border-r border-[var(--border)]"
               style={{ width: LABEL_WIDTH }}
             >
-              {items.map((item, idx) => (
+              {items.map((item, _idx) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2 border-b border-[var(--border)] px-3 transition-colors hover:bg-[var(--surface-1)] cursor-pointer"

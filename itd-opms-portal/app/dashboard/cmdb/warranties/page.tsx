@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
   Filter,
   Plus,
-  Clock,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
   Loader2,
   CalendarClock,
 } from "lucide-react";
@@ -124,7 +121,7 @@ export default function WarrantiesPage() {
     20,
     renewalStatus || undefined,
   );
-  const { data: expiringWarranties, isLoading: expiringLoading } =
+  const { data: expiringWarranties, isLoading: _expiringLoading } =
     useExpiringWarranties(90);
 
   const warranties = data?.data ?? [];

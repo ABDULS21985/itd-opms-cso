@@ -260,7 +260,7 @@ export function useUpdateUserSkill() {
   return useMutation({
     mutationFn: ({ id, ...body }: Partial<UserSkill> & { id: string }) =>
       apiClient.put<UserSkill>(`/people/skills/user-skills/${id}`, body),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["user-skills"] });
       queryClient.invalidateQueries({ queryKey: ["users-by-skill"] });
       toast.success("User skill updated successfully");
@@ -646,7 +646,7 @@ export function useUpdateChecklistTask() {
         `/people/checklists/tasks/item/${id}`,
         body,
       ),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["checklist-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });
       toast.success("Task updated successfully");

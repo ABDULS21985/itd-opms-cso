@@ -9,7 +9,6 @@ import type {
   Delegation,
   PermissionCatalog,
   TenantDetail,
-  TenantSummary,
   OrgUnitDetail,
   OrgTreeNode,
   SystemSetting,
