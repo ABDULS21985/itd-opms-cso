@@ -11,7 +11,6 @@ import {
   Loader2,
   ChevronRight,
   Filter,
-  BarChart3,
 } from "lucide-react";
 import {
   BarChart,
@@ -22,7 +21,6 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
-  Cell,
 } from "recharts";
 import { usePortfolioBudgetSummary } from "@/hooks/use-budget";
 import { usePortfolios } from "@/hooks/use-planning";
