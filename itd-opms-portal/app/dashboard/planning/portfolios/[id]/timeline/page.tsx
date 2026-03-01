@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Calendar,
-  Loader2,
   FolderOpen,
   TrendingUp,
   Briefcase,

@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
   Play,
-  Pause,
   Settings,
   Clock,
   AlertTriangle,
@@ -13,7 +12,6 @@ import {
   XCircle,
   Plus,
   Trash2,
-  ChevronDown,
   Search,
   Filter,
   Pencil,
@@ -25,13 +23,11 @@ import {
   ListChecks,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useAutomationRules,
-  useAutomationRule,
   useCreateAutomationRule,
   useUpdateAutomationRule,
   useDeleteAutomationRule,
@@ -41,7 +37,6 @@ import {
   useAutomationStats,
   type AutomationRule,
   type AutomationExecution,
-  type ActionConfig,
   type CreateAutomationRulePayload,
   type UpdateAutomationRulePayload,
 } from "@/hooks/use-automation";

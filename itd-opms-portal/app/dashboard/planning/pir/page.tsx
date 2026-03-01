@@ -9,7 +9,6 @@ import {
   Star,
   Calendar,
   Loader2,
-  Search,
   Filter,
   Trash2,
   ChevronRight,

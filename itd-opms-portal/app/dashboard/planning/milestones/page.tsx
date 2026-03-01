@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Flag,
   Plus,
-  Filter,
   Loader2,
   Calendar,
   CheckCircle,
@@ -285,7 +284,6 @@ function CreateMilestoneForm({
 /* ------------------------------------------------------------------ */
 
 export default function MilestonesPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("project_id") ?? undefined;
 

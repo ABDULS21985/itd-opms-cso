@@ -206,7 +206,6 @@ function formatDateRange(start: string, end: string, isAllDay: boolean): string 
 
 function getEventTopAndHeight(
   event: CalendarEvent,
-  dayStart: Date,
 ): { top: number; height: number } {
   const evStart = new Date(event.startTime);
   const evEnd = new Date(event.endTime);
