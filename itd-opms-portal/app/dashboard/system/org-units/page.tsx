@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Network, Plus } from "lucide-react";
+import { Network, Plus, BarChart3, UsersRound } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useOrgTree,
+  useOrgAnalytics,
   useCreateOrgUnit,
   useUpdateOrgUnit,
   useMoveOrgUnit,
@@ -20,6 +21,9 @@ import { SunburstView } from "./_components/sunburst-view";
 import { DetailPanel } from "./_components/detail-panel";
 import { UnitFormDialog } from "./_components/unit-form-dialog";
 import { MoveUnitDialog } from "./_components/move-unit-dialog";
+import { MetricsStrip } from "./_components/metrics-strip";
+import { AnalyticsTab } from "./_components/analytics-tab";
+import { PeopleMatrixTab } from "./_components/people-matrix-tab";
 import { exportSvgAsPng } from "./_components/export-png";
 import {
   collectAllIds, countNodes, getMatchingNodeIds, findAncestorIds, flattenTree,
@@ -69,10 +73,12 @@ export default function OrgUnitsPage() {
   ]);
 
   const { data: treeNodes, isLoading } = useOrgTree();
+  const { data: analyticsData, isLoading: analyticsLoading } = useOrgAnalytics();
   const createMutation = useCreateOrgUnit();
   const moveMutation = useMoveOrgUnit();
   const deleteMutation = useDeleteOrgUnit();
 
+  const [activeTab, setActiveTab] = useState<"structure" | "analytics" | "people">("structure");
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -190,94 +196,159 @@ export default function OrgUnitsPage() {
           </div>
         </motion.div>
 
-        {/* Toolbar */}
-        <Toolbar
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          levelFilter={levelFilter}
-          onLevelFilterChange={setLevelFilter}
-          onExpandAll={() => setExpandedIds(collectAllIds(tree))}
-          onCollapseAll={() => setExpandedIds(new Set())}
-          onCreateUnit={() => setShowCreate(true)}
-          onExportPng={handleExportPng}
-          onExportCsv={() => exportCsv(tree)}
-          onExportJson={() => exportJson(tree)}
-          nodeCount={nodeCount}
-        />
+        {/* Metrics Strip */}
+        <MetricsStrip tree={tree} analytics={analyticsData} isLoading={isLoading || analyticsLoading} />
 
-        {/* Main content: View + Detail Panel */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="flex flex-1 min-h-0 gap-0 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
-        >
-          {/* Active view */}
-          <div ref={contentRef} className="flex-1 min-h-0">
-            {isLoading ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3" style={{ paddingLeft: (i % 3) * 24 }}>
-                    <div className="h-6 w-6 animate-pulse rounded bg-[var(--surface-2)]" />
-                    <div className="h-5 w-16 animate-pulse rounded-md bg-[var(--surface-2)]" />
-                    <div className="h-4 flex-1 max-w-[180px] animate-pulse rounded-md bg-[var(--surface-2)]" />
-                  </div>
-                ))}
-              </div>
-            ) : tree.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--surface-2)] mb-4">
-                  <Network size={24} className="text-[var(--neutral-gray)]" />
-                </div>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">No organisational units</h3>
-                <p className="text-sm text-[var(--neutral-gray)] mb-4">
-                  Create your first unit to build the org structure.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(true)}
-                  className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                >
-                  <Plus size={16} />
-                  Add Unit
-                </button>
-              </div>
-            ) : (
-              <>
-                {viewMode === "chart" && <OrgChartView {...viewProps} />}
-                {viewMode === "sunburst" && <SunburstView {...viewProps} />}
-                {viewMode === "tree" && <EnhancedTreeView {...viewProps} />}
-              </>
-            )}
-          </div>
-
-          {/* Detail Side Panel (animated width) */}
-          <AnimatePresence>
-            {selectedId && (
-              <motion.div
-                key="detail-panel"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 380, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="shrink-0 overflow-hidden bg-[var(--surface-0)] max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:w-full max-md:shadow-xl"
+        {/* Tab Bar */}
+        <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-1">
+          {([
+            { key: "structure", label: "Structure", icon: Network },
+            { key: "analytics", label: "Analytics", icon: BarChart3 },
+            { key: "people", label: "People Matrix", icon: UsersRound },
+          ] as const).map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  isActive ? "text-[var(--primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
               >
-                <div className="h-full w-[380px] max-md:w-full">
-                  <DetailPanel
-                    unitId={selectedId}
-                    treeNodes={tree}
-                    onClose={() => setSelectedId(null)}
-                    onEdit={(unit) => setEditTarget(unit)}
-                    onMove={(unit) => setMoveTarget(unit)}
-                    onDelete={(unit) => setDeleteTarget(unit)}
+                {isActive && (
+                  <motion.div
+                    layoutId="org-tab"
+                    className="absolute inset-0 rounded-lg bg-[var(--surface-0)] shadow-sm border border-[var(--border)]"
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
                   />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <Icon size={15} />
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Structure Tab */}
+        {activeTab === "structure" && (
+          <>
+            {/* Toolbar */}
+            <Toolbar
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              levelFilter={levelFilter}
+              onLevelFilterChange={setLevelFilter}
+              onExpandAll={() => setExpandedIds(collectAllIds(tree))}
+              onCollapseAll={() => setExpandedIds(new Set())}
+              onCreateUnit={() => setShowCreate(true)}
+              onExportPng={handleExportPng}
+              onExportCsv={() => exportCsv(tree)}
+              onExportJson={() => exportJson(tree)}
+              nodeCount={nodeCount}
+            />
+
+            {/* Main content: View + Detail Panel */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="flex flex-1 min-h-0 gap-0 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+            >
+              {/* Active view */}
+              <div ref={contentRef} className="flex-1 min-h-0">
+                {isLoading ? (
+                  <div className="space-y-3 p-4">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3" style={{ paddingLeft: (i % 3) * 24 }}>
+                        <div className="h-6 w-6 animate-pulse rounded bg-[var(--surface-2)]" />
+                        <div className="h-5 w-16 animate-pulse rounded-md bg-[var(--surface-2)]" />
+                        <div className="h-4 flex-1 max-w-[180px] animate-pulse rounded-md bg-[var(--surface-2)]" />
+                      </div>
+                    ))}
+                  </div>
+                ) : tree.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--surface-2)] mb-4">
+                      <Network size={24} className="text-[var(--neutral-gray)]" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">No organisational units</h3>
+                    <p className="text-sm text-[var(--neutral-gray)] mb-4">
+                      Create your first unit to build the org structure.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreate(true)}
+                      className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                      <Plus size={16} />
+                      Add Unit
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {viewMode === "chart" && <OrgChartView {...viewProps} />}
+                    {viewMode === "sunburst" && <SunburstView {...viewProps} />}
+                    {viewMode === "tree" && <EnhancedTreeView {...viewProps} />}
+                  </>
+                )}
+              </div>
+
+              {/* Detail Side Panel (animated width) */}
+              <AnimatePresence>
+                {selectedId && (
+                  <motion.div
+                    key="detail-panel"
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: 380, opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                    className="shrink-0 overflow-hidden bg-[var(--surface-0)] max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:w-full max-md:shadow-xl"
+                  >
+                    <div className="h-full w-[380px] max-md:w-full">
+                      <DetailPanel
+                        unitId={selectedId}
+                        treeNodes={tree}
+                        onClose={() => setSelectedId(null)}
+                        onEdit={(unit) => setEditTarget(unit)}
+                        onMove={(unit) => setMoveTarget(unit)}
+                        onDelete={(unit) => setDeleteTarget(unit)}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === "analytics" && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+          >
+            <AnalyticsTab tree={tree} analytics={analyticsData} isLoading={isLoading || analyticsLoading} />
+          </motion.div>
+        )}
+
+        {/* People Matrix Tab */}
+        {activeTab === "people" && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+          >
+            <PeopleMatrixTab tree={tree} isLoading={isLoading} />
+          </motion.div>
+        )}
 
         {/* Create Unit Dialog */}
         <UnitFormDialog

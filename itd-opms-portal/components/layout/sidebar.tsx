@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useState,
   useEffect,
@@ -20,16 +20,18 @@ import {
   HelpCircle,
   X,
   Star,
-  Pin,
   Clock,
   ChevronsUpDown,
   Minus,
   LayoutDashboard,
   Search,
   Layers,
+  Pencil,
+  Download,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { fuzzyMatch, getHighlightSegments } from "@/lib/fuzzy-match";
 import { navGroups, type NavItem } from "@/lib/navigation";
@@ -37,24 +39,29 @@ import {
   useSidebarSections,
   type CollapseMode,
 } from "@/hooks/use-sidebar-sections";
-import {
-  useSidebarFavorites,
-} from "@/hooks/use-sidebar-favorites";
+import { useSidebarFavorites } from "@/hooks/use-sidebar-favorites";
 import { useRecentlyVisited } from "@/hooks/use-sidebar-recently-visited";
 import { useSidebarScroll } from "@/hooks/use-sidebar-scroll";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { useSidebarLayout } from "@/hooks/use-sidebar-layout";
+import { useSidebarCustomizeMode } from "@/hooks/use-sidebar-customize-mode";
+import { useSidebarResize } from "@/hooks/use-sidebar-resize";
+import {
+  decodeLayoutFromBase64,
+  validateImportedLayout,
+} from "@/lib/sidebar-layout-utils";
 import {
   SIDEBAR_PRESETS,
   PRESET_ORDER,
   type PresetId,
 } from "@/components/layout/sidebar/presets";
 import { SidebarSetupWizard } from "@/components/layout/sidebar/sidebar-setup-wizard";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-/* NavItem, NavGroup, and navGroups are imported from @/lib/navigation */
+import { SidebarNavSection } from "@/components/layout/sidebar/sidebar-nav-section";
+import { SidebarDndProvider } from "@/components/layout/sidebar/sidebar-dnd-provider";
+import { SidebarCustomizeToolbar } from "@/components/layout/sidebar/sidebar-customize-toolbar";
+import { SidebarHiddenItemsDrawer } from "@/components/layout/sidebar/sidebar-hidden-items-drawer";
+import { SidebarResizeHandle } from "@/components/layout/sidebar/sidebar-resize-handle";
+import { SidebarImportExport } from "@/components/layout/sidebar/sidebar-import-export";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -103,35 +110,7 @@ function isActive(pathname: string, href: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Icon hover animation map                                           */
-/* ------------------------------------------------------------------ */
-
-type HoverAnimClass =
-  | "sidebar-icon-pulse"
-  | "sidebar-icon-rotate"
-  | "sidebar-icon-wave"
-  | "sidebar-icon-bounce"
-  | "sidebar-icon-scale";
-
-const iconHoverMap: Record<string, HoverAnimClass> = {
-  LayoutDashboard: "sidebar-icon-pulse",
-  Target: "sidebar-icon-pulse",
-  ShieldCheck: "sidebar-icon-pulse",
-  Settings: "sidebar-icon-rotate",
-  Users: "sidebar-icon-wave",
-  UserPlus: "sidebar-icon-wave",
-  UserCheck: "sidebar-icon-wave",
-  User: "sidebar-icon-wave",
-  Activity: "sidebar-icon-bounce",
-  FileBarChart: "sidebar-icon-bounce",
-};
-
-function getIconHoverClass(icon: LucideIcon): HoverAnimClass {
-  return iconHoverMap[icon.displayName || ""] || "sidebar-icon-scale";
-}
-
-/* ------------------------------------------------------------------ */
-/*  HighlightedText — renders fuzzy-matched text with highlights       */
+/*  HighlightedText                                                    */
 /* ------------------------------------------------------------------ */
 
 function HighlightedText({
@@ -161,7 +140,7 @@ function HighlightedText({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Collapse mode icons & labels                                       */
+/*  Collapse mode config                                               */
 /* ------------------------------------------------------------------ */
 
 const collapseModeConfig: Record<
@@ -209,6 +188,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, logout } = useAuth();
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -224,6 +204,7 @@ export function Sidebar({
   } | null>(null);
   const [recentSectionOpen, setRecentSectionOpen] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [importExportOpen, setImportExportOpen] = useState(false);
 
   /* ------- Preset management (localStorage) ------- */
   const [activePreset, setActivePreset] = useState<PresetId>("full");
@@ -249,7 +230,6 @@ export function Sidebar({
     setWizardSeen(seen === "true");
   }, []);
 
-  // Show wizard on first visit after 800ms, only on /dashboard
   useEffect(() => {
     if (wizardSeen || pathname !== "/dashboard") return;
     const timer = setTimeout(() => {
@@ -258,13 +238,10 @@ export function Sidebar({
     return () => clearTimeout(timer);
   }, [wizardSeen, pathname]);
 
-  const handleApplyPreset = useCallback(
-    (id: PresetId) => {
-      setActivePreset(id);
-      localStorage.setItem("opms-sidebar-preset", id);
-    },
-    [],
-  );
+  const handleApplyPreset = useCallback((id: PresetId) => {
+    setActivePreset(id);
+    localStorage.setItem("opms-sidebar-preset", id);
+  }, []);
 
   const handleSetCustomSections = useCallback((sections: string[]) => {
     setCustomVisibleSections(sections);
@@ -277,6 +254,45 @@ export function Sidebar({
   const handleMarkWizardSeen = useCallback(() => {
     setWizardSeen(true);
     localStorage.setItem("opms-sidebar-wizard-seen", "true");
+  }, []);
+
+  /* ------- New hooks ------- */
+  const layoutHook = useSidebarLayout();
+  const customizeMode = useSidebarCustomizeMode();
+
+  const {
+    isDragging: isResizing,
+    currentWidth: resizeWidth,
+    handlePointerDown: resizePointerDown,
+    handleDoubleClick: resizeDoubleClick,
+  } = useSidebarResize({
+    initialWidth: layoutHook.sidebarWidth,
+    collapsed,
+    onWidthChange: layoutHook.setSidebarWidth,
+  });
+
+  const effectiveWidth = isResizing ? resizeWidth : layoutHook.sidebarWidth;
+
+  /* ------- Handle shared layout URL param ------- */
+  useEffect(() => {
+    const layoutParam = searchParams.get("sidebar-layout");
+    if (!layoutParam) return;
+
+    const imported = decodeLayoutFromBase64(layoutParam);
+    if (imported && validateImportedLayout(imported)) {
+      const apply = window.confirm(
+        "Someone shared a sidebar layout with you. Apply it?",
+      );
+      if (apply) {
+        layoutHook.importLayout(imported);
+        toast("Shared layout applied successfully");
+      }
+      // Remove param from URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("sidebar-layout");
+      router.replace(url.pathname + url.search, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ------- Refs ------- */
@@ -313,22 +329,35 @@ export function Sidebar({
   /* ------- Filter by preset ------- */
   const presetVisibleSections = useMemo(() => {
     const preset = SIDEBAR_PRESETS[activePreset];
-    if (!preset || !preset.visibleSections || preset.visibleSections.length === 0)
-      return null; // null = show all
+    if (
+      !preset ||
+      !preset.visibleSections ||
+      preset.visibleSections.length === 0
+    )
+      return null;
     if (activePreset === "custom") {
       return customVisibleSections.length > 0 ? customVisibleSections : null;
     }
     return preset.visibleSections;
   }, [activePreset, customVisibleSections]);
 
-  const visibleGroups = useMemo(() => {
+  const presetFilteredGroups = useMemo(() => {
     if (!presetVisibleSections) return permissionFilteredGroups;
     return permissionFilteredGroups.filter((g) =>
       presetVisibleSections.includes(g.label),
     );
   }, [permissionFilteredGroups, presetVisibleSections]);
 
-  const hiddenSectionCount = permissionFilteredGroups.length - visibleGroups.length;
+  /* ------- Apply layout ordering ------- */
+  const visibleGroups = useMemo(() => {
+    return layoutHook.applyToGroups(
+      presetFilteredGroups,
+      customizeMode.isCustomizing,
+    );
+  }, [presetFilteredGroups, layoutHook, customizeMode.isCustomizing]);
+
+  const presetHiddenSectionCount =
+    permissionFilteredGroups.length - presetFilteredGroups.length;
 
   /* ------- Determine active section/item ------- */
   const activeSectionTitle = useMemo(() => {
@@ -356,7 +385,6 @@ export function Sidebar({
   );
 
   const {
-    expandedSections: _expandedSections,
     pinnedSections,
     collapseMode,
     toggleSection,
@@ -388,7 +416,6 @@ export function Sidebar({
 
   const {
     scrollProgress,
-    scrollToSection: _scrollToSection,
     setScrollRef,
     onScroll: handleNavScroll,
   } = useSidebarScroll(activeSectionTitle, activeItemText);
@@ -473,8 +500,10 @@ export function Sidebar({
           setSearchQuery("");
           searchInputRef.current?.blur();
         }
+        if (customizeMode.isCustomizing) {
+          customizeMode.exitCustomizeMode();
+        }
       }
-      // "/" to focus search — only if no other input/textarea is focused
       if (
         e.key === "/" &&
         !collapsed &&
@@ -488,7 +517,7 @@ export function Sidebar({
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onMobileClose, searchQuery, collapsed]);
+  }, [onMobileClose, searchQuery, collapsed, customizeMode]);
 
   /* ------- Navigation helpers ------- */
   const handleLogout = useCallback(() => {
@@ -540,8 +569,7 @@ export function Sidebar({
   const [navFocusIndex, setNavFocusIndex] = useState(-1);
 
   const handleNavKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
-    // Only handle when the nav container or its children are focused
-    if (debouncedQuery) return; // search mode uses its own keyboard handling
+    if (debouncedQuery) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -574,7 +602,6 @@ export function Sidebar({
         toggleSection(focused.groupLabel);
       }
     } else if (e.key === "Escape") {
-      // Jump to section header
       const focused = allVisibleItems[navFocusIndex];
       if (focused) {
         const headerIdx = allVisibleItems.findIndex(
@@ -594,6 +621,18 @@ export function Sidebar({
     [],
   );
 
+  /* ------- Customize mode handlers ------- */
+  const handleEnterCustomize = useCallback(() => {
+    if (collapsed) onToggleCollapse();
+    customizeMode.enterCustomizeMode();
+    setUserMenuOpen(false);
+  }, [collapsed, onToggleCollapse, customizeMode]);
+
+  const handleResetLayout = useCallback(() => {
+    layoutHook.resetToDefault();
+    toast("Layout reset to default");
+  }, [layoutHook]);
+
   /* ------- Animation durations ------- */
   const dur = prefersReducedMotion ? 0 : 0.2;
   const staggerDur = prefersReducedMotion ? 0 : 0.03;
@@ -604,7 +643,6 @@ export function Sidebar({
     for (const group of navGroups) {
       for (const item of group.items) {
         map.set(item.icon.displayName || "", item.icon);
-        // Also map by label for fallback
         map.set(item.label, item.icon);
       }
     }
@@ -621,6 +659,11 @@ export function Sidebar({
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
   /* ---------------------------------------------------------------- */
+
+  const sidebarStyle = useMemo(() => {
+    if (collapsed) return undefined;
+    return { width: effectiveWidth } as React.CSSProperties;
+  }, [collapsed, effectiveWidth]);
 
   return (
     <>
@@ -642,20 +685,29 @@ export function Sidebar({
       {/* Sidebar */}
       <aside
         className={`
-          flex flex-col h-screen
+          relative flex flex-col h-screen
           bg-gradient-to-b from-[#3D2E0A] to-[#2A1F06]
           border-r border-[#A8893D]/15 shadow-2xl
           transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
 
           fixed inset-y-0 left-0 z-50
-          ${mobileOpen ? "translate-x-0 w-[260px]" : "-translate-x-full w-[260px]"}
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
 
           lg:sticky lg:top-0 lg:z-10 lg:translate-x-0
-          ${collapsed ? "lg:w-[72px]" : "lg:w-[260px]"}
+          ${collapsed ? "lg:w-[72px]" : ""}
         `}
+        style={sidebarStyle}
         role="navigation"
         aria-label="Main navigation"
       >
+        {/* Resize handle */}
+        <SidebarResizeHandle
+          collapsed={collapsed}
+          isDragging={isResizing}
+          onPointerDown={resizePointerDown}
+          onDoubleClick={resizeDoubleClick}
+        />
+
         {/* -------------------------------------------------------- */}
         {/*  Logo & Branding                                          */}
         {/* -------------------------------------------------------- */}
@@ -695,33 +747,62 @@ export function Sidebar({
             </Link>
           )}
 
-          {/* Collapse toggle -- desktop only */}
-          <button
-            onClick={onToggleCollapse}
-            className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-all duration-200 flex-shrink-0"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? (
-              <ChevronRight size={16} />
-            ) : (
-              <ChevronLeft size={16} />
+          {/* Action buttons */}
+          <div className="flex items-center gap-0.5">
+            {/* Customize toggle */}
+            {!collapsed && !customizeMode.isCustomizing && (
+              <button
+                onClick={handleEnterCustomize}
+                className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200 flex-shrink-0"
+                aria-label="Customize sidebar"
+                title="Customize sidebar"
+              >
+                <Pencil size={14} />
+              </button>
             )}
-          </button>
 
-          {/* Close button -- mobile only */}
-          <button
-            onClick={onMobileClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200"
-            aria-label="Close menu"
-          >
-            <X size={18} />
-          </button>
+            {/* Collapse toggle */}
+            <button
+              onClick={onToggleCollapse}
+              className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-all duration-200 flex-shrink-0"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? (
+                <ChevronRight size={16} />
+              ) : (
+                <ChevronLeft size={16} />
+              )}
+            </button>
+
+            {/* Close button -- mobile */}
+            <button
+              onClick={onMobileClose}
+              className="lg:hidden p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200"
+              aria-label="Close menu"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
+
+        {/* -------------------------------------------------------- */}
+        {/*  Customize toolbar                                        */}
+        {/* -------------------------------------------------------- */}
+        <AnimatePresence>
+          {customizeMode.isCustomizing && (
+            <SidebarCustomizeToolbar
+              isCustomizing={customizeMode.isCustomizing}
+              totalHiddenCount={layoutHook.totalHiddenCount}
+              onDone={customizeMode.exitCustomizeMode}
+              onReset={handleResetLayout}
+            />
+          )}
+        </AnimatePresence>
 
         {/* -------------------------------------------------------- */}
         {/*  Search bar                                               */}
         {/* -------------------------------------------------------- */}
-        {!collapsed ? (
+        {!collapsed && !customizeMode.isCustomizing ? (
           <div className="px-3 pt-3 pb-1 flex-shrink-0">
             <div className="relative">
               <Search
@@ -754,12 +835,11 @@ export function Sidebar({
               )}
             </div>
           </div>
-        ) : (
+        ) : collapsed ? (
           <div className="px-3 pt-3 pb-1 flex-shrink-0 hidden lg:block">
             <button
               onClick={() => {
                 onToggleCollapse();
-                // Focus search after expanding
                 setTimeout(() => searchInputRef.current?.focus(), 350);
               }}
               className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-300 hover:text-white transition-all duration-200"
@@ -768,7 +848,7 @@ export function Sidebar({
               <Search size={18} />
             </button>
           </div>
-        )}
+        ) : null}
 
         {/* -------------------------------------------------------- */}
         {/*  Navigation (scrollable area)                             */}
@@ -788,10 +868,7 @@ export function Sidebar({
             <div>
               {flatSearchResults.length === 0 ? (
                 <div className="px-3 py-8 text-center">
-                  <Search
-                    size={32}
-                    className="mx-auto text-gray-400 mb-3"
-                  />
+                  <Search size={32} className="mx-auto text-gray-400 mb-3" />
                   <p className="text-sm text-gray-500">
                     No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
@@ -813,9 +890,7 @@ export function Sidebar({
                         <Link
                           key={result.item.href}
                           href={result.item.href}
-                          onClick={() => {
-                            setSearchQuery("");
-                          }}
+                          onClick={() => setSearchQuery("")}
                           className={`
                             group relative flex items-center gap-3 rounded-xl text-sm font-medium
                             transition-all duration-200 px-3 py-2.5 border-l-[3px]
@@ -852,104 +927,110 @@ export function Sidebar({
           ) : (
             <>
               {/* ------- Favorites section ------- */}
-              {!collapsed && favorites.length > 0 && (
-                <div className="mb-3">
-                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
-                    <Star size={10} className="text-[#C4A962]" />
-                    Favorites
-                  </p>
-                  <div className="space-y-0.5">
-                    {favorites.map((fav) => {
-                      const FavIcon = resolveIcon(fav.iconName);
-                      const active = isActive(pathname, fav.path);
-                      return (
-                        <div
-                          key={fav.path}
-                          className="group relative flex items-center"
-                        >
-                          <Link
-                            href={fav.path}
-                            className={`
-                              flex-1 flex items-center gap-2.5 rounded-xl text-xs font-medium
-                              transition-all duration-200 px-3 py-2 border-l-[3px]
-                              ${
-                                active
-                                  ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
-                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
-                              }
-                            `}
+              {!collapsed &&
+                !customizeMode.isCustomizing &&
+                favorites.length > 0 && (
+                  <div className="mb-3">
+                    <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
+                      <Star size={10} className="text-[#C4A962]" />
+                      Favorites
+                    </p>
+                    <div className="space-y-0.5">
+                      {favorites.map((fav) => {
+                        const FavIcon = resolveIcon(fav.iconName);
+                        const active = isActive(pathname, fav.path);
+                        return (
+                          <div
+                            key={fav.path}
+                            className="group relative flex items-center"
                           >
-                            <FavIcon size={14} className="flex-shrink-0" />
-                            <span className="truncate">{fav.text}</span>
-                          </Link>
-                          <button
-                            onClick={() => removeFavorite(fav.path)}
-                            className="absolute right-2 opacity-0 group-hover:opacity-100 text-[#C4A962] hover:text-[#C4A962]/80 transition-opacity"
-                            title="Remove from favorites"
-                          >
-                            <Star size={12} fill="currentColor" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <Link
+                              href={fav.path}
+                              className={`
+                                flex-1 flex items-center gap-2.5 rounded-xl text-xs font-medium
+                                transition-all duration-200 px-3 py-2 border-l-[3px]
+                                ${
+                                  active
+                                    ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
+                                    : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
+                                }
+                              `}
+                            >
+                              <FavIcon size={14} className="flex-shrink-0" />
+                              <span className="truncate">{fav.text}</span>
+                            </Link>
+                            <button
+                              onClick={() => removeFavorite(fav.path)}
+                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[#C4A962] hover:text-[#C4A962]/80 transition-opacity"
+                              title="Remove from favorites"
+                            >
+                              <Star size={12} fill="currentColor" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
                   </div>
-                  <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
-                </div>
-              )}
+                )}
 
               {/* ------- Recently visited ------- */}
-              {!collapsed && recentItems.length > 0 && (
-                <div className="mb-3">
-                  <button
-                    onClick={() => setRecentSectionOpen((v) => !v)}
-                    className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5 hover:text-gray-200 transition-colors"
-                  >
-                    <Clock size={10} />
-                    Recently Visited
-                    <motion.span
-                      animate={{ rotate: recentSectionOpen ? 0 : -90 }}
-                      transition={{ duration: dur }}
-                      className="ml-auto"
+              {!collapsed &&
+                !customizeMode.isCustomizing &&
+                recentItems.length > 0 && (
+                  <div className="mb-3">
+                    <button
+                      onClick={() => setRecentSectionOpen((v) => !v)}
+                      className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5 hover:text-gray-200 transition-colors"
                     >
-                      <ChevronDown size={10} />
-                    </motion.span>
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {recentSectionOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
+                      <Clock size={10} />
+                      Recently Visited
+                      <motion.span
+                        animate={{ rotate: recentSectionOpen ? 0 : -90 }}
                         transition={{ duration: dur }}
-                        className="overflow-hidden"
+                        className="ml-auto"
                       >
-                        <div className="space-y-0.5">
-                          {recentItems.slice(0, 5).map((recent) => {
-                            const RecentIcon = resolveIcon(recent.iconName);
-                            return (
-                              <Link
-                                key={recent.path}
-                                href={recent.path}
-                                className="flex items-center gap-2.5 rounded-xl text-xs text-gray-300 hover:text-white hover:bg-white/5 transition-all duration-200 px-3 py-1.5"
-                              >
-                                <RecentIcon
-                                  size={13}
-                                  className="flex-shrink-0"
-                                />
-                                <span className="truncate">{recent.text}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
-                </div>
-              )}
+                        <ChevronDown size={10} />
+                      </motion.span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {recentSectionOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: dur }}
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-0.5">
+                            {recentItems.slice(0, 5).map((recent) => {
+                              const RecentIcon = resolveIcon(recent.iconName);
+                              return (
+                                <Link
+                                  key={recent.path}
+                                  href={recent.path}
+                                  className="flex items-center gap-2.5 rounded-xl text-xs text-gray-300 hover:text-white hover:bg-white/5 transition-all duration-200 px-3 py-1.5"
+                                >
+                                  <RecentIcon
+                                    size={13}
+                                    className="flex-shrink-0"
+                                  />
+                                  <span className="truncate">
+                                    {recent.text}
+                                  </span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
+                  </div>
+                )}
 
               {/* ------- Collapse mode control ------- */}
-              {!collapsed && (
+              {!collapsed && !customizeMode.isCustomizing && (
                 <div className="px-3 mb-2 flex items-center justify-end">
                   <button
                     onClick={cycleCollapseMode}
@@ -965,245 +1046,99 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* ------- Nav groups ------- */}
-              {visibleGroups.map((group, groupIndex) => {
-                const expanded = isSectionExpanded(group.label);
-                const pinned = pinnedSections[group.label] || false;
-                const hasActiveItem = group.items.some((item) =>
-                  isActive(pathname, item.href),
-                );
+              {/* ------- Nav groups (with DnD) ------- */}
+              <SidebarDndProvider
+                isCustomizing={customizeMode.isCustomizing}
+                groups={visibleGroups}
+                onReorderSections={(from, to) => {
+                  layoutHook.reorderSections(from, to);
+                  if (activePreset !== "custom") {
+                    handleApplyPreset("custom");
+                  }
+                }}
+                onReorderItems={(section, from, to) => {
+                  layoutHook.reorderItems(section, from, to);
+                  if (activePreset !== "custom") {
+                    handleApplyPreset("custom");
+                  }
+                }}
+                onMoveItemToSection={(href, from, to, idx) => {
+                  layoutHook.moveItemToSection(href, from, to, idx);
+                  if (activePreset !== "custom") {
+                    handleApplyPreset("custom");
+                  }
+                }}
+                onDragStateChange={customizeMode.setDragState}
+              >
+                {visibleGroups.map((group, groupIndex) => {
+                  const expanded = isSectionExpanded(group.label);
+                  const pinned = pinnedSections[group.label] || false;
+                  const hasActiveItem = group.items.some((item) =>
+                    isActive(pathname, item.href),
+                  );
 
-                return (
-                  <div
-                    key={group.label}
-                    className={groupIndex > 0 ? "mt-2" : ""}
-                  >
-                    {/* Section header */}
-                    {!collapsed ? (
-                      <div className="group/header flex items-center px-3 mb-1">
-                        <button
-                          onClick={() => toggleSection(group.label)}
-                          className={`
-                            flex-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest
-                            transition-colors duration-200 py-1
-                            ${
-                              hasActiveItem
-                                ? "bg-gradient-to-r from-[#A8893D] to-[#C4A962] bg-clip-text text-transparent"
-                                : "text-gray-300 hover:text-gray-100"
-                            }
-                          `}
-                        >
-                          <motion.span
-                            animate={{ rotate: expanded ? 0 : -90 }}
-                            transition={{ duration: dur }}
-                            className="flex-shrink-0 text-gray-400"
-                          >
-                            <ChevronDown size={11} />
-                          </motion.span>
-                          <span>{group.label}</span>
-                          {!expanded && (
-                            <span className="text-[9px] text-gray-400 ml-1 font-normal">
-                              ({group.items.length})
-                            </span>
-                          )}
-                        </button>
-                        {/* Pin button (visible on hover) */}
-                        <button
-                          onClick={() => togglePin(group.label)}
-                          className={`
-                            flex-shrink-0 p-0.5 rounded transition-all duration-200
-                            ${
-                              pinned
-                                ? "opacity-100 text-[#A8893D]"
-                                : "opacity-0 group-hover/header:opacity-100 text-gray-400 hover:text-gray-400"
-                            }
-                          `}
-                          title={
-                            pinned ? "Unpin section" : "Pin section open"
-                          }
-                        >
-                          <Pin
-                            size={11}
-                            className={`transition-transform duration-200 ${pinned ? "-rotate-45" : ""}`}
-                          />
-                        </button>
-                      </div>
-                    ) : (
-                      // Collapsed: thin divider
-                      groupIndex > 0 && (
-                        <div className="hidden lg:block mx-3 mb-2 border-t border-[#A8893D]/15" />
-                      )
-                    )}
+                  return (
+                    <SidebarNavSection
+                      key={group.label}
+                      group={group}
+                      expanded={expanded}
+                      pinned={pinned}
+                      hasActiveItem={hasActiveItem}
+                      collapsed={collapsed}
+                      isCustomizing={customizeMode.isCustomizing}
+                      isSectionHidden={layoutHook.isSectionHidden(group.label)}
+                      sidebarWidth={effectiveWidth}
+                      dur={dur}
+                      staggerDur={staggerDur}
+                      pathname={pathname}
+                      navFocusIndex={navFocusIndex}
+                      visibleGroups={visibleGroups}
+                      groupIndex={groupIndex}
+                      isActive={isActive}
+                      isFavorite={isFavorite}
+                      isItemHidden={layoutHook.isItemHidden}
+                      isSectionExpanded={isSectionExpanded}
+                      onToggleSection={toggleSection}
+                      onTogglePin={togglePin}
+                      onToggleSectionVisibility={
+                        layoutHook.toggleSectionVisibility
+                      }
+                      onToggleItemVisibility={layoutHook.toggleItemVisibility}
+                      onContextMenu={handleContextMenu}
+                    />
+                  );
+                })}
+              </SidebarDndProvider>
 
-                    {/* Nav items with AnimatePresence */}
-                    {!collapsed ? (
-                      <AnimatePresence initial={false}>
-                        {expanded && (
-                          <motion.ul
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: dur }}
-                            className="space-y-0.5 overflow-hidden"
-                          >
-                            {group.items.map((item, itemIndex) => {
-                              const active = isActive(pathname, item.href);
-                              const Icon = item.icon;
-                              const hoverClass = getIconHoverClass(item.icon);
-
-                              // Compute flat index for keyboard focus
-                              let flatIdx = -1;
-                              let counter = 0;
-                              for (const g of visibleGroups) {
-                                counter++; // header
-                                if (g.label === group.label) {
-                                  flatIdx = counter + itemIndex;
-                                  break;
-                                }
-                                if (isSectionExpanded(g.label)) {
-                                  counter += g.items.length;
-                                }
-                              }
-                              const isFocused = navFocusIndex === flatIdx;
-
-                              return (
-                                <motion.li
-                                  key={item.href}
-                                  initial={{ opacity: 0, x: -8 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{
-                                    duration: dur,
-                                    delay: staggerDur * itemIndex,
-                                  }}
-                                >
-                                  <Link
-                                    href={item.href}
-                                    onContextMenu={(e) =>
-                                      handleContextMenu(e, item)
-                                    }
-                                    aria-current={
-                                      active ? "page" : undefined
-                                    }
-                                    className={`
-                                      group relative flex items-center gap-3 rounded-xl text-sm font-medium
-                                      transition-all duration-200
-                                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8893D]/50
-                                      active:scale-[0.98]
-                                      px-3 py-2.5
-                                      ${
-                                        active
-                                          ? "bg-[#A8893D]/15 text-white"
-                                          : isFocused
-                                            ? "bg-white/5 text-white"
-                                            : "text-gray-200 hover:bg-white/5 hover:text-white"
-                                      }
-                                    `}
-                                  >
-                                    {/* Active indicator bar */}
-                                    {active && (
-                                      <motion.div
-                                        layoutId="sidebar-active-indicator"
-                                        className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#A8893D] to-[#C4A962]"
-                                        style={{
-                                          boxShadow:
-                                            "0 0 8px rgba(27,115,64,0.4)",
-                                        }}
-                                        transition={{ duration: dur }}
-                                      />
-                                    )}
-
-                                    <Icon
-                                      size={20}
-                                      className={`flex-shrink-0 transition-all duration-200 group-hover:${hoverClass} ${
-                                        active
-                                          ? "text-white"
-                                          : "text-gray-300 group-hover:text-white"
-                                      }`}
-                                    />
-                                    <span className="flex-1 truncate">
-                                      {item.label}
-                                    </span>
-
-                                    {/* Favorite indicator */}
-                                    {isFavorite(item.href) && (
-                                      <Star
-                                        size={12}
-                                        className="text-[#C4A962] flex-shrink-0"
-                                        fill="currentColor"
-                                      />
-                                    )}
-                                  </Link>
-                                </motion.li>
-                              );
-                            })}
-                          </motion.ul>
-                        )}
-                      </AnimatePresence>
-                    ) : (
-                      // Collapsed mode: just icons
-                      <div className="space-y-0.5">
-                        {group.items.map((item) => {
-                          const active = isActive(pathname, item.href);
-                          const Icon = item.icon;
-
-                          return (
-                            <Link
-                              key={item.href}
-                              href={item.href}
-                              aria-current={active ? "page" : undefined}
-                              aria-label={item.label}
-                              title={item.label}
-                              className={`
-                                group relative flex items-center justify-center rounded-xl
-                                transition-all duration-200
-                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8893D]/50
-                                active:scale-[0.98]
-                                w-10 h-10 mx-auto
-                                ${
-                                  active
-                                    ? "bg-[#A8893D]/15 text-white"
-                                    : "text-gray-200 hover:bg-white/5 hover:text-white"
-                                }
-                              `}
-                            >
-                              {active && (
-                                <div
-                                  className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#A8893D] to-[#C4A962]"
-                                  style={{
-                                    boxShadow:
-                                      "0 0 8px rgba(27,115,64,0.4)",
-                                  }}
-                                />
-                              )}
-                              <Icon
-                                size={20}
-                                className={`flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
-                                  active
-                                    ? "text-white"
-                                    : "text-gray-300 group-hover:text-white"
-                                }`}
-                              />
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* ------- Hidden sections link ------- */}
-              {hiddenSectionCount > 0 && !collapsed && (
-                <div className="mt-4 px-3">
-                  <button
-                    onClick={() => setWizardOpen(true)}
-                    className="text-xs text-gray-400 hover:text-gray-400 transition-colors"
-                  >
-                    {hiddenSectionCount} more section
-                    {hiddenSectionCount > 1 ? "s" : ""} hidden
-                  </button>
-                </div>
+              {/* ------- Hidden items drawer (customize mode) ------- */}
+              {customizeMode.isCustomizing && (
+                <SidebarHiddenItemsDrawer
+                  isCustomizing={customizeMode.isCustomizing}
+                  allGroups={permissionFilteredGroups}
+                  hiddenItems={layoutHook.hiddenItems}
+                  hiddenSections={layoutHook.hiddenSections}
+                  onToggleItemVisibility={layoutHook.toggleItemVisibility}
+                  onToggleSectionVisibility={
+                    layoutHook.toggleSectionVisibility
+                  }
+                  dur={dur}
+                />
               )}
+
+              {/* ------- Hidden sections link (preset-based) ------- */}
+              {presetHiddenSectionCount > 0 &&
+                !collapsed &&
+                !customizeMode.isCustomizing && (
+                  <div className="mt-4 px-3">
+                    <button
+                      onClick={() => setWizardOpen(true)}
+                      className="text-xs text-gray-400 hover:text-gray-400 transition-colors"
+                    >
+                      {presetHiddenSectionCount} more section
+                      {presetHiddenSectionCount > 1 ? "s" : ""} hidden
+                    </button>
+                  </div>
+                )}
             </>
           )}
         </nav>
@@ -1228,7 +1163,6 @@ export function Sidebar({
           className="relative border-t border-[#A8893D]/15 p-3"
           ref={userMenuRef}
         >
-          {/* User dropdown popover */}
           <AnimatePresence>
             {userMenuOpen && (
               <motion.div
@@ -1258,7 +1192,6 @@ export function Sidebar({
                   <HelpCircle size={16} />
                   Help & Support
                 </Link>
-                {/* Preset selector */}
                 <div className="my-1 border-t border-[#A8893D]/15" />
                 <button
                   onClick={() => {
@@ -1269,6 +1202,23 @@ export function Sidebar({
                 >
                   <Layers size={16} />
                   Sidebar Layout
+                </button>
+                <button
+                  onClick={handleEnterCustomize}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                >
+                  <Pencil size={16} />
+                  Customize Sidebar
+                </button>
+                <button
+                  onClick={() => {
+                    setImportExportOpen(true);
+                    setUserMenuOpen(false);
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                >
+                  <Download size={16} />
+                  Import / Export
                 </button>
                 <div className="my-1 border-t border-[#A8893D]/15" />
                 <button
@@ -1291,7 +1241,6 @@ export function Sidebar({
               ${collapsed ? "lg:justify-center" : ""}
             `}
           >
-            {/* Avatar with online indicator */}
             <div className="relative flex-shrink-0">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#A8893D] to-[#6B5A28] flex items-center justify-center ring-2 ring-[#A8893D]/30">
                 <span className="text-sm font-semibold text-white">
@@ -1300,8 +1249,6 @@ export function Sidebar({
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-[#0F172A]" />
             </div>
-
-            {/* User info -- hidden when collapsed */}
             {user && (
               <div
                 className={`flex-1 min-w-0 text-left ${
@@ -1377,9 +1324,7 @@ export function Sidebar({
         )}
       </AnimatePresence>
 
-      {/* ---------------------------------------------------------- */}
-      {/*  Setup wizard                                               */}
-      {/* ---------------------------------------------------------- */}
+      {/* Setup wizard */}
       <SidebarSetupWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
@@ -1392,6 +1337,14 @@ export function Sidebar({
         customVisibleSections={customVisibleSections}
         onSetCustomSections={handleSetCustomSections}
         onMarkSeen={handleMarkWizardSeen}
+      />
+
+      {/* Import/Export modal */}
+      <SidebarImportExport
+        open={importExportOpen}
+        onClose={() => setImportExportOpen(false)}
+        currentLayout={layoutHook.exportLayout()}
+        onImport={layoutHook.importLayout}
       />
     </>
   );

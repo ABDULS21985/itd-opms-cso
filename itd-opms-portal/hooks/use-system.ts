@@ -11,6 +11,7 @@ import type {
   TenantDetail,
   OrgUnitDetail,
   OrgTreeNode,
+  OrgAnalyticsResponse,
   SystemSetting,
   AuditEventDetail,
   AuditStatsResponse,
@@ -539,6 +540,16 @@ export function useOrgUnit(id: string | undefined) {
     queryFn: () =>
       apiClient.get<OrgUnitDetail>(`/system/org-units/${id}`),
     enabled: !!id,
+  });
+}
+
+/**
+ * GET /system/org-units/analytics - org analytics dashboard data.
+ */
+export function useOrgAnalytics() {
+  return useQuery({
+    queryKey: ["system-org-analytics"],
+    queryFn: () => apiClient.get<OrgAnalyticsResponse>("/system/org-units/analytics"),
   });
 }
 
