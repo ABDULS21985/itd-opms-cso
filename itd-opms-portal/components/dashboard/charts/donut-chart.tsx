@@ -117,10 +117,16 @@ export function DonutChart({
       </ResponsiveContainer>
       {centerLabel && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ marginBottom: showLegend ? 36 : 0 }}>
-          <span className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+          <span
+            className="font-bold tabular-nums text-[var(--text-primary)]"
+            style={{ fontSize: Math.max(11, Math.min(24, innerRadius * 0.65)) }}
+          >
             {centerValue ?? total}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+          <span
+            className="uppercase tracking-wider text-[var(--text-muted)]"
+            style={{ fontSize: Math.max(7, Math.min(10, innerRadius * 0.3)) }}
+          >
             {centerLabel}
           </span>
         </div>

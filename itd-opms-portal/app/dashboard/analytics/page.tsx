@@ -225,42 +225,42 @@ export default function ExecutiveAnalyticsPage() {
     label: string; value: number | string | undefined; icon: LucideIcon;
     color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
   }> = [
-    {
-      label: "Total Projects", value: anyLoading ? undefined : totalProjects,
-      icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
-      subtitle: `${completedProjects} completed`,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Completed", value: anyLoading ? undefined : completedProjects,
-      icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
-      subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
-      icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
-      icon: DollarSign, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
-      subtitle: totalBudgetApproved > 0
-        ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
-      icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
-      href: "/dashboard/planning/milestones",
-    },
-    {
-      label: "Active Risks", value: summary?.highRisks,
-      icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
-      subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
-      href: "/dashboard/planning/risks",
-    },
-  ];
+      {
+        label: "Total Projects", value: anyLoading ? undefined : totalProjects,
+        icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
+        subtitle: `${completedProjects} completed`,
+        href: "/dashboard/planning/projects",
+      },
+      {
+        label: "Completed", value: anyLoading ? undefined : completedProjects,
+        icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
+        subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
+        href: "/dashboard/planning/projects",
+      },
+      {
+        label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
+        icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
+        href: "/dashboard/planning/projects",
+      },
+      {
+        label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
+        icon: DollarSign, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
+        subtitle: totalBudgetApproved > 0
+          ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
+        href: "/dashboard/planning/projects",
+      },
+      {
+        label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
+        icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
+        href: "/dashboard/planning/milestones",
+      },
+      {
+        label: "Active Risks", value: summary?.highRisks,
+        icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
+        subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
+        href: "/dashboard/planning/risks",
+      },
+    ];
 
   return (
     <div className="space-y-6 pb-8">
@@ -278,7 +278,7 @@ export default function ExecutiveAnalyticsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                PMO Executive Dashboard
+                Head AMD Executive Dashboard
               </h1>
               <p className="text-sm text-[var(--text-secondary)]">
                 Cross-module performance overview and strategic insights
@@ -303,8 +303,7 @@ export default function ExecutiveAnalyticsPage() {
       >
         {analyticsPages.map((page) => (
           <Link key={page.href} href={page.href}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              page.active ? "text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${page.active ? "text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"}`}
             style={page.active ? { backgroundColor: "#1B7340" } : undefined}>
             {page.label}
           </Link>
@@ -349,14 +348,14 @@ export default function ExecutiveAnalyticsPage() {
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={divisionalData.data} categories={divisionalData.categories}
-                height={280} layout="vertical" colors={Object.values(STATUS_COLORS)} />}
+              height={280} layout="vertical" colors={Object.values(STATUS_COLORS)} />}
         </ChartCard>
 
         <ChartCard title="Budget Overview" subtitle="Approved → Spent → Remaining" delay={0.35}>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <WaterfallChart data={budgetData} height={280}
-                formatValue={(v) => `${(v / 1e6).toFixed(1)}M`} />}
+              formatValue={(v) => `${(v / 1e6).toFixed(1)}M`} />}
         </ChartCard>
       </div>
 
@@ -366,14 +365,14 @@ export default function ExecutiveAnalyticsPage() {
           {projectsLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={priorityData} height={220} innerRadius={45} outerRadius={75}
-                centerLabel="Projects" showLabel />}
+              centerLabel="Projects" showLabel />}
         </ChartCard>
 
         <ChartCard title="Milestone Progress" subtitle="Completed vs pending over time" delay={0.45}>
           {milestonesLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <TrendLineChart data={milestoneTrend} height={220}
-                lines={[{ key: "Completed", color: "#22C55E" }, { key: "Pending", color: "#F59E0B" }]} />}
+              lines={[{ key: "Completed", color: "#22C55E" }, { key: "Pending", color: "#F59E0B" }]} />}
         </ChartCard>
 
         <ChartCard title="Risk Heat Map" subtitle="Likelihood vs Impact" delay={0.5}>
