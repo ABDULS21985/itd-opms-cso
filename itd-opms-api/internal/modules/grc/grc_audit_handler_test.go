@@ -706,3 +706,117 @@ func TestAuditMgmtHandler_UpdateEvidenceCollection_InvalidBody(t *testing.T) {
 	}
 	assertErrorCode(t, rr, "BAD_REQUEST")
 }
+
+// ──────────────────────────────────────────────
+// Additional validation tests
+// ──────────────────────────────────────────────
+
+func TestAuditMgmtHandler_CreateAudit_MissingTitle(t *testing.T) {
+	router := newAuditRouter()
+
+	// Has auditType but missing title
+	req := httptest.NewRequest(http.MethodPost, "/audits/",
+		strings.NewReader(`{"auditType":"internal"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAuditMgmtHandler_CreateAudit_MissingAuditType(t *testing.T) {
+	router := newAuditRouter()
+
+	// Has title but missing auditType
+	req := httptest.NewRequest(http.MethodPost, "/audits/",
+		strings.NewReader(`{"title":"Test Audit"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAuditMgmtHandler_CreateFinding_MissingTitle(t *testing.T) {
+	router := newAuditRouter()
+
+	// Has severity but missing title
+	req := httptest.NewRequest(http.MethodPost,
+		"/audits/"+uuid.New().String()+"/findings/",
+		strings.NewReader(`{"severity":"high"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAuditMgmtHandler_CreateFinding_MissingSeverity(t *testing.T) {
+	router := newAuditRouter()
+
+	// Has title but missing severity
+	req := httptest.NewRequest(http.MethodPost,
+		"/audits/"+uuid.New().String()+"/findings/",
+		strings.NewReader(`{"title":"Test Finding"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAuditMgmtHandler_CreateEvidenceCollection_InvalidAuditID(t *testing.T) {
+	router := newAuditRouter()
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/audits/not-a-uuid/evidence/",
+		strings.NewReader(`{"title":"Test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "BAD_REQUEST")
+}
+
+func TestNewAuditMgmtHandler_NotNil(t *testing.T) {
+	svc := NewAuditMgmtService(nil, nil)
+	h := NewAuditMgmtHandler(svc)
+	if h == nil {
+		t.Fatal("expected non-nil AuditMgmtHandler")
+	}
+	if h.svc == nil {
+		t.Fatal("expected non-nil service in handler")
+	}
+}
+
+func TestNewAuditMgmtService_NotNil(t *testing.T) {
+	svc := NewAuditMgmtService(nil, nil)
+	if svc == nil {
+		t.Fatal("expected non-nil AuditMgmtService")
+	}
+}

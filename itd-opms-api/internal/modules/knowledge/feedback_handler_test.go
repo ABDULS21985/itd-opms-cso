@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // ──────────────────────────────────────────────
@@ -243,5 +245,95 @@ func TestFeedbackRoutes_PermissionEnforced(t *testing.T) {
 				t.Errorf("expected 401 for unauthenticated %s %s, got %d", rt.method, rt.path, w.Code)
 			}
 		})
+	}
+}
+
+func TestFeedbackRoutes_ForbiddenWithoutPermission(t *testing.T) {
+	r := knowledgeRouter()
+	validArticleID := uuid.New().String()
+	validFeedbackID := uuid.New().String()
+
+	// Auth with no permissions should get 403 from RequirePermission middleware.
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "test@example.com",
+		Roles:       []string{"viewer"},
+		Permissions: []string{},
+	}
+
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"ListFeedback", http.MethodGet, "/articles/" + validArticleID + "/feedback/"},
+		{"GetFeedbackStats", http.MethodGet, "/articles/" + validArticleID + "/feedback/stats"},
+		{"CreateFeedback", http.MethodPost, "/articles/" + validArticleID + "/feedback/"},
+		{"DeleteFeedback", http.MethodDelete, "/articles/" + validArticleID + "/feedback/" + validFeedbackID},
+	}
+
+	for _, rt := range routes {
+		t.Run(fmt.Sprintf("Forbidden_%s", rt.name), func(t *testing.T) {
+			req := httptest.NewRequest(rt.method, rt.path, nil)
+			ctx := types.SetAuthContext(req.Context(), auth)
+			req = req.WithContext(ctx)
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("expected 403 for %s %s without permission, got %d", rt.method, rt.path, w.Code)
+			}
+		})
+	}
+}
+
+func TestFeedbackRoutes_ViewPermissionCannotDelete(t *testing.T) {
+	r := knowledgeRouter()
+	validArticleID := uuid.New().String()
+	validFeedbackID := uuid.New().String()
+
+	// User with knowledge.view should not be able to delete feedback (requires knowledge.manage).
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "viewer@example.com",
+		Roles:       []string{"viewer"},
+		Permissions: []string{"knowledge.view"},
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/articles/"+validArticleID+"/feedback/"+validFeedbackID, nil)
+	ctx := types.SetAuthContext(req.Context(), auth)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for view-only user deleting feedback, got %d", w.Code)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Additional edge case tests
+// ──────────────────────────────────────────────
+
+func TestFeedbackHandler_CreateFeedback_EmptyBody(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	validArticleID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodPost, "/articles/"+validArticleID+"/feedback/", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	req = withKnowledgeAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("articleId", validArticleID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.feedback.CreateFeedback(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty body, got %d", w.Code)
 	}
 }

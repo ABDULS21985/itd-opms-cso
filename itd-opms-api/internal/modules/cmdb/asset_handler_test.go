@@ -460,6 +460,121 @@ func TestAssetHandler_SearchAssets_MissingQuery(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
+// Query helper function tests
+// ──────────────────────────────────────────────
+
+func TestOptionalString_Present(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?status=active", nil)
+	result := optionalString(req, "status")
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result != "active" {
+		t.Errorf("expected %q, got %q", "active", *result)
+	}
+}
+
+func TestOptionalString_Absent(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	result := optionalString(req, "status")
+	if result != nil {
+		t.Errorf("expected nil result, got %q", *result)
+	}
+}
+
+func TestOptionalString_Empty(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?status=", nil)
+	result := optionalString(req, "status")
+	if result != nil {
+		t.Errorf("expected nil result for empty value, got %q", *result)
+	}
+}
+
+func TestOptionalUUID_ValidUUID(t *testing.T) {
+	id := uuid.New()
+	req := httptest.NewRequest(http.MethodGet, "/?ownerId="+id.String(), nil)
+	result := optionalUUID(req, "ownerId")
+	if result == nil {
+		t.Fatal("expected non-nil result for valid UUID")
+	}
+	if *result != id {
+		t.Errorf("expected %s, got %s", id, *result)
+	}
+}
+
+func TestOptionalUUID_InvalidUUID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?ownerId=not-a-uuid", nil)
+	result := optionalUUID(req, "ownerId")
+	if result != nil {
+		t.Errorf("expected nil result for invalid UUID, got %s", *result)
+	}
+}
+
+func TestOptionalUUID_Absent(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	result := optionalUUID(req, "ownerId")
+	if result != nil {
+		t.Errorf("expected nil result, got %s", *result)
+	}
+}
+
+func TestOptionalUUID_Empty(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?ownerId=", nil)
+	result := optionalUUID(req, "ownerId")
+	if result != nil {
+		t.Errorf("expected nil result for empty value, got %s", *result)
+	}
+}
+
+func TestOptionalInt_ValidValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?days=30", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 30 {
+		t.Errorf("expected 30, got %d", result)
+	}
+}
+
+func TestOptionalInt_DefaultValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 90 {
+		t.Errorf("expected default 90, got %d", result)
+	}
+}
+
+func TestOptionalInt_InvalidValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?days=abc", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 90 {
+		t.Errorf("expected default 90 for invalid input, got %d", result)
+	}
+}
+
+func TestOptionalInt_ZeroValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?days=0", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 90 {
+		t.Errorf("expected default 90 for zero (non-positive), got %d", result)
+	}
+}
+
+func TestOptionalInt_NegativeValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?days=-5", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 90 {
+		t.Errorf("expected default 90 for negative value, got %d", result)
+	}
+}
+
+func TestOptionalInt_LargeValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?days=365", nil)
+	result := optionalInt(req, "days", 90)
+	if result != 365 {
+		t.Errorf("expected 365, got %d", result)
+	}
+}
+
+// ──────────────────────────────────────────────
 // Route registration tests
 // ──────────────────────────────────────────────
 

@@ -582,3 +582,204 @@ func TestArticleRoutes_ForbiddenWithoutPermission(t *testing.T) {
 		})
 	}
 }
+
+// ──────────────────────────────────────────────
+// View-only permission should be forbidden on manage routes
+// ──────────────────────────────────────────────
+
+func TestArticleRoutes_ViewPermissionCannotManage(t *testing.T) {
+	r := knowledgeRouter()
+	validUUID := uuid.New().String()
+
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "viewer@example.com",
+		Roles:       []string{"viewer"},
+		Permissions: []string{"knowledge.view"},
+	}
+
+	manageRoutes := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"CreateCategory", http.MethodPost, "/categories/", `{"name":"test"}`},
+		{"UpdateCategory", http.MethodPut, "/categories/" + validUUID, `{"name":"x"}`},
+		{"DeleteCategory", http.MethodDelete, "/categories/" + validUUID, ""},
+		{"CreateArticle", http.MethodPost, "/articles/", `{"title":"t","slug":"s","content":"c","type":"faq"}`},
+		{"UpdateArticle", http.MethodPut, "/articles/" + validUUID, `{"title":"x"}`},
+		{"DeleteArticle", http.MethodDelete, "/articles/" + validUUID, ""},
+		{"PublishArticle", http.MethodPost, "/articles/" + validUUID + "/publish", ""},
+		{"ArchiveArticle", http.MethodPost, "/articles/" + validUUID + "/archive", ""},
+	}
+
+	for _, rt := range manageRoutes {
+		t.Run(fmt.Sprintf("ViewOnly_%s", rt.name), func(t *testing.T) {
+			var req *http.Request
+			if rt.body != "" {
+				req = httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(rt.method, rt.path, nil)
+			}
+			ctx := types.SetAuthContext(req.Context(), auth)
+			req = req.WithContext(ctx)
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("expected 403 for view-only user on %s %s, got %d", rt.method, rt.path, w.Code)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// Verify view-only permission allows read endpoints
+// ──────────────────────────────────────────────
+
+func TestArticleRoutes_ViewPermissionAllowsRead(t *testing.T) {
+	r := knowledgeRouter()
+	validUUID := uuid.New().String()
+
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "viewer@example.com",
+		Roles:       []string{"viewer"},
+		Permissions: []string{"knowledge.view"},
+	}
+
+	// These should NOT return 401 or 403 (they will panic or return 500
+	// because of nil pool, but that is expected and proves routing works).
+	readRoutes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"ListCategories", http.MethodGet, "/categories/"},
+		{"GetCategory", http.MethodGet, "/categories/" + validUUID},
+		{"ListArticles", http.MethodGet, "/articles/"},
+		{"GetArticle", http.MethodGet, "/articles/" + validUUID},
+		{"SearchArticles", http.MethodGet, "/articles/search?q=test"},
+		{"GetArticleBySlug", http.MethodGet, "/articles/slug/my-slug"},
+	}
+
+	for _, rt := range readRoutes {
+		t.Run(fmt.Sprintf("ViewAllowed_%s", rt.name), func(t *testing.T) {
+			req := httptest.NewRequest(rt.method, rt.path, nil)
+			ctx := types.SetAuthContext(req.Context(), auth)
+			req = req.WithContext(ctx)
+
+			w := httptest.NewRecorder()
+
+			// Use a recovery wrapper since nil pool will panic in service layer.
+			func() {
+				defer func() { recover() }()
+				r.ServeHTTP(w, req)
+			}()
+
+			if w.Code == http.StatusUnauthorized {
+				t.Errorf("unexpected 401 for view-permitted user on %s %s", rt.method, rt.path)
+			}
+			if w.Code == http.StatusForbidden {
+				t.Errorf("unexpected 403 for view-permitted user on %s %s", rt.method, rt.path)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// Additional edge case tests
+// ──────────────────────────────────────────────
+
+func TestArticleHandler_CreateArticle_EmptyBody(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	req := httptest.NewRequest(http.MethodPost, "/articles/", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+	h.article.CreateArticle(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty body, got %d", w.Code)
+	}
+}
+
+func TestArticleHandler_CreateCategory_EmptyBody(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	req := httptest.NewRequest(http.MethodPost, "/categories/", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+	h.article.CreateCategory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty body, got %d", w.Code)
+	}
+}
+
+func TestArticleHandler_SearchArticles_WithQuery(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	// This will have auth but nil pool, so the handler should pass validation
+	// but then fail on service layer. The point is to ensure the handler
+	// does NOT reject a request with a valid query string.
+	req := httptest.NewRequest(http.MethodGet, "/articles/search?q=password", nil)
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+
+	// Will panic because service uses nil pool -- that is expected.
+	func() {
+		defer func() { recover() }()
+		h.article.SearchArticles(w, req)
+	}()
+
+	// If it returned 400, that means validation rejected it wrongly.
+	if w.Code == http.StatusBadRequest {
+		t.Errorf("unexpected 400 for valid search query")
+	}
+}
+
+func TestArticleHandler_ListArticles_ValidFilters(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	validUUID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodGet, "/articles/?category_id="+validUUID+"&status=published&type=faq&author_id="+validUUID, nil)
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+
+	// Will panic because service uses nil pool -- that is expected.
+	func() {
+		defer func() { recover() }()
+		h.article.ListArticles(w, req)
+	}()
+
+	// If it returned 400, that means validation rejected the valid params wrongly.
+	if w.Code == http.StatusBadRequest {
+		t.Errorf("unexpected 400 for valid query filters")
+	}
+}
+
+func TestArticleHandler_ListCategories_ValidParentID(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	validUUID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodGet, "/categories/?parent_id="+validUUID, nil)
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+
+	func() {
+		defer func() { recover() }()
+		h.article.ListCategories(w, req)
+	}()
+
+	if w.Code == http.StatusBadRequest {
+		t.Errorf("unexpected 400 for valid parent_id")
+	}
+}

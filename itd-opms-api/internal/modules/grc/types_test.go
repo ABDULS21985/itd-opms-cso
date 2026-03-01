@@ -1057,3 +1057,900 @@ func TestRisk_JSONNullOptionalFields(t *testing.T) {
 		t.Errorf("LinkedAuditID: expected nil, got %v", decoded.LinkedAuditID)
 	}
 }
+
+// ──────────────────────────────────────────────
+// Request type JSON parsing tests
+// ──────────────────────────────────────────────
+
+func TestCreateRiskRequest_JSONParse(t *testing.T) {
+	ownerID := uuid.New()
+	input := `{
+		"title":"Data Breach Risk",
+		"description":"Potential data leak",
+		"category":"security",
+		"likelihood":"high",
+		"impact":"very_high",
+		"status":"identified",
+		"treatmentPlan":"Encrypt all data",
+		"ownerId":"` + ownerID.String() + `",
+		"escalationThreshold":15
+	}`
+
+	var req CreateRiskRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateRiskRequest: %v", err)
+	}
+
+	if req.Title != "Data Breach Risk" {
+		t.Errorf("Title: expected %q, got %q", "Data Breach Risk", req.Title)
+	}
+	if req.Category != "security" {
+		t.Errorf("Category: expected %q, got %q", "security", req.Category)
+	}
+	if req.Likelihood != "high" {
+		t.Errorf("Likelihood: expected %q, got %q", "high", req.Likelihood)
+	}
+	if req.Impact != "very_high" {
+		t.Errorf("Impact: expected %q, got %q", "very_high", req.Impact)
+	}
+	if req.Status != "identified" {
+		t.Errorf("Status: expected %q, got %q", "identified", req.Status)
+	}
+	if req.Description == nil || *req.Description != "Potential data leak" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	if req.TreatmentPlan == nil || *req.TreatmentPlan != "Encrypt all data" {
+		t.Errorf("TreatmentPlan mismatch: got %v", req.TreatmentPlan)
+	}
+	if req.OwnerID == nil || *req.OwnerID != ownerID {
+		t.Errorf("OwnerID: expected %s, got %v", ownerID, req.OwnerID)
+	}
+	if req.EscalationThreshold == nil || *req.EscalationThreshold != 15 {
+		t.Errorf("EscalationThreshold: expected 15, got %v", req.EscalationThreshold)
+	}
+	// Nil optional fields
+	if req.ContingencyPlan != nil {
+		t.Errorf("ContingencyPlan: expected nil, got %v", req.ContingencyPlan)
+	}
+	if req.ReviewerID != nil {
+		t.Errorf("ReviewerID: expected nil, got %v", req.ReviewerID)
+	}
+}
+
+func TestCreateRiskRequest_MinimalParse(t *testing.T) {
+	input := `{"title":"Risk","category":"operational","likelihood":"low","impact":"low","status":"identified"}`
+	var req CreateRiskRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Title != "Risk" {
+		t.Errorf("Title: expected %q, got %q", "Risk", req.Title)
+	}
+	if req.Description != nil {
+		t.Errorf("Description: expected nil, got %v", req.Description)
+	}
+	if req.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", req.OwnerID)
+	}
+	if req.EscalationThreshold != nil {
+		t.Errorf("EscalationThreshold: expected nil, got %v", req.EscalationThreshold)
+	}
+}
+
+func TestUpdateRiskRequest_PartialParse(t *testing.T) {
+	input := `{"title":"Updated Title","status":"mitigating"}`
+	var req UpdateRiskRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateRiskRequest: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Title" {
+		t.Errorf("Title: expected %q, got %v", "Updated Title", req.Title)
+	}
+	if req.Status == nil || *req.Status != "mitigating" {
+		t.Errorf("Status: expected %q, got %v", "mitigating", req.Status)
+	}
+	// Fields not in JSON should remain nil
+	if req.Category != nil {
+		t.Errorf("Category: expected nil, got %v", req.Category)
+	}
+	if req.Likelihood != nil {
+		t.Errorf("Likelihood: expected nil, got %v", req.Likelihood)
+	}
+	if req.Impact != nil {
+		t.Errorf("Impact: expected nil, got %v", req.Impact)
+	}
+	if req.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", req.OwnerID)
+	}
+}
+
+func TestCreateRiskAssessmentRequest_JSONParse(t *testing.T) {
+	ref := uuid.New()
+	input := `{
+		"newLikelihood":"medium",
+		"newImpact":"high",
+		"rationale":"Risk increased due to new vulnerability",
+		"evidenceRefs":["` + ref.String() + `"]
+	}`
+
+	var req CreateRiskAssessmentRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateRiskAssessmentRequest: %v", err)
+	}
+
+	if req.NewLikelihood != "medium" {
+		t.Errorf("NewLikelihood: expected %q, got %q", "medium", req.NewLikelihood)
+	}
+	if req.NewImpact != "high" {
+		t.Errorf("NewImpact: expected %q, got %q", "high", req.NewImpact)
+	}
+	if req.Rationale == nil || *req.Rationale != "Risk increased due to new vulnerability" {
+		t.Errorf("Rationale mismatch: got %v", req.Rationale)
+	}
+	if len(req.EvidenceRefs) != 1 || req.EvidenceRefs[0] != ref {
+		t.Errorf("EvidenceRefs: expected [%s], got %v", ref, req.EvidenceRefs)
+	}
+}
+
+func TestCreateRiskAssessmentRequest_MinimalParse(t *testing.T) {
+	input := `{"newLikelihood":"low","newImpact":"low"}`
+	var req CreateRiskAssessmentRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.NewLikelihood != "low" {
+		t.Errorf("NewLikelihood: expected %q, got %q", "low", req.NewLikelihood)
+	}
+	if req.Rationale != nil {
+		t.Errorf("Rationale: expected nil, got %v", req.Rationale)
+	}
+	if req.EvidenceRefs != nil {
+		t.Errorf("EvidenceRefs: expected nil, got %v", req.EvidenceRefs)
+	}
+}
+
+func TestCreateAuditRequest_JSONParse(t *testing.T) {
+	input := `{
+		"title":"Q1 Security Audit",
+		"auditType":"internal",
+		"scope":"Full system review",
+		"auditor":"Jane Doe",
+		"auditBody":"Internal Audit Team",
+		"evidenceRequirements":{"items":["logs","configs"]}
+	}`
+
+	var req CreateAuditRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateAuditRequest: %v", err)
+	}
+
+	if req.Title != "Q1 Security Audit" {
+		t.Errorf("Title: expected %q, got %q", "Q1 Security Audit", req.Title)
+	}
+	if req.AuditType != "internal" {
+		t.Errorf("AuditType: expected %q, got %q", "internal", req.AuditType)
+	}
+	if req.Scope == nil || *req.Scope != "Full system review" {
+		t.Errorf("Scope mismatch: got %v", req.Scope)
+	}
+	if req.Auditor == nil || *req.Auditor != "Jane Doe" {
+		t.Errorf("Auditor mismatch: got %v", req.Auditor)
+	}
+	if req.AuditBody == nil || *req.AuditBody != "Internal Audit Team" {
+		t.Errorf("AuditBody mismatch: got %v", req.AuditBody)
+	}
+	if req.EvidenceRequirements == nil {
+		t.Error("EvidenceRequirements: expected non-nil")
+	}
+	if req.ScheduledStart != nil {
+		t.Errorf("ScheduledStart: expected nil, got %v", req.ScheduledStart)
+	}
+}
+
+func TestUpdateAuditRequest_PartialParse(t *testing.T) {
+	input := `{"title":"Updated Audit","status":"in_progress"}`
+	var req UpdateAuditRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateAuditRequest: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Audit" {
+		t.Errorf("Title: expected %q, got %v", "Updated Audit", req.Title)
+	}
+	if req.Status == nil || *req.Status != "in_progress" {
+		t.Errorf("Status: expected %q, got %v", "in_progress", req.Status)
+	}
+	if req.AuditType != nil {
+		t.Errorf("AuditType: expected nil, got %v", req.AuditType)
+	}
+	if req.Scope != nil {
+		t.Errorf("Scope: expected nil, got %v", req.Scope)
+	}
+	if req.ReadinessScore != nil {
+		t.Errorf("ReadinessScore: expected nil, got %v", req.ReadinessScore)
+	}
+}
+
+func TestCreateAuditFindingRequest_JSONParse(t *testing.T) {
+	ownerID := uuid.New()
+	input := `{
+		"title":"Missing MFA",
+		"description":"Admin accounts lack MFA",
+		"severity":"critical",
+		"remediationPlan":"Enable MFA",
+		"ownerId":"` + ownerID.String() + `"
+	}`
+
+	var req CreateAuditFindingRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateAuditFindingRequest: %v", err)
+	}
+
+	if req.Title != "Missing MFA" {
+		t.Errorf("Title: expected %q, got %q", "Missing MFA", req.Title)
+	}
+	if req.Severity != "critical" {
+		t.Errorf("Severity: expected %q, got %q", "critical", req.Severity)
+	}
+	if req.Description == nil || *req.Description != "Admin accounts lack MFA" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	if req.RemediationPlan == nil || *req.RemediationPlan != "Enable MFA" {
+		t.Errorf("RemediationPlan mismatch: got %v", req.RemediationPlan)
+	}
+	if req.OwnerID == nil || *req.OwnerID != ownerID {
+		t.Errorf("OwnerID: expected %s, got %v", ownerID, req.OwnerID)
+	}
+	if req.DueDate != nil {
+		t.Errorf("DueDate: expected nil, got %v", req.DueDate)
+	}
+}
+
+func TestUpdateAuditFindingRequest_PartialParse(t *testing.T) {
+	input := `{"severity":"high","status":"in_remediation"}`
+	var req UpdateAuditFindingRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateAuditFindingRequest: %v", err)
+	}
+
+	if req.Severity == nil || *req.Severity != "high" {
+		t.Errorf("Severity: expected %q, got %v", "high", req.Severity)
+	}
+	if req.Status == nil || *req.Status != "in_remediation" {
+		t.Errorf("Status: expected %q, got %v", "in_remediation", req.Status)
+	}
+	if req.Title != nil {
+		t.Errorf("Title: expected nil, got %v", req.Title)
+	}
+	if req.Description != nil {
+		t.Errorf("Description: expected nil, got %v", req.Description)
+	}
+}
+
+func TestCreateEvidenceCollectionRequest_JSONParse(t *testing.T) {
+	item1 := uuid.New()
+	item2 := uuid.New()
+	collectorID := uuid.New()
+	input := `{
+		"title":"Firewall Evidence",
+		"description":"Firewall config snapshots",
+		"evidenceItemIds":["` + item1.String() + `","` + item2.String() + `"],
+		"collectorId":"` + collectorID.String() + `"
+	}`
+
+	var req CreateEvidenceCollectionRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateEvidenceCollectionRequest: %v", err)
+	}
+
+	if req.Title != "Firewall Evidence" {
+		t.Errorf("Title: expected %q, got %q", "Firewall Evidence", req.Title)
+	}
+	if req.Description == nil || *req.Description != "Firewall config snapshots" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	if len(req.EvidenceItemIDs) != 2 {
+		t.Errorf("EvidenceItemIDs: expected 2, got %d", len(req.EvidenceItemIDs))
+	}
+	if req.CollectorID == nil || *req.CollectorID != collectorID {
+		t.Errorf("CollectorID: expected %s, got %v", collectorID, req.CollectorID)
+	}
+}
+
+func TestUpdateEvidenceCollectionRequest_PartialParse(t *testing.T) {
+	input := `{"title":"Updated Title","status":"review"}`
+	var req UpdateEvidenceCollectionRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateEvidenceCollectionRequest: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Title" {
+		t.Errorf("Title: expected %q, got %v", "Updated Title", req.Title)
+	}
+	if req.Status == nil || *req.Status != "review" {
+		t.Errorf("Status: expected %q, got %v", "review", req.Status)
+	}
+	if req.Description != nil {
+		t.Errorf("Description: expected nil, got %v", req.Description)
+	}
+	if req.CollectorID != nil {
+		t.Errorf("CollectorID: expected nil, got %v", req.CollectorID)
+	}
+	if req.ReviewerID != nil {
+		t.Errorf("ReviewerID: expected nil, got %v", req.ReviewerID)
+	}
+	if req.Checksum != nil {
+		t.Errorf("Checksum: expected nil, got %v", req.Checksum)
+	}
+}
+
+func TestCreateAccessReviewCampaignRequest_JSONParse(t *testing.T) {
+	reviewer1 := uuid.New()
+	reviewer2 := uuid.New()
+	input := `{
+		"title":"Q1 Access Review",
+		"scope":"All admin users",
+		"reviewerIds":["` + reviewer1.String() + `","` + reviewer2.String() + `"]
+	}`
+
+	var req CreateAccessReviewCampaignRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateAccessReviewCampaignRequest: %v", err)
+	}
+
+	if req.Title != "Q1 Access Review" {
+		t.Errorf("Title: expected %q, got %q", "Q1 Access Review", req.Title)
+	}
+	if req.Scope == nil || *req.Scope != "All admin users" {
+		t.Errorf("Scope mismatch: got %v", req.Scope)
+	}
+	if len(req.ReviewerIDs) != 2 {
+		t.Errorf("ReviewerIDs: expected 2, got %d", len(req.ReviewerIDs))
+	}
+	if req.DueDate != nil {
+		t.Errorf("DueDate: expected nil, got %v", req.DueDate)
+	}
+}
+
+func TestUpdateAccessReviewCampaignRequest_PartialParse(t *testing.T) {
+	input := `{"title":"Updated Campaign","status":"active"}`
+	var req UpdateAccessReviewCampaignRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateAccessReviewCampaignRequest: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Campaign" {
+		t.Errorf("Title: expected %q, got %v", "Updated Campaign", req.Title)
+	}
+	if req.Status == nil || *req.Status != "active" {
+		t.Errorf("Status: expected %q, got %v", "active", req.Status)
+	}
+	if req.Scope != nil {
+		t.Errorf("Scope: expected nil, got %v", req.Scope)
+	}
+	if req.DueDate != nil {
+		t.Errorf("DueDate: expected nil, got %v", req.DueDate)
+	}
+}
+
+func TestCreateAccessReviewEntryRequest_JSONParse(t *testing.T) {
+	userID := uuid.New()
+	roleID := uuid.New()
+	input := `{"userId":"` + userID.String() + `","roleId":"` + roleID.String() + `"}`
+
+	var req CreateAccessReviewEntryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateAccessReviewEntryRequest: %v", err)
+	}
+
+	if req.UserID != userID {
+		t.Errorf("UserID: expected %s, got %s", userID, req.UserID)
+	}
+	if req.RoleID == nil || *req.RoleID != roleID {
+		t.Errorf("RoleID: expected %s, got %v", roleID, req.RoleID)
+	}
+}
+
+func TestCreateAccessReviewEntryRequest_MinimalParse(t *testing.T) {
+	userID := uuid.New()
+	input := `{"userId":"` + userID.String() + `"}`
+
+	var req CreateAccessReviewEntryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.UserID != userID {
+		t.Errorf("UserID: expected %s, got %s", userID, req.UserID)
+	}
+	if req.RoleID != nil {
+		t.Errorf("RoleID: expected nil, got %v", req.RoleID)
+	}
+}
+
+func TestRecordDecisionRequest_JSONParse(t *testing.T) {
+	input := `{
+		"decision":"approved",
+		"justification":"User still requires access for project"
+	}`
+
+	var req RecordDecisionRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal RecordDecisionRequest: %v", err)
+	}
+
+	if req.Decision != "approved" {
+		t.Errorf("Decision: expected %q, got %q", "approved", req.Decision)
+	}
+	if req.Justification == nil || *req.Justification != "User still requires access for project" {
+		t.Errorf("Justification mismatch: got %v", req.Justification)
+	}
+	if req.ExceptionExpiry != nil {
+		t.Errorf("ExceptionExpiry: expected nil, got %v", req.ExceptionExpiry)
+	}
+}
+
+func TestRecordDecisionRequest_WithExpiry(t *testing.T) {
+	input := `{
+		"decision":"exception",
+		"justification":"Temporary access needed",
+		"exceptionExpiry":"2026-06-01T00:00:00Z"
+	}`
+
+	var req RecordDecisionRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal RecordDecisionRequest: %v", err)
+	}
+
+	if req.Decision != "exception" {
+		t.Errorf("Decision: expected %q, got %q", "exception", req.Decision)
+	}
+	if req.ExceptionExpiry == nil {
+		t.Fatal("ExceptionExpiry: expected non-nil")
+	}
+	if req.ExceptionExpiry.Year() != 2026 || req.ExceptionExpiry.Month() != time.June {
+		t.Errorf("ExceptionExpiry: unexpected value %v", req.ExceptionExpiry)
+	}
+}
+
+func TestCreateComplianceControlRequest_JSONParse(t *testing.T) {
+	ownerID := uuid.New()
+	input := `{
+		"framework":"ISO_27001",
+		"controlId":"A.10.1.1",
+		"controlName":"Cryptographic Controls",
+		"description":"Encryption at rest and in transit",
+		"ownerId":"` + ownerID.String() + `"
+	}`
+
+	var req CreateComplianceControlRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateComplianceControlRequest: %v", err)
+	}
+
+	if req.Framework != "ISO_27001" {
+		t.Errorf("Framework: expected %q, got %q", "ISO_27001", req.Framework)
+	}
+	if req.ControlID != "A.10.1.1" {
+		t.Errorf("ControlID: expected %q, got %q", "A.10.1.1", req.ControlID)
+	}
+	if req.ControlName != "Cryptographic Controls" {
+		t.Errorf("ControlName: expected %q, got %q", "Cryptographic Controls", req.ControlName)
+	}
+	if req.Description == nil || *req.Description != "Encryption at rest and in transit" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	if req.OwnerID == nil || *req.OwnerID != ownerID {
+		t.Errorf("OwnerID: expected %s, got %v", ownerID, req.OwnerID)
+	}
+}
+
+func TestCreateComplianceControlRequest_MinimalParse(t *testing.T) {
+	input := `{"framework":"NIST_CSF","controlId":"PR.AC-1","controlName":"Identity Management"}`
+	var req CreateComplianceControlRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Framework != "NIST_CSF" {
+		t.Errorf("Framework: expected %q, got %q", "NIST_CSF", req.Framework)
+	}
+	if req.Description != nil {
+		t.Errorf("Description: expected nil, got %v", req.Description)
+	}
+	if req.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", req.OwnerID)
+	}
+}
+
+func TestUpdateComplianceControlRequest_PartialParse(t *testing.T) {
+	ref := uuid.New()
+	input := `{"controlName":"Updated Name","implementationStatus":"verified","evidenceRefs":["` + ref.String() + `"]}`
+	var req UpdateComplianceControlRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateComplianceControlRequest: %v", err)
+	}
+
+	if req.ControlName == nil || *req.ControlName != "Updated Name" {
+		t.Errorf("ControlName: expected %q, got %v", "Updated Name", req.ControlName)
+	}
+	if req.ImplementationStatus == nil || *req.ImplementationStatus != "verified" {
+		t.Errorf("ImplementationStatus: expected %q, got %v", "verified", req.ImplementationStatus)
+	}
+	if len(req.EvidenceRefs) != 1 || req.EvidenceRefs[0] != ref {
+		t.Errorf("EvidenceRefs: expected [%s], got %v", ref, req.EvidenceRefs)
+	}
+	if req.Description != nil {
+		t.Errorf("Description: expected nil, got %v", req.Description)
+	}
+	if req.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", req.OwnerID)
+	}
+}
+
+// ──────────────────────────────────────────────
+// JSON field name tests for remaining types
+// ──────────────────────────────────────────────
+
+func TestAuditFinding_JSONFieldNames(t *testing.T) {
+	f := AuditFinding{
+		ID:            uuid.New(),
+		AuditID:       uuid.New(),
+		TenantID:      uuid.New(),
+		FindingNumber: "FND-0001",
+		Title:         "Test",
+		Severity:      "high",
+		Status:        "open",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatalf("failed to marshal AuditFinding: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal into map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "auditId", "tenantId", "findingNumber", "title",
+		"description", "severity", "status", "remediationPlan",
+		"ownerId", "dueDate", "closedAt", "evidenceOfRemediation",
+		"createdAt", "updatedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized AuditFinding", field)
+		}
+	}
+}
+
+func TestEvidenceCollection_JSONFieldNames(t *testing.T) {
+	ec := EvidenceCollection{
+		ID:       uuid.New(),
+		AuditID:  uuid.New(),
+		TenantID: uuid.New(),
+		Title:    "Test",
+		Status:   "pending",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(ec)
+	if err != nil {
+		t.Fatalf("failed to marshal EvidenceCollection: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal into map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "auditId", "tenantId", "title", "description",
+		"status", "evidenceItemIds", "collectorId", "reviewerId",
+		"approvedAt", "checksum", "createdAt", "updatedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized EvidenceCollection", field)
+		}
+	}
+}
+
+func TestAccessReviewCampaign_JSONFieldNames(t *testing.T) {
+	c := AccessReviewCampaign{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Title:     "Test",
+		Status:    "planned",
+		CreatedBy: uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("failed to marshal AccessReviewCampaign: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal into map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "title", "scope", "status",
+		"reviewerIds", "dueDate", "completionRate",
+		"createdBy", "createdAt", "updatedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized AccessReviewCampaign", field)
+		}
+	}
+}
+
+func TestAccessReviewEntry_JSONFieldNames(t *testing.T) {
+	e := AccessReviewEntry{
+		ID:         uuid.New(),
+		CampaignID: uuid.New(),
+		TenantID:   uuid.New(),
+		UserID:     uuid.New(),
+		CreatedAt:  time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("failed to marshal AccessReviewEntry: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal into map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "campaignId", "tenantId", "userId", "roleId",
+		"reviewerId", "decision", "justification", "exceptionExpiry",
+		"decidedAt", "createdAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized AccessReviewEntry", field)
+		}
+	}
+}
+
+func TestRiskAssessment_JSONFieldNames(t *testing.T) {
+	a := RiskAssessment{
+		ID:             uuid.New(),
+		RiskID:         uuid.New(),
+		AssessedBy:     uuid.New(),
+		AssessmentDate: time.Now().UTC(),
+		NewLikelihood:  "high",
+		NewImpact:      "high",
+		CreatedAt:      time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("failed to marshal RiskAssessment: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal into map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "riskId", "assessedBy", "assessmentDate",
+		"previousLikelihood", "previousImpact",
+		"newLikelihood", "newImpact",
+		"rationale", "evidenceRefs", "createdAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized RiskAssessment", field)
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// likelihoodImpactScore edge cases
+// ──────────────────────────────────────────────
+
+func TestLikelihoodImpactScore_AllCombinations(t *testing.T) {
+	levels := []struct {
+		name  string
+		value int
+	}{
+		{"very_low", 1},
+		{"low", 2},
+		{"medium", 3},
+		{"high", 4},
+		{"very_high", 5},
+	}
+
+	for _, l := range levels {
+		for _, i := range levels {
+			expected := l.value * i.value
+			got := likelihoodImpactScore(l.name, i.name)
+			if got != expected {
+				t.Errorf("likelihoodImpactScore(%q, %q) = %d, want %d",
+					l.name, i.name, got, expected)
+			}
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// Audit with null optional fields
+// ──────────────────────────────────────────────
+
+func TestAudit_JSONNullOptionalFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	a := Audit{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Title:     "Test Audit",
+		AuditType: AuditTypeInternal,
+		Status:    AuditStatusPlanned,
+		CreatedBy: uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		// All pointer fields left nil
+	}
+
+	data, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("failed to marshal Audit with nil optional fields: %v", err)
+	}
+
+	var decoded Audit
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal Audit with nil optional fields: %v", err)
+	}
+
+	if decoded.Scope != nil {
+		t.Errorf("Scope: expected nil, got %v", decoded.Scope)
+	}
+	if decoded.Auditor != nil {
+		t.Errorf("Auditor: expected nil, got %v", decoded.Auditor)
+	}
+	if decoded.AuditBody != nil {
+		t.Errorf("AuditBody: expected nil, got %v", decoded.AuditBody)
+	}
+	if decoded.ScheduledStart != nil {
+		t.Errorf("ScheduledStart: expected nil, got %v", decoded.ScheduledStart)
+	}
+	if decoded.ScheduledEnd != nil {
+		t.Errorf("ScheduledEnd: expected nil, got %v", decoded.ScheduledEnd)
+	}
+}
+
+// ──────────────────────────────────────────────
+// AccessReviewCampaign with null optional fields
+// ──────────────────────────────────────────────
+
+func TestAccessReviewCampaign_JSONNullOptionalFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	c := AccessReviewCampaign{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Title:     "Test Campaign",
+		Status:    AccessReviewStatusPlanned,
+		CreatedBy: uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		// Scope, DueDate, ReviewerIDs nil
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("failed to marshal AccessReviewCampaign with nil optional fields: %v", err)
+	}
+
+	var decoded AccessReviewCampaign
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal AccessReviewCampaign with nil optional fields: %v", err)
+	}
+
+	if decoded.Scope != nil {
+		t.Errorf("Scope: expected nil, got %v", decoded.Scope)
+	}
+	if decoded.DueDate != nil {
+		t.Errorf("DueDate: expected nil, got %v", decoded.DueDate)
+	}
+}
+
+// ──────────────────────────────────────────────
+// ComplianceControl with null optional fields
+// ──────────────────────────────────────────────
+
+func TestComplianceControl_JSONNullOptionalFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	cc := ComplianceControl{
+		ID:                   uuid.New(),
+		TenantID:             uuid.New(),
+		Framework:            FrameworkISO27001,
+		ControlID:            "A.1",
+		ControlName:          "Test",
+		ImplementationStatus: ComplianceStatusNotStarted,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+		// Description, OwnerID, LastAssessedAt, EvidenceRefs nil
+	}
+
+	data, err := json.Marshal(cc)
+	if err != nil {
+		t.Fatalf("failed to marshal ComplianceControl with nil optional fields: %v", err)
+	}
+
+	var decoded ComplianceControl
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ComplianceControl with nil optional fields: %v", err)
+	}
+
+	if decoded.Description != nil {
+		t.Errorf("Description: expected nil, got %v", decoded.Description)
+	}
+	if decoded.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", decoded.OwnerID)
+	}
+	if decoded.LastAssessedAt != nil {
+		t.Errorf("LastAssessedAt: expected nil, got %v", decoded.LastAssessedAt)
+	}
+}
+
+// ──────────────────────────────────────────────
+// AuditFinding with null optional fields
+// ──────────────────────────────────────────────
+
+func TestAuditFinding_JSONNullOptionalFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	f := AuditFinding{
+		ID:            uuid.New(),
+		AuditID:       uuid.New(),
+		TenantID:      uuid.New(),
+		FindingNumber: "FND-0001",
+		Title:         "Test",
+		Severity:      FindingSeverityHigh,
+		Status:        FindingStatusOpen,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		// Description, RemediationPlan, OwnerID, DueDate, ClosedAt nil
+	}
+
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatalf("failed to marshal AuditFinding with nil optional fields: %v", err)
+	}
+
+	var decoded AuditFinding
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal AuditFinding with nil optional fields: %v", err)
+	}
+
+	if decoded.Description != nil {
+		t.Errorf("Description: expected nil, got %v", decoded.Description)
+	}
+	if decoded.RemediationPlan != nil {
+		t.Errorf("RemediationPlan: expected nil, got %v", decoded.RemediationPlan)
+	}
+	if decoded.OwnerID != nil {
+		t.Errorf("OwnerID: expected nil, got %v", decoded.OwnerID)
+	}
+	if decoded.DueDate != nil {
+		t.Errorf("DueDate: expected nil, got %v", decoded.DueDate)
+	}
+	if decoded.ClosedAt != nil {
+		t.Errorf("ClosedAt: expected nil, got %v", decoded.ClosedAt)
+	}
+}

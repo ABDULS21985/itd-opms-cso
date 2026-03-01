@@ -1134,3 +1134,76 @@ func TestCreateMeetingRequestJSON_RoundTrip(t *testing.T) {
 		t.Errorf("AttendeeIDs length mismatch: got %d, want 1", len(decoded.AttendeeIDs))
 	}
 }
+
+// ──────────────────────────────────────────────
+// isValidTransition tests
+// ──────────────────────────────────────────────
+
+func TestIsValidTransition_AllowedTransitions(t *testing.T) {
+	allowed := []struct {
+		from string
+		to   string
+	}{
+		{PolicyStatusDraft, PolicyStatusInReview},
+		{PolicyStatusInReview, PolicyStatusApproved},
+		{PolicyStatusApproved, PolicyStatusPublished},
+		{PolicyStatusPublished, PolicyStatusRetired},
+	}
+
+	for _, tt := range allowed {
+		t.Run(tt.from+"->"+tt.to, func(t *testing.T) {
+			if !isValidTransition(tt.from, tt.to) {
+				t.Errorf("expected transition %s -> %s to be valid", tt.from, tt.to)
+			}
+		})
+	}
+}
+
+func TestIsValidTransition_DisallowedTransitions(t *testing.T) {
+	disallowed := []struct {
+		from string
+		to   string
+	}{
+		// Reverse transitions
+		{PolicyStatusInReview, PolicyStatusDraft},
+		{PolicyStatusApproved, PolicyStatusInReview},
+		{PolicyStatusPublished, PolicyStatusApproved},
+		{PolicyStatusRetired, PolicyStatusPublished},
+		// Skip transitions
+		{PolicyStatusDraft, PolicyStatusApproved},
+		{PolicyStatusDraft, PolicyStatusPublished},
+		{PolicyStatusDraft, PolicyStatusRetired},
+		{PolicyStatusInReview, PolicyStatusPublished},
+		{PolicyStatusInReview, PolicyStatusRetired},
+		{PolicyStatusApproved, PolicyStatusRetired},
+		// Self transitions
+		{PolicyStatusDraft, PolicyStatusDraft},
+		{PolicyStatusInReview, PolicyStatusInReview},
+		{PolicyStatusApproved, PolicyStatusApproved},
+		{PolicyStatusPublished, PolicyStatusPublished},
+		{PolicyStatusRetired, PolicyStatusRetired},
+		// From terminal state
+		{PolicyStatusRetired, PolicyStatusDraft},
+		{PolicyStatusRetired, PolicyStatusInReview},
+		{PolicyStatusRetired, PolicyStatusApproved},
+		// Empty / unknown
+		{"", PolicyStatusDraft},
+		{PolicyStatusDraft, ""},
+		{"unknown", PolicyStatusInReview},
+		{PolicyStatusDraft, "unknown"},
+	}
+
+	for _, tt := range disallowed {
+		name := tt.from + "->" + tt.to
+		if tt.from == "" {
+			name = "(empty)->" + tt.to
+		} else if tt.to == "" {
+			name = tt.from + "->(empty)"
+		}
+		t.Run(name, func(t *testing.T) {
+			if isValidTransition(tt.from, tt.to) {
+				t.Errorf("expected transition %q -> %q to be invalid", tt.from, tt.to)
+			}
+		})
+	}
+}

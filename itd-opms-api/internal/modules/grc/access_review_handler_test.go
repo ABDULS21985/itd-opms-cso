@@ -400,3 +400,100 @@ func TestAccessReviewHandler_RecordDecision_MissingDecision(t *testing.T) {
 	}
 	assertErrorCode(t, rr, "VALIDATION_ERROR")
 }
+
+// ──────────────────────────────────────────────
+// Additional validation tests
+// ──────────────────────────────────────────────
+
+func TestAccessReviewHandler_CreateEntry_NilUserID(t *testing.T) {
+	router := newAccessReviewRouter()
+
+	// userId is explicitly zero UUID
+	req := httptest.NewRequest(http.MethodPost,
+		"/access-reviews/"+uuid.New().String()+"/entries/",
+		strings.NewReader(`{"userId":"00000000-0000-0000-0000-000000000000"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAccessReviewHandler_RecordDecision_EmptyDecision(t *testing.T) {
+	router := newAccessReviewRouter()
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/access-reviews/"+uuid.New().String()+"/entries/"+uuid.New().String()+"/decide",
+		strings.NewReader(`{"decision":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestAccessReviewHandler_CreateCampaign_EmptyTitle(t *testing.T) {
+	router := newAccessReviewRouter()
+
+	req := httptest.NewRequest(http.MethodPost, "/access-reviews/",
+		strings.NewReader(`{"title":"","scope":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestNewAccessReviewHandler_NotNil(t *testing.T) {
+	svc := NewAccessReviewService(nil, nil)
+	h := NewAccessReviewHandler(svc)
+	if h == nil {
+		t.Fatal("expected non-nil AccessReviewHandler")
+	}
+	if h.svc == nil {
+		t.Fatal("expected non-nil service in handler")
+	}
+}
+
+func TestNewAccessReviewService_NotNil(t *testing.T) {
+	svc := NewAccessReviewService(nil, nil)
+	if svc == nil {
+		t.Fatal("expected non-nil AccessReviewService")
+	}
+}
+
+func TestNewHandler_NotNil(t *testing.T) {
+	// NewHandler creates the composite handler with all sub-handlers
+	// Note: this will pass nil pool and nil audit service
+	h := NewHandler(nil, nil)
+	if h == nil {
+		t.Fatal("expected non-nil Handler")
+	}
+	if h.risk == nil {
+		t.Fatal("expected non-nil risk sub-handler")
+	}
+	if h.auditMgmt == nil {
+		t.Fatal("expected non-nil auditMgmt sub-handler")
+	}
+	if h.accessReview == nil {
+		t.Fatal("expected non-nil accessReview sub-handler")
+	}
+	if h.compliance == nil {
+		t.Fatal("expected non-nil compliance sub-handler")
+	}
+}

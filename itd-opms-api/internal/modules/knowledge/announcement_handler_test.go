@@ -335,3 +335,111 @@ func TestAnnouncementRoutes_ForbiddenWithoutPermission(t *testing.T) {
 		})
 	}
 }
+
+// ──────────────────────────────────────────────
+// View-only permission should be forbidden on manage routes
+// ──────────────────────────────────────────────
+
+func TestAnnouncementRoutes_ViewPermissionCannotManage(t *testing.T) {
+	r := knowledgeRouter()
+	validUUID := uuid.New().String()
+
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "viewer@example.com",
+		Roles:       []string{"viewer"},
+		Permissions: []string{"knowledge.view"},
+	}
+
+	manageRoutes := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"CreateAnnouncement", http.MethodPost, "/announcements/", `{"title":"t","content":"c","priority":"high","targetAudience":"all"}`},
+		{"UpdateAnnouncement", http.MethodPut, "/announcements/" + validUUID, `{"title":"x"}`},
+		{"DeleteAnnouncement", http.MethodDelete, "/announcements/" + validUUID, ""},
+	}
+
+	for _, rt := range manageRoutes {
+		t.Run(fmt.Sprintf("ViewOnly_%s", rt.name), func(t *testing.T) {
+			var req *http.Request
+			if rt.body != "" {
+				req = httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(rt.method, rt.path, nil)
+			}
+			ctx := types.SetAuthContext(req.Context(), auth)
+			req = req.WithContext(ctx)
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("expected 403 for view-only user on %s %s, got %d", rt.method, rt.path, w.Code)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// Additional edge case tests
+// ──────────────────────────────────────────────
+
+func TestAnnouncementHandler_CreateAnnouncement_EmptyBody(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	req := httptest.NewRequest(http.MethodPost, "/announcements/", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+	h.announcement.CreateAnnouncement(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty body, got %d", w.Code)
+	}
+}
+
+func TestAnnouncementHandler_ListAnnouncements_ValidBoolFilter(t *testing.T) {
+	h := newTestKnowledgeHandler()
+
+	// Valid boolean values should not cause 400.
+	for _, val := range []string{"true", "false", "1", "0"} {
+		t.Run("is_active="+val, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/announcements/?is_active="+val, nil)
+			req = withKnowledgeAuth(req)
+
+			w := httptest.NewRecorder()
+
+			func() {
+				defer func() { recover() }()
+				h.announcement.ListAnnouncements(w, req)
+			}()
+
+			if w.Code == http.StatusBadRequest {
+				t.Errorf("unexpected 400 for valid is_active=%s", val)
+			}
+		})
+	}
+}
+
+func TestAnnouncementHandler_ListAnnouncements_NoFilter(t *testing.T) {
+	h := newTestKnowledgeHandler()
+	req := httptest.NewRequest(http.MethodGet, "/announcements/", nil)
+	req = withKnowledgeAuth(req)
+
+	w := httptest.NewRecorder()
+
+	func() {
+		defer func() { recover() }()
+		h.announcement.ListAnnouncements(w, req)
+	}()
+
+	// Should not return 400 -- it should pass validation and hit the service layer.
+	if w.Code == http.StatusBadRequest {
+		t.Errorf("unexpected 400 for list without filter")
+	}
+}

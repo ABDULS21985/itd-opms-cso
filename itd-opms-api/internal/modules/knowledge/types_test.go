@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -661,5 +662,417 @@ func TestCreateFeedbackRequestJSON_RoundTrip(t *testing.T) {
 	}
 	if decoded.Comment == nil || *decoded.Comment != comment {
 		t.Errorf("Comment mismatch: got %v, want %q", decoded.Comment, comment)
+	}
+}
+
+func TestCreateFeedbackRequestJSON_NoComment(t *testing.T) {
+	input := `{"isHelpful":false}`
+	var req CreateFeedbackRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if req.IsHelpful != false {
+		t.Errorf("IsHelpful mismatch: got %v, want false", req.IsHelpful)
+	}
+	if req.Comment != nil {
+		t.Errorf("expected nil Comment, got %v", req.Comment)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Update request type JSON parsing tests
+// ──────────────────────────────────────────────
+
+func TestUpdateKBCategoryRequestJSON_Parse(t *testing.T) {
+	input := `{"name":"Updated Cat","description":"New desc"}`
+	var req UpdateKBCategoryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Name == nil || *req.Name != "Updated Cat" {
+		t.Errorf("Name mismatch: got %v", req.Name)
+	}
+	if req.Description == nil || *req.Description != "New desc" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	// Fields not in JSON should remain nil.
+	if req.ParentID != nil {
+		t.Errorf("expected nil ParentID, got %v", req.ParentID)
+	}
+	if req.Icon != nil {
+		t.Errorf("expected nil Icon, got %v", req.Icon)
+	}
+	if req.SortOrder != nil {
+		t.Errorf("expected nil SortOrder, got %v", req.SortOrder)
+	}
+}
+
+func TestUpdateKBCategoryRequestJSON_WithAllFields(t *testing.T) {
+	parentID := uuid.New()
+	input := `{"name":"Full","description":"Full desc","parentId":"` + parentID.String() + `","icon":"folder","sortOrder":5}`
+	var req UpdateKBCategoryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Name == nil || *req.Name != "Full" {
+		t.Errorf("Name mismatch")
+	}
+	if req.ParentID == nil || *req.ParentID != parentID {
+		t.Errorf("ParentID mismatch: got %v, want %s", req.ParentID, parentID)
+	}
+	if req.Icon == nil || *req.Icon != "folder" {
+		t.Errorf("Icon mismatch: got %v", req.Icon)
+	}
+	if req.SortOrder == nil || *req.SortOrder != 5 {
+		t.Errorf("SortOrder mismatch: got %v", req.SortOrder)
+	}
+}
+
+func TestUpdateKBArticleRequestJSON_Parse(t *testing.T) {
+	input := `{"title":"Updated Title","content":"New content","tags":["go","api"]}`
+	var req UpdateKBArticleRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Title" {
+		t.Errorf("Title mismatch: got %v", req.Title)
+	}
+	if req.Content == nil || *req.Content != "New content" {
+		t.Errorf("Content mismatch: got %v", req.Content)
+	}
+	if len(req.Tags) != 2 {
+		t.Errorf("Tags length mismatch: got %d, want 2", len(req.Tags))
+	}
+	// Fields not in JSON should remain nil.
+	if req.CategoryID != nil {
+		t.Errorf("expected nil CategoryID, got %v", req.CategoryID)
+	}
+	if req.Slug != nil {
+		t.Errorf("expected nil Slug, got %v", req.Slug)
+	}
+	if req.Type != nil {
+		t.Errorf("expected nil Type, got %v", req.Type)
+	}
+	if req.ReviewerID != nil {
+		t.Errorf("expected nil ReviewerID, got %v", req.ReviewerID)
+	}
+}
+
+func TestUpdateKBArticleRequestJSON_WithAllFields(t *testing.T) {
+	catID := uuid.New()
+	reviewerID := uuid.New()
+	input := `{
+		"categoryId":"` + catID.String() + `",
+		"title":"Full Title",
+		"slug":"full-title",
+		"content":"Full content",
+		"type":"runbook",
+		"tags":["ops"],
+		"reviewerId":"` + reviewerID.String() + `"
+	}`
+	var req UpdateKBArticleRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.CategoryID == nil || *req.CategoryID != catID {
+		t.Errorf("CategoryID mismatch")
+	}
+	if req.Title == nil || *req.Title != "Full Title" {
+		t.Errorf("Title mismatch")
+	}
+	if req.Slug == nil || *req.Slug != "full-title" {
+		t.Errorf("Slug mismatch")
+	}
+	if req.Content == nil || *req.Content != "Full content" {
+		t.Errorf("Content mismatch")
+	}
+	if req.Type == nil || *req.Type != "runbook" {
+		t.Errorf("Type mismatch")
+	}
+	if len(req.Tags) != 1 || req.Tags[0] != "ops" {
+		t.Errorf("Tags mismatch: got %v", req.Tags)
+	}
+	if req.ReviewerID == nil || *req.ReviewerID != reviewerID {
+		t.Errorf("ReviewerID mismatch")
+	}
+}
+
+func TestUpdateAnnouncementRequestJSON_Parse(t *testing.T) {
+	input := `{"title":"Updated","isActive":false}`
+	var req UpdateAnnouncementRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated" {
+		t.Errorf("Title mismatch: got %v", req.Title)
+	}
+	if req.IsActive == nil || *req.IsActive != false {
+		t.Errorf("IsActive mismatch: got %v", req.IsActive)
+	}
+	// Fields not in JSON should remain nil.
+	if req.Content != nil {
+		t.Errorf("expected nil Content, got %v", req.Content)
+	}
+	if req.Priority != nil {
+		t.Errorf("expected nil Priority, got %v", req.Priority)
+	}
+	if req.TargetAudience != nil {
+		t.Errorf("expected nil TargetAudience, got %v", req.TargetAudience)
+	}
+	if req.ExpiresAt != nil {
+		t.Errorf("expected nil ExpiresAt, got %v", req.ExpiresAt)
+	}
+}
+
+func TestUpdateAnnouncementRequestJSON_WithTargetIDs(t *testing.T) {
+	targetID := uuid.New()
+	input := `{"priority":"critical","targetAudience":"division","targetIds":["` + targetID.String() + `"]}`
+	var req UpdateAnnouncementRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Priority == nil || *req.Priority != "critical" {
+		t.Errorf("Priority mismatch")
+	}
+	if req.TargetAudience == nil || *req.TargetAudience != "division" {
+		t.Errorf("TargetAudience mismatch")
+	}
+	if len(req.TargetIDs) != 1 || req.TargetIDs[0] != targetID {
+		t.Errorf("TargetIDs mismatch: got %v", req.TargetIDs)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Category field name tests
+// ──────────────────────────────────────────────
+
+func TestKBCategoryJSON_FieldNames(t *testing.T) {
+	cat := KBCategory{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Name:      "Test",
+		SortOrder: 1,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(cat)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "name", "description", "parentId",
+		"icon", "sortOrder", "createdAt", "updatedAt",
+	}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized KBCategory", field)
+		}
+	}
+}
+
+func TestKBArticleVersionJSON_FieldNames(t *testing.T) {
+	v := KBArticleVersion{
+		ID:        uuid.New(),
+		ArticleID: uuid.New(),
+		Version:   1,
+		Content:   "content",
+		ChangedBy: uuid.New(),
+		CreatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{"id", "articleId", "version", "content", "changedBy", "createdAt"}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized KBArticleVersion", field)
+		}
+	}
+}
+
+func TestKBArticleFeedbackJSON_FieldNames(t *testing.T) {
+	fb := KBArticleFeedback{
+		ID:        uuid.New(),
+		ArticleID: uuid.New(),
+		UserID:    uuid.New(),
+		IsHelpful: true,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(fb)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{"id", "articleId", "userId", "isHelpful", "comment", "createdAt"}
+	for _, field := range expectedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("expected JSON field %q not found in serialized KBArticleFeedback", field)
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// Nil and empty list tests
+// ──────────────────────────────────────────────
+
+func TestAnnouncementJSON_NilOptionalFields(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	original := Announcement{
+		ID:             uuid.New(),
+		TenantID:       uuid.New(),
+		Title:          "Minimal",
+		Content:        "Body",
+		Priority:       AnnouncementPriorityLow,
+		TargetAudience: AudienceAll,
+		AuthorID:       uuid.New(),
+		IsActive:       true,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded Announcement
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.PublishedAt != nil {
+		t.Errorf("expected nil PublishedAt, got %v", decoded.PublishedAt)
+	}
+	if decoded.ExpiresAt != nil {
+		t.Errorf("expected nil ExpiresAt, got %v", decoded.ExpiresAt)
+	}
+}
+
+func TestKBArticleJSON_EmptyTags(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	original := KBArticle{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Title:     "No Tags",
+		Slug:      "no-tags",
+		Content:   "Content",
+		Status:    ArticleStatusDraft,
+		Type:      ArticleTypeFAQ,
+		Tags:      []string{},
+		AuthorID:  uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded KBArticle
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.Tags == nil {
+		t.Error("expected non-nil empty Tags slice after round-trip")
+	}
+	if len(decoded.Tags) != 0 {
+		t.Errorf("expected empty Tags, got %v", decoded.Tags)
+	}
+}
+
+func TestCreateKBArticleRequestJSON_MinimalFields(t *testing.T) {
+	input := `{"title":"Min","slug":"min","content":"c","type":"faq"}`
+	var req CreateKBArticleRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Title != "Min" {
+		t.Errorf("Title mismatch: got %q", req.Title)
+	}
+	if req.CategoryID != nil {
+		t.Errorf("expected nil CategoryID, got %v", req.CategoryID)
+	}
+	if req.Tags != nil {
+		t.Errorf("expected nil Tags for missing field, got %v", req.Tags)
+	}
+}
+
+func TestCreateKBCategoryRequestJSON_Parse(t *testing.T) {
+	parentID := uuid.New()
+	sortOrder := 3
+	input := `{"name":"Networking","description":"Network articles","parentId":"` + parentID.String() + `","icon":"wifi","sortOrder":` + fmt.Sprintf("%d", sortOrder) + `}`
+	var req CreateKBCategoryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Name != "Networking" {
+		t.Errorf("Name mismatch: got %q", req.Name)
+	}
+	if req.Description == nil || *req.Description != "Network articles" {
+		t.Errorf("Description mismatch: got %v", req.Description)
+	}
+	if req.ParentID == nil || *req.ParentID != parentID {
+		t.Errorf("ParentID mismatch")
+	}
+	if req.Icon == nil || *req.Icon != "wifi" {
+		t.Errorf("Icon mismatch")
+	}
+	if req.SortOrder == nil || *req.SortOrder != sortOrder {
+		t.Errorf("SortOrder mismatch")
+	}
+}
+
+func TestCreateKBCategoryRequestJSON_Minimal(t *testing.T) {
+	input := `{"name":"Simple"}`
+	var req CreateKBCategoryRequest
+	if err := json.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if req.Name != "Simple" {
+		t.Errorf("Name mismatch: got %q", req.Name)
+	}
+	if req.Description != nil {
+		t.Errorf("expected nil Description, got %v", req.Description)
+	}
+	if req.ParentID != nil {
+		t.Errorf("expected nil ParentID, got %v", req.ParentID)
+	}
+	if req.Icon != nil {
+		t.Errorf("expected nil Icon, got %v", req.Icon)
+	}
+	if req.SortOrder != nil {
+		t.Errorf("expected nil SortOrder, got %v", req.SortOrder)
 	}
 }

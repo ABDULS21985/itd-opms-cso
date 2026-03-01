@@ -285,6 +285,64 @@ func TestComplianceHandler_UpdateControl_InvalidBody(t *testing.T) {
 // Full GRC handler routes registration
 // ──────────────────────────────────────────────
 
+func TestComplianceHandler_CreateControl_MissingControlID(t *testing.T) {
+	router := newComplianceRouter()
+
+	// Has framework and controlName but missing controlId
+	req := httptest.NewRequest(http.MethodPost, "/compliance/",
+		strings.NewReader(`{"framework":"ISO_27001","controlName":"Test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestComplianceHandler_CreateControl_MissingControlName(t *testing.T) {
+	router := newComplianceRouter()
+
+	// Has framework and controlId but missing controlName
+	req := httptest.NewRequest(http.MethodPost, "/compliance/",
+		strings.NewReader(`{"framework":"ISO_27001","controlId":"A.1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	assertErrorCode(t, rr, "VALIDATION_ERROR")
+}
+
+func TestNewComplianceHandler_NotNil(t *testing.T) {
+	svc := NewComplianceService(nil, nil)
+	h := NewComplianceHandler(svc)
+	if h == nil {
+		t.Fatal("expected non-nil ComplianceHandler")
+	}
+	if h.svc == nil {
+		t.Fatal("expected non-nil service in handler")
+	}
+}
+
+func TestNewComplianceService_NotNil(t *testing.T) {
+	svc := NewComplianceService(nil, nil)
+	if svc == nil {
+		t.Fatal("expected non-nil ComplianceService")
+	}
+}
+
+// ──────────────────────────────────────────────
+// Full GRC handler routes registration
+// ──────────────────────────────────────────────
+
 func TestGRCHandler_AllSubRoutes_Registered(t *testing.T) {
 	h := NewHandler(nil, nil)
 	r := chi.NewRouter()

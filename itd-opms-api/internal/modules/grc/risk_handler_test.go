@@ -449,3 +449,104 @@ func assertErrorCode(t *testing.T, rr *httptest.ResponseRecorder, expectedCode s
 		t.Errorf("expected error code %q, got %q", expectedCode, resp.Errors[0].Code)
 	}
 }
+
+// ──────────────────────────────────────────────
+// Additional edge case tests
+// ──────────────────────────────────────────────
+
+func TestRiskHandler_CreateRisk_PartialRequiredFields(t *testing.T) {
+	router := newRiskRouter()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"MissingCategory", `{"title":"risk","likelihood":"low","impact":"low","status":"identified"}`},
+		{"MissingLikelihood", `{"title":"risk","category":"operational","impact":"low","status":"identified"}`},
+		{"MissingImpact", `{"title":"risk","category":"operational","likelihood":"low","status":"identified"}`},
+		{"MissingStatus", `{"title":"risk","category":"operational","likelihood":"low","impact":"low"}`},
+		{"MissingTitle", `{"category":"operational","likelihood":"low","impact":"low","status":"identified"}`},
+		{"AllEmpty", `{}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/risks/", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			req = reqWithAuth(req)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Errorf("expected 400, got %d", rr.Code)
+			}
+			assertErrorCode(t, rr, "VALIDATION_ERROR")
+		})
+	}
+}
+
+func TestRiskHandler_CreateRiskAssessment_PartialRequiredFields(t *testing.T) {
+	router := newRiskRouter()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"MissingNewImpact", `{"newLikelihood":"high"}`},
+		{"MissingNewLikelihood", `{"newImpact":"high"}`},
+		{"BothEmpty", `{}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/risks/"+uuid.New().String()+"/assess",
+				strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			req = reqWithAuth(req)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Errorf("expected 400, got %d", rr.Code)
+			}
+			assertErrorCode(t, rr, "VALIDATION_ERROR")
+		})
+	}
+}
+
+func TestRiskHandler_ListRisks_ValidQueryParams(t *testing.T) {
+	// Verify that valid query params with status and category don't return 400
+	// (they will panic due to nil pool, but should not return 400)
+	h := newTestRiskHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/risks?status=identified&category=operational", nil)
+	req = reqWithAuth(req)
+	rr := httptest.NewRecorder()
+
+	// This will panic/error due to nil pool, but the point is
+	// it should not return 400 (it should pass validation)
+	defer func() { recover() }()
+	h.ListRisks(rr, req)
+	// If it returned 400, that's a validation bug
+	if rr.Code == http.StatusBadRequest {
+		t.Errorf("valid query params should not return 400, got %d", rr.Code)
+	}
+}
+
+func TestNewRiskHandler_NotNil(t *testing.T) {
+	svc := NewRiskService(nil, nil)
+	h := NewRiskHandler(svc)
+	if h == nil {
+		t.Fatal("expected non-nil RiskHandler")
+	}
+	if h.svc == nil {
+		t.Fatal("expected non-nil service in handler")
+	}
+}
+
+func TestNewRiskService_NotNil(t *testing.T) {
+	svc := NewRiskService(nil, nil)
+	if svc == nil {
+		t.Fatal("expected non-nil RiskService")
+	}
+}

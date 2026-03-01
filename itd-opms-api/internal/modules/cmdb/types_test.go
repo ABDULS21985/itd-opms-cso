@@ -1198,3 +1198,806 @@ func TestCreateRenewalAlertRequestJSON(t *testing.T) {
 		t.Errorf("EntityID mismatch")
 	}
 }
+
+// ──────────────────────────────────────────────
+// calculateComplianceStatus — exhaustive tests
+// ──────────────────────────────────────────────
+
+func TestCalculateComplianceStatus_Compliant(t *testing.T) {
+	// Exactly at boundary: 50% utilization
+	if got := calculateComplianceStatus(50, 100); got != ComplianceStatusCompliant {
+		t.Errorf("expected %q at 50%% utilization, got %q", ComplianceStatusCompliant, got)
+	}
+	// 100% utilization
+	if got := calculateComplianceStatus(100, 100); got != ComplianceStatusCompliant {
+		t.Errorf("expected %q at 100%% utilization, got %q", ComplianceStatusCompliant, got)
+	}
+	// 75% utilization
+	if got := calculateComplianceStatus(75, 100); got != ComplianceStatusCompliant {
+		t.Errorf("expected %q at 75%% utilization, got %q", ComplianceStatusCompliant, got)
+	}
+}
+
+func TestCalculateComplianceStatus_OverDeployed(t *testing.T) {
+	// More assigned than total
+	if got := calculateComplianceStatus(101, 100); got != ComplianceStatusOverDeployed {
+		t.Errorf("expected %q when over-deployed, got %q", ComplianceStatusOverDeployed, got)
+	}
+	// Way over-deployed
+	if got := calculateComplianceStatus(200, 50); got != ComplianceStatusOverDeployed {
+		t.Errorf("expected %q when 400%% deployed, got %q", ComplianceStatusOverDeployed, got)
+	}
+}
+
+func TestCalculateComplianceStatus_UnderUtilized(t *testing.T) {
+	// Less than 50% utilization
+	if got := calculateComplianceStatus(49, 100); got != ComplianceStatusUnderUtilized {
+		t.Errorf("expected %q at 49%% utilization, got %q", ComplianceStatusUnderUtilized, got)
+	}
+	// Very low utilization
+	if got := calculateComplianceStatus(1, 100); got != ComplianceStatusUnderUtilized {
+		t.Errorf("expected %q at 1%% utilization, got %q", ComplianceStatusUnderUtilized, got)
+	}
+	// Zero assigned with total > 0
+	if got := calculateComplianceStatus(0, 100); got != ComplianceStatusUnderUtilized {
+		t.Errorf("expected %q at 0%% utilization, got %q", ComplianceStatusUnderUtilized, got)
+	}
+}
+
+func TestCalculateComplianceStatus_ZeroTotal(t *testing.T) {
+	// Zero total with zero assigned
+	if got := calculateComplianceStatus(0, 0); got != ComplianceStatusCompliant {
+		t.Errorf("expected %q when both zero, got %q", ComplianceStatusCompliant, got)
+	}
+	// Zero total with assigned > 0
+	if got := calculateComplianceStatus(5, 0); got != ComplianceStatusOverDeployed {
+		t.Errorf("expected %q when total=0 but assigned>0, got %q", ComplianceStatusOverDeployed, got)
+	}
+}
+
+func TestCalculateComplianceStatus_NegativeTotal(t *testing.T) {
+	// Negative total with zero assigned
+	if got := calculateComplianceStatus(0, -1); got != ComplianceStatusCompliant {
+		t.Errorf("expected %q with negative total and zero assigned, got %q", ComplianceStatusCompliant, got)
+	}
+	// Negative total with positive assigned
+	if got := calculateComplianceStatus(5, -1); got != ComplianceStatusOverDeployed {
+		t.Errorf("expected %q with negative total and positive assigned, got %q", ComplianceStatusOverDeployed, got)
+	}
+}
+
+func TestCalculateComplianceStatus_BoundaryValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		assigned int
+		total    int
+		expected string
+	}{
+		{"exact_50_percent", 50, 100, ComplianceStatusCompliant},
+		{"just_below_50", 49, 100, ComplianceStatusUnderUtilized},
+		{"exact_100_percent", 100, 100, ComplianceStatusCompliant},
+		{"just_over_100_percent", 101, 100, ComplianceStatusOverDeployed},
+		{"one_of_two", 1, 2, ComplianceStatusCompliant},
+		{"zero_of_one", 0, 1, ComplianceStatusUnderUtilized},
+		{"one_of_one", 1, 1, ComplianceStatusCompliant},
+		{"two_of_one", 2, 1, ComplianceStatusOverDeployed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateComplianceStatus(tt.assigned, tt.total)
+			if got != tt.expected {
+				t.Errorf("calculateComplianceStatus(%d, %d) = %q, want %q",
+					tt.assigned, tt.total, got, tt.expected)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// JSON tag verification tests
+// ──────────────────────────────────────────────
+
+func TestAsset_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	asset := Asset{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		AssetTag:  "TAG-001",
+		Type:      AssetTypeHardware,
+		Name:      "Server",
+		Status:    AssetStatusActive,
+		Tags:      []string{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(asset)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "assetTag", "type", "name", "status",
+		"category", "description", "manufacturer", "model", "serialNumber",
+		"location", "building", "floor", "room",
+		"ownerId", "custodianId",
+		"purchaseDate", "purchaseCost", "currency", "classification",
+		"attributes", "tags", "createdAt", "updatedAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+func TestCMDBItem_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	item := CMDBItem{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		CIType:    "server",
+		Name:      "Test",
+		Status:    CIStatusActive,
+		Version:   1,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(item)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "ciType", "name", "status",
+		"assetId", "attributes", "version",
+		"createdAt", "updatedAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+func TestLicense_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	license := License{
+		ID:                uuid.New(),
+		TenantID:          uuid.New(),
+		SoftwareName:      "Test",
+		LicenseType:       LicenseTypePerpetual,
+		TotalEntitlements: 10,
+		ComplianceStatus:  ComplianceStatusCompliant,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+
+	data, err := json.Marshal(license)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "softwareName", "vendor", "licenseType",
+		"totalEntitlements", "assignedCount", "complianceStatus",
+		"expiryDate", "cost", "renewalContact",
+		"createdAt", "updatedAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+func TestWarranty_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	warranty := Warranty{
+		ID:            uuid.New(),
+		AssetID:       uuid.New(),
+		TenantID:      uuid.New(),
+		StartDate:     now,
+		EndDate:       now,
+		RenewalStatus: WarrantyRenewalStatusActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	data, err := json.Marshal(warranty)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "assetId", "tenantId", "vendor", "contractNumber",
+		"coverageType", "startDate", "endDate", "cost",
+		"renewalStatus", "createdAt", "updatedAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+func TestCMDBRelationship_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	rel := CMDBRelationship{
+		ID:               uuid.New(),
+		SourceCIID:       uuid.New(),
+		TargetCIID:       uuid.New(),
+		RelationshipType: CIRelationshipDependsOn,
+		IsActive:         true,
+		CreatedAt:        now,
+	}
+
+	data, err := json.Marshal(rel)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "sourceCiId", "targetCiId", "relationshipType",
+		"description", "isActive", "createdAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+func TestRenewalAlert_JSONTagFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	alert := RenewalAlert{
+		ID:         uuid.New(),
+		TenantID:   uuid.New(),
+		EntityType: "warranty",
+		EntityID:   uuid.New(),
+		AlertDate:  now,
+		Sent:       false,
+		CreatedAt:  now,
+	}
+
+	data, err := json.Marshal(alert)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	expectedFields := []string{
+		"id", "tenantId", "entityType", "entityId",
+		"alertDate", "sent", "createdAt",
+	}
+	for _, f := range expectedFields {
+		if _, ok := raw[f]; !ok {
+			t.Errorf("expected JSON field %q to be present", f)
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// Update request type JSON parsing tests
+// ──────────────────────────────────────────────
+
+func TestUpdateAssetRequestJSON(t *testing.T) {
+	body := `{"name":"Updated Server","status":"active","tags":["updated"]}`
+
+	var req UpdateAssetRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateAssetRequest: %v", err)
+	}
+
+	if req.Name == nil || *req.Name != "Updated Server" {
+		t.Errorf("Name mismatch: got %v", req.Name)
+	}
+	if req.Status == nil || *req.Status != "active" {
+		t.Errorf("Status mismatch: got %v", req.Status)
+	}
+	if len(req.Tags) != 1 || req.Tags[0] != "updated" {
+		t.Errorf("Tags mismatch: got %v", req.Tags)
+	}
+	// Fields not in JSON should remain nil.
+	if req.AssetTag != nil {
+		t.Errorf("expected AssetTag to be nil, got %v", req.AssetTag)
+	}
+	if req.Manufacturer != nil {
+		t.Errorf("expected Manufacturer to be nil, got %v", req.Manufacturer)
+	}
+	if req.PurchaseCost != nil {
+		t.Errorf("expected PurchaseCost to be nil, got %v", req.PurchaseCost)
+	}
+}
+
+func TestUpdateAssetRequestJSON_AllFields(t *testing.T) {
+	ownerID := uuid.New()
+	body := `{
+		"name":"Server-02","assetTag":"AST-002","type":"virtual",
+		"status":"maintenance","category":"vm","description":"Updated desc",
+		"manufacturer":"VMware","model":"vSphere","serialNumber":"VS-001",
+		"location":"DC-2","building":"B2","floor":"1","room":"101",
+		"classification":"internal","ownerId":"` + ownerID.String() + `",
+		"purchaseCost":9999.99,"currency":"USD",
+		"tags":["vm","prod"]
+	}`
+
+	var req UpdateAssetRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateAssetRequest: %v", err)
+	}
+
+	if req.Name == nil || *req.Name != "Server-02" {
+		t.Errorf("Name mismatch")
+	}
+	if req.Type == nil || *req.Type != "virtual" {
+		t.Errorf("Type mismatch")
+	}
+	if req.OwnerID == nil || *req.OwnerID != ownerID {
+		t.Errorf("OwnerID mismatch")
+	}
+	if req.PurchaseCost == nil || *req.PurchaseCost != 9999.99 {
+		t.Errorf("PurchaseCost mismatch")
+	}
+	if len(req.Tags) != 2 {
+		t.Errorf("Tags mismatch: expected 2, got %d", len(req.Tags))
+	}
+}
+
+func TestUpdateCMDBItemRequestJSON(t *testing.T) {
+	body := `{"name":"Updated CI","status":"inactive"}`
+
+	var req UpdateCMDBItemRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateCMDBItemRequest: %v", err)
+	}
+
+	if req.Name == nil || *req.Name != "Updated CI" {
+		t.Errorf("Name mismatch: got %v", req.Name)
+	}
+	if req.Status == nil || *req.Status != "inactive" {
+		t.Errorf("Status mismatch: got %v", req.Status)
+	}
+	// Fields not provided should be nil.
+	if req.CIType != nil {
+		t.Errorf("expected CIType to be nil, got %v", req.CIType)
+	}
+	if req.AssetID != nil {
+		t.Errorf("expected AssetID to be nil, got %v", req.AssetID)
+	}
+}
+
+func TestUpdateLicenseRequestJSON(t *testing.T) {
+	body := `{"softwareName":"VS Code Pro","totalEntitlements":1000,"cost":5000.50}`
+
+	var req UpdateLicenseRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateLicenseRequest: %v", err)
+	}
+
+	if req.SoftwareName == nil || *req.SoftwareName != "VS Code Pro" {
+		t.Errorf("SoftwareName mismatch: got %v", req.SoftwareName)
+	}
+	if req.TotalEntitlements == nil || *req.TotalEntitlements != 1000 {
+		t.Errorf("TotalEntitlements mismatch: got %v", req.TotalEntitlements)
+	}
+	if req.Cost == nil || *req.Cost != 5000.50 {
+		t.Errorf("Cost mismatch: got %v", req.Cost)
+	}
+	// Fields not provided should be nil.
+	if req.Vendor != nil {
+		t.Errorf("expected Vendor to be nil, got %v", req.Vendor)
+	}
+	if req.LicenseType != nil {
+		t.Errorf("expected LicenseType to be nil, got %v", req.LicenseType)
+	}
+	if req.ComplianceStatus != nil {
+		t.Errorf("expected ComplianceStatus to be nil, got %v", req.ComplianceStatus)
+	}
+}
+
+func TestUpdateWarrantyRequestJSON(t *testing.T) {
+	body := `{"vendor":"Dell","renewalStatus":"renewed","cost":3500.00}`
+
+	var req UpdateWarrantyRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateWarrantyRequest: %v", err)
+	}
+
+	if req.Vendor == nil || *req.Vendor != "Dell" {
+		t.Errorf("Vendor mismatch: got %v", req.Vendor)
+	}
+	if req.RenewalStatus == nil || *req.RenewalStatus != "renewed" {
+		t.Errorf("RenewalStatus mismatch: got %v", req.RenewalStatus)
+	}
+	if req.Cost == nil || *req.Cost != 3500.00 {
+		t.Errorf("Cost mismatch: got %v", req.Cost)
+	}
+	// Fields not provided should be nil.
+	if req.ContractNumber != nil {
+		t.Errorf("expected ContractNumber to be nil, got %v", req.ContractNumber)
+	}
+	if req.StartDate != nil {
+		t.Errorf("expected StartDate to be nil, got %v", req.StartDate)
+	}
+	if req.EndDate != nil {
+		t.Errorf("expected EndDate to be nil, got %v", req.EndDate)
+	}
+}
+
+func TestUpdateDisposalStatusRequestJSON(t *testing.T) {
+	approver := uuid.New()
+	body := `{
+		"status":"approved",
+		"approvedBy":"` + approver.String() + `",
+		"disposalDate":"2025-12-01T00:00:00Z"
+	}`
+
+	var req UpdateDisposalStatusRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateDisposalStatusRequest: %v", err)
+	}
+
+	if req.Status != "approved" {
+		t.Errorf("Status mismatch: expected %q, got %q", "approved", req.Status)
+	}
+	if req.ApprovedBy == nil || *req.ApprovedBy != approver {
+		t.Errorf("ApprovedBy mismatch")
+	}
+	if req.DisposalDate == nil {
+		t.Error("expected DisposalDate to be non-nil")
+	}
+	if req.DisposalCertificateDocID != nil {
+		t.Errorf("expected DisposalCertificateDocID to be nil, got %v", req.DisposalCertificateDocID)
+	}
+}
+
+func TestCreateDisposalRequestJSON(t *testing.T) {
+	assetID := uuid.New()
+	w1 := uuid.New()
+	w2 := uuid.New()
+	body := `{
+		"assetId":"` + assetID.String() + `",
+		"disposalMethod":"recycling",
+		"reason":"End of life",
+		"witnessIds":["` + w1.String() + `","` + w2.String() + `"],
+		"dataWipeConfirmed":true
+	}`
+
+	var req CreateDisposalRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateDisposalRequest: %v", err)
+	}
+
+	if req.AssetID != assetID {
+		t.Errorf("AssetID mismatch")
+	}
+	if req.DisposalMethod != "recycling" {
+		t.Errorf("DisposalMethod mismatch: expected %q, got %q", "recycling", req.DisposalMethod)
+	}
+	if req.Reason != "End of life" {
+		t.Errorf("Reason mismatch: expected %q, got %q", "End of life", req.Reason)
+	}
+	if len(req.WitnessIDs) != 2 {
+		t.Errorf("WitnessIDs mismatch: expected 2, got %d", len(req.WitnessIDs))
+	}
+	if !req.DataWipeConfirmed {
+		t.Error("expected DataWipeConfirmed to be true")
+	}
+	if req.ApprovalChainID != nil {
+		t.Errorf("expected ApprovalChainID to be nil, got %v", req.ApprovalChainID)
+	}
+}
+
+func TestCreateLifecycleEventRequestJSON(t *testing.T) {
+	assetID := uuid.New()
+	evidenceID := uuid.New()
+	body := `{
+		"assetId":"` + assetID.String() + `",
+		"eventType":"deployed",
+		"evidenceDocumentId":"` + evidenceID.String() + `"
+	}`
+
+	var req CreateLifecycleEventRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateLifecycleEventRequest: %v", err)
+	}
+
+	if req.AssetID != assetID {
+		t.Errorf("AssetID mismatch")
+	}
+	if req.EventType != "deployed" {
+		t.Errorf("EventType mismatch: expected %q, got %q", "deployed", req.EventType)
+	}
+	if req.EvidenceDocumentID == nil || *req.EvidenceDocumentID != evidenceID {
+		t.Errorf("EvidenceDocumentID mismatch")
+	}
+}
+
+func TestCreateReconciliationRunRequestJSON(t *testing.T) {
+	body := `{"source":"network_scanner"}`
+
+	var req CreateReconciliationRunRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateReconciliationRunRequest: %v", err)
+	}
+
+	if req.Source != "network_scanner" {
+		t.Errorf("Source mismatch: expected %q, got %q", "network_scanner", req.Source)
+	}
+	if req.Report != nil {
+		t.Errorf("expected Report to be nil, got %v", req.Report)
+	}
+}
+
+func TestUpdateReconciliationRunRequestJSON(t *testing.T) {
+	matches := 150
+	discrepancies := 5
+	newItems := 3
+	body := `{
+		"completedAt":"2025-06-01T12:00:00Z",
+		"matches":150,
+		"discrepancies":5,
+		"newItems":3
+	}`
+
+	var req UpdateReconciliationRunRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateReconciliationRunRequest: %v", err)
+	}
+
+	if req.CompletedAt == nil {
+		t.Error("expected CompletedAt to be non-nil")
+	}
+	if req.Matches == nil || *req.Matches != matches {
+		t.Errorf("Matches mismatch: expected %d, got %v", matches, req.Matches)
+	}
+	if req.Discrepancies == nil || *req.Discrepancies != discrepancies {
+		t.Errorf("Discrepancies mismatch: expected %d, got %v", discrepancies, req.Discrepancies)
+	}
+	if req.NewItems == nil || *req.NewItems != newItems {
+		t.Errorf("NewItems mismatch: expected %d, got %v", newItems, req.NewItems)
+	}
+	if req.Report != nil {
+		t.Errorf("expected Report to be nil, got %v", req.Report)
+	}
+}
+
+func TestCreateLicenseAssignmentRequestJSON(t *testing.T) {
+	licenseID := uuid.New()
+	userID := uuid.New()
+	body := `{
+		"licenseId":"` + licenseID.String() + `",
+		"userId":"` + userID.String() + `"
+	}`
+
+	var req CreateLicenseAssignmentRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateLicenseAssignmentRequest: %v", err)
+	}
+
+	if req.LicenseID != licenseID {
+		t.Errorf("LicenseID mismatch")
+	}
+	if req.UserID == nil || *req.UserID != userID {
+		t.Errorf("UserID mismatch")
+	}
+	if req.AssetID != nil {
+		t.Errorf("expected AssetID to be nil, got %v", req.AssetID)
+	}
+}
+
+func TestCreateLicenseAssignmentRequestJSON_AssetOnly(t *testing.T) {
+	licenseID := uuid.New()
+	assetID := uuid.New()
+	body := `{
+		"licenseId":"` + licenseID.String() + `",
+		"assetId":"` + assetID.String() + `"
+	}`
+
+	var req CreateLicenseAssignmentRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal CreateLicenseAssignmentRequest: %v", err)
+	}
+
+	if req.LicenseID != licenseID {
+		t.Errorf("LicenseID mismatch")
+	}
+	if req.AssetID == nil || *req.AssetID != assetID {
+		t.Errorf("AssetID mismatch")
+	}
+	if req.UserID != nil {
+		t.Errorf("expected UserID to be nil, got %v", req.UserID)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Domain type edge cases
+// ──────────────────────────────────────────────
+
+func TestAssetLifecycleEvent_NilEvidenceDoc(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	event := AssetLifecycleEvent{
+		ID:          uuid.New(),
+		AssetID:     uuid.New(),
+		TenantID:    uuid.New(),
+		EventType:   LifecycleEventProcured,
+		PerformedBy: uuid.New(),
+		Details:     json.RawMessage(`{}`),
+		CreatedAt:   now,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded AssetLifecycleEvent
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.EvidenceDocumentID != nil {
+		t.Errorf("expected EvidenceDocumentID to be nil, got %v", decoded.EvidenceDocumentID)
+	}
+}
+
+func TestAssetDisposal_EmptyWitnessIDs(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	disposal := AssetDisposal{
+		ID:                uuid.New(),
+		AssetID:           uuid.New(),
+		TenantID:          uuid.New(),
+		DisposalMethod:    DisposalMethodResale,
+		DataWipeConfirmed: false,
+		Status:            DisposalStatusPendingApproval,
+		WitnessIDs:        []uuid.UUID{},
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+
+	data, err := json.Marshal(disposal)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded AssetDisposal
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if len(decoded.WitnessIDs) != 0 {
+		t.Errorf("expected empty WitnessIDs, got %d", len(decoded.WitnessIDs))
+	}
+	if decoded.DataWipeConfirmed {
+		t.Error("expected DataWipeConfirmed to be false")
+	}
+}
+
+func TestReconciliationRun_NilCompletedAt(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	run := ReconciliationRun{
+		ID:        uuid.New(),
+		TenantID:  uuid.New(),
+		Source:    "manual",
+		StartedAt: now,
+		Matches:   0,
+		CreatedAt: now,
+	}
+
+	data, err := json.Marshal(run)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded ReconciliationRun
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.CompletedAt != nil {
+		t.Errorf("expected CompletedAt to be nil, got %v", decoded.CompletedAt)
+	}
+	if decoded.Source != "manual" {
+		t.Errorf("Source mismatch: expected %q, got %q", "manual", decoded.Source)
+	}
+}
+
+func TestLicenseAssignment_NilFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	// Neither UserID nor AssetID
+	assignment := LicenseAssignment{
+		ID:         uuid.New(),
+		LicenseID:  uuid.New(),
+		TenantID:   uuid.New(),
+		AssignedAt: now,
+	}
+
+	data, err := json.Marshal(assignment)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded LicenseAssignment
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.UserID != nil {
+		t.Errorf("expected UserID to be nil, got %v", decoded.UserID)
+	}
+	if decoded.AssetID != nil {
+		t.Errorf("expected AssetID to be nil, got %v", decoded.AssetID)
+	}
+}
+
+// ──────────────────────────────────────────────
+// validAssetTransitions map completeness
+// ──────────────────────────────────────────────
+
+func TestValidAssetTransitions_AllStatesInMap(t *testing.T) {
+	allStatuses := []string{
+		AssetStatusProcured,
+		AssetStatusReceived,
+		AssetStatusActive,
+		AssetStatusMaintenance,
+		AssetStatusRetired,
+		AssetStatusDisposed,
+	}
+
+	for _, s := range allStatuses {
+		if _, ok := validAssetTransitions[s]; !ok {
+			t.Errorf("status %q is not defined in validAssetTransitions map", s)
+		}
+	}
+}
+
+func TestValidAssetTransitions_NoUnknownTargets(t *testing.T) {
+	knownStatuses := map[string]bool{
+		AssetStatusProcured:    true,
+		AssetStatusReceived:    true,
+		AssetStatusActive:      true,
+		AssetStatusMaintenance: true,
+		AssetStatusRetired:     true,
+		AssetStatusDisposed:    true,
+	}
+
+	for from, targets := range validAssetTransitions {
+		for _, to := range targets {
+			if !knownStatuses[to] {
+				t.Errorf("transition %s -> %s references unknown status %q", from, to, to)
+			}
+		}
+	}
+}
