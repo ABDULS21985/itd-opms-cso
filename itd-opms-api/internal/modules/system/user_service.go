@@ -498,7 +498,7 @@ func (s *UserService) AssignRole(ctx context.Context, tenantID, userID uuid.UUID
 		SELECT COUNT(*) FROM role_bindings
 		WHERE user_id = $1 AND role_id = $2 AND tenant_id = $3
 		  AND scope_type = $4::scope_type
-		  AND COALESCE(scope_id, '00000000-0000-0000-0000-000000000000') = COALESCE($5, '00000000-0000-0000-0000-000000000000')
+		  AND scope_id IS NOT DISTINCT FROM $5
 		  AND is_active = true`,
 		userID, req.RoleID, tenantID, req.ScopeType, req.ScopeID,
 	).Scan(&existing)

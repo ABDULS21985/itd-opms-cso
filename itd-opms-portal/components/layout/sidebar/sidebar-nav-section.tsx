@@ -107,7 +107,7 @@ export function SidebarNavSection({
     return (
       <div className={groupIndex > 0 ? "mt-2" : ""}>
         {groupIndex > 0 && (
-          <div className="hidden lg:block mx-3 mb-2 border-t border-[#A8893D]/15" />
+          <div className="hidden lg:block mx-3 mb-2 border-t border-[#6B5521]/15" />
         )}
         <div className="space-y-0.5">
           {group.items.map((item) => (
@@ -140,7 +140,7 @@ export function SidebarNavSection({
       style={sortableStyle}
       className={`${groupIndex > 0 ? "mt-2" : ""} ${
         isCustomizing
-          ? "rounded-lg border border-dashed border-[#A8893D]/20 p-1"
+          ? "rounded-lg border border-dashed border-[#6B5521]/20 p-1"
           : ""
       } ${isSectionHidden && isCustomizing ? "opacity-50" : ""}`}
     >
@@ -165,7 +165,7 @@ export function SidebarNavSection({
             transition-colors duration-200 py-1
             ${
               hasActiveItem
-                ? "bg-gradient-to-r from-[#A8893D] to-[#C4A962] bg-clip-text text-transparent"
+                ? "bg-gradient-to-r from-[#6B5521] to-[#8B6F2E] bg-clip-text text-transparent"
                 : "text-gray-300 hover:text-gray-100"
             }
           `}
@@ -217,7 +217,7 @@ export function SidebarNavSection({
               flex-shrink-0 p-0.5 rounded transition-all duration-200
               ${
                 pinned
-                  ? "opacity-100 text-[#A8893D]"
+                  ? "opacity-100 text-[#6B5521]"
                   : "opacity-0 group-hover/header:opacity-100 text-gray-400 hover:text-gray-400"
               }
             `}
@@ -298,7 +298,7 @@ export function SidebarNavSection({
 export function SidebarNavSectionOverlay({ label }: { label: string }) {
   return (
     <div
-      className="flex items-center gap-2 rounded-xl text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 bg-[#2A1F06] border border-[#A8893D]/30 text-[#C4A962] shadow-2xl shadow-black/50"
+      className="flex items-center gap-2 rounded-xl text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 bg-[#0D0A03] border border-[#6B5521]/30 text-[#8B6F2E] shadow-2xl shadow-black/50"
       style={{ transform: "rotate(3deg)", opacity: 0.9, width: 240 }}
     >
       <GripVertical size={12} className="text-gray-400" />

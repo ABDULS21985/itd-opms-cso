@@ -810,9 +810,9 @@ export function useAuditLogs(
         "/system/audit-logs",
         {
           page,
-          pageSize,
-          dateFrom: filters?.dateFrom,
-          dateTo: filters?.dateTo,
+          limit: pageSize,
+          dateFrom: filters?.dateFrom ? `${filters.dateFrom}T00:00:00Z` : undefined,
+          dateTo: filters?.dateTo ? `${filters.dateTo}T23:59:59Z` : undefined,
           actorId: filters?.actorId,
           entityType: filters?.entityType,
           entityId: filters?.entityId,
@@ -838,7 +838,7 @@ export function useAuditEvent(id: string | undefined) {
 }
 
 /**
- * GET /system/audit-logs/timeline/{entityType}/{entityId} - entity timeline.
+ * GET /system/audit-logs/entity/{type}/{id} - entity audit timeline.
  */
 export function useAuditTimeline(
   entityType: string | undefined,
@@ -848,7 +848,7 @@ export function useAuditTimeline(
     queryKey: ["system-audit-timeline", entityType, entityId],
     queryFn: () =>
       apiClient.get<AuditEventDetail[]>(
-        `/system/audit-logs/timeline/${entityType}/${entityId}`,
+        `/system/audit-logs/entity/${entityType}/${entityId}`,
       ),
     enabled: !!entityType && !!entityId,
   });
@@ -862,8 +862,8 @@ export function useAuditStats(dateFrom?: string, dateTo?: string) {
     queryKey: ["system-audit-stats", dateFrom, dateTo],
     queryFn: () =>
       apiClient.get<AuditStatsResponse>("/system/audit-logs/stats", {
-        dateFrom,
-        dateTo,
+        dateFrom: dateFrom ? `${dateFrom}T00:00:00Z` : undefined,
+        dateTo: dateTo ? `${dateTo}T23:59:59Z` : undefined,
       }),
   });
 }
@@ -873,14 +873,14 @@ export function useAuditStats(dateFrom?: string, dateTo?: string) {
 /* ================================================================== */
 
 /**
- * POST /system/audit-logs/verify-integrity - verify audit log integrity.
+ * POST /system/audit-logs/verify - verify audit log integrity.
  */
 export function useVerifyIntegrity() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body?: { dateFrom?: string; dateTo?: string }) =>
       apiClient.post<{ status: string; verified: number; failed: number }>(
-        "/system/audit-logs/verify-integrity",
+        "/system/audit-logs/verify",
         body,
       ),
     onSuccess: () => {
@@ -894,7 +894,7 @@ export function useVerifyIntegrity() {
 }
 
 /**
- * POST /system/audit-logs/export - export filtered audit logs as CSV or JSON.
+ * GET /system/audit-logs/export - export filtered audit logs as CSV or JSON.
  */
 export function useExportAuditLogs() {
   return useMutation({
@@ -909,9 +909,18 @@ export function useExportAuditLogs() {
       search?: string;
     }) => {
       const { format, ...filters } = params;
-      const res = await apiClient.post<{ url: string }>(
+      const res = await apiClient.get<{ url: string }>(
         "/system/audit-logs/export",
-        { format, ...filters },
+        {
+          format,
+          dateFrom: filters.dateFrom ? `${filters.dateFrom}T00:00:00Z` : undefined,
+          dateTo: filters.dateTo ? `${filters.dateTo}T23:59:59Z` : undefined,
+          actorId: filters.actorId,
+          entityType: filters.entityType,
+          entityId: filters.entityId,
+          action: filters.action,
+          search: filters.search,
+        },
       );
       // Trigger browser download
       if (res?.url) {

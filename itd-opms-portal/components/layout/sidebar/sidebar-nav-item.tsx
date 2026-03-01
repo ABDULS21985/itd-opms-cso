@@ -116,19 +116,19 @@ export function SidebarNavItem({
         className={`
           group relative flex items-center justify-center rounded-xl
           transition-all duration-200
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8893D]/50
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6B5521]/50
           active:scale-[0.98]
           w-10 h-10 mx-auto
           ${
             active
-              ? "bg-[#A8893D]/15 text-white"
+              ? "bg-[#6B5521]/15 text-white"
               : "text-gray-200 hover:bg-white/5 hover:text-white"
           }
         `}
       >
         {active && (
           <div
-            className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#A8893D] to-[#C4A962]"
+            className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#6B5521] to-[#8B6F2E]"
             style={{ boxShadow: "0 0 8px rgba(168,137,61,0.4)" }}
           />
         )}
@@ -174,13 +174,13 @@ export function SidebarNavItem({
           className={`
             group relative flex-1 flex items-center gap-3 rounded-xl text-sm font-medium
             transition-all duration-200
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8893D]/50
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6B5521]/50
             active:scale-[0.98]
             px-3 py-2.5
             ${isHidden && isCustomizing ? "line-through decoration-gray-500" : ""}
             ${
               active
-                ? "bg-[#A8893D]/15 text-white"
+                ? "bg-[#6B5521]/15 text-white"
                 : isFocused
                   ? "bg-white/5 text-white"
                   : "text-gray-200 hover:bg-white/5 hover:text-white"
@@ -191,7 +191,7 @@ export function SidebarNavItem({
           {active && !isCustomizing && (
             <motion.div
               layoutId="sidebar-active-indicator"
-              className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#A8893D] to-[#C4A962]"
+              className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#6B5521] to-[#8B6F2E]"
               style={{ boxShadow: "0 0 8px rgba(168,137,61,0.4)" }}
               transition={{ duration: dur }}
             />
@@ -220,7 +220,7 @@ export function SidebarNavItem({
           {isFav && !isCustomizing && (
             <Star
               size={12}
-              className="text-[#C4A962] flex-shrink-0"
+              className="text-[#8B6F2E] flex-shrink-0"
               fill="currentColor"
             />
           )}
@@ -252,7 +252,7 @@ export function SidebarNavItemOverlay({ item }: { item: NavItem }) {
   const Icon = item.icon;
   return (
     <div
-      className="flex items-center gap-3 rounded-xl text-sm font-medium px-3 py-2.5 bg-[#2A1F06] border border-[#A8893D]/30 text-white shadow-2xl shadow-black/50"
+      className="flex items-center gap-3 rounded-xl text-sm font-medium px-3 py-2.5 bg-[#0D0A03] border border-[#6B5521]/30 text-white shadow-2xl shadow-black/50"
       style={{ transform: "rotate(3deg)", opacity: 0.9, width: 240 }}
     >
       <GripVertical size={14} className="text-gray-400" />

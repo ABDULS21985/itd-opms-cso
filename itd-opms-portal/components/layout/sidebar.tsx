@@ -127,7 +127,7 @@ function HighlightedText({
         seg.highlighted ? (
           <mark
             key={i}
-            className="bg-[#C4A962]/30 text-white rounded-sm px-[1px]"
+            className="bg-[#6B5521]/30 text-white rounded-sm px-[1px]"
           >
             {seg.text}
           </mark>
@@ -686,8 +686,8 @@ export function Sidebar({
       <aside
         className={`
           relative flex flex-col h-screen
-          bg-gradient-to-b from-[#3D2E0A] to-[#2A1F06]
-          border-r border-[#A8893D]/15 shadow-2xl
+          bg-gradient-to-b from-[#1A1508] to-[#110E04]
+          border-r border-[#6B5521]/10 shadow-2xl
           transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
 
           fixed inset-y-0 left-0 z-50
@@ -711,7 +711,7 @@ export function Sidebar({
         {/* -------------------------------------------------------- */}
         {/*  Logo & Branding                                          */}
         {/* -------------------------------------------------------- */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-[#A8893D]/15 bg-[#A8893D]/[0.04] backdrop-blur-sm flex-shrink-0">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-[#6B5521]/15 bg-[#6B5521]/[0.04] backdrop-blur-sm flex-shrink-0">
           {/* Expanded logo */}
           <Link
             href="/dashboard"
@@ -722,13 +722,13 @@ export function Sidebar({
               alt="CBN Logo"
               width={32}
               height={32}
-              className="rounded-lg shadow-lg shadow-[#A8893D]/20 group-hover:shadow-[#A8893D]/40 transition-shadow"
+              className="rounded-lg shadow-lg shadow-[#6B5521]/20 group-hover:shadow-[#6B5521]/40 transition-shadow"
             />
             <div className="flex items-center gap-2">
               <span className="font-semibold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                CBN OPMS
+                OPMS
               </span>
-              <span className="text-[9px] font-medium bg-[#A8893D]/30 text-[#C4A962] px-1.5 py-0.5 rounded-md">
+              <span className="text-[9px] font-medium bg-[#6B5521]/30 text-[#6B5521] px-1.5 py-0.5 rounded-md">
                 v1.0
               </span>
             </div>
@@ -742,7 +742,7 @@ export function Sidebar({
                 alt="CBN Logo"
                 width={32}
                 height={32}
-                className="rounded-lg shadow-lg shadow-[#A8893D]/20"
+                className="rounded-lg shadow-lg shadow-[#6B5521]/20"
               />
             </Link>
           )}
@@ -816,7 +816,7 @@ export function Sidebar({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Search navigation..."
-                className="w-full bg-white/5 border border-[#A8893D]/20 text-white text-sm rounded-lg pl-8 pr-8 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#A8893D]/50 focus:border-[#A8893D]/50 transition-all duration-200"
+                className="w-full bg-white/5 border border-[#6B5521]/20 text-white text-sm rounded-lg pl-8 pr-8 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6B5521]/50 focus:border-[#6B5521]/50 transition-all duration-200"
               />
               {searchQuery ? (
                 <button
@@ -829,7 +829,7 @@ export function Sidebar({
                   <X size={14} />
                 </button>
               ) : (
-                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 border border-[#A8893D]/20 rounded px-1 py-0.5 font-mono">
+                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 border border-[#6B5521]/20 rounded px-1 py-0.5 font-mono">
                   /
                 </kbd>
               )}
@@ -894,13 +894,12 @@ export function Sidebar({
                           className={`
                             group relative flex items-center gap-3 rounded-xl text-sm font-medium
                             transition-all duration-200 px-3 py-2.5 border-l-[3px]
-                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8893D]/50
-                            ${
-                              active
-                                ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
-                                : focused
-                                  ? "border-[#A8893D]/50 bg-white/5 text-white"
-                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
+                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6B5521]/50
+                            ${active
+                              ? "border-[#6B5521] bg-[#6B5521]/15 text-white"
+                              : focused
+                                ? "border-[#6B5521]/50 bg-white/5 text-white"
+                                : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
                             }
                           `}
                         >
@@ -932,7 +931,7 @@ export function Sidebar({
                 favorites.length > 0 && (
                   <div className="mb-3">
                     <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
-                      <Star size={10} className="text-[#C4A962]" />
+                      <Star size={10} className="text-[#6B5521]" />
                       Favorites
                     </p>
                     <div className="space-y-0.5">
@@ -949,10 +948,9 @@ export function Sidebar({
                               className={`
                                 flex-1 flex items-center gap-2.5 rounded-xl text-xs font-medium
                                 transition-all duration-200 px-3 py-2 border-l-[3px]
-                                ${
-                                  active
-                                    ? "border-[#A8893D] bg-[#A8893D]/15 text-white"
-                                    : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
+                                ${active
+                                  ? "border-[#6B5521] bg-[#6B5521]/15 text-white"
+                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
                                 }
                               `}
                             >
@@ -961,7 +959,7 @@ export function Sidebar({
                             </Link>
                             <button
                               onClick={() => removeFavorite(fav.path)}
-                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[#C4A962] hover:text-[#C4A962]/80 transition-opacity"
+                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[#6B5521] hover:text-[#6B5521]/80 transition-opacity"
                               title="Remove from favorites"
                             >
                               <Star size={12} fill="currentColor" />
@@ -970,7 +968,7 @@ export function Sidebar({
                         );
                       })}
                     </div>
-                    <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
+                    <div className="mx-3 mt-2 border-t border-[#6B5521]/15" />
                   </div>
                 )}
 
@@ -1025,7 +1023,7 @@ export function Sidebar({
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <div className="mx-3 mt-2 border-t border-[#A8893D]/15" />
+                    <div className="mx-3 mt-2 border-t border-[#6B5521]/15" />
                   </div>
                 )}
 
@@ -1149,7 +1147,7 @@ export function Sidebar({
         {!collapsed && (
           <div className="h-[2px] bg-white/5 flex-shrink-0">
             <motion.div
-              className="h-full bg-gradient-to-r from-[#A8893D] to-[#C4A962]"
+              className="h-full bg-gradient-to-r from-[#6B5521] to-[#6B5521]"
               style={{ width: `${scrollProgress * 100}%` }}
               transition={{ duration: 0.1 }}
             />
@@ -1160,7 +1158,7 @@ export function Sidebar({
         {/*  User Section                                              */}
         {/* -------------------------------------------------------- */}
         <div
-          className="relative border-t border-[#A8893D]/15 p-3"
+          className="relative border-t border-[#6B5521]/15 p-3"
           ref={userMenuRef}
         >
           <AnimatePresence>
@@ -1170,11 +1168,10 @@ export function Sidebar({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: dur }}
-                className={`absolute bottom-full mb-2 bg-[#2A1F06] border border-[#A8893D]/20 rounded-xl shadow-2xl shadow-black/40 p-2 z-50 ${
-                  collapsed
+                className={`absolute bottom-full mb-2 bg-[#0D0A03] border border-[#6B5521]/20 rounded-xl shadow-2xl shadow-black/40 p-2 z-50 ${collapsed
                     ? "left-full ml-2 w-[200px]"
                     : "left-0 w-[220px]"
-                }`}
+                  }`}
               >
                 <Link
                   href="/dashboard/system/settings"
@@ -1192,7 +1189,7 @@ export function Sidebar({
                   <HelpCircle size={16} />
                   Help & Support
                 </Link>
-                <div className="my-1 border-t border-[#A8893D]/15" />
+                <div className="my-1 border-t border-[#6B5521]/15" />
                 <button
                   onClick={() => {
                     setWizardOpen(true);
@@ -1220,7 +1217,7 @@ export function Sidebar({
                   <Download size={16} />
                   Import / Export
                 </button>
-                <div className="my-1 border-t border-[#A8893D]/15" />
+                <div className="my-1 border-t border-[#6B5521]/15" />
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors w-full text-left"
@@ -1242,7 +1239,7 @@ export function Sidebar({
             `}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#A8893D] to-[#6B5A28] flex items-center justify-center ring-2 ring-[#A8893D]/30">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#6B5521] to-[#4A3D1A] flex items-center justify-center ring-2 ring-[#6B5521]/30">
                 <span className="text-sm font-semibold text-white">
                   {userInitial}
                 </span>
@@ -1251,9 +1248,8 @@ export function Sidebar({
             </div>
             {user && (
               <div
-                className={`flex-1 min-w-0 text-left ${
-                  collapsed ? "lg:hidden" : ""
-                }`}
+                className={`flex-1 min-w-0 text-left ${collapsed ? "lg:hidden" : ""
+                  }`}
               >
                 <p className="text-sm font-medium text-white truncate">
                   {user.displayName || user.email}
@@ -1289,7 +1285,7 @@ export function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: dur * 0.5 }}
-            className="fixed z-[100] bg-[#2A1F06] border border-[#A8893D]/20 rounded-lg shadow-2xl shadow-black/50 p-1 min-w-[180px]"
+            className="fixed z-[100] bg-[#0D0A03] border border-[#6B5521]/20 rounded-lg shadow-2xl shadow-black/50 p-1 min-w-[180px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -1309,7 +1305,7 @@ export function Sidebar({
                 size={14}
                 className={
                   isFavorite(contextMenu.item.href)
-                    ? "text-[#C4A962]"
+                    ? "text-[#6B5521]"
                     : "text-gray-500"
                 }
                 fill={
