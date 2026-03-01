@@ -1511,6 +1511,50 @@ export interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
+/* Org Analytics */
+export interface OrgAnalyticsResponse {
+  totalUnits: number;
+  activeUnits: number;
+  inactiveUnits: number;
+  maxDepth: number;
+  avgSpanOfControl: number;
+  vacantLeadership: number;
+  totalHeadcount: number;
+  headcountByLevel: LevelHeadcount[];
+  spanDistribution: SpanRange[];
+  unitsByLevel: LevelCount[];
+  recentChanges: OrgRecentChange[];
+  growthTimeline: OrgGrowthPoint[];
+}
+
+export interface LevelHeadcount {
+  level: string;
+  count: number;
+  unitCount: number;
+}
+
+export interface SpanRange {
+  range: string;
+  count: number;
+}
+
+export interface LevelCount {
+  level: string;
+  count: number;
+}
+
+export interface OrgRecentChange {
+  action: string;
+  unitName: string;
+  changedBy: string;
+  changedAt: string;
+}
+
+export interface OrgGrowthPoint {
+  month: string;
+  cumulative: number;
+}
+
 export interface SystemSetting {
   id: string;
   tenantId?: string;

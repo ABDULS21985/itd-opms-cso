@@ -74,13 +74,13 @@ func scanAuditEventDetails(rows pgx.Rows) ([]AuditEventDetail, error) {
 // ──────────────────────────────────────────────
 
 // auditSelectCols is the common SELECT column list for audit event detail queries.
-const auditSelectCols = `ae.id, ae.tenant_id, ae.actor_id, COALESCE(u.display_name, '') AS actor_name,
+const auditSelectCols = `ae.event_id, ae.tenant_id, ae.actor_id, COALESCE(u.display_name, '') AS actor_name,
 	ae.actor_role, ae.action, ae.entity_type, ae.entity_id,
 	ae.changes, ae.previous_state,
 	COALESCE(ae.ip_address::text, '') AS ip_address,
 	COALESCE(ae.user_agent, '') AS user_agent,
 	COALESCE(ae.correlation_id::text, '') AS correlation_id,
-	ae.checksum, ae.created_at`
+	ae.checksum, ae.timestamp`
 
 // auditFromJoin is the common FROM + JOIN clause.
 const auditFromJoin = `FROM audit_events ae
@@ -88,7 +88,7 @@ const auditFromJoin = `FROM audit_events ae
 
 // allowedAuditSortColumns maps sort parameter values to safe SQL column references.
 var allowedAuditSortColumns = map[string]string{
-	"created_at":  "ae.created_at",
+	"created_at":  "ae.timestamp",
 	"action":      "ae.action",
 	"entity_type": "ae.entity_type",
 	"actor_name":  "u.display_name",
@@ -131,12 +131,12 @@ func (s *AuditExplorerService) ListEvents(ctx context.Context, tenantID uuid.UUI
 	args = append(args, tenantID)
 
 	if params.DateFrom != nil {
-		conditions = append(conditions, "ae.created_at >= "+nextArg())
+		conditions = append(conditions, "ae.timestamp >= "+nextArg())
 		args = append(args, *params.DateFrom)
 	}
 
 	if params.DateTo != nil {
-		conditions = append(conditions, "ae.created_at <= "+nextArg())
+		conditions = append(conditions, "ae.timestamp <= "+nextArg())
 		args = append(args, *params.DateTo)
 	}
 
@@ -188,7 +188,7 @@ func (s *AuditExplorerService) ListEvents(ctx context.Context, tenantID uuid.UUI
 	// Resolve sort column safely.
 	sortCol, ok := allowedAuditSortColumns[params.SortBy]
 	if !ok {
-		sortCol = "ae.created_at"
+		sortCol = "ae.timestamp"
 	}
 	sortOrder := "DESC"
 	if strings.EqualFold(params.SortOrder, "asc") {
@@ -220,7 +220,7 @@ func (s *AuditExplorerService) ListEvents(ctx context.Context, tenantID uuid.UUI
 
 // GetEvent returns a single audit event by ID with actor name.
 func (s *AuditExplorerService) GetEvent(ctx context.Context, eventID uuid.UUID) (*AuditEventDetail, error) {
-	query := fmt.Sprintf(`SELECT %s %s WHERE ae.id = $1`, auditSelectCols, auditFromJoin)
+	query := fmt.Sprintf(`SELECT %s %s WHERE ae.event_id = $1`, auditSelectCols, auditFromJoin)
 
 	event, err := scanAuditEventDetail(s.pool.QueryRow(ctx, query, eventID))
 	if err != nil {
@@ -235,7 +235,7 @@ func (s *AuditExplorerService) GetEvent(ctx context.Context, eventID uuid.UUID) 
 
 // GetEntityTimeline returns all audit events for a specific entity, ordered by created_at DESC.
 func (s *AuditExplorerService) GetEntityTimeline(ctx context.Context, entityType string, entityID uuid.UUID) ([]AuditEventDetail, error) {
-	query := fmt.Sprintf(`SELECT %s %s WHERE ae.entity_type = $1 AND ae.entity_id = $2 ORDER BY ae.created_at DESC`,
+	query := fmt.Sprintf(`SELECT %s %s WHERE ae.entity_type = $1 AND ae.entity_id = $2 ORDER BY ae.timestamp DESC`,
 		auditSelectCols, auditFromJoin)
 
 	rows, err := s.pool.Query(ctx, query, entityType, entityID)
@@ -258,7 +258,7 @@ func (s *AuditExplorerService) GetStats(ctx context.Context, tenantID uuid.UUID,
 
 	// Total count.
 	err := s.pool.QueryRow(ctx,
-		"SELECT COUNT(*) FROM audit_events WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3",
+		"SELECT COUNT(*) FROM audit_events WHERE tenant_id = $1 AND timestamp >= $2 AND timestamp <= $3",
 		tenantID, dateFrom, dateTo,
 	).Scan(&result.TotalEvents)
 	if err != nil {
@@ -267,10 +267,10 @@ func (s *AuditExplorerService) GetStats(ctx context.Context, tenantID uuid.UUID,
 
 	// Events per day.
 	dayRows, err := s.pool.Query(ctx, `
-		SELECT DATE(created_at)::text AS day, COUNT(*)::int AS cnt
+		SELECT DATE(timestamp)::text AS day, COUNT(*)::int AS cnt
 		FROM audit_events
-		WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
-		GROUP BY DATE(created_at)
+		WHERE tenant_id = $1 AND timestamp >= $2 AND timestamp <= $3
+		GROUP BY DATE(timestamp)
 		ORDER BY day ASC`,
 		tenantID, dateFrom, dateTo)
 	if err != nil {
@@ -297,7 +297,7 @@ func (s *AuditExplorerService) GetStats(ctx context.Context, tenantID uuid.UUID,
 		SELECT ae.actor_id, COALESCE(u.display_name, '') AS actor_name, COUNT(*)::int AS cnt
 		FROM audit_events ae
 		LEFT JOIN users u ON u.id = ae.actor_id
-		WHERE ae.tenant_id = $1 AND ae.created_at >= $2 AND ae.created_at <= $3
+		WHERE ae.tenant_id = $1 AND ae.timestamp >= $2 AND ae.timestamp <= $3
 		GROUP BY ae.actor_id, u.display_name
 		ORDER BY cnt DESC
 		LIMIT 10`,
@@ -325,7 +325,7 @@ func (s *AuditExplorerService) GetStats(ctx context.Context, tenantID uuid.UUID,
 	entityRows, err := s.pool.Query(ctx, `
 		SELECT entity_type, COUNT(*)::int AS cnt
 		FROM audit_events
-		WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+		WHERE tenant_id = $1 AND timestamp >= $2 AND timestamp <= $3
 		GROUP BY entity_type
 		ORDER BY cnt DESC
 		LIMIT 10`,
@@ -353,7 +353,7 @@ func (s *AuditExplorerService) GetStats(ctx context.Context, tenantID uuid.UUID,
 	actionRows, err := s.pool.Query(ctx, `
 		SELECT action, COUNT(*)::int AS cnt
 		FROM audit_events
-		WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+		WHERE tenant_id = $1 AND timestamp >= $2 AND timestamp <= $3
 		GROUP BY action
 		ORDER BY cnt DESC
 		LIMIT 10`,
@@ -407,12 +407,12 @@ func (s *AuditExplorerService) ExportEvents(ctx context.Context, tenantID uuid.U
 	args = append(args, tenantID)
 
 	if params.DateFrom != nil {
-		conditions = append(conditions, "ae.created_at >= "+nextArg())
+		conditions = append(conditions, "ae.timestamp >= "+nextArg())
 		args = append(args, *params.DateFrom)
 	}
 
 	if params.DateTo != nil {
-		conditions = append(conditions, "ae.created_at <= "+nextArg())
+		conditions = append(conditions, "ae.timestamp <= "+nextArg())
 		args = append(args, *params.DateTo)
 	}
 
@@ -457,7 +457,7 @@ func (s *AuditExplorerService) ExportEvents(ctx context.Context, tenantID uuid.U
 	// Resolve sort column safely.
 	sortCol, ok := allowedAuditSortColumns[params.SortBy]
 	if !ok {
-		sortCol = "ae.created_at"
+		sortCol = "ae.timestamp"
 	}
 	sortOrder := "DESC"
 	if strings.EqualFold(params.SortOrder, "asc") {

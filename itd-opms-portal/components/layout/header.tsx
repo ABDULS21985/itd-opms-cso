@@ -13,6 +13,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
@@ -21,6 +23,8 @@ import { useBreadcrumbOverrides } from "@/providers/breadcrumb-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
 import { CommandPalette } from "@/components/shared/command-palette";
+import { ActivityPanel } from "@/components/dashboard/activity-panel";
+import { useActivityPanel } from "@/hooks/use-activity-panel";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -204,6 +208,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const { open: activityPanelOpen, setOpen: setActivityPanelOpen, toggle: toggleActivityPanel } = useActivityPanel();
   const overrides = useBreadcrumbOverrides();
 
   // Global Cmd+K / Ctrl+K listener
@@ -314,6 +319,16 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           <ThemeToggle />
         </div>
 
+        {/* Activity panel toggle */}
+        <button
+          onClick={toggleActivityPanel}
+          className="p-2 rounded-xl hover:bg-[var(--surface-2)] text-[var(--neutral-gray)] transition-colors"
+          aria-label={activityPanelOpen ? "Close activity panel" : "Open activity panel"}
+          title="Activity Center"
+        >
+          {activityPanelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+        </button>
+
         {/* Notification bell */}
         <NotificationBell
           onClick={() => setNotificationPanelOpen((prev) => !prev)}
@@ -333,6 +348,12 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
+      />
+
+      {/* Activity Panel */}
+      <ActivityPanel
+        open={activityPanelOpen}
+        onOpenChange={setActivityPanelOpen}
       />
     </header>
   );

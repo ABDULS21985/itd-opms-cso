@@ -783,12 +783,12 @@ function SpendAnalysisTab({ vendorId }: { vendorId: string }) {
                   borderRadius: "12px",
                   fontSize: "12px",
                 }}
-                formatter={(value: number) =>
+                formatter={(value) =>
                   new Intl.NumberFormat("en-NG", {
                     style: "currency",
                     currency: "NGN",
                     maximumFractionDigits: 0,
-                  }).format(value)
+                  }).format(Number(value))
                 }
               />
               <Bar dataKey="value" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Spend" />
@@ -829,12 +829,12 @@ function SpendAnalysisTab({ vendorId }: { vendorId: string }) {
                   borderRadius: "12px",
                   fontSize: "12px",
                 }}
-                formatter={(value: number) =>
+                formatter={(value) =>
                   new Intl.NumberFormat("en-NG", {
                     style: "currency",
                     currency: "NGN",
                     maximumFractionDigits: 0,
-                  }).format(value)
+                  }).format(Number(value))
                 }
               />
               <Bar dataKey="value" fill="#8B5CF6" radius={[0, 6, 6, 0]} name="Spend" />

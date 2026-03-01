@@ -261,7 +261,7 @@ describe("ExecutiveAnalyticsPage", () => {
   it("renders the page header", { timeout: 15000 }, () => {
     render(<ExecutiveAnalyticsPage />);
 
-    expect(screen.getByText("PMO Executive Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("AMD PM Executive Dashboard")).toBeInTheDocument();
     expect(
       screen.getByText("Cross-module performance overview and strategic insights"),
     ).toBeInTheDocument();
@@ -396,7 +396,7 @@ describe("ExecutiveAnalyticsPage", () => {
     render(<ExecutiveAnalyticsPage />);
 
     // Page should still render without crashing
-    expect(screen.getByText("PMO Executive Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Head AMD Executive Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Total Projects")).toBeInTheDocument();
   });
 
@@ -409,7 +409,7 @@ describe("ExecutiveAnalyticsPage", () => {
     render(<ExecutiveAnalyticsPage />);
 
     // Page should still render without crashing
-    expect(screen.getByText("PMO Executive Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Head AMD Executive Dashboard")).toBeInTheDocument();
   });
 
   it("renders RAG status progress rings when data is loaded", () => {

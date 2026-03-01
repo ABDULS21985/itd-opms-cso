@@ -48,10 +48,10 @@ export function DonutChart({
     );
   }
 
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius: ir, outerRadius: or, percent }: {
-    cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number;
-  }) => {
-    if (!showLabel || percent < 0.05) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderCustomLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius: ir, outerRadius: or, percent } = props;
+    if (!showLabel || !percent || percent < 0.05) return null;
     const RADIAN = Math.PI / 180;
     const radius = ir + (or - ir) * 0.5;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -97,9 +97,9 @@ export function DonutChart({
               fontSize: 12,
               color: "var(--text-primary)",
             }}
-            formatter={(value: number, name: string) => [
-              `${value} (${total > 0 ? ((value / total) * 100).toFixed(1) : 0}%)`,
-              name,
+            formatter={(value, name) => [
+              `${Number(value)} (${total > 0 ? ((Number(value) / total) * 100).toFixed(1) : 0}%)`,
+              String(name),
             ]}
           />
           {showLegend && (
@@ -117,10 +117,16 @@ export function DonutChart({
       </ResponsiveContainer>
       {centerLabel && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ marginBottom: showLegend ? 36 : 0 }}>
-          <span className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+          <span
+            className="font-bold tabular-nums text-[var(--text-primary)]"
+            style={{ fontSize: Math.max(11, Math.min(24, innerRadius * 0.65)) }}
+          >
             {centerValue ?? total}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+          <span
+            className="uppercase tracking-wider text-[var(--text-muted)]"
+            style={{ fontSize: Math.max(7, Math.min(10, innerRadius * 0.3)) }}
+          >
             {centerLabel}
           </span>
         </div>

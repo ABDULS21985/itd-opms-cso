@@ -36,6 +36,7 @@ func (h *UserHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("system.view")).Get("/{id}", h.GetUser)
 
 	// Write endpoints.
+	r.With(middleware.RequirePermission("system.manage")).Post("/", h.CreateUser)
 	r.With(middleware.RequirePermission("system.manage")).Patch("/{id}", h.UpdateUser)
 	r.With(middleware.RequirePermission("system.manage")).Post("/{id}/deactivate", h.DeactivateUser)
 	r.With(middleware.RequirePermission("system.manage")).Post("/{id}/reactivate", h.ReactivateUser)
@@ -166,6 +167,29 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, user, nil)
+}
+
+// CreateUser handles POST /system/users — create a new user.
+func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	user, err := h.svc.CreateUser(r.Context(), auth.TenantID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, user)
 }
 
 // DeactivateUser handles POST /system/users/{id}/deactivate.

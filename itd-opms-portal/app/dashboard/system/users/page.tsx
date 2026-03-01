@@ -9,13 +9,14 @@ import {
   Search,
   Filter,
   Eye,
+  X,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
-import { useUsers, useDeactivateUser, useRoles } from "@/hooks/use-system";
+import { useUsers, useDeactivateUser, useRoles, useCreateUser } from "@/hooks/use-system";
 import type { UserDetail } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -90,6 +91,17 @@ export default function UsersPage() {
     null,
   );
 
+  // Create user dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    email: "",
+    displayName: "",
+    jobTitle: "",
+    department: "",
+    office: "",
+    phone: "",
+  });
+
   /* ---- Debounce search input (300ms) ---- */
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -108,6 +120,7 @@ export default function UsersPage() {
   });
   const { data: rolesData } = useRoles();
   const deactivateMutation = useDeactivateUser();
+  const createMutation = useCreateUser();
 
   const users = data?.data ?? [];
   const meta = data?.meta;
@@ -137,6 +150,28 @@ export default function UsersPage() {
     deactivateMutation.mutate(deactivateTarget.id, {
       onSettled: () => setDeactivateTarget(null),
     });
+  }
+
+  /* ---- Create user handler ---- */
+  function handleCreateSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!createForm.email || !createForm.displayName) return;
+    createMutation.mutate(
+      {
+        email: createForm.email,
+        displayName: createForm.displayName,
+        jobTitle: createForm.jobTitle || undefined,
+        department: createForm.department || undefined,
+        office: createForm.office || undefined,
+        phone: createForm.phone || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowCreateDialog(false);
+          setCreateForm({ email: "", displayName: "", jobTitle: "", department: "", office: "", phone: "" });
+        },
+      },
+    );
   }
 
   /* ---- Columns ---- */
@@ -307,6 +342,7 @@ export default function UsersPage() {
           </button>
           <button
             type="button"
+            onClick={() => setShowCreateDialog(true)}
             className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             <Plus size={16} />
@@ -453,6 +489,117 @@ export default function UsersPage() {
         variant="danger"
         loading={deactivateMutation.isPending}
       />
+      {/* Create User Dialog */}
+      {showCreateDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-6 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">Add New User</h2>
+              <button
+                type="button"
+                onClick={() => setShowCreateDialog(false)}
+                className="rounded-lg p-1 hover:bg-[var(--surface-1)] transition-colors"
+              >
+                <X size={18} className="text-[var(--neutral-gray)]" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="user@cbn.gov.ng"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">
+                  Display Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={createForm.displayName}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, displayName: e.target.value }))}
+                  placeholder="Full Name"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">Job Title</label>
+                  <input
+                    type="text"
+                    value={createForm.jobTitle}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, jobTitle: e.target.value }))}
+                    placeholder="e.g. Staff"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={createForm.department}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, department: e.target.value }))}
+                    placeholder="e.g. AMD"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">Office</label>
+                  <input
+                    type="text"
+                    value={createForm.office}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, office: e.target.value }))}
+                    placeholder="e.g. BISO"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--neutral-gray)] mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="+234..."
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateDialog(false)}
+                  className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-1)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || !createForm.email || !createForm.displayName}
+                  className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {createMutation.isPending ? "Creating..." : "Create User"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
     </PermissionGate>
   );

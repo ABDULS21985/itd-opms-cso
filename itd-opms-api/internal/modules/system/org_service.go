@@ -522,3 +522,204 @@ func (s *OrgService) GetOrgUnitUsers(ctx context.Context, tenantID, orgUnitID uu
 	}
 	return users, nil
 }
+
+// ──────────────────────────────────────────────
+// Analytics
+// ──────────────────────────────────────────────
+
+// GetOrgAnalytics returns aggregated organizational analytics.
+func (s *OrgService) GetOrgAnalytics(ctx context.Context, tenantID uuid.UUID) (*OrgAnalyticsResponse, error) {
+	resp := &OrgAnalyticsResponse{}
+
+	// 1. Basic counts
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE is_active = true) AS active,
+			COUNT(*) FILTER (WHERE is_active = false) AS inactive,
+			COALESCE(SUM(CASE WHEN is_active THEN (SELECT COUNT(*) FROM users u WHERE u.department = o.name AND u.tenant_id = o.tenant_id AND u.is_active = true) ELSE 0 END), 0) AS headcount
+		FROM org_units o
+		WHERE o.tenant_id = $1
+	`, tenantID).Scan(&resp.TotalUnits, &resp.ActiveUnits, &resp.InactiveUnits, &resp.TotalHeadcount)
+	if err != nil {
+		return nil, fmt.Errorf("analytics basic counts: %w", err)
+	}
+
+	// 2. Max depth from closure table
+	err = s.pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(depth), 0)
+		FROM org_hierarchy h
+		JOIN org_units o ON o.id = h.descendant_id
+		WHERE o.tenant_id = $1
+	`, tenantID).Scan(&resp.MaxDepth)
+	if err != nil {
+		return nil, fmt.Errorf("analytics max depth: %w", err)
+	}
+
+	// 3. Average span of control (avg children per non-leaf node)
+	err = s.pool.QueryRow(ctx, `
+		SELECT COALESCE(AVG(child_count), 0)
+		FROM (
+			SELECT parent_id, COUNT(*) AS child_count
+			FROM org_units
+			WHERE tenant_id = $1 AND parent_id IS NOT NULL AND is_active = true
+			GROUP BY parent_id
+		) sub
+	`, tenantID).Scan(&resp.AvgSpanOfControl)
+	if err != nil {
+		return nil, fmt.Errorf("analytics span of control: %w", err)
+	}
+
+	// 4. Vacant leadership (units without a manager)
+	if resp.ActiveUnits > 0 {
+		var vacantCount int
+		err = s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM org_units
+			WHERE tenant_id = $1 AND is_active = true AND manager_user_id IS NULL
+		`, tenantID).Scan(&vacantCount)
+		if err != nil {
+			return nil, fmt.Errorf("analytics vacant leadership: %w", err)
+		}
+		resp.VacantLeadership = float64(vacantCount) / float64(resp.ActiveUnits) * 100
+	}
+
+	// 5. Headcount by level
+	rows, err := s.pool.Query(ctx, `
+		SELECT o.level::text,
+			COALESCE(SUM((SELECT COUNT(*) FROM users u WHERE u.department = o.name AND u.tenant_id = o.tenant_id AND u.is_active = true)), 0) AS headcount,
+			COUNT(*) AS unit_count
+		FROM org_units o
+		WHERE o.tenant_id = $1 AND o.is_active = true
+		GROUP BY o.level
+		ORDER BY
+			CASE o.level::text
+				WHEN 'directorate' THEN 1
+				WHEN 'department' THEN 2
+				WHEN 'division' THEN 3
+				WHEN 'office' THEN 4
+				WHEN 'unit' THEN 5
+				WHEN 'team' THEN 6
+				WHEN 'section' THEN 7
+			END
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("analytics headcount by level: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lh LevelHeadcount
+		if err := rows.Scan(&lh.Level, &lh.Count, &lh.UnitCount); err != nil {
+			return nil, fmt.Errorf("scan headcount by level: %w", err)
+		}
+		resp.HeadcountByLevel = append(resp.HeadcountByLevel, lh)
+	}
+
+	// 6. Units by level (for chart)
+	resp.UnitsByLevel = make([]LevelCount, 0)
+	for _, lh := range resp.HeadcountByLevel {
+		resp.UnitsByLevel = append(resp.UnitsByLevel, LevelCount{Level: lh.Level, Count: lh.UnitCount})
+	}
+
+	// 7. Span of control distribution
+	spanRows, err := s.pool.Query(ctx, `
+		SELECT
+			CASE
+				WHEN child_count BETWEEN 1 AND 3 THEN '1-3'
+				WHEN child_count BETWEEN 4 AND 6 THEN '4-6'
+				WHEN child_count BETWEEN 7 AND 10 THEN '7-10'
+				ELSE '10+'
+			END AS range,
+			COUNT(*) AS cnt
+		FROM (
+			SELECT parent_id, COUNT(*) AS child_count
+			FROM org_units
+			WHERE tenant_id = $1 AND parent_id IS NOT NULL AND is_active = true
+			GROUP BY parent_id
+		) sub
+		GROUP BY range
+		ORDER BY MIN(child_count)
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("analytics span distribution: %w", err)
+	}
+	defer spanRows.Close()
+	for spanRows.Next() {
+		var sr SpanRange
+		if err := spanRows.Scan(&sr.Range, &sr.Count); err != nil {
+			return nil, fmt.Errorf("scan span distribution: %w", err)
+		}
+		resp.SpanDistribution = append(resp.SpanDistribution, sr)
+	}
+
+	// 8. Growth timeline (units created per month)
+	growthRows, err := s.pool.Query(ctx, `
+		SELECT
+			TO_CHAR(created_at, 'YYYY-MM') AS month,
+			COUNT(*) AS cnt
+		FROM org_units
+		WHERE tenant_id = $1
+		GROUP BY month
+		ORDER BY month
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("analytics growth timeline: %w", err)
+	}
+	defer growthRows.Close()
+	cumulative := 0
+	for growthRows.Next() {
+		var gp OrgGrowthPoint
+		var monthCount int
+		if err := growthRows.Scan(&gp.Month, &monthCount); err != nil {
+			return nil, fmt.Errorf("scan growth timeline: %w", err)
+		}
+		cumulative += monthCount
+		gp.Cumulative = cumulative
+		resp.GrowthTimeline = append(resp.GrowthTimeline, gp)
+	}
+
+	// 9. Recent changes from audit log
+	changeRows, err := s.pool.Query(ctx, `
+		SELECT
+			a.action,
+			COALESCE(a.changes->>'name', a.entity_id::text) AS unit_name,
+			COALESCE(u.display_name, a.actor_id::text) AS changed_by,
+			TO_CHAR(a.timestamp, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS changed_at
+		FROM audit_events a
+		LEFT JOIN users u ON u.id = a.actor_id
+		WHERE a.tenant_id = $1
+			AND a.entity_type = 'org_unit'
+		ORDER BY a.timestamp DESC
+		LIMIT 10
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("analytics recent changes: %w", err)
+	}
+	defer changeRows.Close()
+	for changeRows.Next() {
+		var rc OrgRecentChange
+		if err := changeRows.Scan(&rc.Action, &rc.UnitName, &rc.ChangedBy, &rc.ChangedAt); err != nil {
+			return nil, fmt.Errorf("scan recent changes: %w", err)
+		}
+		resp.RecentChanges = append(resp.RecentChanges, rc)
+	}
+
+	// Ensure slices are not nil for JSON
+	if resp.HeadcountByLevel == nil {
+		resp.HeadcountByLevel = []LevelHeadcount{}
+	}
+	if resp.SpanDistribution == nil {
+		resp.SpanDistribution = []SpanRange{}
+	}
+	if resp.UnitsByLevel == nil {
+		resp.UnitsByLevel = []LevelCount{}
+	}
+	if resp.RecentChanges == nil {
+		resp.RecentChanges = []OrgRecentChange{}
+	}
+	if resp.GrowthTimeline == nil {
+		resp.GrowthTimeline = []OrgGrowthPoint{}
+	}
+
+	return resp, nil
+}

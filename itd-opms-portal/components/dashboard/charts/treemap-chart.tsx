@@ -11,6 +11,7 @@ interface TreemapDataItem {
   name: string;
   value: number;
   color?: string;
+  [key: string]: unknown;
 }
 
 interface TreemapChartProps {
