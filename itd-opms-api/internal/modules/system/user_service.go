@@ -213,6 +213,64 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 	return users, total, nil
 }
 
+// CreateUser creates a new user with a default password hash.
+func (s *UserService) CreateUser(ctx context.Context, tenantID uuid.UUID, req CreateUserRequest) (*UserDetail, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	// Validate required fields.
+	if req.Email == "" {
+		return nil, apperrors.BadRequest("email is required")
+	}
+	if req.DisplayName == "" {
+		return nil, apperrors.BadRequest("displayName is required")
+	}
+
+	// Check for duplicate email.
+	var exists bool
+	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", req.Email).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("check existing email: %w", err)
+	}
+	if exists {
+		return nil, apperrors.Conflict("a user with this email already exists")
+	}
+
+	// Insert user with default password hash.
+	defaultPwdHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+	var newID uuid.UUID
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO users (email, display_name, entra_id, job_title, department, office, unit, tenant_id, password_hash)
+		VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8)
+		RETURNING id`,
+		req.Email, req.DisplayName,
+		ptrStr(req.JobTitle), ptrStr(req.Department),
+		ptrStr(req.Office), ptrStr(req.Unit),
+		tenantID, defaultPwdHash,
+	).Scan(&newID)
+	if err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(req)
+	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:      tenantID,
+		ActorID:       auth.UserID,
+		ActorRole:     firstRole(auth.Roles),
+		Action:        "user.created",
+		EntityType:    "user",
+		EntityID:      newID,
+		Changes:       changes,
+		CorrelationID: types.GetCorrelationID(ctx),
+	})
+
+	// Return full user detail.
+	return s.GetUser(ctx, tenantID, newID)
+}
+
 // GetUser returns a single user with their roles and delegations.
 func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (*UserDetail, error) {
 	query := `

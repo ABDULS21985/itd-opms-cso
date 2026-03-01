@@ -135,6 +135,32 @@ export function useUpdateUser(id: string | undefined) {
 }
 
 /**
+ * POST /system/users - create a new user.
+ */
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      email: string;
+      displayName: string;
+      jobTitle?: string;
+      department?: string;
+      office?: string;
+      unit?: string;
+      phone?: string;
+    }) => apiClient.post<UserDetail>("/system/users", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-users"] });
+      queryClient.invalidateQueries({ queryKey: ["system-user-stats"] });
+      toast.success("User created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create user");
+    },
+  });
+}
+
+/**
  * POST /system/users/{id}/deactivate - deactivate a user.
  */
 export function useDeactivateUser() {

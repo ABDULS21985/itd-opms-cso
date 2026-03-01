@@ -67,6 +67,17 @@ type UpdateUserRequest struct {
 	IsActive    *bool   `json:"isActive"`
 }
 
+// CreateUserRequest is the payload for creating a new user.
+type CreateUserRequest struct {
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	JobTitle    *string `json:"jobTitle"`
+	Department  *string `json:"department"`
+	Office      *string `json:"office"`
+	Unit        *string `json:"unit"`
+	Phone       *string `json:"phone"`
+}
+
 // AssignRoleRequest is the payload for assigning a role to a user.
 type AssignRoleRequest struct {
 	RoleID    uuid.UUID  `json:"roleId"`
