@@ -96,9 +96,9 @@ func (h *OKRHandler) CreateOKR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default owner to authenticated user if not provided.
 	if req.OwnerID == uuid.Nil {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "OwnerId is required")
-		return
+		req.OwnerID = authCtx.UserID
 	}
 
 	okr, err := h.svc.CreateOKR(r.Context(), authCtx.TenantID, authCtx.UserID, req)
