@@ -114,9 +114,9 @@ export function SidebarImportExport({
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-[90vw] max-w-md"
           >
-            <div className="bg-[#0D0A03] border border-[#6B5521]/20 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="bg-[#031A0B] border border-[#1B7340]/20 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#6B5521]/15">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#1B7340]/15">
                 <h2 className="text-base font-semibold text-white">
                   Import / Export Layout
                 </h2>
@@ -133,11 +133,11 @@ export function SidebarImportExport({
                 {/* Export */}
                 <button
                   onClick={handleExport}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#6B5521]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
                 >
                   <Download
                     size={18}
-                    className="text-[#8B6F2E] flex-shrink-0"
+                    className="text-[#2D9B58] flex-shrink-0"
                   />
                   <div className="text-left">
                     <span className="text-sm font-medium block">
@@ -152,11 +152,11 @@ export function SidebarImportExport({
                 {/* Import */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#6B5521]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
                 >
                   <Upload
                     size={18}
-                    className="text-[#8B6F2E] flex-shrink-0"
+                    className="text-[#2D9B58] flex-shrink-0"
                   />
                   <div className="text-left">
                     <span className="text-sm font-medium block">
@@ -178,7 +178,7 @@ export function SidebarImportExport({
                 {/* Share */}
                 <button
                   onClick={handleShare}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#6B5521]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
                 >
                   {copied ? (
                     <Check
@@ -188,7 +188,7 @@ export function SidebarImportExport({
                   ) : (
                     <Share2
                       size={18}
-                      className="text-[#8B6F2E] flex-shrink-0"
+                      className="text-[#2D9B58] flex-shrink-0"
                     />
                   )}
                   <div className="text-left">
@@ -214,10 +214,10 @@ export function SidebarImportExport({
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
-                    className="rounded-xl bg-white/5 border border-[#6B5521]/20 p-4 space-y-3"
+                    className="rounded-xl bg-white/5 border border-[#1B7340]/20 p-4 space-y-3"
                   >
                     <div className="flex items-center gap-2 text-sm font-medium text-white">
-                      <FileJson size={16} className="text-[#8B6F2E]" />
+                      <FileJson size={16} className="text-[#2D9B58]" />
                       Preview
                     </div>
 
@@ -250,7 +250,7 @@ export function SidebarImportExport({
 
                     <button
                       onClick={handleApplyImport}
-                      className="w-full py-2 rounded-lg bg-[#6B5521]/20 text-[#8B6F2E] text-sm font-medium hover:bg-[#6B5521]/30 transition-colors"
+                      className="w-full py-2 rounded-lg bg-[#1B7340]/20 text-[#2D9B58] text-sm font-medium hover:bg-[#1B7340]/30 transition-colors"
                     >
                       Apply Layout
                     </button>

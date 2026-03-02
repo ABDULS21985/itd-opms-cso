@@ -295,6 +295,28 @@ export default function ProjectDetailPage({
     updateProject.isPending ||
     deleteProject.isPending;
 
+  /* Days info */
+  const daysInfo = useMemo(() => {
+    if (!project?.plannedStart || !project?.plannedEnd) return null;
+    const start = new Date(project.plannedStart);
+    const end = new Date(project.plannedEnd);
+    const total = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const elapsed = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const remaining = Math.max(0, total - elapsed);
+    const isOverdue = Date.now() > end.getTime() && project.status !== "completed" && project.status !== "cancelled";
+    return { total, elapsed: Math.max(0, elapsed), remaining, isOverdue };
+  }, [project?.plannedStart, project?.plannedEnd, project?.status]);
+
+  /* Content tabs */
+  const contentTabs = useMemo(() => {
+    const tabs: { key: string; label: string; content: string }[] = [];
+    if (project?.description) tabs.push({ key: "description", label: "Description", content: project.description });
+    if (project?.charter) tabs.push({ key: "charter", label: "Charter", content: project.charter });
+    if (project?.scope) tabs.push({ key: "scope", label: "Scope", content: project.scope });
+    if (project?.businessCase) tabs.push({ key: "businessCase", label: "Business Case", content: project.businessCase });
+    return tabs;
+  }, [project?.description, project?.charter, project?.scope, project?.businessCase]);
+
   /* ---- Loading ---- */
 
   if (isLoading) {
@@ -361,27 +383,6 @@ export default function ProjectDetailPage({
   const rag = ragInfo(project.ragStatus);
   const prio = priorityColor(project.priority);
 
-  /* Days info */
-  const daysInfo = useMemo(() => {
-    if (!project.plannedStart || !project.plannedEnd) return null;
-    const start = new Date(project.plannedStart);
-    const end = new Date(project.plannedEnd);
-    const total = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const elapsed = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const remaining = Math.max(0, total - elapsed);
-    const isOverdue = Date.now() > end.getTime() && project.status !== "completed" && project.status !== "cancelled";
-    return { total, elapsed: Math.max(0, elapsed), remaining, isOverdue };
-  }, [project.plannedStart, project.plannedEnd, project.status]);
-
-  /* Content tabs */
-  const contentTabs = useMemo(() => {
-    const tabs: { key: string; label: string; content: string }[] = [];
-    if (project.description) tabs.push({ key: "description", label: "Description", content: project.description });
-    if (project.charter) tabs.push({ key: "charter", label: "Charter", content: project.charter });
-    if (project.scope) tabs.push({ key: "scope", label: "Scope", content: project.scope });
-    if (project.businessCase) tabs.push({ key: "businessCase", label: "Business Case", content: project.businessCase });
-    return tabs;
-  }, [project.description, project.charter, project.scope, project.businessCase]);
 
   /* ---- Status transition actions ---- */
 

@@ -59,7 +59,7 @@ export function SidebarHiddenItemsDrawer({
 
   return (
     <div className="mt-3 mx-1">
-      <div className="border-t border-[#6B5521]/15 pt-2">
+      <div className="border-t border-[#1B7340]/15 pt-2">
         <button
           onClick={() => setOpen((v) => !v)}
           className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400 hover:text-gray-300 transition-colors"

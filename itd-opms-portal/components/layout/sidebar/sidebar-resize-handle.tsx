@@ -25,7 +25,7 @@ export function SidebarResizeHandle({
         cursor-col-resize
         group/resize
         transition-colors duration-150
-        ${isDragging ? "bg-[#6B5521]/60" : "hover:bg-[#6B5521]/30"}
+        ${isDragging ? "bg-[#1B7340]/60" : "hover:bg-[#1B7340]/30"}
       `}
       style={{ touchAction: "none" }}
       role="separator"
@@ -42,8 +42,8 @@ export function SidebarResizeHandle({
           transition-all duration-200
           ${
             isDragging
-              ? "bg-[#6B5521] opacity-100"
-              : "bg-[#6B5521]/40 opacity-0 group-hover/resize:opacity-100"
+              ? "bg-[#1B7340] opacity-100"
+              : "bg-[#1B7340]/40 opacity-0 group-hover/resize:opacity-100"
           }
         `}
       />
