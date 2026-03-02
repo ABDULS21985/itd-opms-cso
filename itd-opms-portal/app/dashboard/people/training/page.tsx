@@ -1,30 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
   Plus,
   Filter,
+  Search,
   AlertTriangle,
   CheckCircle,
   Clock,
   XCircle,
   GraduationCap,
   Loader2,
+  Pencil,
+  Trash2,
+  X,
+  TrendingUp,
+  Award,
+  BarChart3,
 } from "lucide-react";
 import {
   useTrainingRecords,
   useExpiringCertifications,
+  useCreateTrainingRecord,
+  useUpdateTrainingRecord,
+  useDeleteTrainingRecord,
 } from "@/hooks/use-people";
-import type { TrainingRecord } from "@/types";
+import { useSearchUsers } from "@/hooks/use-system";
+import { FormField } from "@/components/shared/form-field";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import type { TrainingRecord, UserSearchResult } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
 const TRAINING_TYPES = [
-  { value: "", label: "All Types" },
   { value: "course", label: "Course" },
   { value: "certification", label: "Certification" },
   { value: "workshop", label: "Workshop" },
@@ -32,17 +44,33 @@ const TRAINING_TYPES = [
 ];
 
 const TRAINING_STATUSES = [
-  { value: "", label: "All Statuses" },
   { value: "planned", label: "Planned" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "expired", label: "Expired" },
 ];
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof Clock }> = {
+const FILTER_TYPES = [{ value: "", label: "All Types" }, ...TRAINING_TYPES];
+const FILTER_STATUSES = [
+  { value: "", label: "All Statuses" },
+  ...TRAINING_STATUSES,
+];
+
+const STATUS_STYLES: Record<
+  string,
+  { bg: string; text: string; icon: typeof Clock }
+> = {
   planned: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280", icon: Clock },
-  in_progress: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6", icon: Clock },
-  completed: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981", icon: CheckCircle },
+  in_progress: {
+    bg: "rgba(59, 130, 246, 0.1)",
+    text: "#3B82F6",
+    icon: Clock,
+  },
+  completed: {
+    bg: "rgba(16, 185, 129, 0.1)",
+    text: "#10B981",
+    icon: CheckCircle,
+  },
   expired: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444", icon: XCircle },
 };
 
@@ -60,56 +88,461 @@ const TYPE_STYLES: Record<string, { bg: string; text: string }> = {
 function daysUntil(dateStr: string): number {
   const now = new Date();
   const target = new Date(dateStr);
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.ceil(
+    (target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  User Search Autocomplete (inline for attendee assignment)          */
+/* ------------------------------------------------------------------ */
+
+function UserPicker({
+  value,
+  displayValue,
+  onChange,
+}: {
+  value: string;
+  displayValue: string;
+  onChange: (userId: string, display: string) => void;
+}) {
+  const [query, setQuery] = useState(displayValue);
+  const [open, setOpen] = useState(false);
+  const [debounced, setDebounced] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data: results, isLoading } = useSearchUsers(debounced);
+
+  function handleSelect(user: UserSearchResult) {
+    onChange(user.id, user.displayName);
+    setQuery(user.displayName);
+    setOpen(false);
+  }
+
+  function handleClear() {
+    onChange("", "");
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        Assign to User <span className="text-[var(--error)] ml-0.5">*</span>
+      </label>
+      <div className="relative">
+        <Search
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)]"
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            if (!e.target.value) handleClear();
+          }}
+          onFocus={() => {
+            if (query.length >= 2) setOpen(true);
+          }}
+          placeholder="Search for a user..."
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-8 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      {open && debounced.length >= 2 && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] shadow-lg max-h-48 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-sm text-[var(--neutral-gray)]">
+              <Loader2 size={14} className="animate-spin" />
+              Searching...
+            </div>
+          ) : results && results.length > 0 ? (
+            results.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => handleSelect(user)}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-1)] first:rounded-t-xl last:rounded-b-xl"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-bold text-[var(--primary)]">
+                  {user.displayName.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                    {user.displayName}
+                  </p>
+                  <p className="text-xs text-[var(--neutral-gray)] truncate">
+                    {user.email}
+                  </p>
+                </div>
+              </button>
+            ))
+          ) : (
+            <p className="py-4 text-center text-sm text-[var(--neutral-gray)]">
+              No users found
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Create / Edit Dialog                                                */
+/* ------------------------------------------------------------------ */
+
+function TrainingFormDialog({
+  open,
+  onClose,
+  onSubmit,
+  loading,
+  initial,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: Record<string, unknown>) => void;
+  loading: boolean;
+  initial?: TrainingRecord | null;
+}) {
+  const isEdit = !!initial;
+
+  const [title, setTitle] = useState("");
+  const [provider, setProvider] = useState("");
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("planned");
+  const [cost, setCost] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [completedAt, setCompletedAt] = useState("");
+  const [userId, setUserId] = useState("");
+  const [userDisplay, setUserDisplay] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Populate form when editing
+  useEffect(() => {
+    if (open && initial) {
+      setTitle(initial.title);
+      setProvider(initial.provider ?? "");
+      setType(initial.type);
+      setStatus(initial.status);
+      setCost(initial.cost != null ? String(initial.cost) : "");
+      setExpiryDate(
+        initial.expiryDate
+          ? new Date(initial.expiryDate).toISOString().split("T")[0]
+          : "",
+      );
+      setCompletedAt(
+        initial.completedAt
+          ? new Date(initial.completedAt).toISOString().split("T")[0]
+          : "",
+      );
+      setUserId(initial.userId);
+      setUserDisplay(initial.userId.slice(0, 8) + "...");
+    } else if (open && !initial) {
+      setTitle("");
+      setProvider("");
+      setType("");
+      setStatus("planned");
+      setCost("");
+      setExpiryDate("");
+      setCompletedAt("");
+      setUserId("");
+      setUserDisplay("");
+      setErrors({});
+    }
+  }, [open, initial]);
+
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!title.trim()) e.title = "Title is required";
+    if (!type) e.type = "Type is required";
+    if (!isEdit && !userId) e.userId = "User is required";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    const data: Record<string, unknown> = {
+      title: title.trim(),
+      type,
+      status,
+    };
+    if (provider.trim()) data.provider = provider.trim();
+    if (cost) data.cost = parseFloat(cost);
+    if (expiryDate) data.expiryDate = new Date(expiryDate).toISOString();
+    if (completedAt) data.completedAt = new Date(completedAt).toISOString();
+    if (!isEdit && userId) data.userId = userId;
+    onSubmit(data);
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !loading && onClose()}
+      />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] shadow-xl"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            {isEdit ? "Edit Training Record" : "Log Training"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-lg p-1 text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="space-y-4 px-6 py-5 max-h-[65vh] overflow-y-auto">
+          <FormField
+            label="Title"
+            name="title"
+            value={title}
+            onChange={setTitle}
+            placeholder="e.g., AWS Solutions Architect Certification"
+            required
+            error={errors.title}
+          />
+
+          <FormField
+            label="Provider"
+            name="provider"
+            value={provider}
+            onChange={setProvider}
+            placeholder="e.g., Amazon Web Services, Coursera"
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label="Type"
+              name="type"
+              type="select"
+              value={type}
+              onChange={setType}
+              options={TRAINING_TYPES}
+              placeholder="Select type..."
+              required
+              error={errors.type}
+            />
+            <FormField
+              label="Status"
+              name="status"
+              type="select"
+              value={status}
+              onChange={setStatus}
+              options={TRAINING_STATUSES}
+              placeholder="Select status..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label="Cost"
+              name="cost"
+              type="number"
+              value={cost}
+              onChange={setCost}
+              placeholder="0.00"
+            />
+            <FormField
+              label="Expiry Date"
+              name="expiryDate"
+              type="date"
+              value={expiryDate}
+              onChange={setExpiryDate}
+            />
+          </div>
+
+          <FormField
+            label="Completed Date"
+            name="completedAt"
+            type="date"
+            value={completedAt}
+            onChange={setCompletedAt}
+          />
+
+          {!isEdit && (
+            <div>
+              <UserPicker
+                value={userId}
+                displayValue={userDisplay}
+                onChange={(id, display) => {
+                  setUserId(id);
+                  setUserDisplay(display);
+                  if (id) setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.userId;
+                    return next;
+                  });
+                }}
+              />
+              {errors.userId && (
+                <p className="flex items-center gap-1 text-xs text-[var(--error)] mt-1.5 font-medium">
+                  {errors.userId}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {isEdit ? "Save Changes" : "Log Training"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stat Card Component                                                 */
+/* ------------------------------------------------------------------ */
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color,
+  bgColor,
+  loading,
+}: {
+  label: string;
+  value: number;
+  icon: typeof BookOpen;
+  color: string;
+  bgColor: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{ backgroundColor: bgColor }}
+        >
+          <Icon size={18} style={{ color }} />
+        </div>
+      </div>
+      <div>
+        {loading ? (
+          <div className="h-7 w-12 rounded bg-[var(--surface-1)] animate-pulse" />
+        ) : (
+          <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
+            {value}
+          </p>
+        )}
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">{label}</p>
+      </div>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
 /*  Expiring Card Component                                             */
 /* ------------------------------------------------------------------ */
 
-function ExpiringCertCard({ record }: { record: TrainingRecord }) {
+function ExpiringCertCard({
+  record,
+  onEdit,
+}: {
+  record: TrainingRecord;
+  onEdit: (r: TrainingRecord) => void;
+}) {
   const days = record.expiryDate ? daysUntil(record.expiryDate) : 999;
   const urgencyColor =
     days <= 30 ? "#EF4444" : days <= 60 ? "#F59E0B" : "#3B82F6";
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
+      onClick={() => onEdit(record)}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="rounded-xl border p-4"
+      className="w-full text-left rounded-xl border p-4 transition-colors hover:shadow-md"
       style={{
         borderColor: urgencyColor,
         backgroundColor: `${urgencyColor}08`,
       }}
     >
       <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-semibold text-[var(--text-primary)]">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
             {record.title}
           </p>
           {record.provider && (
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
               {record.provider}
             </p>
           )}
         </div>
-        <AlertTriangle size={16} style={{ color: urgencyColor }} />
+        <AlertTriangle size={16} className="shrink-0 ml-2" style={{ color: urgencyColor }} />
       </div>
       <div className="mt-2 flex items-center gap-3">
         <span className="text-xs text-[var(--text-secondary)] tabular-nums">
-          Expires: {record.expiryDate ? new Date(record.expiryDate).toLocaleDateString() : "--"}
+          Expires:{" "}
+          {record.expiryDate
+            ? new Date(record.expiryDate).toLocaleDateString()
+            : "--"}
         </span>
         <span
           className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
-          style={{ backgroundColor: `${urgencyColor}15`, color: urgencyColor }}
+          style={{
+            backgroundColor: `${urgencyColor}15`,
+            color: urgencyColor,
+          }}
         >
           {days} days
         </span>
       </div>
-      <p className="text-xs text-[var(--text-secondary)] mt-1">
-        User: {record.userId.slice(0, 8)}...
-      </p>
-    </motion.div>
+    </motion.button>
   );
 }
 
@@ -121,8 +554,15 @@ export default function TrainingPage() {
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
+  /* Modal state */
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<TrainingRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TrainingRecord | null>(null);
+
+  /* Data */
   const { data, isLoading } = useTrainingRecords(
     page,
     20,
@@ -133,9 +573,64 @@ export default function TrainingPage() {
   const { data: expiringCerts, isLoading: expiringLoading } =
     useExpiringCertifications(90);
 
+  /* Mutations */
+  const createMutation = useCreateTrainingRecord();
+  const updateMutation = useUpdateTrainingRecord(editTarget?.id);
+  const deleteMutation = useDeleteTrainingRecord();
+
   const records = data?.data ?? [];
   const meta = data?.meta;
   const expiring = expiringCerts ?? [];
+
+  /* Filter records by search query client-side */
+  const filteredRecords = searchQuery.trim()
+    ? records.filter(
+        (r) =>
+          r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.provider?.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : records;
+
+  /* Stats */
+  const totalRecords = meta?.totalItems ?? records.length;
+  const completedCount = records.filter(
+    (r) => r.status === "completed",
+  ).length;
+  const inProgressCount = records.filter(
+    (r) => r.status === "in_progress",
+  ).length;
+  const expiringCount = expiring.length;
+
+  /* Handlers */
+  const handleCreate = useCallback(
+    (data: Record<string, unknown>) => {
+      createMutation.mutate(data as Partial<TrainingRecord>, {
+        onSuccess: () => setShowForm(false),
+      });
+    },
+    [createMutation],
+  );
+
+  const handleUpdate = useCallback(
+    (data: Record<string, unknown>) => {
+      if (!editTarget) return;
+      updateMutation.mutate(data as Partial<TrainingRecord>, {
+        onSuccess: () => setEditTarget(null),
+      });
+    },
+    [editTarget, updateMutation],
+  );
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  }, [deleteTarget, deleteMutation]);
+
+  function openEdit(record: TrainingRecord) {
+    setEditTarget(record);
+  }
 
   return (
     <div className="space-y-6">
@@ -167,13 +662,23 @@ export default function TrainingPage() {
           <button
             type="button"
             onClick={() => setShowFilters((f) => !f)}
-            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors ${
+              showFilters
+                ? "border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)]"
+                : "border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
+            }`}
           >
             <Filter size={16} />
             Filters
+            {(typeFilter || statusFilter) && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--primary)] text-[9px] font-bold text-white">
+                {(typeFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
+              </span>
+            )}
           </button>
           <button
             type="button"
+            onClick={() => setShowForm(true)}
             className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             <Plus size={16} />
@@ -182,63 +687,153 @@ export default function TrainingPage() {
         </div>
       </motion.div>
 
-      {/* Filters */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="flex flex-wrap gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
-          >
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
-                Type
-              </label>
-              <select
-                value={typeFilter}
-                onChange={(e) => {
-                  setTypeFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-              >
-                {TRAINING_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
-                Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-              >
-                {TRAINING_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Stat Cards */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.03 }}
+        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        <StatCard
+          label="Total Records"
+          value={totalRecords}
+          icon={BookOpen}
+          color="#3B82F6"
+          bgColor="rgba(59, 130, 246, 0.1)"
+          loading={isLoading}
+        />
+        <StatCard
+          label="Completed"
+          value={completedCount}
+          icon={CheckCircle}
+          color="#10B981"
+          bgColor="rgba(16, 185, 129, 0.1)"
+          loading={isLoading}
+        />
+        <StatCard
+          label="In Progress"
+          value={inProgressCount}
+          icon={TrendingUp}
+          color="#3B82F6"
+          bgColor="rgba(59, 130, 246, 0.1)"
+          loading={isLoading}
+        />
+        <StatCard
+          label="Expiring Soon"
+          value={expiringCount}
+          icon={AlertTriangle}
+          color="#F59E0B"
+          bgColor="rgba(245, 158, 11, 0.1)"
+          loading={expiringLoading}
+        />
+      </motion.div>
+
+      {/* Search + Filters */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="space-y-3"
+      >
+        {/* Search */}
+        <div className="relative">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)]"
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by title or provider..."
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-10 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Filters */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-wrap gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                    Type
+                  </label>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => {
+                      setTypeFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  >
+                    {FILTER_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                    Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  >
+                    {FILTER_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {(typeFilter || statusFilter) && (
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter("");
+                        setStatusFilter("");
+                        setPage(1);
+                      }}
+                      className="rounded-lg px-3 py-2 text-xs font-medium text-[var(--error)] hover:bg-[var(--error)]/5 transition-colors"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {/* Expiring Certifications Section */}
       {expiring.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
+          transition={{ duration: 0.4, delay: 0.07 }}
         >
           <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
             <AlertTriangle size={14} style={{ color: "#F59E0B" }} />
@@ -254,7 +849,11 @@ export default function TrainingPage() {
               </div>
             ) : (
               expiring.map((cert) => (
-                <ExpiringCertCard key={cert.id} record={cert} />
+                <ExpiringCertCard
+                  key={cert.id}
+                  record={cert}
+                  onEdit={openEdit}
+                />
               ))
             )}
           </div>
@@ -269,20 +868,37 @@ export default function TrainingPage() {
       >
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
+            <Loader2
+              size={24}
+              className="animate-spin text-[var(--primary)]"
+            />
           </div>
-        ) : records.length === 0 ? (
+        ) : filteredRecords.length === 0 ? (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-12 text-center">
             <GraduationCap
-              size={24}
-              className="mx-auto text-[var(--text-secondary)] mb-2"
+              size={32}
+              className="mx-auto text-[var(--text-secondary)] mb-3"
             />
             <p className="text-sm font-medium text-[var(--text-primary)]">
-              No training records found
+              {searchQuery
+                ? "No training records match your search"
+                : "No training records found"}
             </p>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              Log your first training to start tracking development.
+            <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">
+              {searchQuery
+                ? "Try adjusting your search query or filters."
+                : "Log your first training to start tracking development."}
             </p>
+            {!searchQuery && (
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                <Plus size={16} />
+                Log Training
+              </button>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden">
@@ -311,31 +927,36 @@ export default function TrainingPage() {
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
                       Cost
                     </th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {records.map((record) => {
+                  {filteredRecords.map((record) => {
                     const statusStyle =
                       STATUS_STYLES[record.status] ?? STATUS_STYLES.planned;
                     const StatusIcon = statusStyle.icon;
-                    const typeStyle =
-                      TYPE_STYLES[record.type] ?? {
-                        bg: "var(--surface-2)",
-                        text: "var(--text-secondary)",
-                      };
+                    const typeStyle = TYPE_STYLES[record.type] ?? {
+                      bg: "var(--surface-2)",
+                      text: "var(--text-secondary)",
+                    };
 
                     return (
                       <tr
                         key={record.id}
-                        className="hover:bg-[var(--surface-1)] transition-colors"
+                        className="group hover:bg-[var(--surface-1)] transition-colors"
                       >
                         <td className="px-4 py-3">
-                          <p className="font-medium text-[var(--text-primary)]">
-                            {record.title}
-                          </p>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                            {record.userId.slice(0, 8)}...
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(record)}
+                            className="text-left"
+                          >
+                            <p className="font-medium text-[var(--text-primary)] hover:text-[var(--primary)] transition-colors">
+                              {record.title}
+                            </p>
+                          </button>
                         </td>
                         <td className="px-4 py-3 text-[var(--text-secondary)]">
                           {record.provider || "--"}
@@ -365,18 +986,42 @@ export default function TrainingPage() {
                         </td>
                         <td className="px-4 py-3 text-xs tabular-nums text-[var(--text-secondary)]">
                           {record.completedAt
-                            ? new Date(record.completedAt).toLocaleDateString()
+                            ? new Date(
+                                record.completedAt,
+                              ).toLocaleDateString()
                             : "--"}
                         </td>
                         <td className="px-4 py-3 text-xs tabular-nums text-[var(--text-secondary)]">
                           {record.expiryDate
-                            ? new Date(record.expiryDate).toLocaleDateString()
+                            ? new Date(
+                                record.expiryDate,
+                              ).toLocaleDateString()
                             : "--"}
                         </td>
                         <td className="px-4 py-3 text-right text-xs tabular-nums text-[var(--text-primary)]">
                           {record.cost != null
                             ? `$${record.cost.toLocaleString()}`
                             : "--"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(record)}
+                              className="rounded-lg p-1.5 text-[var(--neutral-gray)] transition-colors hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
+                              title="Edit"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(record)}
+                              className="rounded-lg p-1.5 text-[var(--neutral-gray)] transition-colors hover:bg-[var(--error)]/10 hover:text-[var(--error)]"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -415,6 +1060,35 @@ export default function TrainingPage() {
           </div>
         )}
       </motion.div>
+
+      {/* Create Dialog */}
+      <TrainingFormDialog
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        onSubmit={handleCreate}
+        loading={createMutation.isPending}
+      />
+
+      {/* Edit Dialog */}
+      <TrainingFormDialog
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={handleUpdate}
+        loading={updateMutation.isPending}
+        initial={editTarget}
+      />
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Training Record"
+        message={`Are you sure you want to delete "${deleteTarget?.title ?? ""}"? This action cannot be undone.`}
+        confirmLabel="Delete Record"
+        variant="danger"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

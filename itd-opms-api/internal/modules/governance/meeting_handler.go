@@ -292,8 +292,12 @@ func (h *MeetingHandler) CreateAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Title == "" || req.SourceType == "" || req.SourceID == uuid.Nil || req.OwnerID == uuid.Nil {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title, sourceType, sourceId, and ownerId are required")
+	if req.OwnerID == uuid.Nil {
+		req.OwnerID = authCtx.UserID
+	}
+
+	if req.Title == "" || req.SourceType == "" || req.SourceID == uuid.Nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title, sourceType, and sourceId are required")
 		return
 	}
 

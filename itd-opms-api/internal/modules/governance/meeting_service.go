@@ -14,6 +14,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // OverdueStats provides overdue action statistics for the tenant dashboard.
@@ -248,11 +249,14 @@ func (s *MeetingService) UpdateMeetingStatus(ctx context.Context, tenantID, meet
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting.status_changed",
 		EntityType: "meeting",
 		EntityID:   meetingID,
@@ -312,6 +316,7 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"decision_number": decisionNumber,
 		"title":           req.Title,
@@ -319,6 +324,8 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.created",
 		EntityType: "meeting_decision",
 		EntityID:   id,
@@ -381,10 +388,14 @@ func (s *MeetingService) UpdateDecisionStatus(ctx context.Context, decisionID uu
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.status_changed",
 		EntityType: "meeting_decision",
 		EntityID:   decisionID,
@@ -429,6 +440,7 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"title":       req.Title,
 		"source_type": req.SourceType,
@@ -438,6 +450,8 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.created",
 		EntityType: "action_item",
 		EntityID:   id,
@@ -570,11 +584,14 @@ func (s *MeetingService) UpdateActionItem(ctx context.Context, tenantID, actionI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.updated",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -646,12 +663,15 @@ func (s *MeetingService) CompleteActionItem(ctx context.Context, tenantID, actio
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"status":       ActionStatusCompleted,
 		"completed_at": now,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.completed",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -822,4 +842,12 @@ func (s *MeetingService) GetOverdueActionsByOwner(ctx context.Context, tenantID,
 	}
 
 	return items, nil
+}
+
+// firstRole returns the first role from a slice, or "unknown" if empty.
+func firstRole(roles []string) string {
+	if len(roles) > 0 {
+		return roles[0]
+	}
+	return "unknown"
 }

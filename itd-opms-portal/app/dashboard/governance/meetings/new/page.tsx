@@ -14,6 +14,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import {
+  AttendeeSelector,
+  type SelectedAttendee,
+} from "@/components/governance/attendee-selector";
 import { useCreateMeeting } from "@/hooks/use-governance";
 
 /* ------------------------------------------------------------------ */
@@ -68,7 +72,7 @@ export default function CreateMeetingPage() {
   const [location, setLocation] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("");
-  const [attendeeIds, setAttendeeIds] = useState("");
+  const [attendees, setAttendees] = useState<SelectedAttendee[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -112,10 +116,7 @@ export default function CreateMeetingPage() {
 
   /* ---- Submit ---- */
   function handleSubmit() {
-    const attendees = attendeeIds
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const attendeeIds = attendees.map((a) => a.id);
 
     createMutation.mutate(
       {
@@ -127,7 +128,7 @@ export default function CreateMeetingPage() {
         durationMinutes: durationMinutes
           ? parseInt(durationMinutes, 10)
           : undefined,
-        attendeeIds: attendees.length > 0 ? attendees : undefined,
+        attendeeIds: attendeeIds.length > 0 ? attendeeIds : undefined,
       },
       {
         onSuccess: (data) => {
@@ -355,21 +356,10 @@ export default function CreateMeetingPage() {
                       placeholder="e.g., 60"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-                      Attendee IDs
-                    </label>
-                    <input
-                      type="text"
-                      value={attendeeIds}
-                      onChange={(e) => setAttendeeIds(e.target.value)}
-                      placeholder="Comma-separated UUIDs of attendees"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                    />
-                    <p className="text-xs text-[var(--neutral-gray)] mt-1">
-                      Separate multiple attendee IDs with commas.
-                    </p>
-                  </div>
+                  <AttendeeSelector
+                    selected={attendees}
+                    onChange={setAttendees}
+                  />
                 </div>
               </div>
             )}
@@ -454,11 +444,25 @@ export default function CreateMeetingPage() {
                           durationMinutes ? `${durationMinutes} minutes` : "—"
                         }
                       />
-                      {attendeeIds.trim() && (
-                        <ReviewField
-                          label="Attendees"
-                          value={`${attendeeIds.split(",").filter(Boolean).length} attendee(s)`}
-                        />
+                      {attendees.length > 0 && (
+                        <div className="col-span-2 mt-1">
+                          <span className="text-xs text-[var(--neutral-gray)]">
+                            Attendees ({attendees.length}):
+                          </span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {attendees.map((a) => (
+                              <span
+                                key={a.id}
+                                className="inline-flex items-center gap-1 rounded-md bg-[var(--primary)]/10 px-2 py-0.5 text-xs text-[var(--primary)]"
+                              >
+                                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[8px] font-bold">
+                                  {a.displayName.charAt(0).toUpperCase()}
+                                </span>
+                                {a.displayName}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </button>
