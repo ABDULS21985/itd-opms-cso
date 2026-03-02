@@ -96,7 +96,7 @@ function StatCard({
 
 export default function GRCReportsPage() {
   const { data: risksData, isLoading: risksLoading } = useRisks(1, 1000);
-  useRiskHeatMap();
+  const riskHeatMap = useRiskHeatMap();
   const { data: auditsData, isLoading: auditsLoading } = useGRCAudits(1, 1000);
   const { data: statsData, isLoading: statsLoading } = useComplianceStats();
   useComplianceControls(1, 1);
@@ -105,6 +105,7 @@ export default function GRCReportsPage() {
   const audits = auditsData?.data ?? [];
   const stats = statsData ?? [];
 
+  void riskHeatMap;
   // Computed metrics
   const totalRisks = risks.length;
   const avgRiskScore =
