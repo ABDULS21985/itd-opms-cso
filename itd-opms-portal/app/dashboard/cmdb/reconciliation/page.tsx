@@ -63,8 +63,6 @@ function ReportViewer({ report }: { report: Record<string, unknown> }) {
 export default function ReconciliationPage() {
   const [page, setPage] = useState(1);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [triggerSource, _setTriggerSource] = useState("manual");
-
   const { data, isLoading } = useReconciliationRuns(page, 20);
   const createRun = useCreateReconciliationRun();
 
@@ -114,7 +112,7 @@ export default function ReconciliationPage() {
         <button
           type="button"
           disabled={createRun.isPending}
-          onClick={() => createRun.mutate({ source: triggerSource })}
+          onClick={() => createRun.mutate({ source: "manual" })}
           className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {createRun.isPending ? (
