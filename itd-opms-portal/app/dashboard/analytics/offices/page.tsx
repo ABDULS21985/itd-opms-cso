@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
   Building2,
@@ -9,6 +9,8 @@ import {
   Activity,
   TrendingUp,
   DollarSign,
+  Info,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useProjects, useRisks } from "@/hooks/use-planning";
@@ -20,6 +22,109 @@ import {
   RadarChart,
 } from "@/components/dashboard/charts";
 import type { Project, Risk } from "@/types";
+
+/* ------------------------------------------------------------------ */
+/*  InfoHint — hover/click tooltip for contextual help                 */
+/* ------------------------------------------------------------------ */
+
+function InfoHint({
+  text,
+  position = "bottom",
+  size = 14,
+  className = "",
+}: {
+  text: string;
+  position?: "top" | "bottom" | "left" | "right";
+  size?: number;
+  className?: string;
+}) {
+  const [show, setShow] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const positionStyles: Record<string, React.CSSProperties> = {
+    top: { bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)" },
+    bottom: { top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)" },
+    left: { right: "calc(100% + 8px)", top: "50%", transform: "translateY(-50%)" },
+    right: { left: "calc(100% + 8px)", top: "50%", transform: "translateY(-50%)" },
+  };
+
+  return (
+    <span
+      ref={ref}
+      className={`inline-flex items-center cursor-help relative ${className}`}
+      onMouseEnter={() => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setShow(true);
+      }}
+      onMouseLeave={() => {
+        timeoutRef.current = setTimeout(() => setShow(false), 150);
+      }}
+      onClick={(e) => { e.stopPropagation(); setShow((v) => !v); }}
+    >
+      <HelpCircle
+        size={size}
+        className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+      />
+      <AnimatePresence>
+        {show && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 pointer-events-none"
+            style={{
+              ...positionStyles[position],
+              width: "max-content",
+              maxWidth: 280,
+            }}
+          >
+            <div
+              className="px-3 py-2 rounded-lg text-[11px] leading-relaxed font-normal shadow-lg border"
+              style={{
+                backgroundColor: "var(--surface-0)",
+                borderColor: "var(--border)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {text}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  RAG Legend — small inline legend for RAG status dots                */
+/* ------------------------------------------------------------------ */
+
+function RAGLegend() {
+  return (
+    <div className="flex items-center gap-3 text-[10px] text-[var(--text-muted)]">
+      <div className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: RAG_COLORS.green }} />
+        <span>On Track</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: RAG_COLORS.amber }} />
+        <span>At Risk</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: RAG_COLORS.red }} />
+        <span>Critical</span>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -354,33 +459,38 @@ export default function OfficeAnalyticsPage() {
 
   const kpis: Array<{
     label: string; value: number | string | undefined; icon: LucideIcon;
-    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
+    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string; hint?: string;
   }> = [
     {
       label: "Offices Tracked", value: anyLoading ? undefined : OFFICES.length,
       icon: Building2, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
       subtitle: `${totalActiveAllOffices} active projects`,
+      hint: "Number of ITD service offices being monitored. Each office manages a portfolio of projects.",
     },
     {
       label: "Total Projects", value: anyLoading ? undefined : totalProjectsAllOffices,
       icon: FolderKanban, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)",
       subtitle: `Across all offices`,
       href: "/dashboard/planning/projects",
+      hint: "Sum of all projects across every office, regardless of status. Click to view the full project list.",
     },
     {
       label: "Avg Completion", value: anyLoading ? undefined : avgCompletionAll,
       icon: Activity, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
       href: "/dashboard/planning/projects",
+      hint: "Weighted average completion percentage across all offices. Higher is better — 100% means all projects are finished.",
     },
     {
       label: "Avg Health Score", value: anyLoading ? undefined : avgHealthAll,
       icon: TrendingUp, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)", suffix: "/100",
+      hint: "Composite score (0-100) averaging: Completion 30%, Budget Efficiency 20%, On-Time Delivery 20%, RAG Status 20%, Risk Score 10%.",
     },
     {
       label: "Total Budget", value: anyLoading ? undefined : formatCurrency(totalBudgetAll),
       icon: DollarSign, color: "#F59E0B", bgColor: "rgba(245,158,11,0.1)",
       subtitle: totalBudgetAll > 0 ? `${Math.round((totalSpentAll / totalBudgetAll) * 100)}% utilised` : undefined,
       href: "/dashboard/planning/projects",
+      hint: "Total approved budget across all offices. Utilisation shows the percentage spent so far — above 100% indicates overspend.",
     },
   ];
 
@@ -401,8 +511,13 @@ export default function OfficeAnalyticsPage() {
             <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
               Office-Level Analytics
             </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
+            <p className="text-sm text-[var(--text-secondary)] flex items-center gap-1.5">
               Performance, activity, delivery, and workload across all service offices
+              <InfoHint
+                text="This dashboard compares all 5 service offices side-by-side. Hover over the question mark icons throughout the page for explanations of each metric and chart."
+                position="right"
+                size={15}
+              />
             </p>
           </div>
         </div>
@@ -428,11 +543,28 @@ export default function OfficeAnalyticsPage() {
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpis.map((kpi, index) => (
-          <KPIStatCard key={kpi.label} {...kpi} isLoading={anyLoading} index={index} />
+          <div key={kpi.label} className="relative">
+            <KPIStatCard {...kpi} isLoading={anyLoading} index={index} />
+            {kpi.hint && (
+              <span className="absolute top-2 right-2">
+                <InfoHint text={kpi.hint} position="bottom" size={13} />
+              </span>
+            )}
+          </div>
         ))}
       </div>
 
       {/* Row 1 — Office KPI Cards */}
+      <div className="mb-1 flex items-center gap-2">
+        <span className="text-xs font-semibold text-[var(--text-secondary)]">Office Breakdown</span>
+        <InfoHint
+          text="Each card shows one office's project count, average completion (ring), and RAG status indicators. The colored left border identifies the office."
+          position="right"
+          size={13}
+        />
+        <span className="mx-1 text-[var(--border)]">|</span>
+        <RAGLegend />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {officeMetrics.map((office, index) => (
           <motion.div
@@ -512,6 +644,12 @@ export default function OfficeAnalyticsPage() {
       {/* Row 2 — Office Comparison Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Projects per Office" subtitle="Status distribution by office" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Each bar segment represents a project status. Wider segments mean more projects in that status.
+            </span>
+          </div>
           {anyLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart
@@ -524,6 +662,12 @@ export default function OfficeAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Office Performance Radar" subtitle="Multi-axis comparison across 6 dimensions" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Larger shapes indicate stronger performance. Compare offices by how far each axis extends outward (0-100 scale).
+            </span>
+          </div>
           {anyLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <RadarChart
@@ -540,6 +684,12 @@ export default function OfficeAnalyticsPage() {
       {/* Row 3 — Performance Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Completion Distribution by Office" subtitle="Grouped by completion ranges" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Shows how many projects fall into each completion bracket. More green (76-100%) segments indicate healthier delivery.
+            </span>
+          </div>
           {anyLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart
@@ -552,6 +702,12 @@ export default function OfficeAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Budget Utilization by Office" subtitle="Approved vs Spent vs Remaining (in K)" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Budget values in thousands (K). If Spent exceeds Approved, the office is over budget. Remaining shows unspent funds.
+            </span>
+          </div>
           {anyLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart
@@ -566,6 +722,12 @@ export default function OfficeAnalyticsPage() {
 
       {/* Row 4 — Office Health Table */}
       <ChartCard title="Office Health Summary" subtitle="Comprehensive performance metrics per office" delay={0.4}>
+        <div className="flex items-center gap-1.5 mb-3">
+          <Info size={12} className="text-[var(--text-muted)]" />
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Health score formula: Completion (30%) + Budget Efficiency (20%) + On-Time (20%) + RAG Green % (20%) + Low Risk (10%). Scores above 70 are green, 40-69 amber, below 40 red.
+          </span>
+        </div>
         {anyLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -579,12 +741,26 @@ export default function OfficeAnalyticsPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                  {["Office", "Total", "Active", "Done", "Avg %", "Budget Approved", "Budget Spent", "RAG", "Risks", "Health"].map((h) => (
+                  {[
+                    { label: "Office", hint: "Service office name and code" },
+                    { label: "Total", hint: "Total number of projects in this office" },
+                    { label: "Active", hint: "Projects currently in progress (active, in-development, implementation, etc.)" },
+                    { label: "Done", hint: "Projects with 'completed' status" },
+                    { label: "Avg %", hint: "Average completion percentage across all projects in this office" },
+                    { label: "Budget Approved", hint: "Total approved budget allocated to this office's projects" },
+                    { label: "Budget Spent", hint: "Total amount spent so far across all projects" },
+                    { label: "RAG", hint: "Red-Amber-Green status counts: Green = on track, Amber = at risk, Red = critical issues" },
+                    { label: "Risks", hint: "Number of currently open risks across the office's projects" },
+                    { label: "Health", hint: "Composite score (0-100) based on completion, budget, timeliness, RAG, and risk factors" },
+                  ].map((h) => (
                     <th
-                      key={h}
+                      key={h.label}
                       className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)] uppercase tracking-wider"
                     >
-                      {h}
+                      <span className="flex items-center gap-1">
+                        {h.label}
+                        <InfoHint text={h.hint} position="bottom" size={11} />
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -683,6 +859,12 @@ export default function OfficeAnalyticsPage() {
 
       {/* Row 5 — Office Ranking */}
       <ChartCard title="Office Ranking" subtitle="Ranked by composite health score (0-100)" delay={0.5}>
+        <div className="flex items-center gap-1.5 mb-3">
+          <Info size={12} className="text-[var(--text-muted)]" />
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Offices ranked from highest to lowest health score. Bar length and color indicate relative performance — office color means healthy (70+), amber means moderate (40-69), red means attention needed (&lt;40).
+          </span>
+        </div>
         {anyLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
