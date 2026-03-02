@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 
 interface HeatMapCell {
@@ -138,7 +138,7 @@ export function HeatMapGrid({
                       </motion.div>
                     );
                   })}
-                </>
+                </React.Fragment>
               );
             })}
           </div>
