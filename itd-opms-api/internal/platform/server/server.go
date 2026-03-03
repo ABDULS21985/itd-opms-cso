@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
@@ -91,7 +90,7 @@ func (s *Server) Setup() {
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Correlation)
 	r.Use(middleware.Logging)
-	r.Use(chimiddleware.RealIP)
+	r.Use(middleware.TrustedRealIP)
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
@@ -112,8 +111,9 @@ func (s *Server) Setup() {
 
 	// --- Core services ---
 	authService := auth.NewAuthService(s.pool, s.cfg.JWT)
-	authHandler := auth.NewAuthHandler(authService)
 	auditService := audit.NewAuditService(s.pool)
+	revocationService := auth.NewRevocationService(s.redis)
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
 	auditHandler := audit.NewAuditHandler(auditService)
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
 
@@ -137,10 +137,11 @@ func (s *Server) Setup() {
 
 	// --- Auth middleware config (dual-mode: Entra ID + dev JWT) ---
 	authMiddlewareCfg := middleware.AuthConfig{
-		JWTSecret:      s.cfg.JWT.Secret,
-		EntraIDEnabled: s.cfg.EntraID.Enabled,
-		OIDCValidator:  oidcValidator,
-		Pool:           s.pool,
+		JWTSecret:         s.cfg.JWT.Secret,
+		EntraIDEnabled:    s.cfg.EntraID.Enabled,
+		OIDCValidator:     oidcValidator,
+		Pool:              s.pool,
+		RevocationService: revocationService,
 	}
 
 	// --- Notification service ---
@@ -200,6 +201,11 @@ func (s *Server) Setup() {
 
 		// Auth routes — mixed public/protected.
 		r.Route("/auth", func(r chi.Router) {
+			// Stricter rate limiting on auth endpoints (10 req/min vs global 100).
+			if s.redis != nil {
+				r.Use(middleware.RateLimitByIP(s.redis, 10, 1*time.Minute))
+			}
+
 			// Public: login, refresh, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
@@ -226,12 +232,14 @@ func (s *Server) Setup() {
 				r.Use(middleware.AuthDualMode(authMiddlewareCfg))
 				r.Get("/me", authHandler.Me)
 				r.Post("/logout", authHandler.Logout)
+				r.Post("/change-password", authHandler.ChangePassword)
 			})
 		})
 
 		// Protected routes (require authentication).
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthDualMode(authMiddlewareCfg))
+			r.Use(middleware.SessionTimeout(30 * time.Minute))
 			r.Use(audit.AuditMiddleware(auditService))
 
 			// Audit module.
@@ -247,9 +255,10 @@ func (s *Server) Setup() {
 				r.Get("/stream", sseHandler.ServeHTTP)
 			})
 
-			// Directory sync (admin only).
+			// Directory sync (admin only — restricted to global_admin role).
 			if dirSyncService != nil {
 				r.Route("/admin/directory-sync", func(r chi.Router) {
+					r.Use(middleware.RequireRole("global_admin"))
 					r.Post("/run", func(w http.ResponseWriter, r *http.Request) {
 						result, err := dirSyncService.RunSync(r.Context())
 						if err != nil {

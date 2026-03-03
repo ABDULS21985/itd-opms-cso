@@ -40,9 +40,10 @@ type UserProfile struct {
 
 // LoginResponse is the full response returned on successful login.
 type LoginResponse struct {
-	AccessToken  string      `json:"accessToken"`
-	RefreshToken string      `json:"refreshToken"`
-	User         UserProfile `json:"user"`
+	AccessToken            string      `json:"accessToken"`
+	RefreshToken           string      `json:"refreshToken"`
+	User                   UserProfile `json:"user"`
+	PasswordChangeRequired bool        `json:"passwordChangeRequired,omitempty"`
 }
 
 // AuthService handles authentication logic: login, token refresh, and logout.
@@ -94,6 +95,13 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		return nil, apperrors.Unauthorized("Invalid email or password")
 	}
 
+	// Check if user must change their password.
+	var forceChange bool
+	_ = s.pool.QueryRow(ctx,
+		`SELECT force_password_change FROM users WHERE id = $1`,
+		userID,
+	).Scan(&forceChange)
+
 	// Fetch roles and aggregate permissions.
 	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
 	if err != nil {
@@ -139,6 +147,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 			Roles:       roles,
 			Permissions: permissions,
 		},
+		PasswordChangeRequired: forceChange,
 	}, nil
 }
 
@@ -295,6 +304,57 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 		)
 	}
 
+	return nil
+}
+
+// ChangePassword updates the user's password and clears the force_password_change flag.
+// It verifies the current password before allowing the change.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	// Fetch current password hash.
+	var passwordHash *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT password_hash FROM users WHERE id = $1 AND is_active = true`,
+		userID,
+	).Scan(&passwordHash)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NotFound("user", userID.String())
+		}
+		return apperrors.Internal("Failed to fetch user", err)
+	}
+
+	// Verify current password.
+	if passwordHash == nil || *passwordHash == "" {
+		return apperrors.BadRequest("Account does not use password authentication")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(currentPassword)); err != nil {
+		return apperrors.Unauthorized("Current password is incorrect")
+	}
+
+	// Validate new password strength.
+	if len(newPassword) < 8 {
+		return apperrors.BadRequest("New password must be at least 8 characters")
+	}
+	if newPassword == currentPassword {
+		return apperrors.BadRequest("New password must be different from current password")
+	}
+
+	// Hash new password.
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperrors.Internal("Failed to hash password", err)
+	}
+
+	// Update password and clear force_password_change flag.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, force_password_change = false, updated_at = NOW() WHERE id = $2`,
+		string(hash), userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to update password", err)
+	}
+
+	slog.Info("password changed successfully", "user_id", userID)
 	return nil
 }
 

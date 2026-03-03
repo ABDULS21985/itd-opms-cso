@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,7 @@ type AuthContext struct {
 	DisplayName string    `json:"displayName"`
 	Roles       []string  `json:"roles"`
 	Permissions []string  `json:"permissions"`
+	IssuedAt    time.Time `json:"issuedAt"`
 }
 
 // HasPermission checks if the user has a specific permission.

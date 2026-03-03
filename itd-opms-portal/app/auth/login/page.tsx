@@ -54,7 +54,14 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      if (result.passwordChangeRequired) {
+        toast.warning("Password change required", {
+          description: "You must change your default password before continuing.",
+        });
+        router.push("/auth/change-password");
+        return;
+      }
       toast.success("Welcome back!", {
         description: "You have been signed in successfully.",
       });

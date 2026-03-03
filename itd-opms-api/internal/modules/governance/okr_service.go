@@ -35,6 +35,10 @@ func NewOKRService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *OKRService
 
 // CreateOKR creates a new OKR. If parentId is set, verifies the parent exists.
 func (s *OKRService) CreateOKR(ctx context.Context, tenantID, createdBy uuid.UUID, req CreateOKRRequest) (*OKR, error) {
+	if s.pool == nil {
+		return nil, apperrors.Internal("database pool not available", nil)
+	}
+
 	// Verify parent exists if specified.
 	if req.ParentID != nil && *req.ParentID != uuid.Nil {
 		var exists bool

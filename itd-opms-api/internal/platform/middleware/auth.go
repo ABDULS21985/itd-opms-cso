@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,10 +23,11 @@ const publicRouteKey authContextKey = "public_route"
 
 // AuthConfig holds the configuration needed by the dual-mode auth middleware.
 type AuthConfig struct {
-	JWTSecret      string
-	EntraIDEnabled bool
-	OIDCValidator  *auth.OIDCValidator
-	Pool           *pgxpool.Pool
+	JWTSecret         string
+	EntraIDEnabled    bool
+	OIDCValidator     *auth.OIDCValidator
+	Pool              *pgxpool.Pool
+	RevocationService *auth.RevocationService
 }
 
 // Auth returns a middleware that validates JWT Bearer tokens from the
@@ -109,6 +111,17 @@ func AuthDualMode(cfg AuthConfig) func(http.Handler) http.Handler {
 					Email:       claims.Email,
 					Roles:       claims.Roles,
 					Permissions: claims.Permissions,
+					IssuedAt:    claims.IssuedAt.Time,
+				}
+
+				// Check if token has been revoked.
+				if claims.ID != "" && cfg.RevocationService != nil {
+					if cfg.RevocationService.IsRevoked(r.Context(), claims.ID) {
+						types.ErrorMessage(w, http.StatusUnauthorized,
+							"TOKEN_REVOKED", "Token has been revoked",
+						)
+						return
+					}
 				}
 			}
 
@@ -166,6 +179,7 @@ func resolveEntraUser(ctx context.Context, pool *pgxpool.Pool, claims *auth.Entr
 		Email:       email,
 		Roles:       roles,
 		Permissions: permissions,
+		IssuedAt:    time.Now(), // Entra tokens are validated on each request
 	}, nil
 }
 
