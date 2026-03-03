@@ -240,6 +240,7 @@ func (s *Server) Setup() {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthDualMode(authMiddlewareCfg))
 			r.Use(middleware.SessionTimeout(30 * time.Minute))
+			r.Use(middleware.RLSTenantContext)
 			r.Use(audit.AuditMiddleware(auditService))
 
 			// Audit module.

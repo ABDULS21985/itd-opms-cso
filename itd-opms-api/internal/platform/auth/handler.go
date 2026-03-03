@@ -88,9 +88,42 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"correlation_id", types.GetCorrelationID(r.Context()),
 			"error", err.Error(),
 		)
+
+		// Record failed login in audit trail.
+		changes, _ := json.Marshal(map[string]string{
+			"email":  req.Email,
+			"reason": err.Error(),
+		})
+		_ = h.auditService.Log(r.Context(), audit.AuditEntry{
+			Action:        "auth.login_failed",
+			EntityType:    "session",
+			ActorRole:     "anonymous",
+			Changes:       changes,
+			IPAddress:     realIP(r),
+			UserAgent:     r.UserAgent(),
+			CorrelationID: types.GetCorrelationID(r.Context()),
+		})
+
 		writeAppError(w, r, err)
 		return
 	}
+
+	// Record successful login in audit trail.
+	loginChanges, _ := json.Marshal(map[string]string{
+		"email": req.Email,
+	})
+	_ = h.auditService.Log(r.Context(), audit.AuditEntry{
+		TenantID:      resp.User.TenantID,
+		ActorID:       resp.User.ID,
+		ActorRole:     firstRole(resp.User.Roles),
+		Action:        "auth.login_success",
+		EntityType:    "session",
+		EntityID:      resp.User.ID,
+		Changes:       loginChanges,
+		IPAddress:     realIP(r),
+		UserAgent:     r.UserAgent(),
+		CorrelationID: types.GetCorrelationID(r.Context()),
+	})
 
 	// Create session record for tracking.
 	tokenHash := helpers.SHA256Checksum([]byte(resp.AccessToken))
@@ -241,6 +274,14 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, map[string]string{"message": "Password changed successfully"}, nil)
+}
+
+// firstRole returns the first role from a slice, or "unknown" if empty.
+func firstRole(roles []string) string {
+	if len(roles) > 0 {
+		return roles[0]
+	}
+	return "unknown"
 }
 
 // writeAppError maps an AppError (or generic error) to the appropriate HTTP
