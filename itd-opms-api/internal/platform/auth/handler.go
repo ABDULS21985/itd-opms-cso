@@ -2,8 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -378,6 +380,110 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	})
 
 	types.OK(w, map[string]string{"message": "Password has been reset successfully. You can now sign in with your new password."}, nil)
+}
+
+// UpdateProfile handles PATCH /api/v1/auth/profile.
+// Updates the authenticated user's own profile fields.
+func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req UpdateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	profile, err := h.service.UpdateProfile(r.Context(), authCtx.UserID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, profile, nil)
+}
+
+// UploadProfilePhoto handles POST /api/v1/auth/profile/photo.
+// Accepts a multipart form file and uploads it as the user's profile photo.
+func (h *AuthHandler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	// Limit to 2MB.
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "File too large (max 2MB)")
+		return
+	}
+
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Photo file is required")
+		return
+	}
+	defer file.Close()
+
+	// Validate content type.
+	contentType := header.Header.Get("Content-Type")
+	allowedTypes := map[string]string{
+		"image/jpeg": ".jpg",
+		"image/png":  ".png",
+		"image/webp": ".webp",
+	}
+	ext, ok := allowedTypes[contentType]
+	if !ok {
+		// Fallback: detect from filename extension.
+		ext = strings.ToLower(filepath.Ext(header.Filename))
+		switch ext {
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+			ext = ".jpg"
+		case ".png":
+			contentType = "image/png"
+		case ".webp":
+			contentType = "image/webp"
+		default:
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Only JPEG, PNG, and WebP images are allowed")
+			return
+		}
+	}
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Failed to read file")
+		return
+	}
+
+	objectKey, err := h.service.UploadProfilePhoto(r.Context(), authCtx.UserID, authCtx.TenantID, fileBytes, contentType, ext)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]string{"photoUrl": objectKey}, nil)
+}
+
+// DeleteProfilePhoto handles DELETE /api/v1/auth/profile/photo.
+// Removes the authenticated user's profile photo.
+func (h *AuthHandler) DeleteProfilePhoto(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	if err := h.service.DeleteProfilePhoto(r.Context(), authCtx.UserID, authCtx.TenantID); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]string{"message": "Profile photo removed"}, nil)
 }
 
 // firstRole returns the first role from a slice, or "unknown" if empty.

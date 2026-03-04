@@ -1174,7 +1174,7 @@ export function Sidebar({
                   }`}
               >
                 <Link
-                  href="/dashboard/system/settings"
+                  href="/dashboard/profile"
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors"
                   onClick={() => setUserMenuOpen(false)}
                 >

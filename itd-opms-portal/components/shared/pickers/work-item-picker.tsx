@@ -43,7 +43,7 @@ export function WorkItemPicker({
       value={value}
       displayValue={displayValue}
       onChange={onChange}
-      items={data?.items ?? []}
+      items={data?.data ?? []}
       isLoading={isLoading}
       getItemId={(w) => w.id}
       getItemLabel={(w) => w.title}

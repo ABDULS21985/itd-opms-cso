@@ -10,8 +10,14 @@ export interface User {
   permissions: string[];
   tenantId: string;
   avatarUrl?: string;
+  photoUrl?: string;
   department?: string;
   jobTitle?: string;
+  office?: string;
+  unit?: string;
+  phone?: string;
+  orgUnitId?: string;
+  orgLevel?: string;
   lastLoginAt?: string;
   createdAt?: string;
 }

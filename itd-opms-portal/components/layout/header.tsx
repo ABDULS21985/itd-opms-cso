@@ -115,6 +115,7 @@ function UserMenu() {
   const userInitial = (user?.displayName || user?.email || "U")
     .charAt(0)
     .toUpperCase();
+  const photoUrl = (user as Record<string, unknown>)?.photoUrl as string | undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -136,11 +137,15 @@ function UserMenu() {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 flex items-center justify-center border border-[var(--primary)]/10 hover:ring-2 hover:ring-[var(--primary)]/20 transition-all"
+        className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 flex items-center justify-center border border-[var(--primary)]/10 hover:ring-2 hover:ring-[var(--primary)]/20 transition-all overflow-hidden"
       >
-        <span className="text-sm font-semibold text-[var(--primary)]">
-          {userInitial}
-        </span>
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-sm font-semibold text-[var(--primary)]">
+            {userInitial}
+          </span>
+        )}
       </button>
 
       <AnimatePresence>
@@ -164,7 +169,7 @@ function UserMenu() {
             <button
               onClick={() => {
                 setOpen(false);
-                router.push("/dashboard/system/settings");
+                router.push("/dashboard/profile");
               }}
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-[var(--text-primary)] hover:bg-[var(--surface-1)] transition-colors"
             >

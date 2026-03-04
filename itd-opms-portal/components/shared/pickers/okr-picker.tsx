@@ -40,7 +40,7 @@ export function OKRPicker({
       value={value}
       displayValue={displayValue}
       onChange={onChange}
-      items={data?.items ?? []}
+      items={data?.data ?? []}
       isLoading={isLoading}
       getItemId={(o) => o.id}
       getItemLabel={(o) => o.objective}

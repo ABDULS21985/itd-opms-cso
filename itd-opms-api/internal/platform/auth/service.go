@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -34,10 +36,22 @@ type UserProfile struct {
 	Department  *string    `json:"department,omitempty"`
 	Office      *string    `json:"office,omitempty"`
 	Unit        *string    `json:"unit,omitempty"`
+	Phone       *string    `json:"phone,omitempty"`
+	PhotoURL    *string    `json:"photoUrl,omitempty"`
 	Roles       []string   `json:"roles"`
 	Permissions []string   `json:"permissions"`
 	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	OrgLevel    string     `json:"orgLevel,omitempty"`
+}
+
+// UpdateProfileRequest is the payload for self-service profile updates.
+type UpdateProfileRequest struct {
+	DisplayName *string `json:"displayName"`
+	JobTitle    *string `json:"jobTitle"`
+	Department  *string `json:"department"`
+	Office      *string `json:"office"`
+	Unit        *string `json:"unit"`
+	Phone       *string `json:"phone"`
 }
 
 // LoginResponse is the full response returned on successful login.
@@ -50,15 +64,19 @@ type LoginResponse struct {
 
 // AuthService handles authentication logic: login, token refresh, and logout.
 type AuthService struct {
-	pool   *pgxpool.Pool
-	jwtCfg config.JWTConfig
+	pool     *pgxpool.Pool
+	jwtCfg   config.JWTConfig
+	minio    *minio.Client
+	minioCfg config.MinIOConfig
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig) *AuthService {
+func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig, minioClient *minio.Client, minioCfg config.MinIOConfig) *AuthService {
 	return &AuthService{
-		pool:   pool,
-		jwtCfg: jwtCfg,
+		pool:     pool,
+		jwtCfg:   jwtCfg,
+		minio:    minioClient,
+		minioCfg: minioCfg,
 	}
 }
 
@@ -75,18 +93,20 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		department   *string
 		office       *string
 		unit         *string
+		phone        *string
+		photoURL     *string
 		orgUnitID    *uuid.UUID
 		orgLevel     *string
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.id, u.tenant_id, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
-		        u.org_unit_id, o.level::text
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text
 		 FROM users u
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &orgUnitID, &orgLevel)
+	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.Unauthorized("Invalid email or password")
@@ -148,6 +168,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		Department:  department,
 		Office:      office,
 		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    photoURL,
 		Roles:       roles,
 		Permissions: permissions,
 		OrgUnitID:   orgUnitID,
@@ -382,18 +404,20 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		department  *string
 		office      *string
 		unit        *string
+		phone       *string
+		photoURL    *string
 		orgUnitID   *uuid.UUID
 		orgLevel    *string
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.email, u.display_name, u.tenant_id, u.job_title, u.department, u.office, u.unit,
-		        u.org_unit_id, o.level::text
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text
 		 FROM users u
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.id = $1 AND u.is_active = true`,
 		userID,
-	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit, &orgUnitID, &orgLevel)
+	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("user", userID.String())
@@ -415,6 +439,8 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		Department:  department,
 		Office:      office,
 		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    photoURL,
 		Roles:       roles,
 		Permissions: permissions,
 		OrgUnitID:   orgUnitID,
@@ -610,6 +636,103 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	)
 
 	slog.Info("password reset completed", "user_id", userID)
+	return nil
+}
+
+// UpdateProfile updates the user's own profile fields using COALESCE (partial update).
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, req UpdateProfileRequest) (*UserProfile, error) {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET
+			display_name = COALESCE($2, display_name),
+			job_title    = COALESCE($3, job_title),
+			department   = COALESCE($4, department),
+			office       = COALESCE($5, office),
+			unit         = COALESCE($6, unit),
+			phone        = COALESCE($7, phone),
+			updated_at   = NOW()
+		 WHERE id = $1`,
+		userID,
+		req.DisplayName,
+		req.JobTitle,
+		req.Department,
+		req.Office,
+		req.Unit,
+		req.Phone,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to update profile", err)
+	}
+
+	return s.GetMe(ctx, userID)
+}
+
+// UploadProfilePhoto uploads a profile photo to MinIO and updates the user's photo_url.
+func (s *AuthService) UploadProfilePhoto(ctx context.Context, userID, tenantID uuid.UUID, fileBytes []byte, contentType, ext string) (string, error) {
+	if s.minio == nil {
+		return "", apperrors.Internal("File storage is not configured", nil)
+	}
+
+	objectKey := fmt.Sprintf("tenants/%s/profile-photos/%s%s", tenantID, userID, ext)
+
+	_, err := s.minio.PutObject(ctx, s.minioCfg.BucketAttachment, objectKey,
+		bytes.NewReader(fileBytes), int64(len(fileBytes)),
+		minio.PutObjectOptions{ContentType: contentType},
+	)
+	if err != nil {
+		return "", apperrors.Internal("Failed to upload photo", err)
+	}
+
+	// Update photo_url in database.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET photo_url = $2, updated_at = NOW() WHERE id = $1`,
+		userID, objectKey,
+	)
+	if err != nil {
+		// Try to clean up the uploaded object.
+		_ = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, objectKey, minio.RemoveObjectOptions{})
+		return "", apperrors.Internal("Failed to save photo reference", err)
+	}
+
+	slog.Info("profile photo uploaded", "user_id", userID, "object_key", objectKey)
+	return objectKey, nil
+}
+
+// DeleteProfilePhoto removes the user's profile photo from MinIO and clears the DB field.
+func (s *AuthService) DeleteProfilePhoto(ctx context.Context, userID, tenantID uuid.UUID) error {
+	if s.minio == nil {
+		return apperrors.Internal("File storage is not configured", nil)
+	}
+
+	// Get current photo_url.
+	var photoURL *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT photo_url FROM users WHERE id = $1`,
+		userID,
+	).Scan(&photoURL)
+	if err != nil {
+		return apperrors.Internal("Failed to fetch user", err)
+	}
+
+	if photoURL == nil || *photoURL == "" {
+		return apperrors.BadRequest("No profile photo to delete")
+	}
+
+	// Remove from MinIO.
+	err = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, *photoURL, minio.RemoveObjectOptions{})
+	if err != nil {
+		slog.Warn("failed to remove photo from storage", "error", err, "object_key", *photoURL)
+	}
+
+	// Clear photo_url in database.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET photo_url = NULL, updated_at = NOW() WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to clear photo reference", err)
+	}
+
+	slog.Info("profile photo deleted", "user_id", userID)
 	return nil
 }
 

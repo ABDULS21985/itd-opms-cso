@@ -110,7 +110,7 @@ func (s *Server) Setup() {
 	}
 
 	// --- Core services ---
-	authService := auth.NewAuthService(s.pool, s.cfg.JWT)
+	authService := auth.NewAuthService(s.pool, s.cfg.JWT, s.minio, s.cfg.MinIO)
 	auditService := audit.NewAuditService(s.pool)
 	revocationService := auth.NewRevocationService(s.redis)
 	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
@@ -235,6 +235,9 @@ func (s *Server) Setup() {
 				r.Get("/me", authHandler.Me)
 				r.Post("/logout", authHandler.Logout)
 				r.Post("/change-password", authHandler.ChangePassword)
+				r.Patch("/profile", authHandler.UpdateProfile)
+				r.Post("/profile/photo", authHandler.UploadProfilePhoto)
+				r.Delete("/profile/photo", authHandler.DeleteProfilePhoto)
 			})
 		})
 

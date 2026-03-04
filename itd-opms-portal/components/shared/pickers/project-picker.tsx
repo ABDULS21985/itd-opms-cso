@@ -42,7 +42,7 @@ export function ProjectPicker({
       value={value}
       displayValue={displayValue}
       onChange={onChange}
-      items={data?.items ?? []}
+      items={data?.data ?? []}
       isLoading={isLoading}
       getItemId={(p) => p.id}
       getItemLabel={(p) => p.title}
