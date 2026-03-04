@@ -12,6 +12,7 @@ type contextKey string
 const (
 	authContextKey        contextKey = "auth_context"
 	correlationIDKey      contextKey = "correlation_id"
+	clientIPKey           contextKey = "client_ip"
 )
 
 // AuthContext holds the authenticated user's identity, permissions, and org scope.
@@ -101,6 +102,19 @@ func SetCorrelationID(ctx context.Context, id string) context.Context {
 func GetCorrelationID(ctx context.Context) string {
 	if id, ok := ctx.Value(correlationIDKey).(string); ok {
 		return id
+	}
+	return ""
+}
+
+// SetClientIP stores the client IP address in the context.
+func SetClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, clientIPKey, ip)
+}
+
+// GetClientIP retrieves the client IP address from the context.
+func GetClientIP(ctx context.Context) string {
+	if ip, ok := ctx.Value(clientIPKey).(string); ok {
+		return ip
 	}
 	return ""
 }

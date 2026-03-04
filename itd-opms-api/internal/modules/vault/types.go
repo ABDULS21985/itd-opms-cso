@@ -7,6 +7,39 @@ import (
 )
 
 // ──────────────────────────────────────────────
+// RBAC permission constants
+// ──────────────────────────────────────────────
+
+const (
+	PermDocumentsView    = "documents.view"
+	PermDocumentsManage  = "documents.manage"
+	PermDocumentsShare   = "documents.share"
+	PermDocumentsApprove = "documents.approve"
+	PermDocumentsDelete  = "documents.delete"
+	PermDocumentsAdmin   = "documents.admin"
+)
+
+// ──────────────────────────────────────────────
+// Access-level policy enforcement
+// ──────────────────────────────────────────────
+
+// AccessLevelPolicy defines behavioral rules for each access level.
+type AccessLevelPolicy struct {
+	VisibleInList          bool // appears in general list/search for org-scoped users
+	RequiresExplicitAccess bool // only visible to owner/uploader/shared users/admin
+	AllowRoleSharing       bool // can be shared via role (not just specific user)
+	RequiresShareExpiry    bool // shares must have an expiry date
+}
+
+// AccessLevelPolicies maps each access level to its enforcement rules.
+var AccessLevelPolicies = map[string]AccessLevelPolicy{
+	AccessLevelPublic:       {VisibleInList: true, RequiresExplicitAccess: false, AllowRoleSharing: true, RequiresShareExpiry: false},
+	AccessLevelInternal:     {VisibleInList: true, RequiresExplicitAccess: false, AllowRoleSharing: true, RequiresShareExpiry: false},
+	AccessLevelRestricted:   {VisibleInList: false, RequiresExplicitAccess: true, AllowRoleSharing: true, RequiresShareExpiry: true},
+	AccessLevelConfidential: {VisibleInList: false, RequiresExplicitAccess: true, AllowRoleSharing: false, RequiresShareExpiry: true},
+}
+
+// ──────────────────────────────────────────────
 // Document status constants (lifecycle states)
 // ──────────────────────────────────────────────
 
@@ -314,6 +347,44 @@ type TransitionStatusRequest struct {
 type AddCommentRequest struct {
 	Content  string     `json:"content" validate:"required"`
 	ParentID *uuid.UUID `json:"parentId,omitempty"`
+}
+
+// ──────────────────────────────────────────────
+// Compliance and sharing query types
+// ──────────────────────────────────────────────
+
+// ComplianceDocument is a lightweight document view for compliance reports.
+type ComplianceDocument struct {
+	ID             uuid.UUID  `json:"id"`
+	Title          string     `json:"title"`
+	Classification string     `json:"classification"`
+	AccessLevel    string     `json:"accessLevel"`
+	Status         string     `json:"status"`
+	ExpiryDate     *time.Time `json:"expiryDate"`
+	RetentionUntil *time.Time `json:"retentionUntil"`
+	OwnerName      *string    `json:"ownerName"`
+	OrgUnitID      *uuid.UUID `json:"orgUnitId"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+// RetentionReport holds aggregate retention and compliance statistics.
+type RetentionReport struct {
+	TotalWithExpiry       int64 `json:"totalWithExpiry"`
+	ExpiredCount          int64 `json:"expiredCount"`
+	ExpiringSoon30Days    int64 `json:"expiringSoon30Days"`
+	TotalWithRetention    int64 `json:"totalWithRetention"`
+	RetentionActiveCount  int64 `json:"retentionActiveCount"`
+	RetentionExpiredCount int64 `json:"retentionExpiredCount"`
+	LegalHoldCount        int64 `json:"legalHoldCount"`
+}
+
+// SharedWithMeDocument extends VaultDocument with share metadata.
+type SharedWithMeDocument struct {
+	VaultDocument
+	SharePermission string     `json:"sharePermission"`
+	SharedByName    string     `json:"sharedBy"`
+	SharedAt        time.Time  `json:"sharedAt"`
+	ShareExpiresAt  *time.Time `json:"shareExpiresAt"`
 }
 
 // ──────────────────────────────────────────────

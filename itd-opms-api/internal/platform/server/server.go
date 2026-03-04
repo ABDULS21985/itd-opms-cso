@@ -59,6 +59,7 @@ type Server struct {
 	dashboardRefresh      *reporting.DashboardRefresher
 	reportScheduler       *reporting.ReportScheduler
 	maintenanceWorker     *system.MaintenanceWorker
+	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
 }
 
@@ -188,6 +189,7 @@ func (s *Server) Setup() {
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
+	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
 
@@ -355,6 +357,9 @@ func (s *Server) Start() error {
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)
 	}
+	if s.vaultWorker != nil {
+		s.vaultWorker.Start(ctx)
+	}
 
 	// Start action reminder cron (every hour).
 	if s.actionReminderService != nil {
@@ -413,6 +418,9 @@ func (s *Server) Start() error {
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Stop()
+	}
+	if s.vaultWorker != nil {
+		s.vaultWorker.Stop()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

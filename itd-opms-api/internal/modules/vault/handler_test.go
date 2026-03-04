@@ -783,7 +783,194 @@ func TestAddComment_InvalidBody(t *testing.T) {
 }
 
 // ══════════════════════════════════════════════
-// Route registration
+// New endpoint auth guards (401)
+// ══════════════════════════════════════════════
+
+func TestListSharedWithMe_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/documents/shared-with-me", nil)
+	w := httptest.NewRecorder()
+
+	h.ListSharedWithMe(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestGetExpiringSoon_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/compliance/expiring-soon", nil)
+	w := httptest.NewRecorder()
+
+	h.GetExpiringSoon(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestGetExpiredDocuments_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/compliance/expired", nil)
+	w := httptest.NewRecorder()
+
+	h.GetExpiredDocuments(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestGetRetentionReport_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/compliance/retention-report", nil)
+	w := httptest.NewRecorder()
+
+	h.GetRetentionReport(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+// ══════════════════════════════════════════════
+// Client IP extraction
+// ══════════════════════════════════════════════
+
+func TestClientIPFromRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		xff      string
+		xrip     string
+		remote   string
+		expected string
+	}{
+		{
+			name:     "X-Forwarded-For single IP",
+			xff:      "203.0.113.50",
+			remote:   "10.0.0.1:1234",
+			expected: "203.0.113.50",
+		},
+		{
+			name:     "X-Forwarded-For chain takes first",
+			xff:      "203.0.113.50, 70.41.3.18, 150.172.238.178",
+			remote:   "10.0.0.1:1234",
+			expected: "203.0.113.50",
+		},
+		{
+			name:     "X-Real-IP fallback",
+			xrip:     "198.51.100.25",
+			remote:   "10.0.0.1:1234",
+			expected: "198.51.100.25",
+		},
+		{
+			name:     "X-Forwarded-For takes precedence over X-Real-IP",
+			xff:      "203.0.113.50",
+			xrip:     "198.51.100.25",
+			remote:   "10.0.0.1:1234",
+			expected: "203.0.113.50",
+		},
+		{
+			name:     "RemoteAddr with port",
+			remote:   "192.168.1.100:9876",
+			expected: "192.168.1.100",
+		},
+		{
+			name:     "RemoteAddr without port",
+			remote:   "192.168.1.100",
+			expected: "192.168.1.100",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req.RemoteAddr = tt.remote
+			if tt.xff != "" {
+				req.Header.Set("X-Forwarded-For", tt.xff)
+			}
+			if tt.xrip != "" {
+				req.Header.Set("X-Real-IP", tt.xrip)
+			}
+
+			ip := clientIPFromRequest(req)
+			if ip != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, ip)
+			}
+		})
+	}
+}
+
+// ══════════════════════════════════════════════
+// Client IP middleware integration
+// ══════════════════════════════════════════════
+
+func TestInjectClientIP_Middleware(t *testing.T) {
+	h := newTestHandler()
+
+	var capturedIP string
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedIP = types.GetClientIP(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := h.injectClientIP(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "10.20.30.40")
+	req.RemoteAddr = "127.0.0.1:8080"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if capturedIP != "10.20.30.40" {
+		t.Errorf("expected client IP 10.20.30.40, got %q", capturedIP)
+	}
+}
+
+// ══════════════════════════════════════════════
+// Access-level policy tests
+// ══════════════════════════════════════════════
+
+func TestAccessLevelPolicies(t *testing.T) {
+	tests := []struct {
+		level                  string
+		visibleInList          bool
+		requiresExplicitAccess bool
+		allowRoleSharing       bool
+		requiresShareExpiry    bool
+	}{
+		{AccessLevelPublic, true, false, true, false},
+		{AccessLevelInternal, true, false, true, false},
+		{AccessLevelRestricted, false, true, true, true},
+		{AccessLevelConfidential, false, true, false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.level, func(t *testing.T) {
+			p, ok := AccessLevelPolicies[tt.level]
+			if !ok {
+				t.Fatalf("policy not found for %q", tt.level)
+			}
+			if p.VisibleInList != tt.visibleInList {
+				t.Errorf("VisibleInList: expected %v, got %v", tt.visibleInList, p.VisibleInList)
+			}
+			if p.RequiresExplicitAccess != tt.requiresExplicitAccess {
+				t.Errorf("RequiresExplicitAccess: expected %v, got %v", tt.requiresExplicitAccess, p.RequiresExplicitAccess)
+			}
+			if p.AllowRoleSharing != tt.allowRoleSharing {
+				t.Errorf("AllowRoleSharing: expected %v, got %v", tt.allowRoleSharing, p.AllowRoleSharing)
+			}
+			if p.RequiresShareExpiry != tt.requiresShareExpiry {
+				t.Errorf("RequiresShareExpiry: expected %v, got %v", tt.requiresShareExpiry, p.RequiresShareExpiry)
+			}
+		})
+	}
+}
+
+// ══════════════════════════════════════════════
+// Route registration (updated with new routes)
 // ══════════════════════════════════════════════
 
 func TestHandler_RoutesRegistered(t *testing.T) {
@@ -821,11 +1008,17 @@ func TestHandler_RoutesRegistered(t *testing.T) {
 		{http.MethodGet, "/documents/" + docID + "/lifecycle"},
 		{http.MethodPost, "/documents/" + docID + "/comments"},
 		{http.MethodGet, "/documents/" + docID + "/comments"},
+		// New: Shared with me
+		{http.MethodGet, "/documents/shared-with-me"},
 		// Folders
 		{http.MethodGet, "/folders/"},
 		{http.MethodPost, "/folders/"},
 		{http.MethodPut, "/folders/" + uuid.New().String()},
 		{http.MethodDelete, "/folders/" + uuid.New().String()},
+		// Compliance
+		{http.MethodGet, "/compliance/expiring-soon"},
+		{http.MethodGet, "/compliance/expired"},
+		{http.MethodGet, "/compliance/retention-report"},
 		// Search, Recent, Stats
 		{http.MethodGet, "/search"},
 		{http.MethodGet, "/recent"},

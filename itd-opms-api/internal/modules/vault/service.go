@@ -121,6 +121,95 @@ func scanDocumentRows(rows pgx.Rows) ([]VaultDocument, error) {
 }
 
 // ──────────────────────────────────────────────
+// Access-level enforcement helpers
+// ──────────────────────────────────────────────
+
+// buildAccessLevelFilter returns a SQL WHERE clause that restricts documents
+// based on their access_level relative to the requesting user's permissions.
+//
+// Public/Internal: visible to all org-scoped users (no extra filter).
+// Restricted/Confidential: visible only to owner, uploader, users with an active
+// share, or users with documents.admin permission.
+//
+// Returns an empty string if the user has documents.admin (sees everything).
+func (s *Service) buildAccessLevelFilter(auth *types.AuthContext, userArgIdx, rolesArgIdx int) (clause string, args []any) {
+	if auth.HasPermission(PermDocumentsAdmin) {
+		return "", nil
+	}
+
+	// Users without admin see public+internal freely, but restricted/confidential
+	// only when they are the owner, uploader, or have an active share.
+	clause = fmt.Sprintf(`(
+		d.access_level IN ('public', 'internal')
+		OR d.uploaded_by = $%d
+		OR d.owner_id = $%d
+		OR EXISTS (
+			SELECT 1 FROM document_shares ds
+			WHERE ds.document_id = d.id
+				AND ds.revoked_at IS NULL
+				AND (ds.expires_at IS NULL OR ds.expires_at > NOW())
+				AND (ds.shared_with_user_id = $%d OR ds.shared_with_role = ANY($%d))
+		)
+	)`, userArgIdx, userArgIdx, userArgIdx, rolesArgIdx)
+
+	args = []any{auth.UserID, auth.Roles}
+	return clause, args
+}
+
+// hasDocumentAccess checks whether the requesting user may access a specific
+// document given its access level. This is the single-document equivalent of
+// buildAccessLevelFilter (used post-fetch in GetDocument, Download, Preview).
+func (s *Service) hasDocumentAccess(ctx context.Context, doc VaultDocument, auth *types.AuthContext) bool {
+	if auth.HasPermission(PermDocumentsAdmin) {
+		return true
+	}
+
+	policy := AccessLevelPolicies[doc.AccessLevel]
+	if !policy.RequiresExplicitAccess {
+		return true // public or internal — org-scope check is sufficient
+	}
+
+	// Owner or uploader.
+	if doc.UploadedBy == auth.UserID {
+		return true
+	}
+	if doc.OwnerID != nil && *doc.OwnerID == auth.UserID {
+		return true
+	}
+
+	// Check for active share.
+	var hasShare bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM document_shares
+			WHERE document_id = $1
+				AND tenant_id = $2
+				AND revoked_at IS NULL
+				AND (expires_at IS NULL OR expires_at > NOW())
+				AND (shared_with_user_id = $3 OR shared_with_role = ANY($4))
+		)`, doc.ID, auth.TenantID, auth.UserID, auth.Roles,
+	).Scan(&hasShare)
+	if err != nil {
+		return false
+	}
+
+	return hasShare
+}
+
+// logAccessDenied logs an audit event when a user is denied access to a document.
+func (s *Service) logAccessDenied(ctx context.Context, docID uuid.UUID, auth *types.AuthContext, action string) {
+	changes, _ := json.Marshal(map[string]any{"attemptedAction": action, "documentId": docID})
+	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "access_denied:vault_document",
+		EntityType: "vault_document",
+		EntityID:   docID,
+		Changes:    changes,
+	})
+}
+
+// ──────────────────────────────────────────────
 // ListDocuments
 // ──────────────────────────────────────────────
 
@@ -159,6 +248,14 @@ func (s *Service) ListDocuments(ctx context.Context, folderID *uuid.UUID, classi
 
 	conditions = append(conditions, "d.is_latest = true")
 	conditions = append(conditions, "d.status != 'deleted'")
+
+	// Access-level filter: restrict visibility of restricted/confidential documents.
+	accessClause, accessArgs := s.buildAccessLevelFilter(auth, argIdx+1, argIdx+2)
+	if accessClause != "" {
+		conditions = append(conditions, accessClause)
+		args = append(args, accessArgs...)
+		argIdx += 2
+	}
 
 	if folderID != nil {
 		conditions = append(conditions, "d.folder_id = "+nextArg())
@@ -239,6 +336,16 @@ func (s *Service) GetDocument(ctx context.Context, id uuid.UUID) (VaultDocument,
 	if doc.OrgUnitID != nil && !auth.HasOrgAccess(*doc.OrgUnitID) {
 		return VaultDocument{}, apperrors.NotFound("Document", id.String())
 	}
+
+	// Access-level enforcement: restricted/confidential require explicit access.
+	if !s.hasDocumentAccess(ctx, doc, auth) {
+		s.logAccessDenied(ctx, id, auth, "view")
+		return VaultDocument{}, apperrors.NotFound("Document", id.String())
+	}
+
+	// Log "view" action.
+	ip := types.GetClientIP(ctx)
+	s.logAccessWithIP(ctx, id, auth.UserID, auth.TenantID, "view", ip)
 
 	return doc, nil
 }
@@ -563,6 +670,12 @@ func (s *Service) DeleteDocument(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 
+	// Authorization: documents.delete permission OR owner/uploader.
+	isOwnerOrUploader := existing.UploadedBy == auth.UserID || (existing.OwnerID != nil && *existing.OwnerID == auth.UserID)
+	if !auth.HasPermission(PermDocumentsDelete) && !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+		return apperrors.Forbidden("you do not have permission to delete this document")
+	}
+
 	if existing.LockedBy != nil && *existing.LockedBy != auth.UserID {
 		return apperrors.Conflict("document is locked by another user")
 	}
@@ -678,6 +791,12 @@ func (s *Service) ArchiveDocument(ctx context.Context, id uuid.UUID) (VaultDocum
 		return VaultDocument{}, err
 	}
 
+	// Authorization: documents.delete permission OR owner/uploader.
+	isOwnerOrUploader := existing.UploadedBy == auth.UserID || (existing.OwnerID != nil && *existing.OwnerID == auth.UserID)
+	if !auth.HasPermission(PermDocumentsDelete) && !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+		return VaultDocument{}, apperrors.Forbidden("you do not have permission to archive this document")
+	}
+
 	allowed := ValidTransitions[existing.Status]
 	if !allowed[DocumentStatusArchived] {
 		return VaultDocument{}, apperrors.BadRequest(fmt.Sprintf("cannot archive document with status '%s'", existing.Status))
@@ -734,6 +853,32 @@ func (s *Service) TransitionStatus(ctx context.Context, id uuid.UUID, req Transi
 	if !allowed[req.ToStatus] {
 		return VaultDocument{}, apperrors.BadRequest(fmt.Sprintf(
 			"transition from '%s' to '%s' is not allowed", existing.Status, req.ToStatus))
+	}
+
+	// Workflow authorization: certain transitions require specific permissions.
+	isOwnerOrUploader := existing.UploadedBy == auth.UserID || (existing.OwnerID != nil && *existing.OwnerID == auth.UserID)
+
+	switch req.ToStatus {
+	case DocumentStatusUnderReview:
+		// Only owner/uploader can submit for review.
+		if !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+			return VaultDocument{}, apperrors.Forbidden("only the document owner or uploader can submit for review")
+		}
+	case DocumentStatusApproved, DocumentStatusRejected:
+		// Only users with documents.approve can approve or reject.
+		if !auth.HasPermission(PermDocumentsApprove) && !auth.HasPermission(PermDocumentsAdmin) {
+			return VaultDocument{}, apperrors.Forbidden("you do not have permission to approve or reject documents")
+		}
+	case DocumentStatusDeleted:
+		// Only users with documents.delete or owner/uploader.
+		if !auth.HasPermission(PermDocumentsDelete) && !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+			return VaultDocument{}, apperrors.Forbidden("you do not have permission to delete this document")
+		}
+	case DocumentStatusArchived:
+		// Only users with documents.delete or owner/uploader.
+		if !auth.HasPermission(PermDocumentsDelete) && !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+			return VaultDocument{}, apperrors.Forbidden("you do not have permission to archive this document")
+		}
 	}
 
 	now := time.Now().UTC()
@@ -846,15 +991,19 @@ func (s *Service) GetDownloadURL(ctx context.Context, id uuid.UUID) (string, str
 	}
 
 	var (
-		fileKey   string
-		title     string
-		orgUnitID *uuid.UUID
-		status    string
+		fileKey     string
+		title       string
+		orgUnitID   *uuid.UUID
+		status      string
+		accessLevel string
+		uploadedBy  uuid.UUID
+		ownerID     *uuid.UUID
 	)
 	err := s.pool.QueryRow(ctx,
-		`SELECT file_key, title, org_unit_id, status FROM documents WHERE id = $1 AND tenant_id = $2`,
+		`SELECT file_key, title, org_unit_id, status, access_level, uploaded_by, owner_id
+		FROM documents WHERE id = $1 AND tenant_id = $2`,
 		id, auth.TenantID,
-	).Scan(&fileKey, &title, &orgUnitID, &status)
+	).Scan(&fileKey, &title, &orgUnitID, &status, &accessLevel, &uploadedBy, &ownerID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return "", "", apperrors.NotFound("Document", id.String())
@@ -867,9 +1016,39 @@ func (s *Service) GetDownloadURL(ctx context.Context, id uuid.UUID) (string, str
 		return "", "", apperrors.NotFound("Document", id.String())
 	}
 
+	// Block download of expired documents.
+	if status == DocumentStatusExpired {
+		s.logAccessDenied(ctx, id, auth, "download")
+		return "", "", apperrors.Forbidden("document has expired and cannot be downloaded")
+	}
+
 	// Org-scope access check.
 	if orgUnitID != nil && !auth.HasOrgAccess(*orgUnitID) {
 		return "", "", apperrors.NotFound("Document", id.String())
+	}
+
+	// Access-level enforcement for download.
+	policy := AccessLevelPolicies[accessLevel]
+	if policy.RequiresExplicitAccess && !auth.HasPermission(PermDocumentsAdmin) {
+		isOwnerOrUploader := uploadedBy == auth.UserID || (ownerID != nil && *ownerID == auth.UserID)
+		if !isOwnerOrUploader {
+			// Check for active share with download permission.
+			var hasDownloadShare bool
+			_ = s.pool.QueryRow(ctx, `
+				SELECT EXISTS(
+					SELECT 1 FROM document_shares
+					WHERE document_id = $1 AND tenant_id = $2
+						AND revoked_at IS NULL
+						AND (expires_at IS NULL OR expires_at > NOW())
+						AND permission IN ('download', 'edit', 'share', 'approve')
+						AND (shared_with_user_id = $3 OR shared_with_role = ANY($4))
+				)`, id, auth.TenantID, auth.UserID, auth.Roles,
+			).Scan(&hasDownloadShare)
+			if !hasDownloadShare {
+				s.logAccessDenied(ctx, id, auth, "download")
+				return "", "", apperrors.Forbidden("you do not have download access to this document")
+			}
+		}
 	}
 
 	// Generate presigned URL valid for 15 minutes.
@@ -878,8 +1057,9 @@ func (s *Service) GetDownloadURL(ctx context.Context, id uuid.UUID) (string, str
 		return "", "", apperrors.Internal("failed to generate download URL", err)
 	}
 
-	// Log access.
-	s.logAccess(ctx, id, auth.UserID, auth.TenantID, "download")
+	// Log access with IP.
+	ip := types.GetClientIP(ctx)
+	s.logAccessWithIP(ctx, id, auth.UserID, auth.TenantID, "download", ip)
 
 	return presignedURL.String(), title, nil
 }
@@ -901,11 +1081,15 @@ func (s *Service) GetPreviewURL(ctx context.Context, id uuid.UUID) (string, stri
 		contentType string
 		orgUnitID   *uuid.UUID
 		status      string
+		accessLevel string
+		uploadedBy  uuid.UUID
+		ownerID     *uuid.UUID
 	)
 	err := s.pool.QueryRow(ctx,
-		`SELECT file_key, title, content_type, org_unit_id, status FROM documents WHERE id = $1 AND tenant_id = $2`,
+		`SELECT file_key, title, content_type, org_unit_id, status, access_level, uploaded_by, owner_id
+		FROM documents WHERE id = $1 AND tenant_id = $2`,
 		id, auth.TenantID,
-	).Scan(&fileKey, &title, &contentType, &orgUnitID, &status)
+	).Scan(&fileKey, &title, &contentType, &orgUnitID, &status, &accessLevel, &uploadedBy, &ownerID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return "", "", "", apperrors.NotFound("Document", id.String())
@@ -917,8 +1101,35 @@ func (s *Service) GetPreviewURL(ctx context.Context, id uuid.UUID) (string, stri
 		return "", "", "", apperrors.NotFound("Document", id.String())
 	}
 
+	if status == DocumentStatusExpired {
+		s.logAccessDenied(ctx, id, auth, "preview")
+		return "", "", "", apperrors.Forbidden("document has expired and cannot be previewed")
+	}
+
 	if orgUnitID != nil && !auth.HasOrgAccess(*orgUnitID) {
 		return "", "", "", apperrors.NotFound("Document", id.String())
+	}
+
+	// Access-level enforcement for preview (same as download).
+	policy := AccessLevelPolicies[accessLevel]
+	if policy.RequiresExplicitAccess && !auth.HasPermission(PermDocumentsAdmin) {
+		isOwnerOrUploader := uploadedBy == auth.UserID || (ownerID != nil && *ownerID == auth.UserID)
+		if !isOwnerOrUploader {
+			var hasViewShare bool
+			_ = s.pool.QueryRow(ctx, `
+				SELECT EXISTS(
+					SELECT 1 FROM document_shares
+					WHERE document_id = $1 AND tenant_id = $2
+						AND revoked_at IS NULL
+						AND (expires_at IS NULL OR expires_at > NOW())
+						AND (shared_with_user_id = $3 OR shared_with_role = ANY($4))
+				)`, id, auth.TenantID, auth.UserID, auth.Roles,
+			).Scan(&hasViewShare)
+			if !hasViewShare {
+				s.logAccessDenied(ctx, id, auth, "preview")
+				return "", "", "", apperrors.Forbidden("you do not have preview access to this document")
+			}
+		}
 	}
 
 	// Generate presigned URL valid for 5 minutes (shorter for preview).
@@ -927,8 +1138,9 @@ func (s *Service) GetPreviewURL(ctx context.Context, id uuid.UUID) (string, stri
 		return "", "", "", apperrors.Internal("failed to generate preview URL", err)
 	}
 
-	// Log access.
-	s.logAccess(ctx, id, auth.UserID, auth.TenantID, "preview")
+	// Log access with IP.
+	ip := types.GetClientIP(ctx)
+	s.logAccessWithIP(ctx, id, auth.UserID, auth.TenantID, "preview", ip)
 
 	return presignedURL.String(), title, contentType, nil
 }
@@ -1247,8 +1459,14 @@ func (s *Service) MoveDocument(ctx context.Context, id uuid.UUID, folderID *uuid
 	}
 
 	// Verify the document exists.
-	if _, err := s.GetDocument(ctx, id); err != nil {
+	existing, err := s.GetDocument(ctx, id)
+	if err != nil {
 		return VaultDocument{}, err
+	}
+
+	// Block move if locked by another user.
+	if existing.LockedBy != nil && *existing.LockedBy != auth.UserID {
+		return VaultDocument{}, apperrors.Conflict("document is locked by another user")
 	}
 
 	// Validate the target folder if set.
@@ -1267,7 +1485,7 @@ func (s *Service) MoveDocument(ctx context.Context, id uuid.UUID, folderID *uuid
 	}
 
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(ctx,
+	_, err = s.pool.Exec(ctx,
 		`UPDATE documents SET folder_id = $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
 		folderID, now, id, auth.TenantID,
 	)
@@ -1290,8 +1508,15 @@ func (s *Service) ShareDocument(ctx context.Context, id uuid.UUID, req ShareDocu
 	}
 
 	// Verify the document exists.
-	if _, err := s.GetDocument(ctx, id); err != nil {
+	doc, err := s.GetDocument(ctx, id)
+	if err != nil {
 		return DocumentShare{}, err
+	}
+
+	// Authorization: user must have documents.share permission OR be the document owner/uploader.
+	isOwnerOrUploader := doc.UploadedBy == auth.UserID || (doc.OwnerID != nil && *doc.OwnerID == auth.UserID)
+	if !auth.HasPermission(PermDocumentsShare) && !isOwnerOrUploader {
+		return DocumentShare{}, apperrors.Forbidden("you do not have permission to share this document")
 	}
 
 	// Validate permission.
@@ -1303,10 +1528,47 @@ func (s *Service) ShareDocument(ctx context.Context, id uuid.UUID, req ShareDocu
 		return DocumentShare{}, apperrors.BadRequest("either sharedWithUserId or sharedWithRole is required")
 	}
 
+	// Prevent sharing with self.
+	if req.SharedWithUserID != nil && *req.SharedWithUserID == auth.UserID {
+		return DocumentShare{}, apperrors.BadRequest("cannot share a document with yourself")
+	}
+
+	// Access-level policy enforcement.
+	policy := AccessLevelPolicies[doc.AccessLevel]
+
+	// Confidential documents cannot be shared by role.
+	if !policy.AllowRoleSharing && req.SharedWithRole != nil {
+		return DocumentShare{}, apperrors.Forbidden("confidential documents can only be shared with specific users, not roles")
+	}
+
+	// Restricted/confidential shares require expiry.
+	if policy.RequiresShareExpiry && req.ExpiresAt == nil {
+		return DocumentShare{}, apperrors.BadRequest("shares for " + doc.AccessLevel + " documents must have an expiry date")
+	}
+
+	// Validate expiry is in the future.
+	if req.ExpiresAt != nil && req.ExpiresAt.Before(time.Now()) {
+		return DocumentShare{}, apperrors.BadRequest("share expiry must be in the future")
+	}
+
+	// Validate shared user belongs to the same tenant.
+	if req.SharedWithUserID != nil {
+		var exists bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND tenant_id = $2)`,
+			*req.SharedWithUserID, auth.TenantID,
+		).Scan(&exists); err != nil {
+			return DocumentShare{}, apperrors.Internal("failed to verify shared user", err)
+		}
+		if !exists {
+			return DocumentShare{}, apperrors.BadRequest("shared user not found in this tenant")
+		}
+	}
+
 	shareID := uuid.New()
 	now := time.Now().UTC()
 
-	_, err := s.pool.Exec(ctx, `
+	_, err = s.pool.Exec(ctx, `
 		INSERT INTO document_shares (
 			id, document_id, tenant_id, shared_with_user_id, shared_with_role,
 			permission, shared_by, expires_at, created_at
@@ -1315,6 +1577,10 @@ func (s *Service) ShareDocument(ctx context.Context, id uuid.UUID, req ShareDocu
 		req.Permission, auth.UserID, req.ExpiresAt, now,
 	)
 	if err != nil {
+		// Check for unique constraint violation (duplicate share).
+		if strings.Contains(err.Error(), "idx_document_shares_unique") {
+			return DocumentShare{}, apperrors.Conflict("an active share with the same recipient and permission already exists")
+		}
 		return DocumentShare{}, apperrors.Internal("failed to share document", err)
 	}
 
@@ -1397,8 +1663,28 @@ func (s *Service) RevokeShare(ctx context.Context, docID, shareID uuid.UUID) err
 	}
 
 	// Verify document access.
-	if _, err := s.GetDocument(ctx, docID); err != nil {
+	doc, err := s.GetDocument(ctx, docID)
+	if err != nil {
 		return err
+	}
+
+	// Authorization: only share creator, document owner/uploader, or documents.admin can revoke.
+	var sharedBy uuid.UUID
+	err = s.pool.QueryRow(ctx,
+		`SELECT shared_by FROM document_shares WHERE id = $1 AND document_id = $2 AND tenant_id = $3`,
+		shareID, docID, auth.TenantID,
+	).Scan(&sharedBy)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NotFound("DocumentShare", shareID.String())
+		}
+		return apperrors.Internal("failed to verify share ownership", err)
+	}
+
+	isOwnerOrUploader := doc.UploadedBy == auth.UserID || (doc.OwnerID != nil && *doc.OwnerID == auth.UserID)
+	isShareCreator := sharedBy == auth.UserID
+	if !isShareCreator && !isOwnerOrUploader && !auth.HasPermission(PermDocumentsAdmin) {
+		return apperrors.Forbidden("only the share creator, document owner, or admin can revoke a share")
 	}
 
 	now := time.Now().UTC()
@@ -1993,67 +2279,64 @@ func (s *Service) SearchDocuments(ctx context.Context, query string, limit, offs
 
 	searchPattern := "%" + strings.ToLower(query) + "%"
 
-	// Build org-scope filter clause.
-	orgClause, orgParam := types.BuildOrgFilter(auth, "d.org_unit_id", 3)
+	var (
+		conditions []string
+		args       []any
+		argIdx     int
+	)
 
-	// Count total.
-	var total int64
-	countQuery := `
-		SELECT COUNT(*)
-		FROM documents d
-		WHERE d.tenant_id = $1
-			AND d.is_latest = true
-			AND d.status != 'deleted'
-			AND (
-				LOWER(d.title) LIKE $2
-				OR LOWER(COALESCE(d.description, '')) LIKE $2
-				OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t WHERE LOWER(t) LIKE $2)
-			)`
+	nextArg := func() string {
+		argIdx++
+		return fmt.Sprintf("$%d", argIdx)
+	}
 
-	countArgs := []interface{}{auth.TenantID, searchPattern}
+	conditions = append(conditions, "d.tenant_id = "+nextArg())
+	args = append(args, auth.TenantID)
+
+	conditions = append(conditions, "d.is_latest = true")
+	conditions = append(conditions, "d.status != 'deleted'")
+
+	searchArgRef := nextArg()
+	conditions = append(conditions, fmt.Sprintf(`(
+		LOWER(d.title) LIKE %s
+		OR LOWER(COALESCE(d.description, '')) LIKE %s
+		OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t WHERE LOWER(t) LIKE %s)
+	)`, searchArgRef, searchArgRef, searchArgRef))
+	args = append(args, searchPattern)
+
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "d.org_unit_id", argIdx+1)
 	if orgClause != "" {
-		countQuery += " AND " + orgClause
+		conditions = append(conditions, orgClause)
 		if orgParam != nil {
-			countArgs = append(countArgs, orgParam)
+			args = append(args, orgParam)
+			argIdx++
 		}
 	}
 
-	if err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+	// Access-level filter.
+	accessClause, accessArgs := s.buildAccessLevelFilter(auth, argIdx+1, argIdx+2)
+	if accessClause != "" {
+		conditions = append(conditions, accessClause)
+		args = append(args, accessArgs...)
+		argIdx += 2
+	}
+
+	whereClause := "WHERE " + strings.Join(conditions, " AND ")
+
+	// Count total.
+	var total int64
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM documents d %s`, whereClause)
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	// Determine next param index after the org filter (if any).
-	nextIdx := 3
-	if orgClause != "" && orgParam != nil {
-		nextIdx = 4
-	}
+	// Fetch paginated results.
+	dataQuery := fmt.Sprintf(`SELECT %s %s %s ORDER BY d.created_at DESC LIMIT %s OFFSET %s`,
+		documentColumns, documentJoins, whereClause, nextArg(), nextArg())
+	args = append(args, limit, offset)
 
-	dataQuery := fmt.Sprintf(`SELECT %s %s
-		WHERE d.tenant_id = $1
-			AND d.is_latest = true
-			AND d.status != 'deleted'
-			AND (
-				LOWER(d.title) LIKE $2
-				OR LOWER(COALESCE(d.description, '')) LIKE $2
-				OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t WHERE LOWER(t) LIKE $2)
-			)%s
-		ORDER BY d.created_at DESC
-		LIMIT $%d OFFSET $%d`,
-		documentColumns, documentJoins,
-		func() string {
-			if orgClause != "" {
-				return " AND " + orgClause
-			}
-			return ""
-		}(), nextIdx, nextIdx+1)
-
-	dataArgs := []interface{}{auth.TenantID, searchPattern}
-	if orgClause != "" && orgParam != nil {
-		dataArgs = append(dataArgs, orgParam)
-	}
-	dataArgs = append(dataArgs, limit, offset)
-
-	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
+	rows, err := s.pool.Query(ctx, dataQuery, args...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to search documents", err)
 	}
@@ -2244,15 +2527,243 @@ func (s *Service) GetStats(ctx context.Context) (VaultStats, error) {
 }
 
 // ──────────────────────────────────────────────
+// Shared-With-Me
+// ──────────────────────────────────────────────
+
+// ListSharedWithMe returns documents shared with the current user (by user ID or role).
+func (s *Service) ListSharedWithMe(ctx context.Context, limit, offset int) ([]SharedWithMeDocument, int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, 0, apperrors.Unauthorized("authentication required")
+	}
+
+	// Count total.
+	countQuery := `
+		SELECT COUNT(DISTINCT d.id)
+		FROM documents d
+		INNER JOIN document_shares ds ON ds.document_id = d.id
+		WHERE d.tenant_id = $1
+			AND d.is_latest = true
+			AND d.status != 'deleted'
+			AND ds.revoked_at IS NULL
+			AND (ds.expires_at IS NULL OR ds.expires_at > NOW())
+			AND (ds.shared_with_user_id = $2 OR ds.shared_with_role = ANY($3))`
+
+	var total int64
+	if err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, auth.UserID, auth.Roles).Scan(&total); err != nil {
+		return nil, 0, apperrors.Internal("failed to count shared documents", err)
+	}
+
+	// Fetch paginated results with share metadata.
+	dataQuery := fmt.Sprintf(`
+		SELECT %s,
+			ds.permission, COALESCE(su.display_name, ''), ds.created_at, ds.expires_at
+		%s
+		INNER JOIN document_shares ds ON ds.document_id = d.id
+		LEFT JOIN users su ON su.id = ds.shared_by
+		WHERE d.tenant_id = $1
+			AND d.is_latest = true
+			AND d.status != 'deleted'
+			AND ds.revoked_at IS NULL
+			AND (ds.expires_at IS NULL OR ds.expires_at > NOW())
+			AND (ds.shared_with_user_id = $2 OR ds.shared_with_role = ANY($3))
+		ORDER BY ds.created_at DESC
+		LIMIT $4 OFFSET $5`, documentColumns, documentJoins)
+
+	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, auth.UserID, auth.Roles, limit, offset)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to list shared documents", err)
+	}
+	defer rows.Close()
+
+	docs := make([]SharedWithMeDocument, 0)
+	for rows.Next() {
+		var d SharedWithMeDocument
+		if err := rows.Scan(
+			&d.ID, &d.TenantID, &d.Title, &d.Description, &d.FileKey,
+			&d.ContentType, &d.SizeBytes, &d.ChecksumSHA256, &d.Classification,
+			&d.RetentionUntil, &d.Tags, &d.FolderID, &d.Version,
+			&d.ParentDocumentID, &d.IsLatest, &d.LockedBy, &d.LockedAt,
+			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
+			&d.OwnerID, &d.DocumentCode, &d.SourceModule, &d.SourceEntityID,
+			&d.EffectiveDate, &d.ExpiryDate, &d.Confidential, &d.LegalHold,
+			&d.ArchivedAt, &d.ArchivedBy, &d.DeletedAt, &d.DeletedBy,
+			&d.UploaderName, &d.FolderName, &d.LockedByName, &d.OwnerName,
+			&d.SharePermission, &d.SharedByName, &d.SharedAt, &d.ShareExpiresAt,
+		); err != nil {
+			return nil, 0, apperrors.Internal("failed to scan shared document", err)
+		}
+		d.FileName = filepath.Base(d.FileKey)
+		if d.Tags == nil {
+			d.Tags = []string{}
+		}
+		docs = append(docs, d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.Internal("failed to iterate shared documents", err)
+	}
+
+	return docs, total, nil
+}
+
+// ──────────────────────────────────────────────
+// Compliance queries
+// ──────────────────────────────────────────────
+
+// GetExpiringSoon returns documents with expiry_date within the given number of days.
+func (s *Service) GetExpiringSoon(ctx context.Context, days, limit, offset int) ([]ComplianceDocument, int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, 0, apperrors.Unauthorized("authentication required")
+	}
+
+	if days <= 0 {
+		days = 30
+	}
+
+	// Count total.
+	var total int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM documents d
+		LEFT JOIN users ou ON ou.id = d.owner_id
+		WHERE d.tenant_id = $1
+			AND d.is_latest = true
+			AND d.status NOT IN ('deleted', 'expired', 'archived')
+			AND d.expiry_date IS NOT NULL
+			AND d.expiry_date <= NOW() + ($2 || ' days')::interval
+			AND d.expiry_date > NOW()`,
+		auth.TenantID, fmt.Sprintf("%d", days),
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to count expiring documents", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT d.id, d.title, d.classification, d.access_level, d.status,
+			d.expiry_date, d.retention_until, ou.display_name, d.org_unit_id, d.created_at
+		FROM documents d
+		LEFT JOIN users ou ON ou.id = d.owner_id
+		WHERE d.tenant_id = $1
+			AND d.is_latest = true
+			AND d.status NOT IN ('deleted', 'expired', 'archived')
+			AND d.expiry_date IS NOT NULL
+			AND d.expiry_date <= NOW() + ($2 || ' days')::interval
+			AND d.expiry_date > NOW()
+		ORDER BY d.expiry_date ASC
+		LIMIT $3 OFFSET $4`,
+		auth.TenantID, fmt.Sprintf("%d", days), limit, offset,
+	)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to query expiring documents", err)
+	}
+	defer rows.Close()
+
+	return scanComplianceDocs(rows)
+}
+
+// GetExpiredDocuments returns documents that have status = 'expired'.
+func (s *Service) GetExpiredDocuments(ctx context.Context, limit, offset int) ([]ComplianceDocument, int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, 0, apperrors.Unauthorized("authentication required")
+	}
+
+	var total int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM documents
+		WHERE tenant_id = $1 AND is_latest = true AND status = 'expired'`,
+		auth.TenantID,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to count expired documents", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT d.id, d.title, d.classification, d.access_level, d.status,
+			d.expiry_date, d.retention_until, ou.display_name, d.org_unit_id, d.created_at
+		FROM documents d
+		LEFT JOIN users ou ON ou.id = d.owner_id
+		WHERE d.tenant_id = $1
+			AND d.is_latest = true
+			AND d.status = 'expired'
+		ORDER BY d.expiry_date DESC
+		LIMIT $2 OFFSET $3`,
+		auth.TenantID, limit, offset,
+	)
+	if err != nil {
+		return nil, 0, apperrors.Internal("failed to query expired documents", err)
+	}
+	defer rows.Close()
+
+	return scanComplianceDocs(rows)
+}
+
+// GetRetentionReport returns aggregate retention and compliance statistics.
+func (s *Service) GetRetentionReport(ctx context.Context) (RetentionReport, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return RetentionReport{}, apperrors.Unauthorized("authentication required")
+	}
+
+	var r RetentionReport
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE(SUM(CASE WHEN expiry_date IS NOT NULL THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date <= NOW() + INTERVAL '30 days' AND expiry_date > NOW() AND status NOT IN ('deleted', 'expired', 'archived') THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN retention_until IS NOT NULL THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN retention_until IS NOT NULL AND retention_until > NOW() THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN retention_until IS NOT NULL AND retention_until <= NOW() THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN legal_hold = true THEN 1 ELSE 0 END), 0)
+		FROM documents
+		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'`,
+		auth.TenantID,
+	).Scan(&r.TotalWithExpiry, &r.ExpiredCount, &r.ExpiringSoon30Days,
+		&r.TotalWithRetention, &r.RetentionActiveCount, &r.RetentionExpiredCount,
+		&r.LegalHoldCount)
+	if err != nil {
+		return RetentionReport{}, apperrors.Internal("failed to generate retention report", err)
+	}
+
+	return r, nil
+}
+
+// scanComplianceDocs scans rows into ComplianceDocument slice and returns total.
+func scanComplianceDocs(rows pgx.Rows) ([]ComplianceDocument, int64, error) {
+	docs := make([]ComplianceDocument, 0)
+	for rows.Next() {
+		var d ComplianceDocument
+		if err := rows.Scan(
+			&d.ID, &d.Title, &d.Classification, &d.AccessLevel, &d.Status,
+			&d.ExpiryDate, &d.RetentionUntil, &d.OwnerName, &d.OrgUnitID, &d.CreatedAt,
+		); err != nil {
+			return nil, 0, apperrors.Internal("failed to scan compliance document", err)
+		}
+		docs = append(docs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.Internal("failed to iterate compliance documents", err)
+	}
+	// Note: total is passed separately from the caller's count query.
+	return docs, 0, nil
+}
+
+// ──────────────────────────────────────────────
 // Internal helpers
 // ──────────────────────────────────────────────
 
 // logAccess inserts a record into the document_access_log table.
 func (s *Service) logAccess(ctx context.Context, docID, userID, tenantID uuid.UUID, action string) {
+	s.logAccessWithIP(ctx, docID, userID, tenantID, action, "")
+}
+
+// logAccessWithIP inserts a record into the document_access_log table with an IP address.
+func (s *Service) logAccessWithIP(ctx context.Context, docID, userID, tenantID uuid.UUID, action, ipAddress string) {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO document_access_log (id, document_id, tenant_id, user_id, action, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		uuid.New(), docID, tenantID, userID, action, time.Now().UTC(),
+		INSERT INTO document_access_log (id, document_id, tenant_id, user_id, action, ip_address, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New(), docID, tenantID, userID, action, ipAddress, time.Now().UTC(),
 	)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to log document access", "error", err, "documentId", docID)
