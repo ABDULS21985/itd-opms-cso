@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { ProjectPicker } from "@/components/shared/pickers";
 import { useCreateRACIMatrix } from "@/hooks/use-governance";
 
 /* ------------------------------------------------------------------ */
@@ -62,6 +63,7 @@ export default function CreateRACIMatrixPage() {
   const [title, setTitle] = useState("");
   const [entityType, setEntityType] = useState("");
   const [entityId, setEntityId] = useState("");
+  const [entityDisplay, setEntityDisplay] = useState("");
   const [description, setDescription] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -279,13 +281,16 @@ export default function CreateRACIMatrixPage() {
                     options={ENTITY_TYPES}
                     placeholder="Select entity type..."
                   />
-                  <FormField
-                    label="Entity ID"
-                    name="entityId"
-                    value={entityId}
-                    onChange={setEntityId}
-                    placeholder="Optional UUID of related entity"
-                    description="Link this matrix to a specific process, project, or service by ID."
+                  <ProjectPicker
+                    label="Related Entity"
+                    value={entityId || undefined}
+                    displayValue={entityDisplay}
+                    onChange={(id, name) => {
+                      setEntityId(id ?? "");
+                      setEntityDisplay(name);
+                    }}
+                    placeholder="Search for a project or entity..."
+                    description="Link this matrix to a specific project by searching."
                   />
                   <FormField
                     label="Description"
@@ -330,7 +335,7 @@ export default function CreateRACIMatrixPage() {
                         value={findLabel(ENTITY_TYPES, entityType)}
                       />
                       {entityId && (
-                        <ReviewField label="Entity ID" value={entityId} />
+                        <ReviewField label="Related Entity" value={entityDisplay || entityId} />
                       )}
                     </div>
                     {description && (

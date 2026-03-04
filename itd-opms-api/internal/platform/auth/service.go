@@ -507,6 +507,112 @@ func (s *AuthService) getUserRolesAndPermissions(ctx context.Context, userID uui
 	return roles, permissions, nil
 }
 
+// ForgotPassword generates a password reset token for the given email.
+// Returns the raw token (to be sent to the user) and an error.
+// If the email doesn't exist, returns nil error with empty token (no information leak).
+func (s *AuthService) ForgotPassword(ctx context.Context, email string) (string, error) {
+	// Look up user by email.
+	var userID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM users WHERE email = $1 AND is_active = true AND password_hash IS NOT NULL`,
+		email,
+	).Scan(&userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// Don't reveal whether the email exists.
+			return "", nil
+		}
+		return "", apperrors.Internal("Failed to look up user", err)
+	}
+
+	// Invalidate any existing unused tokens for this user.
+	_, _ = s.pool.Exec(ctx,
+		`UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+		userID,
+	)
+
+	// Generate a secure random token.
+	rawToken := GenerateRefreshToken() // Reuse the same secure random generator.
+	tokenHash := helpers.SHA256Checksum([]byte(rawToken))
+	expiresAt := time.Now().Add(30 * time.Minute)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, tokenHash, expiresAt,
+	)
+	if err != nil {
+		return "", apperrors.Internal("Failed to create reset token", err)
+	}
+
+	slog.Info("password reset token generated", "user_id", userID, "email", email, "expires_at", expiresAt)
+	return rawToken, nil
+}
+
+// ResetPassword validates a reset token and sets a new password.
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if len(newPassword) < 8 {
+		return apperrors.BadRequest("New password must be at least 8 characters")
+	}
+
+	tokenHash := helpers.SHA256Checksum([]byte(token))
+
+	// Find and validate the token.
+	var tokenID, userID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, user_id FROM password_reset_tokens
+		 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()`,
+		tokenHash,
+	).Scan(&tokenID, &userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.BadRequest("Invalid or expired reset link. Please request a new password reset.")
+		}
+		return apperrors.Internal("Failed to validate reset token", err)
+	}
+
+	// Hash new password.
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperrors.Internal("Failed to hash password", err)
+	}
+
+	// Update password and mark token as used in a single transaction.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return apperrors.Internal("Failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
+		`UPDATE users SET password_hash = $1, force_password_change = false, updated_at = NOW() WHERE id = $2`,
+		string(hash), userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to update password", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`,
+		tokenID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to mark token as used", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.Internal("Failed to commit transaction", err)
+	}
+
+	// Revoke all existing refresh tokens for the user (force re-login).
+	_, _ = s.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND revoked = false`,
+		userID,
+	)
+
+	slog.Info("password reset completed", "user_id", userID)
+	return nil
+}
+
 // parsePermissions unmarshals a JSON array of permission strings and adds
 // them to the provided set.
 func parsePermissions(raw json.RawMessage, permSet map[string]struct{}) {

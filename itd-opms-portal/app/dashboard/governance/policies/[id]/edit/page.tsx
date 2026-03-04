@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker } from "@/components/shared/pickers";
 import { usePolicy, useUpdatePolicy } from "@/hooks/use-governance";
 
 /* ------------------------------------------------------------------ */
@@ -48,6 +49,7 @@ export default function EditPolicyPage({
   const [reviewDate, setReviewDate] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
   const [changesSummary, setChangesSummary] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -65,6 +67,7 @@ export default function EditPolicyPage({
       setReviewDate(policy.reviewDate?.split("T")[0] || "");
       setExpiryDate(policy.expiryDate?.split("T")[0] || "");
       setOwnerId(policy.ownerId || "");
+      setOwnerDisplay(policy.ownerId || "");
     }
   }, [policy]);
 
@@ -270,12 +273,15 @@ export default function EditPolicyPage({
         </div>
 
         {/* Owner */}
-        <FormField
-          label="Owner ID"
-          name="ownerId"
-          value={ownerId}
-          onChange={setOwnerId}
-          placeholder="User UUID of the policy owner"
+        <UserPicker
+          label="Owner"
+          value={ownerId || undefined}
+          displayValue={ownerDisplay}
+          onChange={(id, name) => {
+            setOwnerId(id ?? "");
+            setOwnerDisplay(name);
+          }}
+          placeholder="Search for policy owner..."
           description="The person accountable for this policy"
         />
 

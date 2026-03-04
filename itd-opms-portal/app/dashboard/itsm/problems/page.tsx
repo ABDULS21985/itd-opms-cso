@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker } from "@/components/shared/pickers";
 import {
   useProblems,
   useKnownErrors,
@@ -378,6 +379,7 @@ export default function ProblemsPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newOwnerId, setNewOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   function handleCreateProblem(e: React.FormEvent) {
@@ -399,6 +401,7 @@ export default function ProblemsPage() {
           setNewTitle("");
           setNewDescription("");
           setNewOwnerId("");
+          setOwnerDisplay("");
           setFormErrors({});
         },
       },
@@ -523,12 +526,15 @@ export default function ProblemsPage() {
               rows={3}
             />
 
-            <FormField
-              label="Owner ID"
-              name="newOwnerId"
-              value={newOwnerId}
-              onChange={setNewOwnerId}
-              placeholder="User UUID of the problem owner (optional)"
+            <UserPicker
+              label="Owner"
+              value={newOwnerId || undefined}
+              displayValue={ownerDisplay}
+              onChange={(id, name) => {
+                setNewOwnerId(id ?? "");
+                setOwnerDisplay(name);
+              }}
+              placeholder="Search for owner (optional)"
             />
 
             <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] pt-4">

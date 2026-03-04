@@ -13,8 +13,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker } from "@/components/shared/pickers";
 import { useCreatePortfolio } from "@/hooks/use-planning";
-import { useUsers } from "@/hooks/use-system";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -56,18 +56,6 @@ const slideVariants = {
 export default function NewPortfolioPage() {
   const router = useRouter();
   const createPortfolio = useCreatePortfolio();
-  const { data: usersData } = useUsers(1, 200);
-
-  const users = Array.isArray(usersData)
-    ? usersData
-    : usersData?.data ?? [];
-
-  const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
-      value: u.id,
-      label: u.displayName || u.email,
-    }),
-  );
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
@@ -80,6 +68,7 @@ export default function NewPortfolioPage() {
     String(new Date().getFullYear()),
   );
   const [ownerId, setOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -125,12 +114,6 @@ export default function NewPortfolioPage() {
       },
     );
   }
-
-  /* ---- Helpers ---- */
-  const findLabel = (
-    opts: { value: string; label: string }[],
-    val: string,
-  ) => opts.find((o) => o.value === val)?.label || "—";
 
   const isLastStep = step === STEPS.length - 1;
 
@@ -299,14 +282,11 @@ export default function NewPortfolioPage() {
                       error={errors.fiscalYear}
                       description="The financial year this portfolio covers"
                     />
-                    <FormField
+                    <UserPicker
                       label="Portfolio Owner"
-                      name="ownerId"
-                      type="select"
-                      value={ownerId}
-                      onChange={setOwnerId}
-                      options={userOptions}
-                      placeholder="Select owner (optional)"
+                      value={ownerId || undefined}
+                      displayValue={ownerDisplay}
+                      onChange={(id, name) => { setOwnerId(id ?? ""); setOwnerDisplay(name); }}
                       description="The person accountable for this portfolio"
                     />
                   </div>
@@ -379,7 +359,7 @@ export default function NewPortfolioPage() {
                           Owner
                         </span>
                         <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {findLabel(userOptions, ownerId)}
+                          {ownerDisplay || "—"}
                         </p>
                       </div>
                     </div>

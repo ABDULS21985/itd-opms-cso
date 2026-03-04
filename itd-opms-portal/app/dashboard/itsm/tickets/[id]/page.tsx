@@ -23,6 +23,7 @@ import {
   Tag,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { UserPicker } from "@/components/shared/pickers";
 import {
   useTicket,
   useTicketComments,
@@ -359,6 +360,7 @@ export default function TicketDetailPage({
   const [isInternalComment, setIsInternalComment] = useState(false);
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [assigneeInput, setAssigneeInput] = useState("");
+  const [assigneeDisplay, setAssigneeDisplay] = useState("");
   const [showResolveForm, setShowResolveForm] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [transitionReason, setTransitionReason] = useState("");
@@ -447,6 +449,7 @@ export default function TicketDetailPage({
         onSuccess: () => {
           setShowAssignForm(false);
           setAssigneeInput("");
+          setAssigneeDisplay("");
         },
       },
     );
@@ -609,14 +612,15 @@ export default function TicketDetailPage({
             className="flex items-end gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
           >
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--neutral-gray)]">
-                Assign to User ID
-              </label>
-              <input
-                value={assigneeInput}
-                onChange={(e) => setAssigneeInput(e.target.value)}
-                placeholder="Enter user UUID"
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+              <UserPicker
+                label="Assign to User"
+                value={assigneeInput || undefined}
+                displayValue={assigneeDisplay}
+                onChange={(id, name) => {
+                  setAssigneeInput(id ?? "");
+                  setAssigneeDisplay(name);
+                }}
+                placeholder="Search for a user..."
               />
             </div>
             <button

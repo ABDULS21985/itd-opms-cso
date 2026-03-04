@@ -15,8 +15,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker } from "@/components/shared/pickers";
 import { useCreateAsset } from "@/hooks/use-cmdb";
-import { useUsers } from "@/hooks/use-system";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -94,18 +94,6 @@ const slideVariants = {
 export default function NewAssetPage() {
   const router = useRouter();
   const createAsset = useCreateAsset();
-  const { data: usersData } = useUsers(1, 200);
-
-  const users = Array.isArray(usersData)
-    ? usersData
-    : usersData?.data ?? [];
-
-  const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
-      value: u.id,
-      label: u.displayName || u.email,
-    }),
-  );
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
@@ -131,7 +119,9 @@ export default function NewAssetPage() {
 
   // Ownership
   const [ownerId, setOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
   const [custodianId, setCustodianId] = useState("");
+  const [custodianDisplay, setCustodianDisplay] = useState("");
 
   // Financial
   const [purchaseDate, setPurchaseDate] = useState("");
@@ -526,23 +516,25 @@ export default function NewAssetPage() {
                 <div className="space-y-6">
                   {/* Owner & Custodian */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
+                    <UserPicker
                       label="Owner"
-                      name="ownerId"
-                      type="select"
-                      value={ownerId}
-                      onChange={setOwnerId}
-                      options={userOptions}
-                      placeholder="Select owner (optional)"
+                      placeholder="Search for owner..."
+                      value={ownerId || undefined}
+                      displayValue={ownerDisplay}
+                      onChange={(id, name) => {
+                        setOwnerId(id ?? "");
+                        setOwnerDisplay(name);
+                      }}
                     />
-                    <FormField
+                    <UserPicker
                       label="Custodian"
-                      name="custodianId"
-                      type="select"
-                      value={custodianId}
-                      onChange={setCustodianId}
-                      options={userOptions}
-                      placeholder="Select custodian (optional)"
+                      placeholder="Search for custodian..."
+                      value={custodianId || undefined}
+                      displayValue={custodianDisplay}
+                      onChange={(id, name) => {
+                        setCustodianId(id ?? "");
+                        setCustodianDisplay(name);
+                      }}
                     />
                   </div>
 
@@ -707,11 +699,11 @@ export default function NewAssetPage() {
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                       <ReviewField
                         label="Owner"
-                        value={findLabel(userOptions, ownerId)}
+                        value={ownerDisplay || "—"}
                       />
                       <ReviewField
                         label="Custodian"
-                        value={findLabel(userOptions, custodianId)}
+                        value={custodianDisplay || "—"}
                       />
                       <ReviewField
                         label="Purchase Date"

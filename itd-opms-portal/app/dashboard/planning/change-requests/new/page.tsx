@@ -14,7 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
-import { useCreateChangeRequest, useProjects } from "@/hooks/use-planning";
+import { ProjectPicker } from "@/components/shared/pickers";
+import { useCreateChangeRequest } from "@/hooks/use-planning";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -50,17 +51,6 @@ export default function NewChangeRequestPage() {
   const router = useRouter();
   const createChangeRequest = useCreateChangeRequest();
 
-  const { data: projectsData } = useProjects(1, 200);
-  const projects = Array.isArray(projectsData)
-    ? projectsData
-    : projectsData?.data ?? [];
-  const projectOptions = projects.map(
-    (p: { id: string; title?: string; code: string }) => ({
-      value: p.id,
-      label: p.title || p.code,
-    }),
-  );
-
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -69,6 +59,7 @@ export default function NewChangeRequestPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [projectDisplay, setProjectDisplay] = useState("");
   const [justification, setJustification] = useState("");
   const [impactAssessment, setImpactAssessment] = useState("");
 
@@ -130,12 +121,6 @@ export default function NewChangeRequestPage() {
       },
     );
   }
-
-  /* ---- Helpers ---- */
-  const findLabel = (
-    opts: { value: string; label: string }[],
-    val: string,
-  ) => opts.find((o) => o.value === val)?.label || "—";
 
   const isLastStep = step === STEPS.length - 1;
 
@@ -299,14 +284,11 @@ export default function NewChangeRequestPage() {
                     placeholder="Detailed description of the proposed change"
                     rows={4}
                   />
-                  <FormField
+                  <ProjectPicker
                     label="Project"
-                    name="projectId"
-                    type="select"
-                    value={projectId}
-                    onChange={setProjectId}
-                    options={projectOptions}
-                    placeholder="Select project (optional)"
+                    value={projectId || undefined}
+                    displayValue={projectDisplay}
+                    onChange={(id, title) => { setProjectId(id ?? ""); setProjectDisplay(title); }}
                     description="The project this change request applies to"
                   />
                 </div>
@@ -379,7 +361,7 @@ export default function NewChangeRequestPage() {
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Project"
-                        value={findLabel(projectOptions, projectId)}
+                        value={projectDisplay || "—"}
                       />
                     </div>
                     {description && (

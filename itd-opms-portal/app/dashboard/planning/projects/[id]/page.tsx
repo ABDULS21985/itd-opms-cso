@@ -39,6 +39,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { ProjectDocuments } from "@/components/planning/project-documents";
 import { FormField } from "@/components/shared/form-field";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { UserPicker } from "@/components/shared/pickers";
 import {
   useProject,
   useProjectStakeholders,
@@ -274,6 +275,7 @@ export default function ProjectDetailPage({
 
   const [showStakeholderForm, setShowStakeholderForm] = useState(false);
   const [stUserId, setStUserId] = useState("");
+  const [stUserDisplay, setStUserDisplay] = useState("");
   const [stRole, setStRole] = useState("");
   const [stInfluence, setStInfluence] = useState("");
   const [stInterest, setStInterest] = useState("");
@@ -401,7 +403,7 @@ export default function ProjectDetailPage({
     if (!stUserId.trim() || !stRole.trim()) return;
     addStakeholder.mutate(
       { userId: stUserId.trim(), role: stRole.trim(), influence: stInfluence.trim() || undefined, interest: stInterest.trim() || undefined },
-      { onSuccess: () => { setShowStakeholderForm(false); setStUserId(""); setStRole(""); setStInfluence(""); setStInterest(""); } },
+      { onSuccess: () => { setShowStakeholderForm(false); setStUserId(""); setStUserDisplay(""); setStRole(""); setStInfluence(""); setStInterest(""); } },
     );
   }
 
@@ -815,7 +817,7 @@ export default function ProjectDetailPage({
               className="mb-4 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-4 overflow-hidden"
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FormField label="User ID" name="stUserId" value={stUserId} onChange={setStUserId} placeholder="User UUID" required />
+                <UserPicker label="User" required value={stUserId || undefined} displayValue={stUserDisplay} onChange={(id, name) => { setStUserId(id ?? ""); setStUserDisplay(name); }} />
                 <FormField label="Role" name="stRole" value={stRole} onChange={setStRole} placeholder="e.g. Sponsor, PM, Developer" required />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

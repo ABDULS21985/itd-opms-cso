@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ProjectPicker } from "@/components/shared/pickers";
 import {
   useMilestones,
   useCreateMilestone,
@@ -118,6 +119,7 @@ function CreateMilestoneForm({
   const [targetDate, setTargetDate] = useState("");
   const [completionCriteria, setCompletionCriteria] = useState("");
   const [formProjectId, setFormProjectId] = useState(projectId ?? "");
+  const [projectDisplay, setProjectDisplay] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function validate(): boolean {
@@ -184,25 +186,14 @@ function CreateMilestoneForm({
             )}
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
-              Project ID <span className="text-[var(--error)]">*</span>
-            </label>
-            <input
-              type="text"
-              value={formProjectId}
-              onChange={(e) => setFormProjectId(e.target.value)}
-              placeholder="Project UUID"
-              className={`h-10 w-full rounded-xl border bg-[var(--surface-0)] px-3.5 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] ${
-                errors.projectId
-                  ? "border-[var(--error)]"
-                  : "border-[var(--border)]"
-              }`}
+            <ProjectPicker
+              label="Project"
+              required
+              value={formProjectId || undefined}
+              displayValue={projectDisplay}
+              onChange={(id, title) => { setFormProjectId(id ?? ""); setProjectDisplay(title); }}
+              error={errors.projectId}
             />
-            {errors.projectId && (
-              <p className="mt-1 text-xs text-[var(--error)]">
-                {errors.projectId}
-              </p>
-            )}
           </div>
         </div>
 

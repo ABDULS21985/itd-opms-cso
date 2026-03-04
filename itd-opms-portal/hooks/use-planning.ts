@@ -172,6 +172,22 @@ export function useProjects(
 }
 
 /**
+ * GET /planning/projects?search=<query> — lightweight project search for pickers.
+ */
+export function useSearchProjects(query: string) {
+  return useQuery({
+    queryKey: ["projects-search", query],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Project>>("/planning/projects", {
+        page: 1,
+        limit: 15,
+        search: query,
+      }),
+    enabled: query.length >= 2,
+  });
+}
+
+/**
  * GET /planning/projects/{id} - single project detail.
  */
 export function useProject(id: string | undefined) {

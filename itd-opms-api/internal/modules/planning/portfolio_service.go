@@ -566,15 +566,15 @@ func (s *ProjectService) GetProject(ctx context.Context, id uuid.UUID) (Project,
 }
 
 // ListProjects returns a filtered, paginated list of projects.
-func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUID, status, ragStatus *string, limit, offset int) ([]Project, int64, error) {
+func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUID, status, ragStatus, search *string, limit, offset int) ([]Project, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Build base args: $1=tenantID, $2=portfolioID, $3=status, $4=ragStatus.
-	args := []interface{}{auth.TenantID, portfolioID, status, ragStatus}
-	nextIdx := 5
+	// Build base args: $1=tenantID, $2=portfolioID, $3=status, $4=ragStatus, $5=search.
+	args := []interface{}{auth.TenantID, portfolioID, status, ragStatus, search}
+	nextIdx := 6
 
 	// Add org scope filter on division_id.
 	orgClause := ""
@@ -592,7 +592,8 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 		WHERE p.tenant_id = $1
 			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
 			AND ($3::text IS NULL OR p.status = $3)
-			AND ($4::text IS NULL OR p.rag_status = $4)%s`, orgClause)
+			AND ($4::text IS NULL OR p.rag_status = $4)
+			AND ($5::text IS NULL OR p.title ILIKE '%%' || $5 || '%%' OR p.code ILIKE '%%' || $5 || '%%')%s`, orgClause)
 
 	var total int64
 	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
@@ -619,7 +620,8 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 		WHERE p.tenant_id = $1
 			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
 			AND ($3::text IS NULL OR p.status = $3)
-			AND ($4::text IS NULL OR p.rag_status = $4)%s
+			AND ($4::text IS NULL OR p.rag_status = $4)
+			AND ($5::text IS NULL OR p.title ILIKE '%%' || $5 || '%%' OR p.code ILIKE '%%' || $5 || '%%')%s
 		ORDER BY p.created_at DESC
 		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 

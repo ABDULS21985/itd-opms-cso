@@ -109,11 +109,12 @@ class ApiClient {
         window.location.href = "/auth/login";
       }
 
-      throw new ApiError(
-        response.status,
-        error.message || "An error occurred",
-        error,
-      );
+      // Extract message from { status, errors: [{ code, message }] } envelope.
+      const errorMessage =
+        error?.errors?.[0]?.message ||
+        error?.message ||
+        "An error occurred";
+      throw new ApiError(response.status, errorMessage, error);
     }
 
     // Handle 204 No Content responses
@@ -210,11 +211,11 @@ class ApiClient {
         window.location.href = "/auth/login";
       }
 
-      throw new ApiError(
-        response.status,
-        error.message || "Upload failed",
-        error,
-      );
+      const errorMessage =
+        error?.errors?.[0]?.message ||
+        error?.message ||
+        "Upload failed";
+      throw new ApiError(response.status, errorMessage, error);
     }
 
     const data = await response.json();

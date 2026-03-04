@@ -14,8 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker } from "@/components/shared/pickers";
 import { useCreatePolicy } from "@/hooks/use-governance";
-import { useUsers } from "@/hooks/use-system";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -62,18 +62,6 @@ const slideVariants = {
 export default function NewPolicyPage() {
   const router = useRouter();
   const createPolicy = useCreatePolicy();
-  const { data: usersData } = useUsers(1, 200);
-
-  const users = Array.isArray(usersData)
-    ? usersData
-    : usersData?.data ?? [];
-
-  const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
-      value: u.id,
-      label: u.displayName || u.email,
-    }),
-  );
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
@@ -90,6 +78,7 @@ export default function NewPolicyPage() {
   const [reviewDate, setReviewDate] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -382,14 +371,15 @@ export default function NewPolicyPage() {
                     placeholder="e.g. security, access-control, gdpr (comma-separated)"
                     description="Separate multiple tags with commas"
                   />
-                  <FormField
+                  <UserPicker
                     label="Owner"
-                    name="ownerId"
-                    type="select"
-                    value={ownerId}
-                    onChange={setOwnerId}
-                    options={userOptions}
-                    placeholder="Select policy owner (optional)"
+                    value={ownerId || undefined}
+                    displayValue={ownerDisplay}
+                    onChange={(id, name) => {
+                      setOwnerId(id ?? "");
+                      setOwnerDisplay(name);
+                    }}
+                    placeholder="Search for policy owner..."
                     description="The person accountable for this policy"
                   />
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -484,7 +474,7 @@ export default function NewPolicyPage() {
                       {tags && <ReviewField label="Tags" value={tags} />}
                       <ReviewField
                         label="Owner"
-                        value={findLabel(userOptions, ownerId)}
+                        value={ownerDisplay || "—"}
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-x-6 gap-y-1 mt-2">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -13,6 +14,9 @@ import {
   Building2,
   Landmark,
   LogIn,
+  AlertTriangle,
+  Clock,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
@@ -38,8 +42,49 @@ function MicrosoftLogo({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Maps API error messages to user-friendly guidance.
+ */
+function getFriendlyError(message: string): { title: string; description: string; icon: typeof Shield } {
+  const lower = message.toLowerCase();
+  if (lower.includes("invalid email or password") || lower.includes("invalid credentials")) {
+    return {
+      title: "Incorrect email or password",
+      description: "Please double-check your credentials and try again. If you've forgotten your password, use the \"Forgot password?\" link below.",
+      icon: Lock,
+    };
+  }
+  if (lower.includes("account") && lower.includes("disabled")) {
+    return {
+      title: "Account disabled",
+      description: "Your account has been deactivated. Please contact your IT administrator for assistance.",
+      icon: AlertTriangle,
+    };
+  }
+  if (lower.includes("too many") || lower.includes("rate limit")) {
+    return {
+      title: "Too many attempts",
+      description: "You've made too many login attempts. Please wait a few minutes before trying again.",
+      icon: Clock,
+    };
+  }
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch")) {
+    return {
+      title: "Connection error",
+      description: "Unable to reach the server. Please check your network connection and try again.",
+      icon: AlertTriangle,
+    };
+  }
+  return {
+    title: "Sign in failed",
+    description: message || "An unexpected error occurred. Please try again or contact IT support.",
+    icon: Shield,
+  };
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, loginWithEntraID, isEntraIDEnabled, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,10 +92,32 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSSOLoading, setIsSSOLoading] = useState(false);
   const [error, setError] = useState("");
+  const [infoBanner, setInfoBanner] = useState<{ message: string; icon: typeof Clock } | null>(null);
+
+  // Detect redirect reasons (e.g., session timeout, password reset success)
+  useEffect(() => {
+    const reason = searchParams.get("reason");
+    if (reason === "timeout") {
+      setInfoBanner({
+        message: "Your session has expired due to inactivity. Please sign in again to continue.",
+        icon: Clock,
+      });
+      toast.info("Session expired", {
+        description: "You were signed out due to 30 minutes of inactivity.",
+        duration: 6000,
+      });
+    } else if (reason === "password-reset") {
+      toast.success("Password reset successful", {
+        description: "Your password has been updated. Please sign in with your new password.",
+        duration: 6000,
+      });
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setInfoBanner(null);
     setIsLoading(true);
 
     try {
@@ -71,8 +138,9 @@ export default function LoginPage() {
         err instanceof Error
           ? err.message
           : "Invalid credentials. Please try again.";
-      setError(message);
-      toast.error("Sign in failed", { description: message });
+      const friendly = getFriendlyError(message);
+      setError(friendly.description);
+      toast.error(friendly.title, { description: friendly.description, duration: 5000 });
     } finally {
       setIsLoading(false);
     }
@@ -80,6 +148,7 @@ export default function LoginPage() {
 
   const handleEntraIDLogin = async () => {
     setError("");
+    setInfoBanner(null);
     setIsSSOLoading(true);
 
     try {
@@ -306,6 +375,27 @@ export default function LoginPage() {
               </p>
             </motion.div>
 
+            {/* Info banner (session timeout, etc.) */}
+            <AnimatePresence>
+              {infoBanner && !error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <infoBanner.icon className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <p className="text-sm text-blue-700 font-medium pt-1">
+                      {infoBanner.message}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Error */}
             <AnimatePresence>
               {error && (
@@ -317,9 +407,9 @@ export default function LoginPage() {
                 >
                   <div className="flex items-start gap-3 p-4 bg-[var(--error-light)] border border-[var(--error)]/20 rounded-xl">
                     <div className="w-8 h-8 rounded-lg bg-[var(--error)]/10 flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-4 h-4 text-[var(--error)]" />
+                      <AlertTriangle className="w-4 h-4 text-[var(--error)]" />
                     </div>
-                    <p className="text-sm text-[var(--error)] font-medium pt-1">
+                    <p className="text-sm text-[var(--error)] font-medium pt-1 leading-relaxed">
                       {error}
                     </p>
                   </div>
@@ -433,6 +523,21 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+              </motion.div>
+
+              {/* Forgot password link */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.5 : 0.4 }}
+                className="flex justify-end -mt-1"
+              >
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs font-medium text-[var(--primary)] hover:text-[var(--secondary)] hover:underline transition-all duration-200"
+                >
+                  Forgot password?
+                </Link>
               </motion.div>
 
               <motion.div

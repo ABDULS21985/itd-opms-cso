@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PageSkeleton } from "@/components/shared/loading-skeleton";
+import { UserPicker } from "@/components/shared/pickers";
 import {
   useMeeting,
   useUpdateMeeting,
@@ -67,6 +68,7 @@ export default function MeetingDetailPage() {
   const [actionForm, setActionForm] = useState({
     title: "",
     ownerId: "",
+    ownerDisplay: "",
     dueDate: "",
     priority: "medium",
   });
@@ -145,6 +147,7 @@ export default function MeetingDetailPage() {
           setActionForm({
             title: "",
             ownerId: "",
+            ownerDisplay: "",
             dueDate: "",
             priority: "medium",
           });
@@ -653,24 +656,20 @@ export default function MeetingDetailPage() {
                   }}
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
-                  Owner ID *
-                </label>
-                <input
-                  type="text"
-                  value={actionForm.ownerId}
-                  onChange={(e) =>
-                    setActionForm({ ...actionForm, ownerId: e.target.value })
-                  }
-                  placeholder="UUID of owner"
-                  className="w-full rounded-lg border px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-              </div>
+              <UserPicker
+                label="Owner"
+                required
+                value={actionForm.ownerId || undefined}
+                displayValue={actionForm.ownerDisplay}
+                onChange={(id, name) =>
+                  setActionForm({
+                    ...actionForm,
+                    ownerId: id ?? "",
+                    ownerDisplay: name,
+                  })
+                }
+                placeholder="Search for owner..."
+              />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

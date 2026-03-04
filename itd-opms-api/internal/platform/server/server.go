@@ -206,9 +206,11 @@ func (s *Server) Setup() {
 				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
 			}
 
-			// Public: login, refresh, OIDC config.
+			// Public: login, refresh, forgot/reset password, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/forgot-password", authHandler.ForgotPassword)
+			r.Post("/reset-password", authHandler.ResetPassword)
 
 			// OIDC routes (public, used by frontend PKCE flow).
 			if oidcHandler != nil {

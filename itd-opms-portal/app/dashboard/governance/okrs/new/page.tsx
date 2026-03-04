@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { OKRPicker } from "@/components/shared/pickers";
 import { useCreateOKR } from "@/hooks/use-governance";
 import { useOrgUnits } from "@/hooks/use-system";
 
@@ -83,6 +84,7 @@ export default function CreateOKRPage() {
   const [level, setLevel] = useState("");
   const [period, setPeriod] = useState("");
   const [parentId, setParentId] = useState("");
+  const [parentDisplay, setParentDisplay] = useState("");
   const [scopeId, setScopeId] = useState("");
   const [scoringMethod, setScoringMethod] = useState("percentage");
 
@@ -317,12 +319,15 @@ export default function CreateOKRPage() {
                       error={errors.period}
                     />
                   </div>
-                  <FormField
-                    label="Parent OKR ID"
-                    name="parentId"
-                    value={parentId}
-                    onChange={setParentId}
-                    placeholder="Optional UUID of parent OKR"
+                  <OKRPicker
+                    label="Parent OKR"
+                    value={parentId || undefined}
+                    displayValue={parentDisplay}
+                    onChange={(id, name) => {
+                      setParentId(id ?? "");
+                      setParentDisplay(name);
+                    }}
+                    placeholder="Search for a parent OKR..."
                     description="Link this OKR to a parent objective for cascading alignment."
                   />
                   <FormField
@@ -395,7 +400,7 @@ export default function CreateOKRPage() {
                         value={findLabel(orgUnitOptions, scopeId)}
                       />
                       {parentId && (
-                        <ReviewField label="Parent OKR" value={parentId} />
+                        <ReviewField label="Parent OKR" value={parentDisplay || parentId} />
                       )}
                     </div>
                   </button>

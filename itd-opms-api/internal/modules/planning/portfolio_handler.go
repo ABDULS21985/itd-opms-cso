@@ -313,9 +313,14 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		ragStatusParam = &rs
 	}
 
+	var searchParam *string
+	if q := r.URL.Query().Get("search"); q != "" {
+		searchParam = &q
+	}
+
 	params := types.ParsePagination(r)
 
-	projects, total, err := h.svc.ListProjects(r.Context(), portfolioID, statusParam, ragStatusParam, params.Limit, params.Offset())
+	projects, total, err := h.svc.ListProjects(r.Context(), portfolioID, statusParam, ragStatusParam, searchParam, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return
