@@ -703,6 +703,11 @@ func (s *Service) ListExecutions(ctx context.Context, ruleID uuid.UUID, status s
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Verify the user has org-scope access to the parent rule.
+	if _, err := s.GetRule(ctx, ruleID); err != nil {
+		return nil, 0, err
+	}
+
 	var whereClauses []string
 	var args []any
 	argIdx := 0
@@ -765,27 +770,40 @@ func (s *Service) ListAllExecutions(ctx context.Context, status string, limit, o
 	argIdx := 0
 	nextArg := func() string { argIdx++; return fmt.Sprintf("$%d", argIdx) }
 
-	whereClauses = append(whereClauses, "tenant_id = "+nextArg())
+	whereClauses = append(whereClauses, "ae.tenant_id = "+nextArg())
 	args = append(args, auth.TenantID)
 
 	if status != "" {
-		whereClauses = append(whereClauses, "status = "+nextArg())
+		whereClauses = append(whereClauses, "ae.status = "+nextArg())
 		args = append(args, status)
 	}
 
+	// Org-scope filter via joined automation_rules table.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "ar.org_unit_id", argIdx+1)
+	if orgClause != "" {
+		whereClauses = append(whereClauses, orgClause)
+		if orgParam != nil {
+			args = append(args, orgParam)
+			argIdx++
+		}
+	}
+
 	where := strings.Join(whereClauses, " AND ")
+	joinClause := "FROM automation_executions ae JOIN automation_rules ar ON ar.id = ae.rule_id"
 
 	// Count.
 	var total int64
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM automation_executions WHERE %s", where)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) %s WHERE %s", joinClause, where)
 	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count automation executions", err)
 	}
 
-	// Fetch.
+	// Fetch — select execution columns with ae. prefix.
+	execCols := `ae.id, ae.rule_id, ae.tenant_id, ae.trigger_event, ae.entity_type, ae.entity_id,
+		ae.actions_taken, ae.status, ae.error_message, ae.duration_ms, ae.executed_at`
 	query := fmt.Sprintf(
-		"SELECT %s FROM automation_executions WHERE %s ORDER BY executed_at DESC LIMIT %s OFFSET %s",
-		executionColumns, where, nextArg(), nextArg(),
+		"SELECT %s %s WHERE %s ORDER BY ae.executed_at DESC LIMIT %s OFFSET %s",
+		execCols, joinClause, where, nextArg(), nextArg(),
 	)
 	args = append(args, limit, offset)
 
@@ -816,25 +834,46 @@ func (s *Service) GetStats(ctx context.Context) (*AutomationStats, error) {
 
 	stats := &AutomationStats{}
 
+	// Org-scope filter for rules.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	rulesArgs := []any{auth.TenantID}
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			rulesArgs = append(rulesArgs, orgParam)
+		}
+	}
+
 	// Total and active rules.
-	err := s.pool.QueryRow(ctx,
-		"SELECT COUNT(*), COUNT(*) FILTER (WHERE is_active = true) FROM automation_rules WHERE tenant_id = $1",
-		auth.TenantID,
-	).Scan(&stats.TotalRules, &stats.ActiveRules)
+	rulesQuery := fmt.Sprintf(
+		"SELECT COUNT(*), COUNT(*) FILTER (WHERE is_active = true) FROM automation_rules WHERE tenant_id = $1%s",
+		orgSQL,
+	)
+	err := s.pool.QueryRow(ctx, rulesQuery, rulesArgs...).Scan(&stats.TotalRules, &stats.ActiveRules)
 	if err != nil {
 		return nil, apperrors.Internal("failed to count automation rules", err)
 	}
 
-	// Executions today and failures today.
+	// Executions today and failures today — join to rules for org filtering.
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	err = s.pool.QueryRow(ctx,
-		`SELECT
+	execOrgClause, execOrgParam := types.BuildOrgFilter(auth, "ar.org_unit_id", 3)
+	execArgs := []any{auth.TenantID, today}
+	execOrgSQL := ""
+	if execOrgClause != "" {
+		execOrgSQL = " AND " + execOrgClause
+		if execOrgParam != nil {
+			execArgs = append(execArgs, execOrgParam)
+		}
+	}
+
+	execQuery := fmt.Sprintf(`SELECT
 			COUNT(*),
-			COUNT(*) FILTER (WHERE status = 'failed')
-		FROM automation_executions
-		WHERE tenant_id = $1 AND executed_at >= $2`,
-		auth.TenantID, today,
-	).Scan(&stats.ExecutionsToday, &stats.FailuresToday)
+			COUNT(*) FILTER (WHERE ae.status = 'failed')
+		FROM automation_executions ae
+		JOIN automation_rules ar ON ar.id = ae.rule_id
+		WHERE ae.tenant_id = $1 AND ae.executed_at >= $2%s`, execOrgSQL)
+	err = s.pool.QueryRow(ctx, execQuery, execArgs...).Scan(&stats.ExecutionsToday, &stats.FailuresToday)
 	if err != nil {
 		return nil, apperrors.Internal("failed to count automation executions", err)
 	}
