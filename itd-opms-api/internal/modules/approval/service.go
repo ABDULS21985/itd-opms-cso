@@ -13,6 +13,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // Service handles business logic for the approval workflow engine.
@@ -35,6 +36,8 @@ func NewService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Service {
 
 // ListWorkflowDefinitions returns all active workflow definitions, optionally filtered by entity type.
 func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUID, entityType string) ([]WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var conditions []string
 	var args []any
 	argIdx := 0
@@ -48,6 +51,14 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 		args = append(args, entityType)
 	}
 
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", argIdx+1)
+	if orgClause != "" {
+		conditions = append(conditions, orgClause)
+		args = append(args, orgParam)
+		argIdx++
+	}
+
 	whereClause := ""
 	for i, c := range conditions {
 		if i == 0 {
@@ -59,7 +70,7 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
 		FROM workflow_definitions
 		%s
 		ORDER BY created_at DESC`, whereClause)
@@ -76,7 +87,7 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 		var stepsJSON []byte
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &stepsJSON,
-			&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan workflow definition", err)
 		}
@@ -103,9 +114,11 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 
 // GetWorkflowDefinition retrieves a single workflow definition by ID.
 func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.UUID) (*WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	query := `
 		SELECT id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
 		FROM workflow_definitions
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -113,7 +126,7 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 	var stepsJSON []byte
 	err := s.pool.QueryRow(ctx, query, id, tenantID).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &stepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -121,6 +134,12 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 		}
 		return nil, apperrors.Internal("failed to get workflow definition", err)
 	}
+
+	// Org-scope access check.
+	if auth != nil && d.OrgUnitID != nil && !auth.HasOrgAccess(*d.OrgUnitID) {
+		return nil, apperrors.NotFound("WorkflowDefinition", id.String())
+	}
+
 	if stepsJSON != nil {
 		if err := json.Unmarshal(stepsJSON, &d.Steps); err != nil {
 			return nil, apperrors.Internal("failed to parse workflow steps", err)
@@ -135,6 +154,8 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 
 // CreateWorkflowDefinition creates a new workflow definition.
 func (s *Service) CreateWorkflowDefinition(ctx context.Context, tenantID, createdBy uuid.UUID, req CreateWorkflowDefinitionRequest) (*WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	if req.Name == "" {
 		return nil, apperrors.BadRequest("Name is required")
 	}
@@ -153,22 +174,29 @@ func (s *Service) CreateWorkflowDefinition(ctx context.Context, tenantID, create
 		return nil, apperrors.Internal("failed to marshal workflow steps", err)
 	}
 
+	// Derive org_unit_id from auth context.
+	var orgUnitID *uuid.UUID
+	if auth != nil && auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	query := `
 		INSERT INTO workflow_definitions (
 			id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at`
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at`
 
 	var d WorkflowDefinition
 	var returnedStepsJSON []byte
 	err = s.pool.QueryRow(ctx, query,
 		id, tenantID, req.Name, req.Description, req.EntityType, stepsJSON,
-		true, 1, req.AutoAssignRules, createdBy, now, now,
+		true, 1, req.AutoAssignRules, createdBy, orgUnitID, now, now,
 	).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &returnedStepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to create workflow definition", err)
@@ -232,7 +260,7 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 			updated_at = $8
 		WHERE id = $9 AND tenant_id = $10
 		RETURNING id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at`
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at`
 
 	var d WorkflowDefinition
 	var returnedStepsJSON []byte
@@ -242,7 +270,7 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 		id, tenantID,
 	).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &returnedStepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to update workflow definition", err)
@@ -276,6 +304,11 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 
 // DeleteWorkflowDefinition soft-deletes a workflow definition by setting is_active to false.
 func (s *Service) DeleteWorkflowDefinition(ctx context.Context, tenantID, id, deletedBy uuid.UUID) error {
+	// Verify access (GetWorkflowDefinition includes org-scope check).
+	if _, err := s.GetWorkflowDefinition(ctx, tenantID, id); err != nil {
+		return err
+	}
+
 	now := time.Now().UTC()
 	query := `
 		UPDATE workflow_definitions
@@ -316,6 +349,8 @@ func (s *Service) DeleteWorkflowDefinition(ctx context.Context, tenantID, id, de
 // It finds the matching workflow definition, creates the chain record,
 // and creates the initial step(s) for the first step order.
 func (s *Service) StartApproval(ctx context.Context, tenantID, createdBy uuid.UUID, req StartApprovalRequest) (*ApprovalChain, error) {
+	auth := types.GetAuthContext(ctx)
+
 	if req.EntityType == "" {
 		return nil, apperrors.BadRequest("Entity type is required")
 	}
@@ -375,27 +410,34 @@ func (s *Service) StartApproval(ctx context.Context, tenantID, createdBy uuid.UU
 	now := time.Now().UTC()
 	chainID := uuid.New()
 
+	// Derive org_unit_id from auth context.
+	var orgUnitID *uuid.UUID
+	if auth != nil && auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	// Create the chain.
 	chainQuery := `
 		INSERT INTO approval_chains (
 			id, entity_type, entity_id, tenant_id, workflow_definition_id,
 			status, current_step, deadline, urgency, metadata,
-			created_by, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			created_by, org_unit_id, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, entity_type, entity_id, tenant_id, workflow_definition_id,
 			status, current_step, deadline, urgency, metadata,
-			created_by, created_at, completed_at`
+			created_by, org_unit_id, created_at, completed_at`
 
 	var chain ApprovalChain
 	err = s.pool.QueryRow(ctx, chainQuery,
 		chainID, req.EntityType, req.EntityID, tenantID, wfID,
 		ChainStatusInProgress, 1, req.Deadline, urgency, req.Metadata,
-		createdBy, now,
+		createdBy, orgUnitID, now,
 	).Scan(
 		&chain.ID, &chain.EntityType, &chain.EntityID, &chain.TenantID,
 		&chain.WorkflowDefinitionID, &chain.Status, &chain.CurrentStep,
 		&chain.Deadline, &chain.Urgency, &chain.Metadata,
-		&chain.CreatedBy, &chain.CreatedAt, &chain.CompletedAt,
+		&chain.CreatedBy, &chain.OrgUnitID, &chain.CreatedAt, &chain.CompletedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to create approval chain", err)
@@ -480,10 +522,12 @@ func (s *Service) createStepsForOrder(ctx context.Context, chainID uuid.UUID, st
 
 // GetApprovalChain retrieves an approval chain with all its steps (joined with user names).
 func (s *Service) GetApprovalChain(ctx context.Context, tenantID, chainID uuid.UUID) (*ApprovalChain, error) {
+	auth := types.GetAuthContext(ctx)
+
 	chainQuery := `
 		SELECT id, entity_type, entity_id, tenant_id, workflow_definition_id,
 			status, current_step, deadline, urgency, metadata,
-			created_by, created_at, completed_at
+			created_by, org_unit_id, created_at, completed_at
 		FROM approval_chains
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -492,13 +536,18 @@ func (s *Service) GetApprovalChain(ctx context.Context, tenantID, chainID uuid.U
 		&chain.ID, &chain.EntityType, &chain.EntityID, &chain.TenantID,
 		&chain.WorkflowDefinitionID, &chain.Status, &chain.CurrentStep,
 		&chain.Deadline, &chain.Urgency, &chain.Metadata,
-		&chain.CreatedBy, &chain.CreatedAt, &chain.CompletedAt,
+		&chain.CreatedBy, &chain.OrgUnitID, &chain.CreatedAt, &chain.CompletedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("ApprovalChain", chainID.String())
 		}
 		return nil, apperrors.Internal("failed to get approval chain", err)
+	}
+
+	// Org-scope access check.
+	if auth != nil && chain.OrgUnitID != nil && !auth.HasOrgAccess(*chain.OrgUnitID) {
+		return nil, apperrors.NotFound("ApprovalChain", chainID.String())
 	}
 
 	// Load steps with approver names.
@@ -512,10 +561,12 @@ func (s *Service) GetApprovalChain(ctx context.Context, tenantID, chainID uuid.U
 
 // GetApprovalChainForEntity retrieves the most recent approval chain for an entity.
 func (s *Service) GetApprovalChainForEntity(ctx context.Context, tenantID uuid.UUID, entityType string, entityID uuid.UUID) (*ApprovalChain, error) {
+	auth := types.GetAuthContext(ctx)
+
 	chainQuery := `
 		SELECT id, entity_type, entity_id, tenant_id, workflow_definition_id,
 			status, current_step, deadline, urgency, metadata,
-			created_by, created_at, completed_at
+			created_by, org_unit_id, created_at, completed_at
 		FROM approval_chains
 		WHERE entity_type = $1 AND entity_id = $2 AND tenant_id = $3
 		ORDER BY created_at DESC
@@ -526,13 +577,18 @@ func (s *Service) GetApprovalChainForEntity(ctx context.Context, tenantID uuid.U
 		&chain.ID, &chain.EntityType, &chain.EntityID, &chain.TenantID,
 		&chain.WorkflowDefinitionID, &chain.Status, &chain.CurrentStep,
 		&chain.Deadline, &chain.Urgency, &chain.Metadata,
-		&chain.CreatedBy, &chain.CreatedAt, &chain.CompletedAt,
+		&chain.CreatedBy, &chain.OrgUnitID, &chain.CreatedAt, &chain.CompletedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("ApprovalChain", fmt.Sprintf("%s/%s", entityType, entityID))
 		}
 		return nil, apperrors.Internal("failed to get approval chain for entity", err)
+	}
+
+	// Org-scope access check.
+	if auth != nil && chain.OrgUnitID != nil && !auth.HasOrgAccess(*chain.OrgUnitID) {
+		return nil, apperrors.NotFound("ApprovalChain", fmt.Sprintf("%s/%s", entityType, entityID))
 	}
 
 	// Load steps with approver names.
@@ -926,12 +982,15 @@ func (s *Service) DelegateStep(ctx context.Context, tenantID, userID uuid.UUID, 
 
 // CancelChain cancels an in-progress approval chain.
 func (s *Service) CancelChain(ctx context.Context, tenantID, cancelledBy, chainID uuid.UUID) error {
+	auth := types.GetAuthContext(ctx)
+
 	// Verify the chain exists and is in progress.
 	var cStatus string
 	var cTenantID uuid.UUID
+	var cOrgUnitID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT status, tenant_id FROM approval_chains WHERE id = $1`, chainID,
-	).Scan(&cStatus, &cTenantID)
+		`SELECT status, tenant_id, org_unit_id FROM approval_chains WHERE id = $1`, chainID,
+	).Scan(&cStatus, &cTenantID, &cOrgUnitID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return apperrors.NotFound("ApprovalChain", chainID.String())
@@ -941,6 +1000,12 @@ func (s *Service) CancelChain(ctx context.Context, tenantID, cancelledBy, chainI
 	if cTenantID != tenantID {
 		return apperrors.NotFound("ApprovalChain", chainID.String())
 	}
+
+	// Org-scope access check.
+	if auth != nil && cOrgUnitID != nil && !auth.HasOrgAccess(*cOrgUnitID) {
+		return apperrors.NotFound("ApprovalChain", chainID.String())
+	}
+
 	if cStatus != ChainStatusInProgress && cStatus != ChainStatusPending {
 		return apperrors.BadRequest(fmt.Sprintf("Cannot cancel a chain with status '%s'", cStatus))
 	}
@@ -1097,6 +1162,8 @@ func (s *Service) CountMyPendingApprovals(ctx context.Context, tenantID, userID 
 
 // GetApprovalHistory returns a paginated list of approval chains for the given entity type.
 func (s *Service) GetApprovalHistory(ctx context.Context, tenantID uuid.UUID, entityType string, limit, offset int) ([]ApprovalHistoryItem, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var conditions []string
 	var args []any
 	argIdx := 0
@@ -1108,6 +1175,14 @@ func (s *Service) GetApprovalHistory(ctx context.Context, tenantID uuid.UUID, en
 	if entityType != "" {
 		conditions = append(conditions, fmt.Sprintf("c.entity_type = %s", nextArg()))
 		args = append(args, entityType)
+	}
+
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "c.org_unit_id", argIdx+1)
+	if orgClause != "" {
+		conditions = append(conditions, orgClause)
+		args = append(args, orgParam)
+		argIdx++
 	}
 
 	whereClause := ""

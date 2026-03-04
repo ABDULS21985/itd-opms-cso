@@ -1,7 +1,17 @@
 "use client";
 
 import { type ReactNode, useState, useRef, useCallback, useEffect } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, Inbox, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Inbox,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TableRowSkeleton } from "@/components/shared/loading-skeleton";
@@ -64,6 +74,10 @@ export interface DataTableProps<T> {
     totalItems?: number;
     pageSize?: number;
     onPageChange: (page: number) => void;
+    /** Per-page size options (e.g. [10,20,50,100]). Omit to hide selector. */
+    pageSizeOptions?: number[];
+    /** Called when user changes the page size. */
+    onPageSizeChange?: (size: number) => void;
   };
   /** Optional row click handler. */
   onRowClick?: (item: T) => void;
@@ -109,41 +123,138 @@ function SimplePagination({
   currentPage,
   totalPages,
   totalItems,
+  pageSize,
   onPageChange,
+  pageSizeOptions,
+  onPageSizeChange,
 }: {
   currentPage: number;
   totalPages: number;
   totalItems?: number;
+  pageSize?: number;
   onPageChange: (page: number) => void;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
 }) {
+  /* Build visible page numbers with ellipsis */
+  function getPageNumbers(): (number | "ellipsis")[] {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages: (number | "ellipsis")[] = [1];
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    if (start > 2) pages.push("ellipsis");
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push("ellipsis");
+    pages.push(totalPages);
+    return pages;
+  }
+
+  const rangeStart = totalItems !== undefined && pageSize ? (currentPage - 1) * pageSize + 1 : undefined;
+  const rangeEnd = totalItems !== undefined && pageSize ? Math.min(currentPage * pageSize, totalItems) : undefined;
+
   return (
-    <div className="flex items-center justify-between text-sm">
-      <p className="text-[var(--neutral-gray)]">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+      {/* Left: results info + page size */}
+      <div className="flex items-center gap-4">
         {totalItems !== undefined && (
-          <span>
-            {totalItems} result{totalItems !== 1 ? "s" : ""}
-          </span>
+          <p className="text-[var(--neutral-gray)] tabular-nums">
+            {rangeStart !== undefined && rangeEnd !== undefined ? (
+              <>
+                Showing <span className="font-medium text-[var(--text-primary)]">{rangeStart}&ndash;{rangeEnd}</span> of{" "}
+                <span className="font-medium text-[var(--text-primary)]">{totalItems.toLocaleString()}</span>
+              </>
+            ) : (
+              <>
+                {totalItems.toLocaleString()} result{totalItems !== 1 ? "s" : ""}
+              </>
+            )}
+          </p>
         )}
-      </p>
-      <div className="flex items-center gap-2">
+        {pageSizeOptions && pageSizeOptions.length > 0 && onPageSizeChange && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--neutral-gray)]">Per page</span>
+            <select
+              value={pageSize ?? pageSizeOptions[0]}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 cursor-pointer"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Right: page navigation */}
+      <div className="flex items-center gap-1">
+        {/* First page */}
+        <button
+          type="button"
+          onClick={() => onPageChange(1)}
+          disabled={currentPage <= 1}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="First page"
+        >
+          <ChevronsLeft size={16} />
+        </button>
+        {/* Previous */}
         <button
           type="button"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
-          className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Previous page"
         >
-          Previous
+          <ChevronLeft size={16} />
         </button>
-        <span className="text-[var(--neutral-gray)] tabular-nums">
-          {currentPage} / {totalPages}
-        </span>
+
+        {/* Page numbers */}
+        {getPageNumbers().map((p, i) =>
+          p === "ellipsis" ? (
+            <span
+              key={`ell-${i}`}
+              className="inline-flex items-center justify-center h-8 w-8 text-xs text-[var(--neutral-gray)]"
+            >
+              &hellip;
+            </span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`inline-flex items-center justify-center h-8 w-8 rounded-lg text-xs font-medium transition-all ${
+                p === currentPage
+                  ? "bg-[var(--primary)] text-white shadow-sm"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--surface-1)]"
+              }`}
+            >
+              {p}
+            </button>
+          ),
+        )}
+
+        {/* Next */}
         <button
           type="button"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Next page"
         >
-          Next
+          <ChevronRight size={16} />
+        </button>
+        {/* Last page */}
+        <button
+          type="button"
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage >= totalPages}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Last page"
+        >
+          <ChevronsRight size={16} />
         </button>
       </div>
     </div>
@@ -512,7 +623,15 @@ export function DataTable<T>({
         {/* Pagination */}
         {pagination && !loading && data.length > 0 && (
           <div className="border-t border-[var(--border)] px-4 py-3">
-            <SimplePagination {...pagination} />
+            <SimplePagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.totalItems}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.onPageChange}
+              pageSizeOptions={pagination.pageSizeOptions}
+              onPageSizeChange={pagination.onPageSizeChange}
+            />
           </div>
         )}
       </div>

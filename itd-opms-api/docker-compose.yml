@@ -124,6 +124,10 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: opms-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=90d"
+      - "--storage.tsdb.retention.size=5GB"
     ports:
       - "9090:9090"
     volumes:

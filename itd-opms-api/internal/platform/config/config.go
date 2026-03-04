@@ -29,14 +29,15 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Name     string `mapstructure:"name"`
-	SSLMode  string `mapstructure:"sslmode"`
-	MaxConns int32  `mapstructure:"max_conns"`
-	MinConns int32  `mapstructure:"min_conns"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	User       string `mapstructure:"user"`
+	Password   string `mapstructure:"password"`
+	Name       string `mapstructure:"name"`
+	SSLMode    string `mapstructure:"sslmode"`
+	MaxConns   int32  `mapstructure:"max_conns"`
+	MinConns   int32  `mapstructure:"min_conns"`
+	RLSEnabled bool   `mapstructure:"rls_enabled"`
 }
 
 func (d DatabaseConfig) DSN() string {
@@ -139,6 +140,7 @@ func Load() (*Config, error) {
 	v.SetDefault("DB_SSLMODE", "disable")
 	v.SetDefault("DB_MAX_CONNS", 25)
 	v.SetDefault("DB_MIN_CONNS", 5)
+	v.SetDefault("DB_RLS_ENABLED", false)
 	v.SetDefault("REDIS_HOST", "localhost")
 	v.SetDefault("REDIS_PORT", 6379)
 	v.SetDefault("REDIS_PASSWORD", "")
@@ -188,14 +190,15 @@ func Load() (*Config, error) {
 			Env:  v.GetString("SERVER_ENV"),
 		},
 		Database: DatabaseConfig{
-			Host:     v.GetString("DB_HOST"),
-			Port:     v.GetInt("DB_PORT"),
-			User:     v.GetString("DB_USER"),
-			Password: v.GetString("DB_PASSWORD"),
-			Name:     v.GetString("DB_NAME"),
-			SSLMode:  v.GetString("DB_SSLMODE"),
-			MaxConns: v.GetInt32("DB_MAX_CONNS"),
-			MinConns: v.GetInt32("DB_MIN_CONNS"),
+			Host:       v.GetString("DB_HOST"),
+			Port:       v.GetInt("DB_PORT"),
+			User:       v.GetString("DB_USER"),
+			Password:   v.GetString("DB_PASSWORD"),
+			Name:       v.GetString("DB_NAME"),
+			SSLMode:    v.GetString("DB_SSLMODE"),
+			MaxConns:   v.GetInt32("DB_MAX_CONNS"),
+			MinConns:   v.GetInt32("DB_MIN_CONNS"),
+			RLSEnabled: v.GetBool("DB_RLS_ENABLED"),
 		},
 		Redis: RedisConfig{
 			Host:     v.GetString("REDIS_HOST"),

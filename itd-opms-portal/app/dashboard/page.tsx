@@ -225,7 +225,7 @@ export default function DashboardPage() {
             {greeting}, {user?.displayName || "User"}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Executive Command Center — IT Operations & Project Management
+            Executive Command Center — IT AMD Projects and Initiatives
           </p>
         </div>
 

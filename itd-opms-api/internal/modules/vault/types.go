@@ -101,6 +101,7 @@ type VaultDocument struct {
 	Status           string     `json:"status"`
 	AccessLevel      string     `json:"accessLevel"`
 	UploadedBy       uuid.UUID  `json:"uploadedBy"`
+	OrgUnitID        *uuid.UUID `json:"orgUnitId,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
 
@@ -120,6 +121,7 @@ type DocumentFolder struct {
 	Path        string     `json:"path"`
 	Color       *string    `json:"color"`
 	CreatedBy   uuid.UUID  `json:"createdBy"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 

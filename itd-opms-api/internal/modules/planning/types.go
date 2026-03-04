@@ -130,6 +130,7 @@ const (
 type Portfolio struct {
 	ID          uuid.UUID  `json:"id"`
 	TenantID    uuid.UUID  `json:"tenantId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
@@ -364,6 +365,7 @@ type CreatePortfolioRequest struct {
 	Name        string     `json:"name" validate:"required"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 	FiscalYear  int        `json:"fiscalYear" validate:"required"`
 	Status      *string    `json:"status"`
 }

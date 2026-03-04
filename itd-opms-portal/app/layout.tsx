@@ -7,7 +7,7 @@ import { NotificationProvider } from "@/providers/notification-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ITD-OPMS | CBN IT Operations & Project Management",
+  title: "ITD-OPMS | CBN IT AMD Projects and Initiatives",
   description:
     "Central Bank of Nigeria — Information Technology Department. Operations and Project Management System for governance, service management, asset tracking, and strategic planning.",
   keywords: [
@@ -47,6 +47,7 @@ export default function RootLayout({
       </head>
       <body
         className="min-h-screen bg-background text-foreground antialiased"
+        suppressHydrationWarning={true}
         style={{
           fontFamily:
             'Aptos, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -56,7 +57,7 @@ export default function RootLayout({
           <QueryProvider>
             <AuthProvider>
               <NotificationProvider>
-              {children}
+                {children}
               </NotificationProvider>
               <Toaster
                 theme="system"

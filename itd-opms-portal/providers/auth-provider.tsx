@@ -40,8 +40,8 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isLoggedIn: boolean;
-  /** Dev-mode login via email/password. */
-  login: (email: string, password: string) => Promise<void>;
+  /** Dev-mode login via email/password. Returns whether password change is required. */
+  login: (email: string, password: string) => Promise<{ passwordChangeRequired: boolean }>;
   /** Initiate Microsoft Entra ID OIDC/PKCE login flow. */
   loginWithEntraID: () => Promise<void>;
   logout: () => void;
@@ -54,7 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
   isLoggedIn: false,
-  login: async () => { },
+  login: async () => ({ passwordChangeRequired: false }),
   loginWithEntraID: async () => { },
   logout: () => { },
   refreshUser: async () => { },
@@ -111,12 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accessToken: string;
         refreshToken: string;
         user: User;
+        passwordChangeRequired?: boolean;
       }>("/auth/login", { email, password });
       setToken(response.accessToken);
       setRefreshToken(response.refreshToken);
       setAuthMode("dev");
       setUser(response.user);
       setIsLoading(false);
+      return { passwordChangeRequired: response.passwordChangeRequired ?? false };
     },
     [],
   );

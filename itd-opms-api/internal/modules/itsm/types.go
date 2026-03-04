@@ -207,6 +207,7 @@ type Ticket struct {
 	RelatedTicketIDs        []uuid.UUID     `json:"relatedTicketIds"`
 	LinkedProblemID         *uuid.UUID      `json:"linkedProblemId"`
 	LinkedAssetIDs          []uuid.UUID     `json:"linkedAssetIds"`
+	OrgUnitID               *uuid.UUID      `json:"orgUnitId"`
 	ResolutionNotes         *string         `json:"resolutionNotes"`
 	ResolvedAt              *time.Time      `json:"resolvedAt"`
 	ClosedAt                *time.Time      `json:"closedAt"`

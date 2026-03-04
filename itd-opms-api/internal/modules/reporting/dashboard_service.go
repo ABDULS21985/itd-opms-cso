@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -266,11 +267,18 @@ func (s *DashboardService) GetTicketsByPriority(ctx context.Context) ([]ChartDat
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	// Build org-scope filter (tickets have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT priority AS label, COUNT(*)::int AS value
 		FROM tickets
 		WHERE tenant_id = $1
-			AND status NOT IN ('closed', 'cancelled')
+			AND status NOT IN ('closed', 'cancelled')%s
 			GROUP BY priority
 			ORDER BY
 				CASE priority
@@ -279,9 +287,13 @@ func (s *DashboardService) GetTicketsByPriority(ctx context.Context) ([]ChartDat
 					WHEN 'P3_medium' THEN 3
 					WHEN 'P4_low' THEN 4
 					ELSE 5
-				END`
+				END`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetTicketsByStatus returns ticket counts grouped by status.
@@ -291,14 +303,24 @@ func (s *DashboardService) GetTicketsByStatus(ctx context.Context) ([]ChartDataP
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM tickets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -312,14 +334,24 @@ func (s *DashboardService) GetProjectsByStatus(ctx context.Context) ([]ChartData
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -333,14 +365,24 @@ func (s *DashboardService) GetAssetsByType(ctx context.Context) ([]ChartDataPoin
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT type AS label, COUNT(*)::int AS value
 		FROM assets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY type
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetAssetsByStatus returns asset counts grouped by status.
@@ -350,14 +392,24 @@ func (s *DashboardService) GetAssetsByStatus(ctx context.Context) ([]ChartDataPo
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM assets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -371,7 +423,13 @@ func (s *DashboardService) GetSLAComplianceRate(ctx context.Context, since time.
 		return 0, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			CASE WHEN COUNT(*) = 0 THEN 100.0
 			ELSE (COUNT(*) FILTER (WHERE sla_resolution_met = true)::float8 / COUNT(*)::float8) * 100.0
@@ -379,10 +437,15 @@ func (s *DashboardService) GetSLAComplianceRate(ctx context.Context, since time.
 		FROM tickets
 		WHERE tenant_id = $1
 			AND sla_resolution_met IS NOT NULL
-			AND created_at >= $2`
+			AND created_at >= $2%s`, orgSQL)
+
+	args := []any{auth.TenantID, since}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
 
 	var rate float64
-	err := s.pool.QueryRow(ctx, query, auth.TenantID, since).Scan(&rate)
+	err := s.pool.QueryRow(ctx, query, args...).Scan(&rate)
 	if err != nil {
 		return 0, apperrors.Internal("failed to get SLA compliance rate", err)
 	}
@@ -478,14 +541,24 @@ func (s *DashboardService) GetProjectsByRAG(ctx context.Context) ([]ChartDataPoi
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT rag_status AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY rag_status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetProjectsByPriority returns project counts grouped by priority.
@@ -495,10 +568,16 @@ func (s *DashboardService) GetProjectsByPriority(ctx context.Context) ([]ChartDa
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT priority AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY priority
 		ORDER BY
 			CASE priority
@@ -507,9 +586,13 @@ func (s *DashboardService) GetProjectsByPriority(ctx context.Context) ([]ChartDa
 				WHEN 'medium' THEN 3
 				WHEN 'low' THEN 4
 				ELSE 5
-			END`
+			END`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -523,15 +606,28 @@ func (s *DashboardService) GetRisksByCategory(ctx context.Context) ([]ChartDataP
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT COALESCE(category, 'uncategorized') AS label, COUNT(*)::int AS value
-		FROM risk_register
-		WHERE tenant_id = $1
-			AND status = 'open'
-		GROUP BY category
-		ORDER BY value DESC`
+	// risk_register scopes through project's division_id via JOIN.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	joinSQL := ""
+	if orgClause != "" {
+		joinSQL = " JOIN projects p ON p.id = r.project_id"
+		orgSQL = " AND " + orgClause
+	}
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	query := fmt.Sprintf(`
+		SELECT COALESCE(r.category, 'uncategorized') AS label, COUNT(*)::int AS value
+		FROM risk_register r%s
+		WHERE r.tenant_id = $1
+			AND r.status = 'open'%s
+		GROUP BY r.category
+		ORDER BY value DESC`, joinSQL, orgSQL)
+
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -545,14 +641,27 @@ func (s *DashboardService) GetWorkItemsByStatus(ctx context.Context) ([]ChartDat
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT status AS label, COUNT(*)::int AS value
-		FROM work_items
-		WHERE tenant_id = $1
-		GROUP BY status
-		ORDER BY value DESC`
+	// work_items scope through project's division_id via JOIN.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	joinSQL := ""
+	if orgClause != "" {
+		joinSQL = " JOIN projects p ON p.id = wi.project_id"
+		orgSQL = " AND " + orgClause
+	}
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	query := fmt.Sprintf(`
+		SELECT wi.status AS label, COUNT(*)::int AS value
+		FROM work_items wi%s
+		WHERE wi.tenant_id = $1%s
+		GROUP BY wi.status
+		ORDER BY value DESC`, joinSQL, orgSQL)
+
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -588,7 +697,14 @@ func (s *DashboardService) GetOfficeAnalytics(ctx context.Context) ([]OfficeAnal
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	// Filter visible org units by org scope (o.id matches the division).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "o.id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			o.id AS division_id,
 			o.name AS division_name,
@@ -606,11 +722,15 @@ func (s *DashboardService) GetOfficeAnalytics(ctx context.Context) ([]OfficeAnal
 		LEFT JOIN projects p ON p.division_id = o.id AND p.tenant_id = $1
 		WHERE o.tenant_id = $1
 			AND o.level IN ('office', 'division')
-			AND o.is_active = true
+			AND o.is_active = true%s
 		GROUP BY o.id, o.name, o.code
-		ORDER BY total_projects DESC`
+		ORDER BY total_projects DESC`, orgSQL)
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to query office analytics", err)
 	}
@@ -684,15 +804,25 @@ func (s *DashboardService) GetProjectsByOffice(ctx context.Context) ([]ChartData
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT COALESCE(o.name, 'Unassigned') AS label, COUNT(*)::int AS value
 		FROM projects p
 		LEFT JOIN org_units o ON o.id = p.division_id
-		WHERE p.tenant_id = $1
+		WHERE p.tenant_id = $1%s
 		GROUP BY o.name
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────

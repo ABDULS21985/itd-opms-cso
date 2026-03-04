@@ -166,17 +166,6 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUI
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Count total matching records.
-	countQuery := `
-		SELECT COUNT(*)
-		FROM work_items
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR assignee_id = $4)
-			AND ($5::text IS NULL OR priority = $5)
-			AND ($6::text IS NULL OR type = $6)`
-
 	var assigneeID *uuid.UUID
 	if assignee != nil && *assignee != "" {
 		parsed, err := uuid.Parse(*assignee)
@@ -185,29 +174,56 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUI
 		}
 	}
 
+	// Build base args: $1=tenantID, $2=projectID, $3=status, $4=assigneeID, $5=priority, $6=wiType.
+	args := []interface{}{auth.TenantID, projectID, status, assigneeID, priority, wiType}
+	nextIdx := 7
+
+	// Add org scope filter via JOIN to projects on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	// Count total matching records.
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE wi.tenant_id = $1
+			AND ($2::uuid IS NULL OR wi.project_id = $2)
+			AND ($3::text IS NULL OR wi.status = $3)
+			AND ($4::uuid IS NULL OR wi.assignee_id = $4)
+			AND ($5::text IS NULL OR wi.priority = $5)
+			AND ($6::text IS NULL OR wi.type = $6)%s`, orgClause)
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, projectID, status, assigneeID, priority, wiType).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count work items", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
-		SELECT id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
-			estimated_hours, actual_hours, due_date, completed_at,
-			sort_order, tags, metadata, created_at, updated_at
-		FROM work_items
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR project_id = $2)
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR assignee_id = $4)
-			AND ($5::text IS NULL OR priority = $5)
-			AND ($6::text IS NULL OR type = $6)
-		ORDER BY sort_order ASC, created_at DESC
-		LIMIT $7 OFFSET $8`
+	dataQuery := fmt.Sprintf(`
+		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
+			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
+			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE wi.tenant_id = $1
+			AND ($2::uuid IS NULL OR wi.project_id = $2)
+			AND ($3::text IS NULL OR wi.status = $3)
+			AND ($4::uuid IS NULL OR wi.assignee_id = $4)
+			AND ($5::text IS NULL OR wi.priority = $5)
+			AND ($6::text IS NULL OR wi.type = $6)%s
+		ORDER BY wi.sort_order ASC, wi.created_at DESC
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, projectID, status, assigneeID, priority, wiType, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list work items", err)
 	}
@@ -562,19 +578,33 @@ func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID *u
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
-			estimated_hours, actual_hours, due_date, completed_at,
-			sort_order, tags, metadata, created_at, updated_at
-		FROM work_items
-		WHERE ($1::uuid IS NULL OR project_id = $1)
-			AND tenant_id = $2
-			AND due_date < NOW()
-			AND status IN ('todo', 'in_progress')
-		ORDER BY due_date ASC`
+	// Build base args: $1=projectID, $2=tenantID.
+	args := []interface{}{projectID, auth.TenantID}
+	nextIdx := 3
 
-	rows, err := s.pool.Query(ctx, query, projectID, auth.TenantID)
+	// Add org scope filter via JOIN to projects on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	query := fmt.Sprintf(`
+		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
+			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
+			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE ($1::uuid IS NULL OR wi.project_id = $1)
+			AND wi.tenant_id = $2
+			AND wi.due_date < NOW()
+			AND wi.status IN ('todo', 'in_progress')%s
+		ORDER BY wi.due_date ASC`, orgClause)
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list overdue work items", err)
 	}

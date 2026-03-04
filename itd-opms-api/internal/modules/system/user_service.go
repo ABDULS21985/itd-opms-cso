@@ -41,6 +41,7 @@ func scanUserDetail(row pgx.Row) (UserDetail, error) {
 		&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 		&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.OrgUnitID, &u.OrgUnitName,
 	)
 	return u, err
 }
@@ -54,6 +55,7 @@ func scanUserDetails(rows pgx.Rows) ([]UserDetail, error) {
 			&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 			&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 			&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+			&u.OrgUnitID, &u.OrgUnitName,
 		); err != nil {
 			return nil, err
 		}
@@ -173,9 +175,11 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.tenant_id = $1
 		  AND ($2::text = 'all' OR ($2::text = 'active' AND u.is_active = true) OR ($2::text = 'inactive' AND u.is_active = false))
 		  AND ($3::text = '' OR u.display_name ILIKE '%' || $3::text || '%' OR u.email ILIKE '%' || $3::text || '%')
@@ -242,13 +246,13 @@ func (s *UserService) CreateUser(ctx context.Context, tenantID uuid.UUID, req Cr
 	defaultPwdHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 	var newID uuid.UUID
 	err = s.pool.QueryRow(ctx, `
-		INSERT INTO users (email, display_name, entra_id, job_title, department, office, unit, tenant_id, password_hash)
-		VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (email, display_name, entra_id, job_title, department, office, unit, tenant_id, password_hash, org_unit_id)
+		VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id`,
 		req.Email, req.DisplayName,
 		ptrStr(req.JobTitle), ptrStr(req.Department),
 		ptrStr(req.Office), ptrStr(req.Unit),
-		tenantID, defaultPwdHash,
+		tenantID, defaultPwdHash, req.OrgUnitID,
 	).Scan(&newID)
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
@@ -277,9 +281,11 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.id = $1 AND u.tenant_id = $2`
 
 	user, err := scanUserDetail(s.pool.QueryRow(ctx, query, userID, tenantID))
@@ -362,6 +368,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		  office = COALESCE(NULLIF($6, ''), office),
 		  unit = COALESCE(NULLIF($7, ''), unit),
 		  phone = COALESCE(NULLIF($8, ''), phone),
+		  org_unit_id = COALESCE($9, org_unit_id),
 		  updated_at = NOW()
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -370,6 +377,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		ptrStr(req.DisplayName), ptrStr(req.JobTitle),
 		ptrStr(req.Department), ptrStr(req.Office),
 		ptrStr(req.Unit), ptrStr(req.Phone),
+		req.OrgUnitID,
 	)
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)

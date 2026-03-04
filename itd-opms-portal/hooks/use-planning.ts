@@ -23,6 +23,10 @@ import type {
   ProjectDocument,
   ProjectDocumentCategoryCount,
   DocumentDownloadResponse,
+  ValidateImportResponse,
+  CommitImportResponse,
+  ImportBatch,
+  ImportBatchError,
 } from "@/types";
 
 /* ================================================================== */
@@ -1336,5 +1340,76 @@ export function useBulkUpdateWorkItems() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["work-items"] });
     },
+  });
+}
+
+/* ================================================================== */
+/*  Bulk Project Import                                                */
+/* ================================================================== */
+
+/**
+ * POST /planning/projects/import/validate - upload and validate a file.
+ */
+export function useValidateProjectImport() {
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<ValidateImportResponse>(
+        "/planning/projects/import/validate",
+        formData,
+      ),
+    onError: () => {
+      toast.error("Failed to validate import file");
+    },
+  });
+}
+
+/**
+ * POST /planning/projects/import/commit - commit a validated batch.
+ */
+export function useCommitProjectImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) =>
+      apiClient.post<CommitImportResponse>(
+        "/planning/projects/import/commit",
+        { batchId },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(
+        `Successfully imported ${data.importedRows} project${data.importedRows !== 1 ? "s" : ""}`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to import projects");
+    },
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id} - get batch details.
+ */
+export function useImportBatch(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch", id],
+    queryFn: () =>
+      apiClient.get<ImportBatch>(
+        `/planning/projects/import/batches/${id}`,
+      ),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id}/errors - get batch errors.
+ */
+export function useImportBatchErrors(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch-errors", id],
+    queryFn: () =>
+      apiClient.get<ImportBatchError[]>(
+        `/planning/projects/import/batches/${id}/errors`,
+      ),
+    enabled: !!id,
   });
 }

@@ -12,8 +12,10 @@ import {
   Calendar,
   Loader2,
   Building2,
+  Upload,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { BulkUploadModal } from "@/components/planning/bulk-upload-modal";
 import { useProjects, usePortfolios } from "@/hooks/use-planning";
 import type { Project } from "@/types";
 
@@ -64,6 +66,7 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState("");
   const [ragStatus, setRagStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const { data, isLoading } = useProjects(
     page,
@@ -110,6 +113,14 @@ export default function ProjectsPage() {
           >
             <Filter size={16} />
             Filters
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowBulkUpload(true)}
+            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+          >
+            <Upload size={16} />
+            Bulk Upload
           </button>
           <button
             type="button"
@@ -396,6 +407,12 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        open={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+      />
     </div>
   );
 }

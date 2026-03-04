@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -40,7 +41,7 @@ func NewAnnouncementService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *A
 // announcementColumns is the standard SELECT column list for announcements.
 const announcementColumns = `id, tenant_id, title, content, priority,
 	target_audience, target_ids, published_at, expires_at,
-	author_id, is_active, created_at, updated_at`
+	author_id, is_active, org_unit_id, created_at, updated_at`
 
 // scanAnnouncement scans a single Announcement from a pgx.Row.
 func scanAnnouncement(row pgx.Row) (Announcement, error) {
@@ -48,7 +49,7 @@ func scanAnnouncement(row pgx.Row) (Announcement, error) {
 	err := row.Scan(
 		&a.ID, &a.TenantID, &a.Title, &a.Content, &a.Priority,
 		&a.TargetAudience, &a.TargetIDs, &a.PublishedAt, &a.ExpiresAt,
-		&a.AuthorID, &a.IsActive, &a.CreatedAt, &a.UpdatedAt,
+		&a.AuthorID, &a.IsActive, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
 	)
 	return a, err
 }
@@ -72,22 +73,29 @@ func (s *AnnouncementService) CreateAnnouncement(ctx context.Context, req Create
 		targetIDs = []uuid.UUID{}
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		oid := auth.OrgUnitID
+		orgUnitID = &oid
+	}
+
 	query := `
 		INSERT INTO announcements (
 			id, tenant_id, title, content, priority,
 			target_audience, target_ids, published_at, expires_at,
-			author_id, is_active, created_at, updated_at
+			author_id, is_active, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
-			$10, $11, $12, $13
+			$10, $11, $12, $13, $14
 		)
 		RETURNING ` + announcementColumns
 
 	a, err := scanAnnouncement(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Content, req.Priority,
 		req.TargetAudience, targetIDs, now, req.ExpiresAt,
-		auth.UserID, true, now, now,
+		auth.UserID, true, orgUnitID, now, now,
 	))
 	if err != nil {
 		return Announcement{}, apperrors.Internal("failed to create announcement", err)
@@ -129,6 +137,11 @@ func (s *AnnouncementService) GetAnnouncement(ctx context.Context, id uuid.UUID)
 		return Announcement{}, apperrors.Internal("failed to get announcement", err)
 	}
 
+	// Org-scope access check.
+	if a.OrgUnitID != nil && !auth.HasOrgAccess(*a.OrgUnitID) {
+		return Announcement{}, apperrors.NotFound("Announcement", id.String())
+	}
+
 	return a, nil
 }
 
@@ -139,27 +152,56 @@ func (s *AnnouncementService) ListAnnouncements(ctx context.Context, isActive *b
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
 	countQuery := `
 		SELECT COUNT(*)
 		FROM announcements
 		WHERE tenant_id = $1
 			AND ($2::boolean IS NULL OR is_active = $2)`
 
+	countArgs := []interface{}{auth.TenantID, isActive}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, isActive).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count announcements", err)
 	}
 
-	dataQuery := `
-		SELECT ` + announcementColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" && orgParam != nil {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+announcementColumns+`
 		FROM announcements
 		WHERE tenant_id = $1
-			AND ($2::boolean IS NULL OR is_active = $2)
+			AND ($2::boolean IS NULL OR is_active = $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, isActive, params.Limit, params.Offset())
+	dataArgs := []interface{}{auth.TenantID, isActive}
+	if orgClause != "" && orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list announcements", err)
 	}
@@ -171,7 +213,7 @@ func (s *AnnouncementService) ListAnnouncements(ctx context.Context, isActive *b
 		if err := rows.Scan(
 			&a.ID, &a.TenantID, &a.Title, &a.Content, &a.Priority,
 			&a.TargetAudience, &a.TargetIDs, &a.PublishedAt, &a.ExpiresAt,
-			&a.AuthorID, &a.IsActive, &a.CreatedAt, &a.UpdatedAt,
+			&a.AuthorID, &a.IsActive, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan announcement", err)
 		}

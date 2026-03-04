@@ -49,7 +49,7 @@ const ticketColumns = `
 	sla_response_met, sla_resolution_met,
 	sla_paused_at, sla_paused_duration_minutes,
 	is_major_incident, related_ticket_ids, linked_problem_id,
-	linked_asset_ids, resolution_notes, resolved_at,
+	linked_asset_ids, org_unit_id, resolution_notes, resolved_at,
 	closed_at, first_response_at, satisfaction_score,
 	tags, custom_fields, created_at, updated_at`
 
@@ -65,7 +65,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 	)
@@ -86,7 +86,7 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
@@ -140,6 +140,12 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		customFields = json.RawMessage("null")
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		orgUnitID = &auth.OrgUnitID
+	}
+
 	query := `
 		INSERT INTO tickets (
 			id, tenant_id, type,
@@ -148,17 +154,17 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			reporter_id, assignee_id, team_queue_id,
 			sla_policy_id,
 			is_major_incident, related_ticket_ids,
-			linked_asset_ids, tags, custom_fields,
+			linked_asset_ids, org_unit_id, tags, custom_fields,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3,
 			$4, $5, $6, $7,
-			$8, $9, $10, 'new', $11,
+			$8, $9, $10, 'logged', $11,
 			$12, $13, $14,
 			$15,
 			false, '{}',
-			'{}', $16, $17,
-			$18, $19
+			'{}', $16, $17, $18,
+			$19, $20
 		)
 		RETURNING ` + ticketColumns
 
@@ -168,7 +174,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		priority, req.Urgency, req.Impact, channel,
 		auth.UserID, req.AssigneeID, req.TeamQueueID,
 		req.SLAPolicyID,
-		tags, customFields,
+		orgUnitID, tags, customFields,
 		now, now,
 	))
 	if err != nil {
@@ -224,6 +230,9 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 8)
+
 	// Count total matching records.
 	countQuery := `
 		SELECT COUNT(*)
@@ -236,18 +245,30 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 			AND ($6::uuid IS NULL OR reporter_id = $6)
 			AND ($7::uuid IS NULL OR team_queue_id = $7)`
 
-	var total int64
-	err := s.pool.QueryRow(ctx, countQuery,
+	countArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
 		assigneeID, reporterID, teamQueueID,
-	).Scan(&total)
+	}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
+	var total int64
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count tickets", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
-		SELECT ` + ticketColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 8
+	if orgClause != "" {
+		nextIdx = 9
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketColumns+`
 		FROM tickets
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
@@ -255,15 +276,26 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 			AND ($4::text IS NULL OR type = $4)
 			AND ($5::uuid IS NULL OR assignee_id = $5)
 			AND ($6::uuid IS NULL OR reporter_id = $6)
-			AND ($7::uuid IS NULL OR team_queue_id = $7)
+			AND ($7::uuid IS NULL OR team_queue_id = $7)%s
 		ORDER BY created_at DESC
-		LIMIT $8 OFFSET $9`
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery,
+	dataArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
 		assigneeID, reporterID, teamQueueID,
-		limit, offset,
-	)
+	}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list tickets", err)
 	}
@@ -470,7 +502,7 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 	}
 
 	// Insert status history if status changed to assigned.
-	if existing.Status == "new" {
+	if existing.Status == "logged" {
 		historyID := uuid.New()
 		_, err = s.pool.Exec(ctx, `
 			INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
@@ -794,6 +826,9 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
 	// Count total.
 	countQuery := `
 		SELECT COUNT(*)
@@ -802,22 +837,46 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 			AND assignee_id = $2
 			AND status NOT IN ('closed', 'cancelled')`
 
+	countArgs := []interface{}{auth.TenantID, auth.UserID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, auth.UserID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count my queue", err)
 	}
 
-	dataQuery := `
-		SELECT ` + ticketColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketColumns+`
 		FROM tickets
 		WHERE tenant_id = $1
 			AND assignee_id = $2
-			AND status NOT IN ('closed', 'cancelled')
-		ORDER BY ` + priorityOrderSQL + `, created_at ASC
-		LIMIT $3 OFFSET $4`
+			AND status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, created_at ASC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, auth.UserID, limit, offset)
+	dataArgs := []interface{}{auth.TenantID, auth.UserID}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list my queue", err)
 	}
@@ -838,6 +897,9 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
 	// Count total.
 	countQuery := `
 		SELECT COUNT(*)
@@ -846,22 +908,46 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 			AND team_queue_id = $2
 			AND status NOT IN ('closed', 'cancelled')`
 
+	countArgs := []interface{}{auth.TenantID, teamID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, teamID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count team queue", err)
 	}
 
-	dataQuery := `
-		SELECT ` + ticketColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketColumns+`
 		FROM tickets
 		WHERE tenant_id = $1
 			AND team_queue_id = $2
-			AND status NOT IN ('closed', 'cancelled')
-		ORDER BY ` + priorityOrderSQL + `, created_at ASC
-		LIMIT $3 OFFSET $4`
+			AND status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, created_at ASC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, teamID, limit, offset)
+	dataArgs := []interface{}{auth.TenantID, teamID}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list team queue", err)
 	}

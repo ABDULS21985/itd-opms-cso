@@ -88,6 +88,7 @@ type KBArticle struct {
 	HelpfulCount    int         `json:"helpfulCount"`
 	NotHelpfulCount int         `json:"notHelpfulCount"`
 	LinkedTicketIDs []uuid.UUID `json:"linkedTicketIds"`
+	OrgUnitID       *uuid.UUID  `json:"orgUnitId,omitempty"`
 	CreatedAt       time.Time   `json:"createdAt"`
 	UpdatedAt       time.Time   `json:"updatedAt"`
 }
@@ -132,6 +133,7 @@ type Announcement struct {
 	ExpiresAt      *time.Time  `json:"expiresAt"`
 	AuthorID       uuid.UUID   `json:"authorId"`
 	IsActive       bool        `json:"isActive"`
+	OrgUnitID      *uuid.UUID  `json:"orgUnitId,omitempty"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
 }
