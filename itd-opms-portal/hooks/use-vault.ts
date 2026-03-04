@@ -29,11 +29,27 @@ export interface VaultDocument {
   status: string;
   accessLevel: string;
   uploadedBy: string;
+  orgUnitId?: string;
   createdAt: string;
   updatedAt: string;
+  // Extended DMS metadata
+  ownerId?: string;
+  documentCode?: string;
+  sourceModule?: string;
+  sourceEntityId?: string;
+  effectiveDate?: string;
+  expiryDate?: string;
+  confidential: boolean;
+  legalHold: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  // Joined fields
   uploaderName: string;
   folderName: string | null;
   lockedByName: string | null;
+  ownerName?: string;
 }
 
 export interface DocumentFolder {
@@ -45,6 +61,7 @@ export interface DocumentFolder {
   path: string;
   color: string | null;
   createdBy: string;
+  orgUnitId?: string;
   createdAt: string;
   updatedAt: string;
   documentCount: number;
@@ -71,9 +88,35 @@ export interface DocumentShare {
   permission: string;
   sharedBy: string;
   expiresAt: string | null;
+  revokedAt?: string;
+  revokedBy?: string;
   createdAt: string;
   sharedWithName: string;
   sharedByName: string;
+}
+
+export interface DocumentComment {
+  id: string;
+  documentId: string;
+  tenantId: string;
+  userId: string;
+  content: string;
+  parentId?: string;
+  createdAt: string;
+  updatedAt: string;
+  userName: string;
+}
+
+export interface DocumentLifecycleEntry {
+  id: string;
+  documentId: string;
+  tenantId: string;
+  fromStatus: string;
+  toStatus: string;
+  changedBy: string;
+  reason?: string;
+  createdAt: string;
+  changedByName: string;
 }
 
 export interface VaultStats {
@@ -81,6 +124,7 @@ export interface VaultStats {
   totalSizeBytes: number;
   totalFolders: number;
   byClassification: Record<string, number>;
+  byStatus: Record<string, number>;
   recentUploads: number;
 }
 
@@ -88,9 +132,6 @@ export interface VaultStats {
 /*  Documents — Queries                                                */
 /* ================================================================== */
 
-/**
- * GET /vault/documents — paginated list of vault documents.
- */
 export function useDocuments(filters: {
   page?: number;
   limit?: number;
@@ -116,9 +157,6 @@ export function useDocuments(filters: {
   });
 }
 
-/**
- * GET /vault/documents/{id} — single vault document.
- */
 export function useDocument(id: string | undefined) {
   return useQuery({
     queryKey: ["vault-document", id],
@@ -127,9 +165,6 @@ export function useDocument(id: string | undefined) {
   });
 }
 
-/**
- * GET /vault/documents/{id}/versions — all versions of a document.
- */
 export function useDocumentVersions(id: string | undefined) {
   return useQuery({
     queryKey: ["vault-document-versions", id],
@@ -138,9 +173,6 @@ export function useDocumentVersions(id: string | undefined) {
   });
 }
 
-/**
- * GET /vault/documents/{id}/access-log — paginated access log.
- */
 export function useDocumentAccessLog(id: string | undefined, page = 1, limit = 20) {
   return useQuery({
     queryKey: ["vault-access-log", id, page, limit],
@@ -153,15 +185,45 @@ export function useDocumentAccessLog(id: string | undefined, page = 1, limit = 2
   });
 }
 
-/**
- * GET /vault/documents/{id}/download — get presigned download URL.
- */
 export function useDocumentDownloadUrl(id: string | undefined) {
   return useQuery({
     queryKey: ["vault-download-url", id],
     queryFn: () =>
       apiClient.get<{ url: string; fileName: string }>(`/vault/documents/${id}/download`),
-    enabled: false, // Manually triggered
+    enabled: false,
+  });
+}
+
+export function useDocumentPreviewUrl(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-preview-url", id],
+    queryFn: () =>
+      apiClient.get<{ url: string; contentType: string }>(`/vault/documents/${id}/preview`),
+    enabled: false,
+  });
+}
+
+export function useDocumentShares(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-document-shares", id],
+    queryFn: () => apiClient.get<DocumentShare[]>(`/vault/documents/${id}/shares`),
+    enabled: !!id,
+  });
+}
+
+export function useDocumentComments(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-document-comments", id],
+    queryFn: () => apiClient.get<DocumentComment[]>(`/vault/documents/${id}/comments`),
+    enabled: !!id,
+  });
+}
+
+export function useDocumentLifecycle(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-document-lifecycle", id],
+    queryFn: () => apiClient.get<DocumentLifecycleEntry[]>(`/vault/documents/${id}/lifecycle`),
+    enabled: !!id,
   });
 }
 
@@ -169,9 +231,6 @@ export function useDocumentDownloadUrl(id: string | undefined) {
 /*  Documents — Mutations                                              */
 /* ================================================================== */
 
-/**
- * POST /vault/documents — upload a document.
- */
 export function useUploadDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -190,14 +249,23 @@ export function useUploadDocument() {
   });
 }
 
-/**
- * PUT /vault/documents/{id} — update document metadata.
- */
 export function useUpdateDocument(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<VaultDocument>) =>
-      apiClient.put<VaultDocument>(`/vault/documents/${id}`, body),
+    mutationFn: (body: {
+      title?: string;
+      description?: string;
+      tags?: string[];
+      classification?: string;
+      accessLevel?: string;
+      folderId?: string;
+      documentCode?: string;
+      ownerId?: string;
+      effectiveDate?: string;
+      expiryDate?: string;
+      confidential?: boolean;
+      retentionUntil?: string;
+    }) => apiClient.put<VaultDocument>(`/vault/documents/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vault-documents"] });
       queryClient.invalidateQueries({ queryKey: ["vault-document", id] });
@@ -209,9 +277,6 @@ export function useUpdateDocument(id: string | undefined) {
   });
 }
 
-/**
- * DELETE /vault/documents/{id} — soft-delete a document.
- */
 export function useDeleteDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -228,9 +293,6 @@ export function useDeleteDocument() {
   });
 }
 
-/**
- * POST /vault/documents/{id}/version — upload a new version.
- */
 export function useUploadVersion(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -248,9 +310,6 @@ export function useUploadVersion(id: string | undefined) {
   });
 }
 
-/**
- * POST /vault/documents/{id}/lock — lock a document.
- */
 export function useLockDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -267,9 +326,6 @@ export function useLockDocument() {
   });
 }
 
-/**
- * POST /vault/documents/{id}/unlock — unlock a document.
- */
 export function useUnlockDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -286,9 +342,6 @@ export function useUnlockDocument() {
   });
 }
 
-/**
- * POST /vault/documents/{id}/move — move a document to a folder.
- */
 export function useMoveDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -305,9 +358,6 @@ export function useMoveDocument() {
   });
 }
 
-/**
- * POST /vault/documents/{id}/share — share a document.
- */
 export function useShareDocument(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -319,6 +369,7 @@ export function useShareDocument(id: string | undefined) {
     }) => apiClient.post<DocumentShare>(`/vault/documents/${id}/share`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vault-document", id] });
+      queryClient.invalidateQueries({ queryKey: ["vault-document-shares", id] });
       toast.success("Document shared successfully");
     },
     onError: () => {
@@ -327,13 +378,92 @@ export function useShareDocument(id: string | undefined) {
   });
 }
 
+export function useRevokeShare(documentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (shareId: string) =>
+      apiClient.delete(`/vault/documents/${documentId}/shares/${shareId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vault-document-shares", documentId] });
+      toast.success("Share revoked");
+    },
+    onError: () => {
+      toast.error("Failed to revoke share");
+    },
+  });
+}
+
+export function useRestoreDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<VaultDocument>(`/vault/documents/${id}/restore`, {}),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["vault-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["vault-document", id] });
+      queryClient.invalidateQueries({ queryKey: ["vault-stats"] });
+      toast.success("Document restored");
+    },
+    onError: () => {
+      toast.error("Failed to restore document");
+    },
+  });
+}
+
+export function useArchiveDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<VaultDocument>(`/vault/documents/${id}/archive`, {}),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["vault-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["vault-document", id] });
+      queryClient.invalidateQueries({ queryKey: ["vault-stats"] });
+      toast.success("Document archived");
+    },
+    onError: () => {
+      toast.error("Failed to archive document");
+    },
+  });
+}
+
+export function useTransitionStatus(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { toStatus: string; reason?: string }) =>
+      apiClient.post<VaultDocument>(`/vault/documents/${id}/transition`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vault-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["vault-document", id] });
+      queryClient.invalidateQueries({ queryKey: ["vault-document-lifecycle", id] });
+      queryClient.invalidateQueries({ queryKey: ["vault-stats"] });
+      toast.success("Status updated");
+    },
+    onError: () => {
+      toast.error("Failed to update status");
+    },
+  });
+}
+
+export function useAddComment(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { content: string; parentId?: string }) =>
+      apiClient.post<DocumentComment>(`/vault/documents/${id}/comments`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vault-document-comments", id] });
+      toast.success("Comment added");
+    },
+    onError: () => {
+      toast.error("Failed to add comment");
+    },
+  });
+}
+
 /* ================================================================== */
 /*  Folders — Queries                                                  */
 /* ================================================================== */
 
-/**
- * GET /vault/folders — list all folders.
- */
 export function useFolders() {
   return useQuery({
     queryKey: ["vault-folders"],
@@ -345,9 +475,6 @@ export function useFolders() {
 /*  Folders — Mutations                                                */
 /* ================================================================== */
 
-/**
- * POST /vault/folders — create a folder.
- */
 export function useCreateFolder() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -368,9 +495,6 @@ export function useCreateFolder() {
   });
 }
 
-/**
- * PUT /vault/folders/{id} — update a folder.
- */
 export function useUpdateFolder(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -386,9 +510,6 @@ export function useUpdateFolder(id: string | undefined) {
   });
 }
 
-/**
- * DELETE /vault/folders/{id} — delete a folder.
- */
 export function useDeleteFolder() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -408,9 +529,6 @@ export function useDeleteFolder() {
 /*  Search, Recent, Stats — Queries                                    */
 /* ================================================================== */
 
-/**
- * GET /vault/search?q=... — search documents.
- */
 export function useVaultSearch(query: string, page = 1, limit = 20) {
   return useQuery({
     queryKey: ["vault-search", query, page, limit],
@@ -424,9 +542,6 @@ export function useVaultSearch(query: string, page = 1, limit = 20) {
   });
 }
 
-/**
- * GET /vault/recent — recently uploaded documents by current user.
- */
 export function useRecentDocuments(limit = 10) {
   return useQuery({
     queryKey: ["vault-recent", limit],
@@ -435,9 +550,6 @@ export function useRecentDocuments(limit = 10) {
   });
 }
 
-/**
- * GET /vault/stats — aggregate vault statistics.
- */
 export function useVaultStats() {
   return useQuery({
     queryKey: ["vault-stats"],

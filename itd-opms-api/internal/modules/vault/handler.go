@@ -43,13 +43,22 @@ func (h *Handler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("documents.manage")).Put("/{id}", h.UpdateDocument)
 		r.With(middleware.RequirePermission("documents.manage")).Delete("/{id}", h.DeleteDocument)
 		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/download", h.GetDownloadURL)
+		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/preview", h.GetPreviewURL)
 		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/version", h.UploadVersion)
 		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/versions", h.ListVersions)
 		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/lock", h.LockDocument)
 		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/unlock", h.UnlockDocument)
 		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/move", h.MoveDocument)
 		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/share", h.ShareDocument)
+		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/shares", h.ListShares)
+		r.With(middleware.RequirePermission("documents.manage")).Delete("/{id}/shares/{shareId}", h.RevokeShare)
 		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/access-log", h.GetAccessLog)
+		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/restore", h.RestoreDocument)
+		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/archive", h.ArchiveDocument)
+		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/transition", h.TransitionStatus)
+		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/lifecycle", h.GetLifecycleLog)
+		r.With(middleware.RequirePermission("documents.manage")).Post("/{id}/comments", h.AddComment)
+		r.With(middleware.RequirePermission("documents.view")).Get("/{id}/comments", h.ListComments)
 	})
 	r.Route("/folders", func(r chi.Router) {
 		r.With(middleware.RequirePermission("documents.view")).Get("/", h.ListFolders)
@@ -263,6 +272,29 @@ func (h *Handler) GetDownloadURL(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, map[string]string{"url": downloadURL, "fileName": fileName}, nil)
 }
 
+// GetPreviewURL handles GET /documents/{id}/preview — returns a presigned preview URL.
+func (h *Handler) GetPreviewURL(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	previewURL, title, contentType, err := h.svc.GetPreviewURL(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]string{"url": previewURL, "title": title, "contentType": contentType}, nil)
+}
+
 // UploadVersion handles POST /documents/{id}/version — uploads a new version of a document.
 func (h *Handler) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	authCtx := types.GetAuthContext(r.Context())
@@ -425,6 +457,57 @@ func (h *Handler) ShareDocument(w http.ResponseWriter, r *http.Request) {
 	types.Created(w, share)
 }
 
+// ListShares handles GET /documents/{id}/shares — returns all active shares for a document.
+func (h *Handler) ListShares(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	shares, err := h.svc.ListShares(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, shares, nil)
+}
+
+// RevokeShare handles DELETE /documents/{id}/shares/{shareId} — revokes a document share.
+func (h *Handler) RevokeShare(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	shareID, err := uuid.Parse(chi.URLParam(r, "shareId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid share ID")
+		return
+	}
+
+	if err := h.svc.RevokeShare(r.Context(), id, shareID); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.NoContent(w)
+}
+
 // GetAccessLog handles GET /documents/{id}/access-log — returns a paginated access log.
 func (h *Handler) GetAccessLog(w http.ResponseWriter, r *http.Request) {
 	authCtx := types.GetAuthContext(r.Context())
@@ -448,6 +531,164 @@ func (h *Handler) GetAccessLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, entries, types.NewMeta(total, params))
+}
+
+// ──────────────────────────────────────────────
+// Lifecycle Handlers
+// ──────────────────────────────────────────────
+
+// RestoreDocument handles POST /documents/{id}/restore — restores a soft-deleted or archived document.
+func (h *Handler) RestoreDocument(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	doc, err := h.svc.RestoreDocument(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, doc, nil)
+}
+
+// ArchiveDocument handles POST /documents/{id}/archive — archives a document.
+func (h *Handler) ArchiveDocument(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	doc, err := h.svc.ArchiveDocument(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, doc, nil)
+}
+
+// TransitionStatus handles POST /documents/{id}/transition — transitions document lifecycle status.
+func (h *Handler) TransitionStatus(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	var req TransitionStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	doc, err := h.svc.TransitionStatus(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, doc, nil)
+}
+
+// GetLifecycleLog handles GET /documents/{id}/lifecycle — returns the lifecycle transition history.
+func (h *Handler) GetLifecycleLog(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	entries, err := h.svc.GetLifecycleLog(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, entries, nil)
+}
+
+// ──────────────────────────────────────────────
+// Comment Handlers
+// ──────────────────────────────────────────────
+
+// AddComment handles POST /documents/{id}/comments — adds a comment to a document.
+func (h *Handler) AddComment(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	var req AddCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	comment, err := h.svc.AddComment(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, comment)
+}
+
+// ListComments handles GET /documents/{id}/comments — returns all comments for a document.
+func (h *Handler) ListComments(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid document ID")
+		return
+	}
+
+	comments, err := h.svc.ListComments(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, comments, nil)
 }
 
 // ──────────────────────────────────────────────

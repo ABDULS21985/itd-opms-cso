@@ -33,6 +33,7 @@ func requestWithAuth(method, target string, body string) *http.Request {
 		UserID:      uuid.New(),
 		TenantID:    uuid.New(),
 		Email:       "test@test.com",
+		DisplayName: "Test User",
 		Roles:       []string{"admin"},
 		Permissions: []string{"*"},
 	}
@@ -116,6 +117,18 @@ func TestGetDownloadURL_NoAuth(t *testing.T) {
 	}
 }
 
+func TestGetPreviewURL_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/documents/"+uuid.New().String()+"/preview", nil)
+	w := httptest.NewRecorder()
+
+	h.GetPreviewURL(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
 func TestUploadVersion_NoAuth(t *testing.T) {
 	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodPost, "/documents/"+uuid.New().String()+"/version", nil)
@@ -190,12 +203,108 @@ func TestShareDocument_NoAuth(t *testing.T) {
 	}
 }
 
+func TestListShares_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/documents/"+uuid.New().String()+"/shares", nil)
+	w := httptest.NewRecorder()
+
+	h.ListShares(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestRevokeShare_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodDelete, "/documents/"+uuid.New().String()+"/shares/"+uuid.New().String(), nil)
+	w := httptest.NewRecorder()
+
+	h.RevokeShare(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
 func TestGetAccessLog_NoAuth(t *testing.T) {
 	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/documents/"+uuid.New().String()+"/access-log", nil)
 	w := httptest.NewRecorder()
 
 	h.GetAccessLog(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestRestoreDocument_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodPost, "/documents/"+uuid.New().String()+"/restore", nil)
+	w := httptest.NewRecorder()
+
+	h.RestoreDocument(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestArchiveDocument_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodPost, "/documents/"+uuid.New().String()+"/archive", nil)
+	w := httptest.NewRecorder()
+
+	h.ArchiveDocument(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestTransitionStatus_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodPost, "/documents/"+uuid.New().String()+"/transition", strings.NewReader(`{"toStatus":"approved"}`))
+	w := httptest.NewRecorder()
+
+	h.TransitionStatus(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestGetLifecycleLog_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/documents/"+uuid.New().String()+"/lifecycle", nil)
+	w := httptest.NewRecorder()
+
+	h.GetLifecycleLog(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestAddComment_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodPost, "/documents/"+uuid.New().String()+"/comments", strings.NewReader(`{"content":"test"}`))
+	w := httptest.NewRecorder()
+
+	h.AddComment(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestListComments_NoAuth(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/documents/"+uuid.New().String()+"/comments", nil)
+	w := httptest.NewRecorder()
+
+	h.ListComments(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
@@ -355,6 +464,20 @@ func TestGetDownloadURL_InvalidID(t *testing.T) {
 	}
 }
 
+func TestGetPreviewURL_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Get("/{id}/preview", h.GetPreviewURL)
+
+	req := requestWithAuth(http.MethodGet, "/bad-uuid/preview", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
 func TestLockDocument_InvalidID(t *testing.T) {
 	h := newTestHandler()
 	r := chi.NewRouter()
@@ -408,6 +531,132 @@ func TestShareDocument_InvalidID(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestRestoreDocument_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/restore", h.RestoreDocument)
+
+	req := requestWithAuth(http.MethodPost, "/bad-uuid/restore", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestArchiveDocument_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/archive", h.ArchiveDocument)
+
+	req := requestWithAuth(http.MethodPost, "/bad-uuid/archive", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestTransitionStatus_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/transition", h.TransitionStatus)
+
+	req := requestWithAuth(http.MethodPost, "/bad-uuid/transition", `{"toStatus":"approved"}`)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestAddComment_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/comments", h.AddComment)
+
+	req := requestWithAuth(http.MethodPost, "/bad-uuid/comments", `{"content":"test"}`)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestListComments_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Get("/{id}/comments", h.ListComments)
+
+	req := requestWithAuth(http.MethodGet, "/bad-uuid/comments", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestGetLifecycleLog_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Get("/{id}/lifecycle", h.GetLifecycleLog)
+
+	req := requestWithAuth(http.MethodGet, "/bad-uuid/lifecycle", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestListShares_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Get("/{id}/shares", h.ListShares)
+
+	req := requestWithAuth(http.MethodGet, "/bad-uuid/shares", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestRevokeShare_InvalidDocID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Delete("/{id}/shares/{shareId}", h.RevokeShare)
+
+	req := requestWithAuth(http.MethodDelete, "/bad-uuid/shares/"+uuid.New().String(), "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid doc UUID, got %d", w.Code)
+	}
+}
+
+func TestRevokeShare_InvalidShareID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Delete("/{id}/shares/{shareId}", h.RevokeShare)
+
+	req := requestWithAuth(http.MethodDelete, "/"+uuid.New().String()+"/shares/bad-uuid", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid share UUID, got %d", w.Code)
 	}
 }
 
@@ -505,6 +754,34 @@ func TestMoveDocument_InvalidBody(t *testing.T) {
 	}
 }
 
+func TestTransitionStatus_InvalidBody(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/transition", h.TransitionStatus)
+
+	req := requestWithAuth(http.MethodPost, "/"+uuid.New().String()+"/transition", "not-json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid body, got %d", w.Code)
+	}
+}
+
+func TestAddComment_InvalidBody(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/comments", h.AddComment)
+
+	req := requestWithAuth(http.MethodPost, "/"+uuid.New().String()+"/comments", "not-json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid body, got %d", w.Code)
+	}
+}
+
 // ══════════════════════════════════════════════
 // Route registration
 // ══════════════════════════════════════════════
@@ -514,6 +791,9 @@ func TestHandler_RoutesRegistered(t *testing.T) {
 	r := chi.NewRouter()
 	h.Routes(r)
 
+	docID := uuid.New().String()
+	shareID := uuid.New().String()
+
 	tests := []struct {
 		method string
 		path   string
@@ -521,17 +801,26 @@ func TestHandler_RoutesRegistered(t *testing.T) {
 		// Documents
 		{http.MethodGet, "/documents/"},
 		{http.MethodPost, "/documents/"},
-		{http.MethodGet, "/documents/" + uuid.New().String()},
-		{http.MethodPut, "/documents/" + uuid.New().String()},
-		{http.MethodDelete, "/documents/" + uuid.New().String()},
-		{http.MethodGet, "/documents/" + uuid.New().String() + "/download"},
-		{http.MethodPost, "/documents/" + uuid.New().String() + "/version"},
-		{http.MethodGet, "/documents/" + uuid.New().String() + "/versions"},
-		{http.MethodPost, "/documents/" + uuid.New().String() + "/lock"},
-		{http.MethodPost, "/documents/" + uuid.New().String() + "/unlock"},
-		{http.MethodPost, "/documents/" + uuid.New().String() + "/move"},
-		{http.MethodPost, "/documents/" + uuid.New().String() + "/share"},
-		{http.MethodGet, "/documents/" + uuid.New().String() + "/access-log"},
+		{http.MethodGet, "/documents/" + docID},
+		{http.MethodPut, "/documents/" + docID},
+		{http.MethodDelete, "/documents/" + docID},
+		{http.MethodGet, "/documents/" + docID + "/download"},
+		{http.MethodGet, "/documents/" + docID + "/preview"},
+		{http.MethodPost, "/documents/" + docID + "/version"},
+		{http.MethodGet, "/documents/" + docID + "/versions"},
+		{http.MethodPost, "/documents/" + docID + "/lock"},
+		{http.MethodPost, "/documents/" + docID + "/unlock"},
+		{http.MethodPost, "/documents/" + docID + "/move"},
+		{http.MethodPost, "/documents/" + docID + "/share"},
+		{http.MethodGet, "/documents/" + docID + "/shares"},
+		{http.MethodDelete, "/documents/" + docID + "/shares/" + shareID},
+		{http.MethodGet, "/documents/" + docID + "/access-log"},
+		{http.MethodPost, "/documents/" + docID + "/restore"},
+		{http.MethodPost, "/documents/" + docID + "/archive"},
+		{http.MethodPost, "/documents/" + docID + "/transition"},
+		{http.MethodGet, "/documents/" + docID + "/lifecycle"},
+		{http.MethodPost, "/documents/" + docID + "/comments"},
+		{http.MethodGet, "/documents/" + docID + "/comments"},
 		// Folders
 		{http.MethodGet, "/folders/"},
 		{http.MethodPost, "/folders/"},
