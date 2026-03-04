@@ -12,14 +12,17 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/approval"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/automation"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/calendar"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/cmdb"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/customfields"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/governance"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/grc"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/itsm"
@@ -28,6 +31,8 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/vault"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/vendor"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -49,11 +54,12 @@ type Server struct {
 	router   chi.Router
 
 	// Background services for graceful shutdown.
-	outboxProcessor    *notification.OutboxProcessor
-	orchestrator       *notification.Orchestrator
-	dashboardRefresh   *reporting.DashboardRefresher
-	reportScheduler    *reporting.ReportScheduler
-	maintenanceWorker  *system.MaintenanceWorker
+	outboxProcessor       *notification.OutboxProcessor
+	orchestrator          *notification.Orchestrator
+	dashboardRefresh      *reporting.DashboardRefresher
+	reportScheduler       *reporting.ReportScheduler
+	maintenanceWorker     *system.MaintenanceWorker
+	actionReminderService *governance.ActionReminderService
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -84,7 +90,7 @@ func (s *Server) Setup() {
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Correlation)
 	r.Use(middleware.Logging)
-	r.Use(chimiddleware.RealIP)
+	r.Use(middleware.TrustedRealIP)
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
@@ -105,8 +111,9 @@ func (s *Server) Setup() {
 
 	// --- Core services ---
 	authService := auth.NewAuthService(s.pool, s.cfg.JWT)
-	authHandler := auth.NewAuthHandler(authService)
 	auditService := audit.NewAuditService(s.pool)
+	revocationService := auth.NewRevocationService(s.redis)
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
 	auditHandler := audit.NewAuditHandler(auditService)
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
 
@@ -130,10 +137,11 @@ func (s *Server) Setup() {
 
 	// --- Auth middleware config (dual-mode: Entra ID + dev JWT) ---
 	authMiddlewareCfg := middleware.AuthConfig{
-		JWTSecret:      s.cfg.JWT.Secret,
-		EntraIDEnabled: s.cfg.EntraID.Enabled,
-		OIDCValidator:  oidcValidator,
-		Pool:           s.pool,
+		JWTSecret:         s.cfg.JWT.Secret,
+		EntraIDEnabled:    s.cfg.EntraID.Enabled,
+		OIDCValidator:     oidcValidator,
+		Pool:              s.pool,
+		RevocationService: revocationService,
 	}
 
 	// --- Notification service ---
@@ -158,16 +166,27 @@ func (s *Server) Setup() {
 		s.orchestrator = orchestrator
 	}
 
+	// --- Action reminder service (hourly cron for overdue action notifications) ---
+	if s.js != nil {
+		s.actionReminderService = governance.NewActionReminderService(s.pool, s.js)
+	}
+
 	// --- Module stub handlers ---
 	governanceHandler := governance.NewHandler(s.pool, auditService)
 	peopleHandler := people.NewHandler(s.pool, auditService)
-	planningHandler := planning.NewHandler(s.pool, auditService)
+	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
 	itsmHandler := itsm.NewHandler(s.pool, auditService)
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
 	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio)
+	approvalHandler := approval.NewHandler(s.pool, auditService)
+	calendarHandler := calendar.NewHandler(s.pool, auditService)
+	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
+	vendorHandler := vendor.NewHandler(s.pool, auditService)
+	automationHandler := automation.NewHandler(s.pool, auditService)
+	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
@@ -182,6 +201,11 @@ func (s *Server) Setup() {
 
 		// Auth routes — mixed public/protected.
 		r.Route("/auth", func(r chi.Router) {
+			// Stricter rate limiting on auth endpoints (10 req/min vs global 100).
+			if s.redis != nil {
+				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
+			}
+
 			// Public: login, refresh, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
@@ -208,12 +232,16 @@ func (s *Server) Setup() {
 				r.Use(middleware.AuthDualMode(authMiddlewareCfg))
 				r.Get("/me", authHandler.Me)
 				r.Post("/logout", authHandler.Logout)
+				r.Post("/change-password", authHandler.ChangePassword)
 			})
 		})
 
 		// Protected routes (require authentication).
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthDualMode(authMiddlewareCfg))
+			r.Use(middleware.SessionTimeout(30 * time.Minute))
+			r.Use(middleware.RLSTenantContext)
+			r.Use(middleware.OrgScope(s.pool))
 			r.Use(audit.AuditMiddleware(auditService))
 
 			// Audit module.
@@ -229,9 +257,10 @@ func (s *Server) Setup() {
 				r.Get("/stream", sseHandler.ServeHTTP)
 			})
 
-			// Directory sync (admin only).
+			// Directory sync (admin only — restricted to global_admin role).
 			if dirSyncService != nil {
 				r.Route("/admin/directory-sync", func(r chi.Router) {
+					r.Use(middleware.RequireRole("global_admin"))
 					r.Post("/run", func(w http.ResponseWriter, r *http.Request) {
 						result, err := dirSyncService.RunSync(r.Context())
 						if err != nil {
@@ -279,6 +308,12 @@ func (s *Server) Setup() {
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
 			r.Route("/system", func(r chi.Router) { systemHandler.Routes(r) })
+			r.Route("/approvals", func(r chi.Router) { approvalHandler.Routes(r) })
+			r.Route("/calendar", func(r chi.Router) { calendarHandler.Routes(r) })
+			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
+			r.Route("/vendors", func(r chi.Router) { vendorHandler.Routes(r) })
+			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
+			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })
@@ -314,6 +349,25 @@ func (s *Server) Start() error {
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)
+	}
+
+	// Start action reminder cron (every hour).
+	if s.actionReminderService != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			// Run once on startup.
+			s.actionReminderService.RunReminders(ctx)
+			for {
+				select {
+				case <-ticker.C:
+					s.actionReminderService.RunReminders(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		slog.Info("action reminder cron started (1h interval)")
 	}
 
 	addr := s.cfg.ListenAddr()

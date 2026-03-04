@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/helpers"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
@@ -16,12 +17,14 @@ import (
 
 // AuthHandler provides HTTP handlers for authentication endpoints.
 type AuthHandler struct {
-	service *AuthService
+	service           *AuthService
+	auditService      *audit.AuditService
+	revocationService *RevocationService
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(service *AuthService) *AuthHandler {
-	return &AuthHandler{service: service}
+func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService) *AuthHandler {
+	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService}
 }
 
 // Routes mounts the auth routes on the given chi router.
@@ -77,9 +80,50 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
+		// Log failed authentication attempt for security monitoring.
+		slog.Warn("login attempt failed",
+			"email", req.Email,
+			"ip", realIP(r),
+			"user_agent", r.UserAgent(),
+			"correlation_id", types.GetCorrelationID(r.Context()),
+			"error", err.Error(),
+		)
+
+		// Record failed login in audit trail.
+		changes, _ := json.Marshal(map[string]string{
+			"email":  req.Email,
+			"reason": err.Error(),
+		})
+		_ = h.auditService.Log(r.Context(), audit.AuditEntry{
+			Action:        "auth.login_failed",
+			EntityType:    "session",
+			ActorRole:     "anonymous",
+			Changes:       changes,
+			IPAddress:     realIP(r),
+			UserAgent:     r.UserAgent(),
+			CorrelationID: types.GetCorrelationID(r.Context()),
+		})
+
 		writeAppError(w, r, err)
 		return
 	}
+
+	// Record successful login in audit trail.
+	loginChanges, _ := json.Marshal(map[string]string{
+		"email": req.Email,
+	})
+	_ = h.auditService.Log(r.Context(), audit.AuditEntry{
+		TenantID:      resp.User.TenantID,
+		ActorID:       resp.User.ID,
+		ActorRole:     firstRole(resp.User.Roles),
+		Action:        "auth.login_success",
+		EntityType:    "session",
+		EntityID:      resp.User.ID,
+		Changes:       loginChanges,
+		IPAddress:     realIP(r),
+		UserAgent:     r.UserAgent(),
+		CorrelationID: types.GetCorrelationID(r.Context()),
+	})
 
 	// Create session record for tracking.
 	tokenHash := helpers.SHA256Checksum([]byte(resp.AccessToken))
@@ -133,7 +177,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout handles POST /api/v1/auth/logout.
-// Accepts JSON {refreshToken} and revokes it.
+// Accepts JSON {refreshToken} and revokes both the refresh token (DB) and the
+// access token (Redis revocation list) so it cannot be reused before expiry.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	var req logoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -148,6 +193,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 			"BAD_REQUEST", "Refresh token is required",
 		)
 		return
+	}
+
+	// Revoke the access token (JWT) so it can't be reused before expiry.
+	if h.revocationService != nil {
+		tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if tokenString != "" {
+			if claims, err := ValidateToken(tokenString, h.service.jwtCfg.Secret); err == nil && claims.ID != "" {
+				ttl := time.Until(claims.ExpiresAt.Time)
+				if ttl > 0 {
+					_ = h.revocationService.RevokeToken(r.Context(), claims.ID, ttl)
+				}
+			}
+		}
 	}
 
 	if err := h.service.Logout(r.Context(), req.RefreshToken); err != nil {
@@ -176,6 +234,54 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, profile, nil)
+}
+
+// changePasswordRequest is the JSON body for POST /api/v1/auth/change-password.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+// ChangePassword handles POST /api/v1/auth/change-password.
+// Requires authentication. Validates the current password and sets a new one.
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized,
+			"UNAUTHORIZED", "Authentication required",
+		)
+		return
+	}
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest,
+			"BAD_REQUEST", "Invalid request body",
+		)
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		types.ErrorMessage(w, http.StatusBadRequest,
+			"BAD_REQUEST", "Current password and new password are required",
+		)
+		return
+	}
+
+	if err := h.service.ChangePassword(r.Context(), authCtx.UserID, req.CurrentPassword, req.NewPassword); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]string{"message": "Password changed successfully"}, nil)
+}
+
+// firstRole returns the first role from a slice, or "unknown" if empty.
+func firstRole(roles []string) string {
+	if len(roles) > 0 {
+		return roles[0]
+	}
+	return "unknown"
 }
 
 // writeAppError maps an AppError (or generic error) to the appropriate HTTP

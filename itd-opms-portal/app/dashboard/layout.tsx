@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Menu, Search, ChevronRight, LogOut, User, Settings } from "lucide-react";
-import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { BreadcrumbProvider } from "@/providers/breadcrumb-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { DashboardHeader } from "@/components/layout/header";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { KeyboardShortcutHelp } from "@/components/shared/keyboard-shortcut-help";
+import { useHotkeys } from "@/hooks/use-hotkeys";
 
 /* ------------------------------------------------------------------ */
 /*  Page transition wrapper                                            */
@@ -39,6 +38,67 @@ function PageTransition({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Global Keyboard Shortcuts                                          */
+/* ------------------------------------------------------------------ */
+
+function GlobalShortcuts() {
+  const router = useRouter();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+
+  useHotkeys([
+    {
+      key: "?",
+      handler: () => setHelpOpen((o) => !o),
+    },
+    {
+      key: "g",
+      handler: () => setPendingKey("g"),
+    },
+  ]);
+
+  useEffect(() => {
+    if (!pendingKey) return;
+    const timeout = setTimeout(() => setPendingKey(null), 1000);
+
+    const handleSecond = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable
+      )
+        return;
+
+      const routes: Record<string, string> = {
+        d: "/dashboard",
+        t: "/dashboard/itsm/tickets",
+        p: "/dashboard/planning/projects",
+        w: "/dashboard/planning/work-items",
+        a: "/dashboard/cmdb/assets",
+        k: "/dashboard/knowledge",
+        s: "/dashboard/system",
+      };
+
+      if (routes[e.key]) {
+        e.preventDefault();
+        router.push(routes[e.key]);
+      }
+      setPendingKey(null);
+    };
+
+    document.addEventListener("keydown", handleSecond);
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener("keydown", handleSecond);
+    };
+  }, [pendingKey, router]);
+
+  return (
+    <KeyboardShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Layout                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -49,7 +109,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isLoggedIn, isLoading, user, logout } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
 
   // Sidebar state
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -135,6 +195,9 @@ export default function DashboardLayout({
 
         {/* Mobile bottom tab bar */}
         <MobileNav />
+
+        {/* Global keyboard shortcuts */}
+        <GlobalShortcuts />
       </div>
     </BreadcrumbProvider>
   );

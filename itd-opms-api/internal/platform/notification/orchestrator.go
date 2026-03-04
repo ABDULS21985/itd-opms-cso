@@ -264,6 +264,21 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      10,
 		},
+		"governance.action_due_soon": {
+			EmailTemplate: "action_due_reminder",
+			Channels:      []string{"email", "in_app"},
+			Priority:      5,
+		},
+		"governance.action_overdue": {
+			EmailTemplate: "action_overdue_reminder",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      7,
+		},
+		"governance.action_critical_overdue": {
+			EmailTemplate: "action_critical_overdue",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      9,
+		},
 	}
 
 	return configs[eventType]

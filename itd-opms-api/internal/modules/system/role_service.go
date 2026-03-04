@@ -119,8 +119,9 @@ func (s *RoleService) CreateRole(ctx context.Context, req CreateRoleRequest) (*R
 	if len(req.Name) < 3 || len(req.Name) > 50 {
 		return nil, apperrors.BadRequest("name must be between 3 and 50 characters")
 	}
-	if len(req.Permissions) == 0 {
-		return nil, apperrors.BadRequest("at least one permission is required")
+	// Allow creating roles with empty permissions — permissions can be added later via update.
+	if req.Permissions == nil {
+		req.Permissions = []string{}
 	}
 
 	// Check for duplicate name.

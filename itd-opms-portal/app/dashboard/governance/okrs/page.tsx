@@ -175,7 +175,7 @@ export default function OKRListPage() {
     periodFilter,
     statusFilter,
   );
-  const { data: treeData, isLoading: treeLoading } = useOKRTree(undefined);
+  const { data: _treeData, isLoading: _treeLoading } = useOKRTree(undefined);
 
   const okrs = okrsData?.data ?? [];
   const meta = okrsData?.meta;

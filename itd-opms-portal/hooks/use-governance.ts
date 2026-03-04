@@ -9,9 +9,12 @@ import type {
   AttestationCampaign,
   RACIMatrix,
   RACIEntry,
+  RACICoverageReport,
+  RACICoverageSummary,
   Meeting,
   MeetingDecision,
   ActionItem,
+  OverdueStats,
   OKR,
   KeyResult,
   KPI,
@@ -835,5 +838,64 @@ export function useDeleteKPI() {
     onError: () => {
       toast.error("Failed to delete KPI");
     },
+  });
+}
+
+/* ================================================================== */
+/*  FR-A010: RACI Coverage Reports                                     */
+/* ================================================================== */
+
+/**
+ * GET /governance/raci/{id}/coverage - full gap-analysis coverage report.
+ */
+export function useRACICoverageReport(matrixId: string | undefined) {
+  return useQuery({
+    queryKey: ["raci-coverage", matrixId],
+    queryFn: () =>
+      apiClient.get<RACICoverageReport>(
+        `/governance/raci/${matrixId}/coverage`,
+      ),
+    enabled: !!matrixId,
+  });
+}
+
+/**
+ * GET /governance/raci/coverage-summary - tenant-wide coverage stats.
+ */
+export function useRACICoverageSummary() {
+  return useQuery({
+    queryKey: ["raci-coverage-summary"],
+    queryFn: () =>
+      apiClient.get<RACICoverageSummary>("/governance/raci/coverage-summary"),
+  });
+}
+
+/* ================================================================== */
+/*  FR-A014: Overdue Action Stats                                      */
+/* ================================================================== */
+
+/**
+ * GET /governance/meetings/actions/overdue/stats - overdue action statistics.
+ */
+export function useOverdueActionStats() {
+  return useQuery({
+    queryKey: ["action-items-overdue-stats"],
+    queryFn: () =>
+      apiClient.get<OverdueStats>(
+        "/governance/meetings/actions/overdue/stats",
+      ),
+  });
+}
+
+/**
+ * GET /governance/meetings/actions/overdue/mine - current user's overdue actions.
+ */
+export function useMyOverdueActions() {
+  return useQuery({
+    queryKey: ["action-items-overdue-mine"],
+    queryFn: () =>
+      apiClient.get<ActionItem[]>(
+        "/governance/meetings/actions/overdue/mine",
+      ),
   });
 }

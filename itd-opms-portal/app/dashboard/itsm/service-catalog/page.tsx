@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ShoppingCart,
@@ -13,7 +12,6 @@ import {
   Layers,
   Package,
 } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
 import {
   useCatalogCategories,
   useEntitledCatalogItems,
@@ -25,7 +23,6 @@ import type { CatalogItem, CatalogCategory } from "@/types";
 /* ------------------------------------------------------------------ */
 
 export default function ServiceCatalogPage() {
-  const { user } = useAuth();
   const router = useRouter();
 
   const { data: categories, isLoading: categoriesLoading } =

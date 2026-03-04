@@ -3,34 +3,57 @@ package planning
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 )
 
 // Handler is the top-level HTTP handler for the planning module.
 // It composes all sub-handlers for portfolios, projects, work-items,
-// milestones, and risks/issues/change-requests.
+// milestones, risks/issues/change-requests, timeline views, and PIRs.
 type Handler struct {
-	portfolio *PortfolioHandler
-	project   *ProjectHandler
-	workItem  *WorkItemHandler
-	milestone *MilestoneHandler
-	risk      *RiskHandler
+	portfolio    *PortfolioHandler
+	project      *ProjectHandler
+	workItem     *WorkItemHandler
+	milestone    *MilestoneHandler
+	risk         *RiskHandler
+	timeline     *TimelineHandler
+	pir          *PIRHandler
+	budget       *BudgetHandler
+	costCategory *CostCategoryHandler
+	projectImport *ImportHandler
 }
 
 // NewHandler creates a new planning Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *minio.Client, minioCfg config.MinIOConfig) *Handler {
 	portfolioSvc := NewPortfolioService(pool, auditSvc)
 	projectSvc := NewProjectService(pool, auditSvc)
 	workItemSvc := NewWorkItemService(pool, auditSvc)
 	riskSvc := NewRiskService(pool, auditSvc)
+	timelineSvc := NewTimelineService(pool)
+	pirSvc := NewPIRService(pool, auditSvc)
+	documentSvc := NewDocumentService(pool, minioClient, minioCfg, auditSvc)
+	budgetSvc := NewBudgetService(pool, auditSvc)
+
+	projectHandler := NewProjectHandler(projectSvc)
+	projectHandler.doc = NewDocumentHandler(documentSvc)
+	projectHandler.budget = NewBudgetHandler(budgetSvc)
+
+	importSvc := NewImportService(pool, auditSvc)
+	importHandler := NewImportHandler(importSvc)
 
 	return &Handler{
-		portfolio: NewPortfolioHandler(portfolioSvc),
-		project:   NewProjectHandler(projectSvc),
-		workItem:  NewWorkItemHandler(workItemSvc),
-		milestone: NewMilestoneHandler(workItemSvc),
-		risk:      NewRiskHandler(riskSvc),
+		portfolio:     NewPortfolioHandler(portfolioSvc),
+		project:       projectHandler,
+		workItem:      NewWorkItemHandler(workItemSvc),
+		milestone:     NewMilestoneHandler(workItemSvc),
+		risk:          NewRiskHandler(riskSvc),
+		timeline:      NewTimelineHandler(timelineSvc),
+		pir:           NewPIRHandler(pirSvc),
+		budget:        NewBudgetHandler(budgetSvc),
+		costCategory:  NewCostCategoryHandler(budgetSvc),
+		projectImport: importHandler,
 	}
 }
 
@@ -58,4 +81,22 @@ func (h *Handler) Routes(r chi.Router) {
 
 	// Risks, Issues & Change Requests (FR-C011 to FR-C016)
 	h.risk.Routes(r)
+
+	// Timeline / Gantt views (FR-C009)
+	h.timeline.Routes(r)
+
+	// Post-Implementation Reviews (FR-C016)
+	r.Route("/pir", func(r chi.Router) {
+		h.pir.Routes(r)
+	})
+
+	// Budget — cost categories & portfolio summary
+	r.Route("/budget", func(r chi.Router) {
+		h.costCategory.Routes(r)
+	})
+
+	// Bulk project import
+	r.Route("/projects/import", func(r chi.Router) {
+		h.projectImport.Routes(r)
+	})
 }

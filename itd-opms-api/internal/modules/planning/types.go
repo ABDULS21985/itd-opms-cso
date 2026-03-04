@@ -130,6 +130,7 @@ const (
 type Portfolio struct {
 	ID          uuid.UUID  `json:"id"`
 	TenantID    uuid.UUID  `json:"tenantId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
@@ -144,6 +145,7 @@ type Project struct {
 	ID               uuid.UUID       `json:"id"`
 	TenantID         uuid.UUID       `json:"tenantId"`
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            string          `json:"title"`
 	Code             string          `json:"code"`
 	Description      *string         `json:"description"`
@@ -162,9 +164,43 @@ type Project struct {
 	BudgetApproved   *float64        `json:"budgetApproved"`
 	BudgetSpent      *float64        `json:"budgetSpent"`
 	CompletionPct    *float64        `json:"completionPct"`
-	Metadata         json.RawMessage `json:"metadata"`
+	DivisionName       string          `json:"divisionName,omitempty"`
+	PortfolioName      string          `json:"portfolioName,omitempty"`
+	SponsorName        string          `json:"sponsorName,omitempty"`
+	ProjectManagerName string          `json:"projectManagerName,omitempty"`
+	Metadata           json.RawMessage `json:"metadata"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
+}
+
+// ProjectDivisionAssignment represents a division assigned to collaborate on a project.
+type ProjectDivisionAssignment struct {
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	DivisionID     uuid.UUID  `json:"divisionId"`
+	DivisionName   string     `json:"divisionName"`
+	DivisionCode   string     `json:"divisionCode"`
+	AssignmentType string     `json:"assignmentType"`
+	AssignedBy     *uuid.UUID `json:"assignedBy"`
+	AssignedAt     time.Time  `json:"assignedAt"`
+	UnassignedAt   *time.Time `json:"unassignedAt"`
+	Notes          *string    `json:"notes"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+// DivisionAssignmentLog represents a history entry for division assignments.
+type DivisionAssignmentLog struct {
+	ID             uuid.UUID  `json:"id"`
+	EntityType     string     `json:"entityType"`
+	EntityID       uuid.UUID  `json:"entityId"`
+	Action         string     `json:"action"`
+	FromDivisionID *uuid.UUID `json:"fromDivisionId"`
+	ToDivisionID   *uuid.UUID `json:"toDivisionId"`
+	PerformedBy    uuid.UUID  `json:"performedBy"`
+	PerformerName  string     `json:"performerName,omitempty"`
+	Notes          *string    `json:"notes"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 // ProjectDependency represents a dependency link between two projects.
@@ -329,6 +365,7 @@ type CreatePortfolioRequest struct {
 	Name        string     `json:"name" validate:"required"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 	FiscalYear  int        `json:"fiscalYear" validate:"required"`
 	Status      *string    `json:"status"`
 }
@@ -345,6 +382,7 @@ type UpdatePortfolioRequest struct {
 // CreateProjectRequest is the payload for creating a new project.
 type CreateProjectRequest struct {
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            string          `json:"title" validate:"required"`
 	Code             string          `json:"code" validate:"required"`
 	Description      *string         `json:"description"`
@@ -365,6 +403,7 @@ type CreateProjectRequest struct {
 // UpdateProjectRequest is the payload for updating an existing project.
 type UpdateProjectRequest struct {
 	PortfolioID      *uuid.UUID      `json:"portfolioId"`
+	DivisionID       *uuid.UUID      `json:"divisionId"`
 	Title            *string         `json:"title"`
 	Code             *string         `json:"code"`
 	Description      *string         `json:"description"`
@@ -384,6 +423,20 @@ type UpdateProjectRequest struct {
 	BudgetSpent      *float64        `json:"budgetSpent"`
 	CompletionPct    *float64        `json:"completionPct"`
 	Metadata         json.RawMessage `json:"metadata"`
+}
+
+// AssignDivisionRequest is the payload for assigning a project to a division.
+type AssignDivisionRequest struct {
+	DivisionID     uuid.UUID `json:"divisionId" validate:"required"`
+	AssignmentType string    `json:"assignmentType"` // "primary" or "collaborator"
+	Notes          *string   `json:"notes"`
+}
+
+// ReassignDivisionRequest is the payload for reassigning a project to a different division.
+type ReassignDivisionRequest struct {
+	FromDivisionID uuid.UUID `json:"fromDivisionId" validate:"required"`
+	ToDivisionID   uuid.UUID `json:"toDivisionId" validate:"required"`
+	Notes          *string   `json:"notes"`
 }
 
 // ApproveProjectRequest is the payload for approving a project proposal.
@@ -567,4 +620,90 @@ type UpdateChangeRequestStatusRequest struct {
 // EscalateIssueRequest is the payload for escalating an issue.
 type EscalateIssueRequest struct {
 	EscalatedToID uuid.UUID `json:"escalatedToId" validate:"required"`
+}
+
+// ──────────────────────────────────────────────
+// Project Document category constants
+// ──────────────────────────────────────────────
+
+// ValidDocumentCategories is the set of allowed project document categories.
+var ValidDocumentCategories = map[string]bool{
+	"project_charter":        true,
+	"project_approval":       true,
+	"business_case":          true,
+	"business_requirements":  true,
+	"solution_architecture":  true,
+	"solution_design":        true,
+	"solution_brief":         true,
+	"technical_specification": true,
+	"test_plan":              true,
+	"test_results":           true,
+	"user_manual":            true,
+	"training_material":      true,
+	"deployment_guide":       true,
+	"meeting_minutes":        true,
+	"status_report":          true,
+	"risk_register":          true,
+	"change_request":         true,
+	"sign_off":               true,
+	"closure_report":         true,
+	"other":                  true,
+}
+
+// ──────────────────────────────────────────────
+// Project Document domain types
+// ──────────────────────────────────────────────
+
+// ProjectDocument represents a document linked to a project with enrichment metadata.
+type ProjectDocument struct {
+	ID           uuid.UUID `json:"id"`
+	TenantID     uuid.UUID `json:"tenantId"`
+	ProjectID    uuid.UUID `json:"projectId"`
+	DocumentID   uuid.UUID `json:"documentId"`
+	Category     string    `json:"category"`
+	Label        *string   `json:"label"`
+	Version      string    `json:"version"`
+	DisplayOrder int       `json:"displayOrder"`
+	Status       string    `json:"status"`
+	UploadedBy   uuid.UUID `json:"uploadedBy"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+
+	// Joined fields from documents table
+	Title        string  `json:"title"`
+	Description  *string `json:"description"`
+	FileName     string  `json:"fileName"`
+	ContentType  string  `json:"contentType"`
+	SizeBytes    int64   `json:"sizeBytes"`
+	UploaderName string  `json:"uploaderName,omitempty"`
+}
+
+// ProjectDocumentCategoryCount holds a count of documents per category.
+type ProjectDocumentCategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}
+
+// ──────────────────────────────────────────────
+// Project Document request types
+// ──────────────────────────────────────────────
+
+// UploadProjectDocumentRequest is parsed from multipart form fields.
+type UploadProjectDocumentRequest struct {
+	Title       string  `json:"title"`
+	Description *string `json:"description"`
+	Category    string  `json:"category"`
+	Label       *string `json:"label"`
+	Version     *string `json:"version"`
+}
+
+// UpdateProjectDocumentRequest is the payload for updating document metadata.
+type UpdateProjectDocumentRequest struct {
+	Category     *string `json:"category"`
+	Label        *string `json:"label"`
+	Version      *string `json:"version"`
+	DisplayOrder *int    `json:"displayOrder"`
+	Status       *string `json:"status"`
+	Title        *string `json:"title"`
+	Description  *string `json:"description"`
 }

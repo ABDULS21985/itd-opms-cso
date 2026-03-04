@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   RefreshCw,
   Loader2,
   CheckCircle,
-  AlertTriangle,
   Plus,
   ChevronDown,
   ChevronUp,
@@ -17,7 +16,6 @@ import {
   useReconciliationRuns,
   useCreateReconciliationRun,
 } from "@/hooks/use-cmdb";
-import type { ReconciliationRun } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -65,7 +63,7 @@ function ReportViewer({ report }: { report: Record<string, unknown> }) {
 export default function ReconciliationPage() {
   const [page, setPage] = useState(1);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [triggerSource, setTriggerSource] = useState("manual");
+  const [triggerSource, _setTriggerSource] = useState("manual");
 
   const { data, isLoading } = useReconciliationRuns(page, 20);
   const createRun = useCreateReconciliationRun();

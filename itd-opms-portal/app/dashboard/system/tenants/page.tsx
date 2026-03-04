@@ -311,7 +311,7 @@ function DetailPanel({ tenant, onEdit, onDeactivate }: {
             </pre>
           </DetailRow>
         )}
-        {tenant.children.length > 0 && (
+        {tenant.children && tenant.children.length > 0 && (
           <DetailRow label="Children">
             <div className="flex flex-wrap gap-1.5">
               {tenant.children.map((c) => {

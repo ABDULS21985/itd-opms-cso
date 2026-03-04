@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bug,
@@ -9,7 +8,6 @@ import {
   Filter,
   ChevronDown,
   ChevronRight,
-  AlertCircle,
   Link as LinkIcon,
   FileText,
   Loader2,
@@ -365,7 +363,6 @@ function ProblemRow({
 /* ------------------------------------------------------------------ */
 
 export default function ProblemsPage() {
-  const router = useRouter();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);

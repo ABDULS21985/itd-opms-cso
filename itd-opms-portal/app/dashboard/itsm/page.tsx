@@ -216,7 +216,6 @@ export default function ITSMHubPage() {
         </h2>
         <div className="flex flex-wrap gap-3">
           {quickLinks.map((link) => {
-            const Icon = link.icon;
             return (
               <Link
                 key={link.label}

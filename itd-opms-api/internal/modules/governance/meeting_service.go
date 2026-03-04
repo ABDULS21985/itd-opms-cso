@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,26 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
+
+// OverdueStats provides overdue action statistics for the tenant dashboard.
+type OverdueStats struct {
+	TotalOverdue       int                 `json:"totalOverdue"`
+	OverdueByPriority  map[string]int      `json:"overdueByPriority"`
+	OverdueByOwner     []OwnerOverdueCount `json:"overdueByOwner"`
+	OldestOverdueDays  int                 `json:"oldestOverdueDays"`
+	AvgDaysOverdue     float64             `json:"avgDaysOverdue"`
+	DueThisWeek        int                 `json:"dueThisWeek"`
+	CompletedThisMonth int                 `json:"completedThisMonth"`
+}
+
+// OwnerOverdueCount tracks overdue actions per owner.
+type OwnerOverdueCount struct {
+	OwnerID   uuid.UUID `json:"ownerId"`
+	OwnerName string    `json:"ownerName"`
+	Count     int       `json:"count"`
+}
 
 // MeetingService handles business logic for meeting management.
 type MeetingService struct {
@@ -104,33 +124,49 @@ func (s *MeetingService) GetMeeting(ctx context.Context, tenantID, meetingID uui
 
 // ListMeetings returns a paginated list of meetings, optionally filtered by status.
 func (s *MeetingService) ListMeetings(ctx context.Context, tenantID uuid.UUID, status string, limit, offset int) ([]Meeting, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var statusParam *string
 	if status != "" {
 		statusParam = &status
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status.
+	args := []interface{}{tenantID, statusParam}
+	nextIdx := 3
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count meetings", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
+			AND ($2::text IS NULL OR status = $2)%s
 		ORDER BY scheduled_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list meetings", err)
 	}
@@ -229,11 +265,14 @@ func (s *MeetingService) UpdateMeetingStatus(ctx context.Context, tenantID, meet
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting.status_changed",
 		EntityType: "meeting",
 		EntityID:   meetingID,
@@ -293,6 +332,7 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"decision_number": decisionNumber,
 		"title":           req.Title,
@@ -300,6 +340,8 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.created",
 		EntityType: "meeting_decision",
 		EntityID:   id,
@@ -362,10 +404,14 @@ func (s *MeetingService) UpdateDecisionStatus(ctx context.Context, decisionID uu
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.status_changed",
 		EntityType: "meeting_decision",
 		EntityID:   decisionID,
@@ -410,6 +456,7 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"title":       req.Title,
 		"source_type": req.SourceType,
@@ -419,6 +466,8 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.created",
 		EntityType: "action_item",
 		EntityID:   id,
@@ -457,6 +506,8 @@ func (s *MeetingService) GetActionItem(ctx context.Context, tenantID, actionID u
 
 // ListActionItems returns a paginated list of action items, optionally filtered by status and owner.
 func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID string, limit, offset int) ([]ActionItem, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var statusParam, ownerParam *string
 	if status != "" {
 		statusParam = &status
@@ -465,30 +516,44 @@ func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID
 		ownerParam = &ownerID
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status, $3=ownerID.
+	args := []interface{}{tenantID, statusParam, ownerParam}
+	nextIdx := 4
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)`
+			AND ($3::text IS NULL OR owner_id::text = $3)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam, ownerParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count action items", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, source_type, source_id, title,
 			description, owner_id, due_date, status,
 			completion_evidence, completed_at, priority, created_at
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($3::text IS NULL OR owner_id::text = $3)%s
 		ORDER BY due_date ASC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, ownerParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list action items", err)
 	}
@@ -551,11 +616,14 @@ func (s *MeetingService) UpdateActionItem(ctx context.Context, tenantID, actionI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.updated",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -627,12 +695,15 @@ func (s *MeetingService) CompleteActionItem(ctx context.Context, tenantID, actio
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"status":       ActionStatusCompleted,
 		"completed_at": now,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.completed",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -642,4 +713,173 @@ func (s *MeetingService) CompleteActionItem(ctx context.Context, tenantID, actio
 	}
 
 	return nil
+}
+
+// GetOverdueActionStats returns aggregated overdue action item statistics for a tenant.
+func (s *MeetingService) GetOverdueActionStats(ctx context.Context, tenantID uuid.UUID) (*OverdueStats, error) {
+	stats := &OverdueStats{
+		OverdueByPriority: make(map[string]int),
+		OverdueByOwner:    []OwnerOverdueCount{},
+	}
+
+	// Total overdue count.
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE`,
+		tenantID,
+	).Scan(&stats.TotalOverdue)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count overdue actions", err)
+	}
+
+	// Overdue by priority.
+	rows, err := s.pool.Query(ctx, `
+		SELECT priority, COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE
+		GROUP BY priority`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue by priority", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var priority string
+		var count int
+		if err := rows.Scan(&priority, &count); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue by priority", err)
+		}
+		stats.OverdueByPriority[priority] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue by priority", err)
+	}
+
+	// Overdue by owner (top 10).
+	ownerRows, err := s.pool.Query(ctx, `
+		SELECT a.owner_id, u.display_name, COUNT(*)
+		FROM action_items a
+		JOIN users u ON u.id = a.owner_id
+		WHERE a.tenant_id = $1 AND a.status IN ('open', 'in_progress') AND a.due_date < CURRENT_DATE
+		GROUP BY a.owner_id, u.display_name
+		ORDER BY COUNT(*) DESC
+		LIMIT 10`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue by owner", err)
+	}
+	defer ownerRows.Close()
+
+	for ownerRows.Next() {
+		var oc OwnerOverdueCount
+		if err := ownerRows.Scan(&oc.OwnerID, &oc.OwnerName, &oc.Count); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue by owner", err)
+		}
+		stats.OverdueByOwner = append(stats.OverdueByOwner, oc)
+	}
+	if err := ownerRows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue by owner", err)
+	}
+
+	// Oldest overdue days and average days overdue.
+	var oldestDays *int
+	var avgDays *float64
+	err = s.pool.QueryRow(ctx, `
+		SELECT
+			MAX(CURRENT_DATE - due_date),
+			AVG(CURRENT_DATE - due_date)::float8
+		FROM action_items
+		WHERE tenant_id = $1 AND status IN ('open', 'in_progress') AND due_date < CURRENT_DATE`,
+		tenantID,
+	).Scan(&oldestDays, &avgDays)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query overdue age stats", err)
+	}
+	if oldestDays != nil {
+		stats.OldestOverdueDays = *oldestDays
+	}
+	if avgDays != nil {
+		stats.AvgDaysOverdue = math.Round(*avgDays*100) / 100
+	}
+
+	// Due this week (open/in_progress items due within the next 7 days).
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1
+			AND status IN ('open', 'in_progress')
+			AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
+		tenantID,
+	).Scan(&stats.DueThisWeek)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count due this week", err)
+	}
+
+	// Completed this month.
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM action_items
+		WHERE tenant_id = $1
+			AND status = 'completed'
+			AND completed_at >= date_trunc('month', CURRENT_DATE)`,
+		tenantID,
+	).Scan(&stats.CompletedThisMonth)
+	if err != nil {
+		return nil, apperrors.Internal("failed to count completed this month", err)
+	}
+
+	return stats, nil
+}
+
+// GetOverdueActionsByOwner returns all overdue action items for a specific owner within a tenant.
+func (s *MeetingService) GetOverdueActionsByOwner(ctx context.Context, tenantID, ownerID uuid.UUID) ([]ActionItem, error) {
+	query := `
+		SELECT id, tenant_id, source_type, source_id, title,
+			description, owner_id, due_date, status,
+			completion_evidence, completed_at, priority, created_at
+		FROM action_items
+		WHERE tenant_id = $1 AND owner_id = $2
+			AND status IN ('open', 'in_progress')
+			AND due_date < CURRENT_DATE
+		ORDER BY due_date ASC`
+
+	rows, err := s.pool.Query(ctx, query, tenantID, ownerID)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list overdue actions by owner", err)
+	}
+	defer rows.Close()
+
+	var items []ActionItem
+	for rows.Next() {
+		var a ActionItem
+		if err := rows.Scan(
+			&a.ID, &a.TenantID, &a.SourceType, &a.SourceID, &a.Title,
+			&a.Description, &a.OwnerID, &a.DueDate, &a.Status,
+			&a.CompletionEvidence, &a.CompletedAt, &a.Priority, &a.CreatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan overdue action", err)
+		}
+		items = append(items, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate overdue actions", err)
+	}
+
+	if items == nil {
+		items = []ActionItem{}
+	}
+
+	return items, nil
+}
+
+// firstRole returns the first role from a slice, or "unknown" if empty.
+func firstRole(roles []string) string {
+	if len(roles) > 0 {
+		return roles[0]
+	}
+	return "unknown"
 }

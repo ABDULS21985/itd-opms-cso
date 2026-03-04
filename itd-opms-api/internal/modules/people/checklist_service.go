@@ -3,6 +3,7 @@ package people
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -392,21 +393,36 @@ func (s *ChecklistService) ListChecklists(ctx context.Context, checklistType, st
 
 	offset := (page - 1) * limit
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $4 (userID) is 5.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 5)
+
+	// Build args: tenant_id, checklistType, status, userID [, orgParam]
+	countArgs := []interface{}{auth.TenantID, checklistType, status, userID}
+	orgSQL := ""
+	nextIdx := 5
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 6
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM checklists
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR type = $2)
 			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR user_id = $4)`
+			AND ($4::uuid IS NULL OR user_id = $4)%s`, orgSQL)
 
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, checklistType, status, userID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count checklists", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, template_id, user_id, type,
 			status, completion_pct, started_at, completed_at,
 			created_at, updated_at
@@ -414,11 +430,12 @@ func (s *ChecklistService) ListChecklists(ctx context.Context, checklistType, st
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR type = $2)
 			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR user_id = $4)
+			AND ($4::uuid IS NULL OR user_id = $4)%s
 		ORDER BY created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, checklistType, status, userID, limit, offset)
+	dataArgs := append(countArgs, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list checklists", err)
 	}

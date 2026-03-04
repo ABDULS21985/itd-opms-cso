@@ -1130,3 +1130,18 @@ export function useCreateCSATSurvey(ticketId: string | undefined) {
     },
   });
 }
+
+/**
+ * POST /itsm/tickets/bulk/update - bulk update tickets.
+ */
+export function useBulkUpdateTickets() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; fields: Record<string, unknown> }) =>
+      apiClient.post("/itsm/tickets/bulk/update", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+    },
+  });
+}

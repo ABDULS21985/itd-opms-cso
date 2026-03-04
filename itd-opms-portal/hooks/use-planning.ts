@@ -14,7 +14,19 @@ import type {
   Risk,
   ProjectIssue,
   ChangeRequest,
+  ProjectTimeline,
+  PortfolioTimelineItem,
+  PIR,
+  PIRTemplate,
+  PIRStats,
   PaginatedResponse,
+  ProjectDocument,
+  ProjectDocumentCategoryCount,
+  DocumentDownloadResponse,
+  ValidateImportResponse,
+  CommitImportResponse,
+  ImportBatch,
+  ImportBatchError,
 } from "@/types";
 
 /* ================================================================== */
@@ -870,7 +882,7 @@ export function useEscalateIssue() {
       escalatedToId: string;
     }) =>
       apiClient.put(`/planning/issues/${id}/escalate`, { escalatedToId }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       toast.success("Issue escalated");
     },
@@ -995,5 +1007,409 @@ export function useDeleteChangeRequest() {
     onError: () => {
       toast.error("Failed to delete change request");
     },
+  });
+}
+
+/* ================================================================== */
+/*  FR-C009: Project & Portfolio Timeline                              */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/timeline - project timeline data for Gantt chart.
+ */
+export function useProjectTimeline(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project-timeline", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectTimeline>(
+        `/planning/projects/${projectId}/timeline`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/portfolios/{id}/timeline - portfolio timeline for Gantt chart.
+ */
+export function usePortfolioTimeline(portfolioId: string | undefined) {
+  return useQuery({
+    queryKey: ["portfolio-timeline", portfolioId],
+    queryFn: () =>
+      apiClient.get<PortfolioTimelineItem[]>(
+        `/planning/portfolios/${portfolioId}/timeline`,
+      ),
+    enabled: !!portfolioId,
+  });
+}
+
+/* ================================================================== */
+/*  FR-C016: Post-Implementation Reviews (PIR)                         */
+/* ================================================================== */
+
+/**
+ * GET /planning/pir - paginated list of PIRs.
+ */
+export function usePIRs(
+  page = 1,
+  limit = 20,
+  projectId?: string,
+  status?: string,
+) {
+  return useQuery({
+    queryKey: ["pirs", page, limit, projectId, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<PIR>>("/planning/pir", {
+        page,
+        limit,
+        projectId,
+        status,
+      }),
+  });
+}
+
+/**
+ * GET /planning/pir/{id} - single PIR detail.
+ */
+export function usePIR(id: string | undefined) {
+  return useQuery({
+    queryKey: ["pir", id],
+    queryFn: () => apiClient.get<PIR>(`/planning/pir/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /planning/pir/stats - PIR statistics.
+ */
+export function usePIRStats() {
+  return useQuery({
+    queryKey: ["pir-stats"],
+    queryFn: () => apiClient.get<PIRStats>("/planning/pir/stats"),
+  });
+}
+
+/**
+ * GET /planning/pir/templates - PIR templates.
+ */
+export function usePIRTemplates(reviewType?: string) {
+  return useQuery({
+    queryKey: ["pir-templates", reviewType],
+    queryFn: () =>
+      apiClient.get<PIRTemplate[]>("/planning/pir/templates", { reviewType }),
+  });
+}
+
+/**
+ * POST /planning/pir - create a PIR.
+ */
+export function useCreatePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<PIR>) =>
+      apiClient.post<PIR>("/planning/pir", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("Post-Implementation Review created");
+    },
+    onError: () => {
+      toast.error("Failed to create PIR");
+    },
+  });
+}
+
+/**
+ * PUT /planning/pir/{id} - update a PIR.
+ */
+export function useUpdatePIR(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<PIR>) =>
+      apiClient.put<PIR>(`/planning/pir/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir", id] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR updated");
+    },
+    onError: () => {
+      toast.error("Failed to update PIR");
+    },
+  });
+}
+
+/**
+ * POST /planning/pir/{id}/complete - complete a PIR.
+ */
+export function useCompletePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<PIR>(`/planning/pir/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR marked as completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete PIR");
+    },
+  });
+}
+
+/**
+ * DELETE /planning/pir/{id} - delete a PIR.
+ */
+export function useDeletePIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/planning/pir/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pirs"] });
+      queryClient.invalidateQueries({ queryKey: ["pir-stats"] });
+      toast.success("PIR deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete PIR");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Project Documents — Queries                                        */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/documents - paginated list of project documents.
+ */
+export function useProjectDocuments(
+  projectId: string | undefined,
+  page = 1,
+  limit = 20,
+  category?: string,
+  status?: string,
+  search?: string,
+) {
+  return useQuery({
+    queryKey: [
+      "project-documents",
+      projectId,
+      page,
+      limit,
+      category,
+      status,
+      search,
+    ],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ProjectDocument>>(
+        `/planning/projects/${projectId}/documents`,
+        { page, limit, category, status, search },
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/documents/categories - category counts.
+ */
+export function useProjectDocumentCategories(
+  projectId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["project-document-categories", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectDocumentCategoryCount[]>(
+        `/planning/projects/${projectId}/documents/categories`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/* ================================================================== */
+/*  Project Documents — Mutations                                      */
+/* ================================================================== */
+
+/**
+ * POST /planning/projects/{id}/documents - upload a document (multipart).
+ */
+export function useUploadProjectDocument(projectId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<ProjectDocument>(
+        `/planning/projects/${projectId}/documents`,
+        formData,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document uploaded successfully");
+    },
+    onError: () => {
+      toast.error("Failed to upload document");
+    },
+  });
+}
+
+/**
+ * PUT /planning/projects/{id}/documents/{docId} - update document metadata.
+ */
+export function useUpdateProjectDocument(
+  projectId: string | undefined,
+  docId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<ProjectDocument>) =>
+      apiClient.put<ProjectDocument>(
+        `/planning/projects/${projectId}/documents/${docId}`,
+        body,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update document");
+    },
+  });
+}
+
+/**
+ * DELETE /planning/projects/{id}/documents/{docId} - delete a document.
+ */
+export function useDeleteProjectDocument(projectId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (docId: string) =>
+      apiClient.delete(
+        `/planning/projects/${projectId}/documents/${docId}`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["project-documents", projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-document-categories", projectId],
+      });
+      toast.success("Document deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete document");
+    },
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/documents/{docId}/download - get download URL.
+ */
+export function useDownloadProjectDocument(
+  projectId: string | undefined,
+) {
+  return useMutation({
+    mutationFn: (docId: string) =>
+      apiClient.get<DocumentDownloadResponse>(
+        `/planning/projects/${projectId}/documents/${docId}/download`,
+      ),
+    onSuccess: (data) => {
+      window.open(data.url, "_blank");
+    },
+    onError: () => {
+      toast.error("Failed to download document");
+    },
+  });
+}
+
+/**
+ * POST /planning/work-items/bulk/update - bulk update work items.
+ */
+export function useBulkUpdateWorkItems() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; fields: Record<string, unknown> }) =>
+      apiClient.post("/planning/work-items/bulk/update", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work-items"] });
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Bulk Project Import                                                */
+/* ================================================================== */
+
+/**
+ * POST /planning/projects/import/validate - upload and validate a file.
+ */
+export function useValidateProjectImport() {
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<ValidateImportResponse>(
+        "/planning/projects/import/validate",
+        formData,
+      ),
+    onError: () => {
+      toast.error("Failed to validate import file");
+    },
+  });
+}
+
+/**
+ * POST /planning/projects/import/commit - commit a validated batch.
+ */
+export function useCommitProjectImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) =>
+      apiClient.post<CommitImportResponse>(
+        "/planning/projects/import/commit",
+        { batchId },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(
+        `Successfully imported ${data.importedRows} project${data.importedRows !== 1 ? "s" : ""}`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to import projects");
+    },
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id} - get batch details.
+ */
+export function useImportBatch(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch", id],
+    queryFn: () =>
+      apiClient.get<ImportBatch>(
+        `/planning/projects/import/batches/${id}`,
+      ),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id}/errors - get batch errors.
+ */
+export function useImportBatchErrors(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch-errors", id],
+    queryFn: () =>
+      apiClient.get<ImportBatchError[]>(
+        `/planning/projects/import/batches/${id}/errors`,
+      ),
+    enabled: !!id,
   });
 }

@@ -29,6 +29,7 @@ func NewOrgHandler(svc *OrgService) *OrgHandler {
 func (h *OrgHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("system.view")).Get("/", h.ListOrgUnits)
 	r.With(middleware.RequirePermission("system.view")).Get("/tree", h.GetOrgTree)
+	r.With(middleware.RequirePermission("system.view")).Get("/analytics", h.GetOrgAnalytics)
 	r.With(middleware.RequirePermission("system.view")).Get("/{id}", h.GetOrgUnit)
 	r.With(middleware.RequirePermission("system.manage")).Post("/", h.CreateOrgUnit)
 	r.With(middleware.RequirePermission("system.manage")).Patch("/{id}", h.UpdateOrgUnit)
@@ -200,6 +201,23 @@ func (h *OrgHandler) DeleteOrgUnit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// GetOrgAnalytics handles GET /system/org-units/analytics — org analytics.
+func (h *OrgHandler) GetOrgAnalytics(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	analytics, err := h.svc.GetOrgAnalytics(r.Context(), auth.TenantID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, analytics, nil)
 }
 
 // GetOrgUnitUsers handles GET /system/org-units/{id}/users — users in org unit.

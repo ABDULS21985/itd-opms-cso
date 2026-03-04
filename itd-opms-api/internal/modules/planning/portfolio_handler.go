@@ -224,7 +224,9 @@ func (h *PortfolioHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) 
 
 // ProjectHandler handles HTTP requests for project management.
 type ProjectHandler struct {
-	svc *ProjectService
+	svc    *ProjectService
+	doc    *DocumentHandler
+	budget *BudgetHandler
 }
 
 // NewProjectHandler creates a new ProjectHandler.
@@ -255,6 +257,31 @@ func (h *ProjectHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("planning.view")).Get("/stakeholders", h.GetProjectStakeholders)
 		r.With(middleware.RequirePermission("planning.manage")).Post("/stakeholders", h.AddProjectStakeholder)
 		r.With(middleware.RequirePermission("planning.manage")).Delete("/stakeholders/{stakeholderId}", h.RemoveProjectStakeholder)
+
+		// Division assignments
+		r.With(middleware.RequirePermission("planning.view")).Get("/divisions", h.ListProjectDivisions)
+		r.With(middleware.RequirePermission("planning.manage")).Post("/divisions", h.AssignProjectDivision)
+		r.With(middleware.RequirePermission("planning.manage")).Delete("/divisions/{divisionId}", h.UnassignProjectDivision)
+		r.With(middleware.RequirePermission("planning.manage")).Post("/divisions/reassign", h.ReassignProjectDivision)
+		r.With(middleware.RequirePermission("planning.view")).Get("/divisions/history", h.GetDivisionAssignmentHistory)
+
+		// Documents
+		r.Route("/documents", func(r chi.Router) {
+			r.With(middleware.RequirePermission("planning.view")).Get("/", h.doc.ListDocuments)
+			r.With(middleware.RequirePermission("planning.manage")).Post("/", h.doc.UploadDocument)
+			r.With(middleware.RequirePermission("planning.view")).Get("/categories", h.doc.GetCategoryCounts)
+			r.With(middleware.RequirePermission("planning.view")).Get("/{docId}", h.doc.GetDocument)
+			r.With(middleware.RequirePermission("planning.manage")).Put("/{docId}", h.doc.UpdateDocument)
+			r.With(middleware.RequirePermission("planning.manage")).Delete("/{docId}", h.doc.DeleteDocument)
+			r.With(middleware.RequirePermission("planning.view")).Get("/{docId}/download", h.doc.GetDownloadURL)
+		})
+
+		// Budget & Cost Tracking
+		if h.budget != nil {
+			r.Route("/budget", func(r chi.Router) {
+				h.budget.Routes(r)
+			})
+		}
 	})
 }
 
@@ -610,6 +637,149 @@ func (h *ProjectHandler) RemoveProjectStakeholder(w http.ResponseWriter, r *http
 	}
 
 	types.NoContent(w)
+}
+
+// ──────────────────────────────────────────────
+// Division Assignment Handlers
+// ──────────────────────────────────────────────
+
+// ListProjectDivisions handles GET /{id}/divisions — returns active division assignments.
+func (h *ProjectHandler) ListProjectDivisions(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	assignments, err := h.svc.ListProjectDivisions(r.Context(), projectID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, assignments, nil)
+}
+
+// AssignProjectDivision handles POST /{id}/divisions — assigns a division.
+func (h *ProjectHandler) AssignProjectDivision(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	var req AssignDivisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+	if req.DivisionID == uuid.Nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Division ID is required")
+		return
+	}
+
+	assignment, err := h.svc.AssignProjectDivision(r.Context(), projectID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, assignment)
+}
+
+// UnassignProjectDivision handles DELETE /{id}/divisions/{divisionId}.
+func (h *ProjectHandler) UnassignProjectDivision(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	divisionID, err := uuid.Parse(chi.URLParam(r, "divisionId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid division ID")
+		return
+	}
+
+	if err := h.svc.UnassignProjectDivision(r.Context(), projectID, divisionID); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.NoContent(w)
+}
+
+// ReassignProjectDivision handles POST /{id}/divisions/reassign.
+func (h *ProjectHandler) ReassignProjectDivision(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	var req ReassignDivisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+	if req.FromDivisionID == uuid.Nil || req.ToDivisionID == uuid.Nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Both fromDivisionId and toDivisionId are required")
+		return
+	}
+
+	if err := h.svc.ReassignProjectDivision(r.Context(), projectID, req); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.NoContent(w)
+}
+
+// GetDivisionAssignmentHistory handles GET /{id}/divisions/history.
+func (h *ProjectHandler) GetDivisionAssignmentHistory(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	logs, err := h.svc.GetDivisionAssignmentHistory(r.Context(), "project", projectID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, logs, nil)
 }
 
 // ──────────────────────────────────────────────

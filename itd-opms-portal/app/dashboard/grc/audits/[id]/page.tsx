@@ -10,9 +10,7 @@ import {
   FolderArchive,
   Calendar,
   User,
-  AlertTriangle,
   CheckCircle,
-  Plus,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {

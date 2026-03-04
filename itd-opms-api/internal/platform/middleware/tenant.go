@@ -92,3 +92,19 @@ func Tenant(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RLSTenantContext is a lightweight chi middleware that extracts the tenant ID
+// from the authenticated user's context and stores it for RLS-aware operations.
+// Unlike the full Tenant middleware, this does not validate the tenant against
+// the database (that's already done during auth).
+func RLSTenantContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authCtx := types.GetAuthContext(r.Context())
+		if authCtx != nil && authCtx.TenantID != uuid.Nil {
+			ctx := SetTenantID(r.Context(), authCtx.TenantID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

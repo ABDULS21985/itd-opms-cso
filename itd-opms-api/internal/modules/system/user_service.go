@@ -41,6 +41,7 @@ func scanUserDetail(row pgx.Row) (UserDetail, error) {
 		&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 		&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.OrgUnitID, &u.OrgUnitName,
 	)
 	return u, err
 }
@@ -54,6 +55,7 @@ func scanUserDetails(rows pgx.Rows) ([]UserDetail, error) {
 			&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 			&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 			&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+			&u.OrgUnitID, &u.OrgUnitName,
 		); err != nil {
 			return nil, err
 		}
@@ -173,9 +175,11 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.tenant_id = $1
 		  AND ($2::text = 'all' OR ($2::text = 'active' AND u.is_active = true) OR ($2::text = 'inactive' AND u.is_active = false))
 		  AND ($3::text = '' OR u.display_name ILIKE '%' || $3::text || '%' OR u.email ILIKE '%' || $3::text || '%')
@@ -213,15 +217,75 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 	return users, total, nil
 }
 
+// CreateUser creates a new user with a default password hash.
+func (s *UserService) CreateUser(ctx context.Context, tenantID uuid.UUID, req CreateUserRequest) (*UserDetail, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	// Validate required fields.
+	if req.Email == "" {
+		return nil, apperrors.BadRequest("email is required")
+	}
+	if req.DisplayName == "" {
+		return nil, apperrors.BadRequest("displayName is required")
+	}
+
+	// Check for duplicate email.
+	var exists bool
+	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", req.Email).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("check existing email: %w", err)
+	}
+	if exists {
+		return nil, apperrors.Conflict("a user with this email already exists")
+	}
+
+	// Insert user with default password hash.
+	defaultPwdHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+	var newID uuid.UUID
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO users (email, display_name, entra_id, job_title, department, office, unit, tenant_id, password_hash, org_unit_id)
+		VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id`,
+		req.Email, req.DisplayName,
+		ptrStr(req.JobTitle), ptrStr(req.Department),
+		ptrStr(req.Office), ptrStr(req.Unit),
+		tenantID, defaultPwdHash, req.OrgUnitID,
+	).Scan(&newID)
+	if err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(req)
+	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:      tenantID,
+		ActorID:       auth.UserID,
+		ActorRole:     firstRole(auth.Roles),
+		Action:        "user.created",
+		EntityType:    "user",
+		EntityID:      newID,
+		Changes:       changes,
+		CorrelationID: types.GetCorrelationID(ctx),
+	})
+
+	// Return full user detail.
+	return s.GetUser(ctx, tenantID, newID)
+}
+
 // GetUser returns a single user with their roles and delegations.
 func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (*UserDetail, error) {
 	query := `
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.id = $1 AND u.tenant_id = $2`
 
 	user, err := scanUserDetail(s.pool.QueryRow(ctx, query, userID, tenantID))
@@ -304,6 +368,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		  office = COALESCE(NULLIF($6, ''), office),
 		  unit = COALESCE(NULLIF($7, ''), unit),
 		  phone = COALESCE(NULLIF($8, ''), phone),
+		  org_unit_id = COALESCE($9, org_unit_id),
 		  updated_at = NOW()
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -312,6 +377,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		ptrStr(req.DisplayName), ptrStr(req.JobTitle),
 		ptrStr(req.Department), ptrStr(req.Office),
 		ptrStr(req.Unit), ptrStr(req.Phone),
+		req.OrgUnitID,
 	)
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)
@@ -440,7 +506,7 @@ func (s *UserService) AssignRole(ctx context.Context, tenantID, userID uuid.UUID
 		SELECT COUNT(*) FROM role_bindings
 		WHERE user_id = $1 AND role_id = $2 AND tenant_id = $3
 		  AND scope_type = $4::scope_type
-		  AND COALESCE(scope_id, '00000000-0000-0000-0000-000000000000') = COALESCE($5, '00000000-0000-0000-0000-000000000000')
+		  AND scope_id IS NOT DISTINCT FROM $5
 		  AND is_active = true`,
 		userID, req.RoleID, tenantID, req.ScopeType, req.ScopeID,
 	).Scan(&existing)

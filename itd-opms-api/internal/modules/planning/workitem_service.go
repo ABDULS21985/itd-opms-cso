@@ -160,22 +160,11 @@ func (s *WorkItemService) GetWorkItem(ctx context.Context, id uuid.UUID) (WorkIt
 }
 
 // ListWorkItems returns a filtered, paginated list of work items for a project.
-func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID uuid.UUID, status, assignee, priority, wiType *string, limit, offset int) ([]WorkItem, int64, error) {
+func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUID, status, assignee, priority, wiType *string, limit, offset int) ([]WorkItem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
-
-	// Count total matching records.
-	countQuery := `
-		SELECT COUNT(*)
-		FROM work_items
-		WHERE tenant_id = $1
-			AND project_id = $2
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR assignee_id = $4)
-			AND ($5::text IS NULL OR priority = $5)
-			AND ($6::text IS NULL OR type = $6)`
 
 	var assigneeID *uuid.UUID
 	if assignee != nil && *assignee != "" {
@@ -185,29 +174,56 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID uuid.UUID
 		}
 	}
 
+	// Build base args: $1=tenantID, $2=projectID, $3=status, $4=assigneeID, $5=priority, $6=wiType.
+	args := []interface{}{auth.TenantID, projectID, status, assigneeID, priority, wiType}
+	nextIdx := 7
+
+	// Add org scope filter via JOIN to projects on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	// Count total matching records.
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE wi.tenant_id = $1
+			AND ($2::uuid IS NULL OR wi.project_id = $2)
+			AND ($3::text IS NULL OR wi.status = $3)
+			AND ($4::uuid IS NULL OR wi.assignee_id = $4)
+			AND ($5::text IS NULL OR wi.priority = $5)
+			AND ($6::text IS NULL OR wi.type = $6)%s`, orgClause)
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, projectID, status, assigneeID, priority, wiType).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count work items", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
-		SELECT id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
-			estimated_hours, actual_hours, due_date, completed_at,
-			sort_order, tags, metadata, created_at, updated_at
-		FROM work_items
-		WHERE tenant_id = $1
-			AND project_id = $2
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::uuid IS NULL OR assignee_id = $4)
-			AND ($5::text IS NULL OR priority = $5)
-			AND ($6::text IS NULL OR type = $6)
-		ORDER BY sort_order ASC, created_at DESC
-		LIMIT $7 OFFSET $8`
+	dataQuery := fmt.Sprintf(`
+		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
+			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
+			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE wi.tenant_id = $1
+			AND ($2::uuid IS NULL OR wi.project_id = $2)
+			AND ($3::text IS NULL OR wi.status = $3)
+			AND ($4::uuid IS NULL OR wi.assignee_id = $4)
+			AND ($5::text IS NULL OR wi.priority = $5)
+			AND ($6::text IS NULL OR wi.type = $6)%s
+		ORDER BY wi.sort_order ASC, wi.created_at DESC
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, projectID, status, assigneeID, priority, wiType, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list work items", err)
 	}
@@ -556,25 +572,39 @@ func (s *WorkItemService) GetWorkItemStatusCounts(ctx context.Context, projectID
 }
 
 // ListOverdueWorkItems returns work items that are past due and not yet completed.
-func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID uuid.UUID) ([]WorkItem, error) {
+func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID *uuid.UUID) ([]WorkItem, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
-			estimated_hours, actual_hours, due_date, completed_at,
-			sort_order, tags, metadata, created_at, updated_at
-		FROM work_items
-		WHERE project_id = $1
-			AND tenant_id = $2
-			AND due_date < NOW()
-			AND status IN ('todo', 'in_progress')
-		ORDER BY due_date ASC`
+	// Build base args: $1=projectID, $2=tenantID.
+	args := []interface{}{projectID, auth.TenantID}
+	nextIdx := 3
 
-	rows, err := s.pool.Query(ctx, query, projectID, auth.TenantID)
+	// Add org scope filter via JOIN to projects on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	query := fmt.Sprintf(`
+		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
+			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
+			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
+		FROM work_items wi
+		JOIN projects p ON p.id = wi.project_id
+		WHERE ($1::uuid IS NULL OR wi.project_id = $1)
+			AND wi.tenant_id = $2
+			AND wi.due_date < NOW()
+			AND wi.status IN ('todo', 'in_progress')%s
+		ORDER BY wi.due_date ASC`, orgClause)
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list overdue work items", err)
 	}
@@ -979,4 +1009,86 @@ func (s *WorkItemService) GetTimeSum(ctx context.Context, workItemID uuid.UUID) 
 	}
 
 	return total, nil
+}
+
+// ──────────────────────────────────────────────
+// Bulk Operations
+// ──────────────────────────────────────────────
+
+// workItemColumnForField maps a JSON field name to its database column name for work items.
+// Returns empty string if the field is not allowed for bulk update.
+func workItemColumnForField(field string) string {
+	switch field {
+	case "status":
+		return "status"
+	case "priority":
+		return "priority"
+	case "assigneeId":
+		return "assignee_id"
+	case "dueDate":
+		return "due_date"
+	default:
+		return ""
+	}
+}
+
+// BulkUpdateWorkItems updates multiple work items matching the given IDs with the provided field values.
+// Only allowed fields (status, priority, assigneeId, dueDate) are accepted.
+func (s *WorkItemService) BulkUpdateWorkItems(ctx context.Context, ids []uuid.UUID, fields map[string]string) (int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return 0, apperrors.Unauthorized("authentication required")
+	}
+
+	if len(ids) == 0 {
+		return 0, apperrors.BadRequest("ids must not be empty")
+	}
+
+	if len(fields) == 0 {
+		return 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	// Build dynamic SET clause.
+	setClauses := []string{}
+	args := []any{auth.TenantID, ids}
+	argIdx := 3
+
+	for field, value := range fields {
+		col := workItemColumnForField(field)
+		if col == "" {
+			return 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, argIdx))
+		args = append(args, value)
+		argIdx++
+	}
+
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
+	args = append(args, time.Now().UTC())
+
+	query := fmt.Sprintf(`
+		UPDATE work_items
+		SET %s
+		WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		joinWorkItemStrings(setClauses, ", "),
+	)
+
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, apperrors.Internal("failed to bulk update work items", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// joinWorkItemStrings joins a slice of strings with a separator.
+func joinWorkItemStrings(elems []string, sep string) string {
+	if len(elems) == 0 {
+		return ""
+	}
+	result := elems[0]
+	for _, e := range elems[1:] {
+		result += sep + e
+	}
+	return result
 }

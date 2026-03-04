@@ -59,25 +59,22 @@ func (s *RiskService) CreateRisk(ctx context.Context, req CreateRiskRequest) (Ri
 	query := `
 		INSERT INTO risks (
 			id, tenant_id, risk_number, title, description,
-			category, likelihood, impact, risk_score, status,
+			category, likelihood, impact, status,
 			treatment_plan, contingency_plan, owner_id, reviewer_id,
 			review_date, next_review_date, linked_project_id, linked_audit_id,
 			escalation_threshold, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9, $10,
-			$11, $12, $13, $14,
-			$15, $16, $17, $18,
-			$19, $20, $21
+			$6, $7, $8, $9,
+			$10, $11, $12, $13,
+			$14, $15, $16, $17,
+			$18, $19, $20
 		)
 		RETURNING id, tenant_id, risk_number, title, description,
 			category, likelihood, impact, risk_score, status,
 			treatment_plan, contingency_plan, owner_id, reviewer_id,
 			review_date, next_review_date, linked_project_id, linked_audit_id,
 			escalation_threshold, created_at, updated_at`
-
-	// Calculate risk score from likelihood * impact mapping
-	riskScore := likelihoodImpactScore(req.Likelihood, req.Impact)
 
 	escalationThreshold := 0
 	if req.EscalationThreshold != nil {
@@ -87,7 +84,7 @@ func (s *RiskService) CreateRisk(ctx context.Context, req CreateRiskRequest) (Ri
 	var risk Risk
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, riskNumber, req.Title, req.Description,
-		req.Category, req.Likelihood, req.Impact, riskScore, req.Status,
+		req.Category, req.Likelihood, req.Impact, req.Status,
 		req.TreatmentPlan, req.ContingencyPlan, req.OwnerID, req.ReviewerID,
 		req.ReviewDate, req.NextReviewDate, req.LinkedProjectID, req.LinkedAuditID,
 		escalationThreshold, now, now,
@@ -160,21 +157,36 @@ func (s *RiskService) ListRisks(ctx context.Context, status, category *string, o
 
 	offset := (page - 1) * limit
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $4 (owner_id) is 5.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 5)
+
+	// Build args: tenant_id, status, category, ownerID [, orgParam]
+	countArgs := []interface{}{auth.TenantID, status, category, ownerID}
+	orgSQL := ""
+	nextIdx := 5
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 6
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM risks
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
 			AND ($3::text IS NULL OR category = $3)
-			AND ($4::uuid IS NULL OR owner_id = $4)`
+			AND ($4::uuid IS NULL OR owner_id = $4)%s`, orgSQL)
 
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status, category, ownerID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count risks", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, risk_number, title, description,
 			category, likelihood, impact, risk_score, status,
 			treatment_plan, contingency_plan, owner_id, reviewer_id,
@@ -184,11 +196,12 @@ func (s *RiskService) ListRisks(ctx context.Context, status, category *string, o
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
 			AND ($3::text IS NULL OR category = $3)
-			AND ($4::uuid IS NULL OR owner_id = $4)
+			AND ($4::uuid IS NULL OR owner_id = $4)%s
 		ORDER BY risk_score DESC, created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, category, ownerID, limit, offset)
+	dataArgs := append(countArgs, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list risks", err)
 	}
@@ -497,19 +510,17 @@ func (s *RiskService) CreateRiskAssessment(ctx context.Context, riskID uuid.UUID
 		return RiskAssessment{}, apperrors.Internal("failed to create risk assessment", err)
 	}
 
-	// Update the risk's likelihood and impact
-	newScore := likelihoodImpactScore(req.NewLikelihood, req.NewImpact)
+	// Update the risk's likelihood and impact (risk_score is auto-generated)
 	updateQuery := `
 		UPDATE risks SET
 			likelihood = $1,
 			impact = $2,
-			risk_score = $3,
-			review_date = $4,
-			updated_at = $5
-		WHERE id = $6 AND tenant_id = $7`
+			review_date = $3,
+			updated_at = $4
+		WHERE id = $5 AND tenant_id = $6`
 
 	if _, err := s.pool.Exec(ctx, updateQuery,
-		req.NewLikelihood, req.NewImpact, newScore,
+		req.NewLikelihood, req.NewImpact,
 		now, now, riskID, auth.TenantID,
 	); err != nil {
 		slog.ErrorContext(ctx, "failed to update risk after assessment", "error", err)

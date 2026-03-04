@@ -26,23 +26,26 @@ type TokenPair struct {
 
 // UserProfile represents the authenticated user's profile data.
 type UserProfile struct {
-	ID          uuid.UUID `json:"id"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"displayName"`
-	TenantID    uuid.UUID `json:"tenantId"`
-	JobTitle    *string   `json:"jobTitle,omitempty"`
-	Department  *string   `json:"department,omitempty"`
-	Office      *string   `json:"office,omitempty"`
-	Unit        *string   `json:"unit,omitempty"`
-	Roles       []string  `json:"roles"`
-	Permissions []string  `json:"permissions"`
+	ID          uuid.UUID  `json:"id"`
+	Email       string     `json:"email"`
+	DisplayName string     `json:"displayName"`
+	TenantID    uuid.UUID  `json:"tenantId"`
+	JobTitle    *string    `json:"jobTitle,omitempty"`
+	Department  *string    `json:"department,omitempty"`
+	Office      *string    `json:"office,omitempty"`
+	Unit        *string    `json:"unit,omitempty"`
+	Roles       []string   `json:"roles"`
+	Permissions []string   `json:"permissions"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
+	OrgLevel    string     `json:"orgLevel,omitempty"`
 }
 
 // LoginResponse is the full response returned on successful login.
 type LoginResponse struct {
-	AccessToken  string      `json:"accessToken"`
-	RefreshToken string      `json:"refreshToken"`
-	User         UserProfile `json:"user"`
+	AccessToken            string      `json:"accessToken"`
+	RefreshToken           string      `json:"refreshToken"`
+	User                   UserProfile `json:"user"`
+	PasswordChangeRequired bool        `json:"passwordChangeRequired,omitempty"`
 }
 
 // AuthService handles authentication logic: login, token refresh, and logout.
@@ -72,13 +75,18 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		department   *string
 		office       *string
 		unit         *string
+		orgUnitID    *uuid.UUID
+		orgLevel     *string
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, display_name, password_hash, job_title, department, office, unit
-		 FROM users WHERE email = $1 AND is_active = true`,
+		`SELECT u.id, u.tenant_id, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
+		        u.org_unit_id, o.level::text
+		 FROM users u
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit)
+	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &orgUnitID, &orgLevel)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.Unauthorized("Invalid email or password")
@@ -93,6 +101,13 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(password)); err != nil {
 		return nil, apperrors.Unauthorized("Invalid email or password")
 	}
+
+	// Check if user must change their password.
+	var forceChange bool
+	_ = s.pool.QueryRow(ctx,
+		`SELECT force_password_change FROM users WHERE id = $1`,
+		userID,
+	).Scan(&forceChange)
 
 	// Fetch roles and aggregate permissions.
 	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
@@ -124,21 +139,28 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	// Update last login timestamp.
 	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
 
+	profile := UserProfile{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		TenantID:    tenantID,
+		JobTitle:    jobTitle,
+		Department:  department,
+		Office:      office,
+		Unit:        unit,
+		Roles:       roles,
+		Permissions: permissions,
+		OrgUnitID:   orgUnitID,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
 	return &LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		User: UserProfile{
-			ID:          userID,
-			Email:       email,
-			DisplayName: displayName,
-			TenantID:    tenantID,
-			JobTitle:    jobTitle,
-			Department:  department,
-			Office:      office,
-			Unit:        unit,
-			Roles:       roles,
-			Permissions: permissions,
-		},
+		AccessToken:            accessToken,
+		RefreshToken:           refreshToken,
+		User:                   profile,
+		PasswordChangeRequired: forceChange,
 	}, nil
 }
 
@@ -298,8 +320,59 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
-// GetMe returns the user profile for the given user ID, including roles and
-// permissions.
+// ChangePassword updates the user's password and clears the force_password_change flag.
+// It verifies the current password before allowing the change.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	// Fetch current password hash.
+	var passwordHash *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT password_hash FROM users WHERE id = $1 AND is_active = true`,
+		userID,
+	).Scan(&passwordHash)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NotFound("user", userID.String())
+		}
+		return apperrors.Internal("Failed to fetch user", err)
+	}
+
+	// Verify current password.
+	if passwordHash == nil || *passwordHash == "" {
+		return apperrors.BadRequest("Account does not use password authentication")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(currentPassword)); err != nil {
+		return apperrors.Unauthorized("Current password is incorrect")
+	}
+
+	// Validate new password strength.
+	if len(newPassword) < 8 {
+		return apperrors.BadRequest("New password must be at least 8 characters")
+	}
+	if newPassword == currentPassword {
+		return apperrors.BadRequest("New password must be different from current password")
+	}
+
+	// Hash new password.
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperrors.Internal("Failed to hash password", err)
+	}
+
+	// Update password and clear force_password_change flag.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, force_password_change = false, updated_at = NOW() WHERE id = $2`,
+		string(hash), userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to update password", err)
+	}
+
+	slog.Info("password changed successfully", "user_id", userID)
+	return nil
+}
+
+// GetMe returns the user profile for the given user ID, including roles,
+// permissions, and org scope information.
 func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile, error) {
 	var (
 		email       string
@@ -309,13 +382,18 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		department  *string
 		office      *string
 		unit        *string
+		orgUnitID   *uuid.UUID
+		orgLevel    *string
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT email, display_name, tenant_id, job_title, department, office, unit
-		 FROM users WHERE id = $1 AND is_active = true`,
+		`SELECT u.email, u.display_name, u.tenant_id, u.job_title, u.department, u.office, u.unit,
+		        u.org_unit_id, o.level::text
+		 FROM users u
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.id = $1 AND u.is_active = true`,
 		userID,
-	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit)
+	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit, &orgUnitID, &orgLevel)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("user", userID.String())
@@ -328,7 +406,7 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		return nil, apperrors.Internal("Failed to fetch user roles", err)
 	}
 
-	return &UserProfile{
+	profile := &UserProfile{
 		ID:          userID,
 		Email:       email,
 		DisplayName: displayName,
@@ -339,7 +417,13 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		Unit:        unit,
 		Roles:       roles,
 		Permissions: permissions,
-	}, nil
+		OrgUnitID:   orgUnitID,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
+	return profile, nil
 }
 
 // GetUserRolesAndPermissions is the exported version used by middleware and

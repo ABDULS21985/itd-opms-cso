@@ -2,20 +2,17 @@
 
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Package,
   MapPin,
   User,
-  Calendar,
   DollarSign,
   Tag,
   Shield,
   Clock,
   Loader2,
-  Pencil,
   Trash2,
   History,
   AlertTriangle,

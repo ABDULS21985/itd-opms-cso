@@ -196,3 +196,32 @@ SELECT COALESCE(
 FROM tickets
 WHERE tenant_id = $1
   AND created_at >= $2;
+
+-- ──────────────────────────────────────────────
+-- Additional Dashboard Chart Queries
+-- ──────────────────────────────────────────────
+
+-- name: GetProjectsByRAG :many
+SELECT rag_status AS label, COUNT(*)::int AS value
+FROM projects
+WHERE tenant_id = $1
+GROUP BY rag_status;
+
+-- name: GetProjectsByPriority :many
+SELECT priority AS label, COUNT(*)::int AS value
+FROM projects
+WHERE tenant_id = $1
+GROUP BY priority;
+
+-- name: GetRisksByCategory :many
+SELECT COALESCE(category, 'uncategorized') AS label, COUNT(*)::int AS value
+FROM risk_register
+WHERE tenant_id = $1
+  AND status = 'open'
+GROUP BY category;
+
+-- name: GetWorkItemsByStatus :many
+SELECT status AS label, COUNT(*)::int AS value
+FROM work_items
+WHERE tenant_id = $1
+GROUP BY status;

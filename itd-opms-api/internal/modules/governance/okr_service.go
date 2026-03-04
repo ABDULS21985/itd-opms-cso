@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // OKRService handles business logic for OKR, Key Result, and KPI management.
@@ -34,6 +36,10 @@ func NewOKRService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *OKRService
 
 // CreateOKR creates a new OKR. If parentId is set, verifies the parent exists.
 func (s *OKRService) CreateOKR(ctx context.Context, tenantID, createdBy uuid.UUID, req CreateOKRRequest) (*OKR, error) {
+	if s.pool == nil {
+		return nil, apperrors.Internal("database pool not available", nil)
+	}
+
 	// Verify parent exists if specified.
 	if req.ParentID != nil && *req.ParentID != uuid.Nil {
 		var exists bool
@@ -139,6 +145,8 @@ func (s *OKRService) GetOKR(ctx context.Context, tenantID, okrID uuid.UUID) (*OK
 
 // ListOKRs returns a paginated list of OKRs, optionally filtered by level, period, and status.
 func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, period, status string, limit, offset int) ([]OKR, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var levelParam, periodParam, statusParam *string
 	if level != "" {
 		levelParam = &level
@@ -150,20 +158,33 @@ func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, pe
 		statusParam = &status
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=level, $3=period, $4=status.
+	args := []interface{}{tenantID, levelParam, periodParam, statusParam}
+	nextIdx := 5
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM okrs
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR level = $2)
 			AND ($3::text IS NULL OR period = $3)
-			AND ($4::text IS NULL OR status = $4)`
+			AND ($4::text IS NULL OR status = $4)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, levelParam, periodParam, statusParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count OKRs", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, parent_id, level, scope_id,
 			objective, period, owner_id, status,
 			progress_pct, scoring_method, created_at
@@ -171,11 +192,12 @@ func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, pe
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR level = $2)
 			AND ($3::text IS NULL OR period = $3)
-			AND ($4::text IS NULL OR status = $4)
+			AND ($4::text IS NULL OR status = $4)%s
 		ORDER BY created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, levelParam, periodParam, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list OKRs", err)
 	}
@@ -208,6 +230,8 @@ func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, pe
 
 // UpdateOKR updates an existing OKR.
 func (s *OKRService) UpdateOKR(ctx context.Context, tenantID, okrID uuid.UUID, req UpdateOKRRequest) (*OKR, error) {
+	auth := types.GetAuthContext(ctx)
+
 	query := `
 		UPDATE okrs SET
 			objective = COALESCE($1, objective),
@@ -249,6 +273,8 @@ func (s *OKRService) UpdateOKR(ctx context.Context, tenantID, okrID uuid.UUID, r
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "okr.updated",
 		EntityType: "okr",
 		EntityID:   okrID,
@@ -379,6 +405,8 @@ func (s *OKRService) GetOKRTree(ctx context.Context, tenantID, rootID uuid.UUID)
 
 // CreateKeyResult adds a new key result to an OKR.
 func (s *OKRService) CreateKeyResult(ctx context.Context, okrID uuid.UUID, req CreateKeyResultRequest) (*KeyResult, error) {
+	auth := types.GetAuthContext(ctx)
+
 	id := uuid.New()
 	now := time.Now().UTC()
 
@@ -408,6 +436,9 @@ func (s *OKRService) CreateKeyResult(ctx context.Context, okrID uuid.UUID, req C
 		"okr_id": okrID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "key_result.created",
 		EntityType: "key_result",
 		EntityID:   id,
@@ -422,6 +453,8 @@ func (s *OKRService) CreateKeyResult(ctx context.Context, okrID uuid.UUID, req C
 // UpdateKeyResult updates a key result. When current_value changes, recalculates
 // the parent OKR's progress percentage.
 func (s *OKRService) UpdateKeyResult(ctx context.Context, krID uuid.UUID, req UpdateKeyResultRequest) (*KeyResult, error) {
+	auth := types.GetAuthContext(ctx)
+
 	query := `
 		UPDATE key_results SET
 			title = COALESCE($1, title),
@@ -460,6 +493,9 @@ func (s *OKRService) UpdateKeyResult(ctx context.Context, krID uuid.UUID, req Up
 		"key_result_id": krID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "key_result.updated",
 		EntityType: "key_result",
 		EntityID:   krID,
@@ -473,6 +509,8 @@ func (s *OKRService) UpdateKeyResult(ctx context.Context, krID uuid.UUID, req Up
 
 // DeleteKeyResult deletes a key result.
 func (s *OKRService) DeleteKeyResult(ctx context.Context, krID uuid.UUID) error {
+	auth := types.GetAuthContext(ctx)
+
 	// Get the OKR ID before deleting so we can recalculate.
 	var okrID uuid.UUID
 	err := s.pool.QueryRow(ctx, `SELECT okr_id FROM key_results WHERE id = $1`, krID).Scan(&okrID)
@@ -498,6 +536,9 @@ func (s *OKRService) DeleteKeyResult(ctx context.Context, krID uuid.UUID) error 
 
 	// Log audit event.
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "key_result.deleted",
 		EntityType: "key_result",
 		EntityID:   krID,
@@ -550,8 +591,11 @@ func (s *OKRService) CreateKPI(ctx context.Context, tenantID uuid.UUID, req Crea
 		"name":      req.Name,
 		"frequency": frequency,
 	})
+	authKPI := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    authKPI.UserID,
+		ActorRole:  firstRole(authKPI.Roles),
 		Action:     "kpi.created",
 		EntityType: "kpi",
 		EntityID:   id,
@@ -678,8 +722,11 @@ func (s *OKRService) UpdateKPI(ctx context.Context, tenantID, kpiID uuid.UUID, r
 	changes, _ := json.Marshal(map[string]any{
 		"kpi_id": kpiID,
 	})
+	authUpd := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    authUpd.UserID,
+		ActorRole:  firstRole(authUpd.Roles),
 		Action:     "kpi.updated",
 		EntityType: "kpi",
 		EntityID:   kpiID,
@@ -703,8 +750,11 @@ func (s *OKRService) DeleteKPI(ctx context.Context, tenantID, kpiID uuid.UUID) e
 	}
 
 	// Log audit event.
+	authDel := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    authDel.UserID,
+		ActorRole:  firstRole(authDel.Roles),
 		Action:     "kpi.deleted",
 		EntityType: "kpi",
 		EntityID:   kpiID,

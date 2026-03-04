@@ -10,7 +10,103 @@ import type {
   GlobalSearchResults,
   SavedSearch,
   PaginatedResponse,
+  ProjectDivisionAssignment,
+  DivisionAssignmentLog,
 } from "@/types";
+
+/* ================================================================== */
+/*  Activity Feed — Types & Queries                                      */
+/* ================================================================== */
+
+export interface ActivityFeedItem {
+  id: string;
+  type:
+    | "ticket.created"
+    | "ticket.resolved"
+    | "ticket.escalated"
+    | "project.status_changed"
+    | "risk.identified"
+    | "risk.mitigated"
+    | "asset.deployed"
+    | "asset.decommissioned"
+    | "policy.approved"
+    | "policy.expired"
+    | "sla.breached";
+  actor: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  description: string;
+  entity: {
+    type: "ticket" | "project" | "risk" | "asset" | "policy" | "sla";
+    id: string;
+    label: string;
+    href: string;
+  };
+  timestamp: string;
+}
+
+export interface ActivityFeedResponse {
+  data: ActivityFeedItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * GET /reporting/dashboards/activity-feed - recent activity across all modules.
+ */
+export function useRecentActivity(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["activity-feed", page, limit],
+    queryFn: () =>
+      apiClient.get<ActivityFeedResponse>(
+        "/reporting/dashboards/activity-feed",
+        { page, limit },
+      ),
+    refetchInterval: 30 * 1000, // Poll every 30s for near-realtime feel
+  });
+}
+
+export interface MyTasksSummary {
+  openTickets: { count: number; items: Array<{ id: string; title: string; href: string; priority: string }> };
+  tasksDueThisWeek: { count: number; items: Array<{ id: string; title: string; href: string; dueDate: string }> };
+  pendingApprovals: { count: number; items: Array<{ id: string; title: string; href: string; type: string }> };
+  overdueItems: { count: number; items: Array<{ id: string; title: string; href: string; dueDate: string }> };
+}
+
+/**
+ * GET /reporting/dashboards/my-tasks - current user's assigned items summary.
+ */
+export function useMyTasks() {
+  return useQuery({
+    queryKey: ["my-tasks"],
+    queryFn: () =>
+      apiClient.get<MyTasksSummary>("/reporting/dashboards/my-tasks"),
+    refetchInterval: 60 * 1000,
+  });
+}
+
+export interface UpcomingEvent {
+  id: string;
+  title: string;
+  type: "deadline" | "meeting" | "milestone" | "expiration";
+  date: string;
+  href?: string;
+}
+
+/**
+ * GET /reporting/dashboards/upcoming - next upcoming events/deadlines.
+ */
+export function useUpcomingEvents(limit = 5) {
+  return useQuery({
+    queryKey: ["upcoming-events", limit],
+    queryFn: () =>
+      apiClient.get<UpcomingEvent[]>("/reporting/dashboards/upcoming", { limit }),
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
 
 /* ================================================================== */
 /*  Executive Dashboard — Queries                                        */
@@ -24,6 +120,7 @@ export function useExecutiveSummary() {
     queryKey: ["executive-summary"],
     queryFn: () =>
       apiClient.get<ExecutiveSummary>("/reporting/dashboards/executive"),
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -114,6 +211,201 @@ export function useSLACompliance(since?: string) {
         "/reporting/dashboards/charts/sla-compliance",
         { since },
       ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/projects-by-rag - project distribution by RAG status.
+ */
+export function useProjectsByRAG() {
+  return useQuery({
+    queryKey: ["chart-projects-by-rag"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-rag",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/projects-by-priority - project distribution by priority.
+ */
+export function useProjectsByPriority() {
+  return useQuery({
+    queryKey: ["chart-projects-by-priority"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-priority",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/risks-by-category - open risk distribution by category.
+ */
+export function useRisksByCategory() {
+  return useQuery({
+    queryKey: ["chart-risks-by-category"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/risks-by-category",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/work-items-by-status - work item distribution by status.
+ */
+export function useWorkItemsByStatus() {
+  return useQuery({
+    queryKey: ["chart-work-items-by-status"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/work-items-by-status",
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Office Analytics — Queries                                            */
+/* ================================================================== */
+
+export interface OfficeAnalyticsData {
+  divisionId: string;
+  divisionName: string;
+  divisionCode: string;
+  totalProjects: number;
+  activeProjects: number;
+  completedProjects: number;
+  avgCompletionPct: number;
+  budgetApproved: number;
+  budgetSpent: number;
+  ragGreen: number;
+  ragAmber: number;
+  ragRed: number;
+  openRisks: number;
+  openIssues: number;
+  totalWorkItems: number;
+  completedWorkItems: number;
+  overdueWorkItems: number;
+  staffCount: number;
+}
+
+/**
+ * GET /reporting/dashboards/charts/office-analytics - aggregated analytics per office.
+ */
+export function useOfficeAnalytics() {
+  return useQuery({
+    queryKey: ["chart-office-analytics"],
+    queryFn: () =>
+      apiClient.get<OfficeAnalyticsData[]>(
+        "/reporting/dashboards/charts/office-analytics",
+      ),
+  });
+}
+
+/**
+ * GET /reporting/dashboards/charts/projects-by-office - project counts per office.
+ */
+export function useProjectsByOffice() {
+  return useQuery({
+    queryKey: ["chart-projects-by-office"],
+    queryFn: () =>
+      apiClient.get<ChartDataPoint[]>(
+        "/reporting/dashboards/charts/projects-by-office",
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Division Assignment — Queries & Mutations                             */
+/* ================================================================== */
+
+/**
+ * GET /planning/projects/{id}/divisions - active division assignments for a project.
+ */
+export function useProjectDivisionAssignments(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project-divisions", projectId],
+    queryFn: () =>
+      apiClient.get<ProjectDivisionAssignment[]>(
+        `/planning/projects/${projectId}/divisions`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * GET /planning/projects/{id}/divisions/history - assignment history.
+ */
+export function useDivisionAssignmentHistory(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["division-assignment-history", projectId],
+    queryFn: () =>
+      apiClient.get<DivisionAssignmentLog[]>(
+        `/planning/projects/${projectId}/divisions/history`,
+      ),
+    enabled: !!projectId,
+  });
+}
+
+/**
+ * POST /planning/projects/{id}/divisions - assign a division.
+ */
+export function useAssignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { divisionId: string; assignmentType?: string; notes?: string }) =>
+      apiClient.post<ProjectDivisionAssignment>(
+        `/planning/projects/${projectId}/divisions`,
+        data,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Division assigned successfully");
+    },
+    onError: () => toast.error("Failed to assign division"),
+  });
+}
+
+/**
+ * DELETE /planning/projects/{id}/divisions/{divisionId} - unassign a division.
+ */
+export function useUnassignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (divisionId: string) =>
+      apiClient.delete(`/planning/projects/${projectId}/divisions/${divisionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Division unassigned successfully");
+    },
+    onError: () => toast.error("Failed to unassign division"),
+  });
+}
+
+/**
+ * POST /planning/projects/{id}/divisions/reassign - reassign from one division to another.
+ */
+export function useReassignProjectDivision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { fromDivisionId: string; toDivisionId: string; notes?: string }) =>
+      apiClient.post(`/planning/projects/${projectId}/divisions/reassign`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-divisions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["division-assignment-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project reassigned successfully");
+    },
+    onError: () => toast.error("Failed to reassign project"),
   });
 }
 

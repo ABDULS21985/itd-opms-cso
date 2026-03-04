@@ -2,13 +2,16 @@ package itsm
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/export"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -51,6 +54,12 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/resolve", h.ResolveTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/close", h.CloseTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/csat", h.CreateCSATSurvey)
+
+	// Bulk operations.
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/bulk/update", h.BulkUpdate)
+
+	// Export.
+	r.With(middleware.RequirePermission("itsm.view")).Get("/export", h.ExportTickets)
 }
 
 // ──────────────────────────────────────────────
@@ -618,4 +627,114 @@ func (h *TicketHandler) CreateCSATSurvey(w http.ResponseWriter, r *http.Request)
 	}
 
 	types.Created(w, survey)
+}
+
+// ──────────────────────────────────────────────
+// Bulk Operations
+// ──────────────────────────────────────────────
+
+// BulkUpdate handles POST /bulk/update — bulk updates multiple tickets.
+func (h *TicketHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req struct {
+		IDs    []string          `json:"ids"`
+		Fields map[string]string `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "ids must not be empty")
+		return
+	}
+
+	if len(req.Fields) == 0 {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "fields must not be empty")
+		return
+	}
+
+	// Validate allowed fields.
+	allowedFields := map[string]bool{"status": true, "priority": true, "assigneeId": true}
+	for field := range req.Fields {
+		if !allowedFields[field] {
+			types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR",
+				fmt.Sprintf("field %q is not allowed for bulk update", field))
+			return
+		}
+	}
+
+	// Parse UUIDs.
+	ids := make([]uuid.UUID, 0, len(req.IDs))
+	for _, raw := range req.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST",
+				fmt.Sprintf("invalid UUID: %s", raw))
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	updated, err := h.svc.BulkUpdateTickets(r.Context(), ids, req.Fields)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]int64{"updated": updated, "failed": 0}, nil)
+}
+
+// ──────────────────────────────────────────────
+// CSV Export
+// ──────────────────────────────────────────────
+
+// ExportTickets handles GET /export — exports tickets as a CSV file.
+func (h *TicketHandler) ExportTickets(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	// Optional filters.
+	status := optionalString(r, "status")
+	priority := optionalString(r, "priority")
+	ticketType := optionalString(r, "type")
+
+	tickets, err := h.svc.ListTicketsForExport(r.Context(), status, priority, ticketType, 10000)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	columns := []export.CSVColumn{
+		{Header: "Ticket#", Field: "ticketNumber"},
+		{Header: "Title", Field: "title"},
+		{Header: "Type", Field: "type"},
+		{Header: "Priority", Field: "priority"},
+		{Header: "Status", Field: "status"},
+		{Header: "Created", Field: "createdAt"},
+	}
+
+	rows := make([][]string, 0, len(tickets))
+	for _, t := range tickets {
+		rows = append(rows, []string{
+			t.TicketNumber,
+			t.Title,
+			t.Type,
+			t.Priority,
+			t.Status,
+			t.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	filename := fmt.Sprintf("tickets-%s.csv", time.Now().Format("2006-01-02"))
+	export.WriteCSV(w, filename, columns, rows)
 }

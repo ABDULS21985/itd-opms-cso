@@ -8,7 +8,6 @@ import {
   Calendar,
   ClipboardList,
   Plus,
-  Pencil,
   CheckCircle,
   ArrowLeft,
   AlertTriangle,

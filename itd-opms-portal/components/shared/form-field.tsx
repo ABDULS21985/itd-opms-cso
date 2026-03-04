@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState, useId } from "react";
+import { useState, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,7 @@ export function FormField({
   className,
 }: FormFieldProps) {
   const id = useId();
-  const [focused, setFocused] = useState(false);
+  const [_focused, setFocused] = useState(false);
 
   const inputClass = cn(
     "w-full rounded-xl border bg-[var(--surface-0)] text-sm transition-all duration-200",

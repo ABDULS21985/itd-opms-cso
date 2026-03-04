@@ -42,6 +42,8 @@ type UserDetail struct {
 	Metadata    json.RawMessage `json:"metadata"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
+	OrgUnitID   *uuid.UUID      `json:"orgUnitId"`
+	OrgUnitName string          `json:"orgUnitName,omitempty"`
 	Roles       []RoleBinding   `json:"roles"`
 	Delegations []Delegation    `json:"delegations"`
 }
@@ -58,13 +60,26 @@ type UserSearchResult struct {
 
 // UpdateUserRequest is the admin user update payload.
 type UpdateUserRequest struct {
-	DisplayName *string `json:"displayName"`
-	JobTitle    *string `json:"jobTitle"`
-	Department  *string `json:"department"`
-	Office      *string `json:"office"`
-	Unit        *string `json:"unit"`
-	Phone       *string `json:"phone"`
-	IsActive    *bool   `json:"isActive"`
+	DisplayName *string    `json:"displayName"`
+	JobTitle    *string    `json:"jobTitle"`
+	Department  *string    `json:"department"`
+	Office      *string    `json:"office"`
+	Unit        *string    `json:"unit"`
+	Phone       *string    `json:"phone"`
+	IsActive    *bool      `json:"isActive"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
+}
+
+// CreateUserRequest is the payload for creating a new user.
+type CreateUserRequest struct {
+	Email       string     `json:"email"`
+	DisplayName string     `json:"displayName"`
+	JobTitle    *string    `json:"jobTitle"`
+	Department  *string    `json:"department"`
+	Office      *string    `json:"office"`
+	Unit        *string    `json:"unit"`
+	Phone       *string    `json:"phone"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 }
 
 // AssignRoleRequest is the payload for assigning a role to a user.
@@ -530,4 +545,57 @@ type UpdateEmailTemplateRequest struct {
 // TemplatePreviewRequest is the payload for previewing a rendered template.
 type TemplatePreviewRequest struct {
 	Variables map[string]string `json:"variables"`
+}
+
+// ──────────────────────────────────────────────
+// Org Analytics Types
+// ──────────────────────────────────────────────
+
+// OrgAnalyticsResponse contains aggregated org structure analytics.
+type OrgAnalyticsResponse struct {
+	TotalUnits       int                `json:"totalUnits"`
+	ActiveUnits      int                `json:"activeUnits"`
+	InactiveUnits    int                `json:"inactiveUnits"`
+	MaxDepth         int                `json:"maxDepth"`
+	AvgSpanOfControl float64            `json:"avgSpanOfControl"`
+	VacantLeadership float64            `json:"vacantLeadership"`
+	TotalHeadcount   int                `json:"totalHeadcount"`
+	HeadcountByLevel []LevelHeadcount   `json:"headcountByLevel"`
+	SpanDistribution []SpanRange        `json:"spanDistribution"`
+	UnitsByLevel     []LevelCount       `json:"unitsByLevel"`
+	RecentChanges    []OrgRecentChange  `json:"recentChanges"`
+	GrowthTimeline   []OrgGrowthPoint   `json:"growthTimeline"`
+}
+
+// LevelHeadcount holds headcount and unit count for a single org level.
+type LevelHeadcount struct {
+	Level     string `json:"level"`
+	Count     int    `json:"count"`
+	UnitCount int    `json:"unitCount"`
+}
+
+// SpanRange holds the count of parent units within a span-of-control range.
+type SpanRange struct {
+	Range string `json:"range"`
+	Count int    `json:"count"`
+}
+
+// LevelCount holds a count of org units at a given level.
+type LevelCount struct {
+	Level string `json:"level"`
+	Count int    `json:"count"`
+}
+
+// OrgRecentChange represents a recent audit event for an org unit.
+type OrgRecentChange struct {
+	Action    string `json:"action"`
+	UnitName  string `json:"unitName"`
+	ChangedBy string `json:"changedBy"`
+	ChangedAt string `json:"changedAt"`
+}
+
+// OrgGrowthPoint represents cumulative org unit count at a point in time.
+type OrgGrowthPoint struct {
+	Month      string `json:"month"`
+	Cumulative int    `json:"cumulative"`
 }
