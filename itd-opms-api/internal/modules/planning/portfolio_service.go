@@ -16,6 +16,14 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
+// uuidPtrOrNil returns a *uuid.UUID if the value is non-nil, otherwise nil.
+func uuidPtrOrNil(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
+}
+
 // ──────────────────────────────────────────────
 // PortfolioService
 // ──────────────────────────────────────────────
@@ -49,23 +57,29 @@ func (s *PortfolioService) CreatePortfolio(ctx context.Context, req CreatePortfo
 		status = *req.Status
 	}
 
+	// Auto-set org_unit_id from auth context if not provided in request.
+	orgUnitID := req.OrgUnitID
+	if orgUnitID == nil && auth.OrgUnitID != uuid.Nil {
+		orgUnitID = uuidPtrOrNil(auth.OrgUnitID)
+	}
+
 	query := `
 		INSERT INTO portfolios (
-			id, tenant_id, name, description, owner_id,
+			id, tenant_id, org_unit_id, name, description, owner_id,
 			fiscal_year, status, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10
 		)
-		RETURNING id, tenant_id, name, description, owner_id,
+		RETURNING id, tenant_id, org_unit_id, name, description, owner_id,
 			fiscal_year, status, created_at, updated_at`
 
 	var p Portfolio
 	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.Name, req.Description, req.OwnerID,
+		id, auth.TenantID, orgUnitID, req.Name, req.Description, req.OwnerID,
 		req.FiscalYear, status, now, now,
 	).Scan(
-		&p.ID, &p.TenantID, &p.Name, &p.Description, &p.OwnerID,
+		&p.ID, &p.TenantID, &p.OrgUnitID, &p.Name, &p.Description, &p.OwnerID,
 		&p.FiscalYear, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -100,14 +114,14 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, id uuid.UUID) (Port
 	}
 
 	query := `
-		SELECT id, tenant_id, name, description, owner_id,
+		SELECT id, tenant_id, org_unit_id, name, description, owner_id,
 			fiscal_year, status, created_at, updated_at
 		FROM portfolios
 		WHERE id = $1 AND tenant_id = $2`
 
 	var p Portfolio
 	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
-		&p.ID, &p.TenantID, &p.Name, &p.Description, &p.OwnerID,
+		&p.ID, &p.TenantID, &p.OrgUnitID, &p.Name, &p.Description, &p.OwnerID,
 		&p.FiscalYear, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -127,30 +141,44 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, status *string, l
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build base args: $1=tenantID, $2=status.
+	args := []interface{}{auth.TenantID, status}
+	nextIdx := 3
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
 	// Count total matching records.
-	countQuery := `
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM portfolios
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)%s`, orgClause)
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count portfolios", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
-		SELECT id, tenant_id, name, description, owner_id,
+	dataQuery := fmt.Sprintf(`
+		SELECT id, tenant_id, org_unit_id, name, description, owner_id,
 			fiscal_year, status, created_at, updated_at
 		FROM portfolios
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
+			AND ($2::text IS NULL OR status = $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list portfolios", err)
 	}
@@ -160,7 +188,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, status *string, l
 	for rows.Next() {
 		var p Portfolio
 		if err := rows.Scan(
-			&p.ID, &p.TenantID, &p.Name, &p.Description, &p.OwnerID,
+			&p.ID, &p.TenantID, &p.OrgUnitID, &p.Name, &p.Description, &p.OwnerID,
 			&p.FiscalYear, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan portfolio", err)
@@ -203,7 +231,7 @@ func (s *PortfolioService) UpdatePortfolio(ctx context.Context, id uuid.UUID, re
 			status = COALESCE($5, status),
 			updated_at = $6
 		WHERE id = $7 AND tenant_id = $8
-		RETURNING id, tenant_id, name, description, owner_id,
+		RETURNING id, tenant_id, org_unit_id, name, description, owner_id,
 			fiscal_year, status, created_at, updated_at`
 
 	var p Portfolio
@@ -212,7 +240,7 @@ func (s *PortfolioService) UpdatePortfolio(ctx context.Context, id uuid.UUID, re
 		req.FiscalYear, req.Status,
 		now, id, auth.TenantID,
 	).Scan(
-		&p.ID, &p.TenantID, &p.Name, &p.Description, &p.OwnerID,
+		&p.ID, &p.TenantID, &p.OrgUnitID, &p.Name, &p.Description, &p.OwnerID,
 		&p.FiscalYear, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -432,6 +460,12 @@ func (s *ProjectService) CreateProject(ctx context.Context, req CreateProjectReq
 		priority = *req.Priority
 	}
 
+	// Auto-set division_id from auth context if not provided in request.
+	divisionID := req.DivisionID
+	if divisionID == nil && auth.OrgUnitID != uuid.Nil {
+		divisionID = uuidPtrOrNil(auth.OrgUnitID)
+	}
+
 	query := `
 		INSERT INTO projects (
 			id, tenant_id, portfolio_id, division_id, title, code, description, charter, scope, business_case,
@@ -452,7 +486,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, req CreateProjectReq
 
 	var p Project
 	err := s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.PortfolioID, req.DivisionID, req.Title, req.Code, req.Description, req.Charter, req.Scope, req.BusinessCase,
+		id, auth.TenantID, req.PortfolioID, divisionID, req.Title, req.Code, req.Description, req.Charter, req.Scope, req.BusinessCase,
 		req.SponsorID, req.ProjectManagerID, "proposed", "green", priority,
 		req.PlannedStart, req.PlannedEnd, req.BudgetApproved, req.Metadata,
 		now, now,
@@ -538,23 +572,36 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build base args: $1=tenantID, $2=portfolioID, $3=status, $4=ragStatus.
+	args := []interface{}{auth.TenantID, portfolioID, status, ragStatus}
+	nextIdx := 5
+
+	// Add org scope filter on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
 	// Count total matching records.
-	countQuery := `
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
-		FROM projects
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR portfolio_id = $2)
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::text IS NULL OR rag_status = $4)`
+		FROM projects p
+		WHERE p.tenant_id = $1
+			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
+			AND ($3::text IS NULL OR p.status = $3)
+			AND ($4::text IS NULL OR p.rag_status = $4)%s`, orgClause)
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, portfolioID, status, ragStatus).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count projects", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT p.id, p.tenant_id, p.portfolio_id, p.division_id, p.title, p.code, p.description, p.charter, p.scope, p.business_case,
 			p.sponsor_id, p.project_manager_id, p.status, p.rag_status, p.priority,
 			p.planned_start, p.planned_end, p.actual_start, p.actual_end,
@@ -572,11 +619,12 @@ func (s *ProjectService) ListProjects(ctx context.Context, portfolioID *uuid.UUI
 		WHERE p.tenant_id = $1
 			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
 			AND ($3::text IS NULL OR p.status = $3)
-			AND ($4::text IS NULL OR p.rag_status = $4)
+			AND ($4::text IS NULL OR p.rag_status = $4)%s
 		ORDER BY p.created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, portfolioID, status, ragStatus, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list projects", err)
 	}

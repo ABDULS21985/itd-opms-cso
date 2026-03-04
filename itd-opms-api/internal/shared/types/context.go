@@ -14,7 +14,7 @@ const (
 	correlationIDKey      contextKey = "correlation_id"
 )
 
-// AuthContext holds the authenticated user's identity and permissions.
+// AuthContext holds the authenticated user's identity, permissions, and org scope.
 type AuthContext struct {
 	UserID      uuid.UUID `json:"userId"`
 	TenantID    uuid.UUID `json:"tenantId"`
@@ -23,6 +23,12 @@ type AuthContext struct {
 	Roles       []string  `json:"roles"`
 	Permissions []string  `json:"permissions"`
 	IssuedAt    time.Time `json:"issuedAt"`
+
+	// Org scope fields — populated by OrgScope middleware, NOT stored in JWT.
+	OrgUnitID     uuid.UUID   `json:"orgUnitId"`
+	OrgLevel      string      `json:"orgLevel"`
+	VisibleOrgIDs []uuid.UUID `json:"-"`
+	IsGlobalScope bool        `json:"isGlobalScope"`
 }
 
 // HasPermission checks if the user has a specific permission.
@@ -43,6 +49,34 @@ func (a *AuthContext) HasRole(role string) bool {
 		}
 	}
 	return false
+}
+
+// HasOrgAccess checks if the user can access records belonging to the given org unit.
+// Returns true if: the user has global scope, the orgUnitID is nil (tenant-visible),
+// or the orgUnitID is in the user's visible org unit list.
+func (a *AuthContext) HasOrgAccess(orgUnitID uuid.UUID) bool {
+	if a.IsGlobalScope {
+		return true
+	}
+	if orgUnitID == uuid.Nil {
+		return true
+	}
+	for _, id := range a.VisibleOrgIDs {
+		if id == orgUnitID {
+			return true
+		}
+	}
+	return false
+}
+
+// OrgScopeFilter returns the list of visible org unit IDs for use in SQL
+// WHERE org_unit_id = ANY($N) clauses. Returns nil for global-scope users
+// (caller should skip the org filter entirely).
+func (a *AuthContext) OrgScopeFilter() []uuid.UUID {
+	if a.IsGlobalScope {
+		return nil
+	}
+	return a.VisibleOrgIDs
 }
 
 // SetAuthContext stores the auth context in the request context.

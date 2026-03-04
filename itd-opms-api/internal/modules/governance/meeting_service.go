@@ -124,33 +124,49 @@ func (s *MeetingService) GetMeeting(ctx context.Context, tenantID, meetingID uui
 
 // ListMeetings returns a paginated list of meetings, optionally filtered by status.
 func (s *MeetingService) ListMeetings(ctx context.Context, tenantID uuid.UUID, status string, limit, offset int) ([]Meeting, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var statusParam *string
 	if status != "" {
 		statusParam = &status
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status.
+	args := []interface{}{tenantID, statusParam}
+	nextIdx := 3
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count meetings", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
+			AND ($2::text IS NULL OR status = $2)%s
 		ORDER BY scheduled_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list meetings", err)
 	}
@@ -490,6 +506,8 @@ func (s *MeetingService) GetActionItem(ctx context.Context, tenantID, actionID u
 
 // ListActionItems returns a paginated list of action items, optionally filtered by status and owner.
 func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID string, limit, offset int) ([]ActionItem, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var statusParam, ownerParam *string
 	if status != "" {
 		statusParam = &status
@@ -498,30 +516,44 @@ func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID
 		ownerParam = &ownerID
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status, $3=ownerID.
+	args := []interface{}{tenantID, statusParam, ownerParam}
+	nextIdx := 4
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)`
+			AND ($3::text IS NULL OR owner_id::text = $3)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam, ownerParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count action items", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, source_type, source_id, title,
 			description, owner_id, due_date, status,
 			completion_evidence, completed_at, priority, created_at
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($3::text IS NULL OR owner_id::text = $3)%s
 		ORDER BY due_date ASC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, ownerParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list action items", err)
 	}

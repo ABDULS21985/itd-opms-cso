@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -86,7 +87,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search tickets.
 	if allTypes["tickets"] {
-		ticketResult, err := s.searchTickets(ctx, auth.TenantID, likePattern, entityLimit)
+		ticketResult, err := s.searchTickets(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search tickets", "error", err)
 			result["tickets"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -108,7 +109,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search assets.
 	if allTypes["assets"] {
-		assetResult, err := s.searchAssets(ctx, auth.TenantID, likePattern, entityLimit)
+		assetResult, err := s.searchAssets(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search assets", "error", err)
 			result["assets"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -119,7 +120,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search projects.
 	if allTypes["projects"] {
-		projectResult, err := s.searchProjects(ctx, auth.TenantID, likePattern, entityLimit)
+		projectResult, err := s.searchProjects(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search projects", "error", err)
 			result["projects"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -130,7 +131,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search policies.
 	if allTypes["policies"] {
-		policyResult, err := s.searchPolicies(ctx, auth.TenantID, likePattern, entityLimit)
+		policyResult, err := s.searchPolicies(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search policies", "error", err)
 			result["policies"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -152,7 +153,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search meetings.
 	if allTypes["meetings"] {
-		meetingResult, err := s.searchMeetings(ctx, auth.TenantID, likePattern, entityLimit)
+		meetingResult, err := s.searchMeetings(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search meetings", "error", err)
 			result["meetings"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -163,7 +164,7 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 
 	// Search meeting decisions.
 	if allTypes["decisions"] {
-		decisionResult, err := s.searchMeetingDecisions(ctx, auth.TenantID, likePattern, entityLimit)
+		decisionResult, err := s.searchMeetingDecisions(ctx, auth, likePattern, entityLimit)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to search meeting decisions", "error", err)
 			result["decisions"] = searchEntityResult{Results: []map[string]any{}, Count: 0}
@@ -176,29 +177,49 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, entityTy
 }
 
 // searchTickets searches the tickets table.
-func (s *SearchService) searchTickets(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+func (s *SearchService) searchTickets(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter (tickets have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	// Count total matches.
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM tickets
 		WHERE tenant_id = $1
-			AND (title ILIKE $2 OR description ILIKE $2)`,
-		tenantID, pattern,
+			AND (title ILIKE $2 OR description ILIKE $2)`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
 	// Fetch top results.
-	rows, err := s.pool.Query(ctx, `
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, ticket_number, title, status, priority, created_at
 		FROM tickets
 		WHERE tenant_id = $1
-			AND (title ILIKE $2 OR description ILIKE $2)
+			AND (title ILIKE $2 OR description ILIKE $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -296,27 +317,47 @@ func (s *SearchService) searchArticles(ctx context.Context, tenantID uuid.UUID, 
 }
 
 // searchAssets searches the assets table.
-func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+func (s *SearchService) searchAssets(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter (assets have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM assets
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR asset_tag ILIKE $2)`,
-		tenantID, pattern,
+			AND (name ILIKE $2 OR asset_tag ILIKE $2)`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, name, asset_tag, asset_type, status, created_at
 		FROM assets
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR asset_tag ILIKE $2)
+			AND (name ILIKE $2 OR asset_tag ILIKE $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -355,27 +396,47 @@ func (s *SearchService) searchAssets(ctx context.Context, tenantID uuid.UUID, pa
 }
 
 // searchProjects searches the projects table.
-func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+func (s *SearchService) searchProjects(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter (projects use division_id as their org scope column).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM projects
 		WHERE tenant_id = $1
-			AND (title ILIKE $2 OR description ILIKE $2)`,
-		tenantID, pattern,
+			AND (title ILIKE $2 OR description ILIKE $2)`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, title AS name, status, priority, created_at
 		FROM projects
 		WHERE tenant_id = $1
-			AND (title ILIKE $2 OR description ILIKE $2)
+			AND (title ILIKE $2 OR description ILIKE $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -412,27 +473,47 @@ func (s *SearchService) searchProjects(ctx context.Context, tenantID uuid.UUID, 
 }
 
 // searchPolicies searches the policies table.
-func (s *SearchService) searchPolicies(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+func (s *SearchService) searchPolicies(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter (policies have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM policies
 		WHERE tenant_id = $1
-			AND title ILIKE $2`,
-		tenantID, pattern,
+			AND title ILIKE $2`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, title, status, created_at
 		FROM policies
 		WHERE tenant_id = $1
-			AND title ILIKE $2
+			AND title ILIKE $2%s
 		ORDER BY created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -528,27 +609,47 @@ func (s *SearchService) searchUsers(ctx context.Context, tenantID uuid.UUID, pat
 }
 
 // searchMeetings searches governance meetings.
-func (s *SearchService) searchMeetings(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+func (s *SearchService) searchMeetings(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter (meetings have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM meetings
 		WHERE tenant_id = $1
-		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)`,
-		tenantID, pattern,
+		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, title, status, scheduled_at, created_at
 		FROM meetings
 		WHERE tenant_id = $1
-		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)
+		  AND (title ILIKE $2 OR COALESCE(agenda, '') ILIKE $2 OR COALESCE(minutes, '') ILIKE $2)%s
 		ORDER BY scheduled_at DESC NULLS LAST, created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err
@@ -585,27 +686,50 @@ func (s *SearchService) searchMeetings(ctx context.Context, tenantID uuid.UUID, 
 }
 
 // searchMeetingDecisions searches governance meeting decisions.
-func (s *SearchService) searchMeetingDecisions(ctx context.Context, tenantID uuid.UUID, pattern string, limit int) (searchEntityResult, error) {
+// Decisions inherit org scope from their parent meeting via JOIN.
+func (s *SearchService) searchMeetingDecisions(ctx context.Context, auth *types.AuthContext, pattern string, limit int) (searchEntityResult, error) {
+	// Build org-scope filter on the parent meeting's org_unit_id.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "m.org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	var count int
+	countArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		countArgs = append(countArgs, orgParam)
+	}
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
-		FROM meeting_decisions
-		WHERE tenant_id = $1
-		  AND (title ILIKE $2 OR description ILIKE $2 OR COALESCE(decision_number, '') ILIKE $2)`,
-		tenantID, pattern,
+		FROM meeting_decisions md
+		JOIN meetings m ON m.id = md.meeting_id
+		WHERE md.tenant_id = $1
+		  AND (md.title ILIKE $2 OR md.description ILIKE $2 OR COALESCE(md.decision_number, '') ILIKE $2)`+orgSQL,
+		countArgs...,
 	).Scan(&count)
 	if err != nil {
 		return searchEntityResult{}, err
 	}
 
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, meeting_id, decision_number, title, status, created_at
-		FROM meeting_decisions
-		WHERE tenant_id = $1
-		  AND (title ILIKE $2 OR description ILIKE $2 OR COALESCE(decision_number, '') ILIKE $2)
-		ORDER BY created_at DESC
-		LIMIT $3`,
-		tenantID, pattern, limit,
+	limitParamIdx := 3
+	if orgParam != nil {
+		limitParamIdx = 4
+	}
+	dataArgs := []any{auth.TenantID, pattern}
+	if orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit)
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
+		SELECT md.id, md.meeting_id, md.decision_number, md.title, md.status, md.created_at
+		FROM meeting_decisions md
+		JOIN meetings m ON m.id = md.meeting_id
+		WHERE md.tenant_id = $1
+		  AND (md.title ILIKE $2 OR md.description ILIKE $2 OR COALESCE(md.decision_number, '') ILIKE $2)%s
+		ORDER BY md.created_at DESC
+		LIMIT $%d`, orgSQL, limitParamIdx),
+		dataArgs...,
 	)
 	if err != nil {
 		return searchEntityResult{}, err

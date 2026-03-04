@@ -194,30 +194,43 @@ func (s *AssetService) SearchAssets(ctx context.Context, query string, params ty
 
 	searchPattern := "%" + query + "%"
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $2 (searchPattern) is 3.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
+	// Build args: tenant_id, searchPattern [, orgParam]
+	countArgs := []interface{}{auth.TenantID, searchPattern}
+	orgSQL := ""
+	nextIdx := 3
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 4
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM assets
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR asset_tag ILIKE $2 OR serial_number ILIKE $2 OR model ILIKE $2)`
+			AND (name ILIKE $2 OR asset_tag ILIKE $2 OR serial_number ILIKE $2 OR model ILIKE $2)%s`, orgSQL)
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, searchPattern).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	dataQuery := `
-		SELECT ` + assetColumns + `
+	dataQuery := fmt.Sprintf(`
+		SELECT `+assetColumns+`
 		FROM assets
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR asset_tag ILIKE $2 OR serial_number ILIKE $2 OR model ILIKE $2)
+			AND (name ILIKE $2 OR asset_tag ILIKE $2 OR serial_number ILIKE $2 OR model ILIKE $2)%s
 		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery,
-		auth.TenantID, searchPattern,
-		params.Limit, params.Offset(),
-	)
+	dataArgs := append(countArgs, params.Limit, params.Offset())
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to search assets", err)
 	}
@@ -258,36 +271,47 @@ func (s *AssetService) ListAssets(ctx context.Context, assetType, status, ownerI
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $4 (ownerID) is 5.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 5)
+
+	// Build args: tenant_id, assetType, status, ownerID [, orgParam]
+	countArgs := []interface{}{auth.TenantID, assetType, status, ownerID}
+	orgSQL := ""
+	nextIdx := 5
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 6
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM assets
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR type = $2)
 			AND ($3::text IS NULL OR status = $3)
-			AND ($4::text IS NULL OR owner_id::text = $4)`
+			AND ($4::text IS NULL OR owner_id::text = $4)%s`, orgSQL)
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery,
-		auth.TenantID, assetType, status, ownerID,
-	).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count assets", err)
 	}
 
-	dataQuery := `
-		SELECT ` + assetColumns + `
+	dataQuery := fmt.Sprintf(`
+		SELECT `+assetColumns+`
 		FROM assets
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR type = $2)
 			AND ($3::text IS NULL OR status = $3)
-			AND ($4::text IS NULL OR owner_id::text = $4)
+			AND ($4::text IS NULL OR owner_id::text = $4)%s
 		ORDER BY created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery,
-		auth.TenantID, assetType, status, ownerID,
-		params.Limit, params.Offset(),
-	)
+	dataArgs := append(countArgs, params.Limit, params.Offset())
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list assets", err)
 	}

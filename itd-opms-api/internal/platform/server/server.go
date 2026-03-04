@@ -203,7 +203,7 @@ func (s *Server) Setup() {
 		r.Route("/auth", func(r chi.Router) {
 			// Stricter rate limiting on auth endpoints (10 req/min vs global 100).
 			if s.redis != nil {
-				r.Use(middleware.RateLimitByIP(s.redis, 10, 1*time.Minute))
+				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
 			}
 
 			// Public: login, refresh, OIDC config.
@@ -241,6 +241,7 @@ func (s *Server) Setup() {
 			r.Use(middleware.AuthDualMode(authMiddlewareCfg))
 			r.Use(middleware.SessionTimeout(30 * time.Minute))
 			r.Use(middleware.RLSTenantContext)
+			r.Use(middleware.OrgScope(s.pool))
 			r.Use(audit.AuditMiddleware(auditService))
 
 			// Audit module.

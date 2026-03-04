@@ -42,6 +42,8 @@ type UserDetail struct {
 	Metadata    json.RawMessage `json:"metadata"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
+	OrgUnitID   *uuid.UUID      `json:"orgUnitId"`
+	OrgUnitName string          `json:"orgUnitName,omitempty"`
 	Roles       []RoleBinding   `json:"roles"`
 	Delegations []Delegation    `json:"delegations"`
 }
@@ -58,24 +60,26 @@ type UserSearchResult struct {
 
 // UpdateUserRequest is the admin user update payload.
 type UpdateUserRequest struct {
-	DisplayName *string `json:"displayName"`
-	JobTitle    *string `json:"jobTitle"`
-	Department  *string `json:"department"`
-	Office      *string `json:"office"`
-	Unit        *string `json:"unit"`
-	Phone       *string `json:"phone"`
-	IsActive    *bool   `json:"isActive"`
+	DisplayName *string    `json:"displayName"`
+	JobTitle    *string    `json:"jobTitle"`
+	Department  *string    `json:"department"`
+	Office      *string    `json:"office"`
+	Unit        *string    `json:"unit"`
+	Phone       *string    `json:"phone"`
+	IsActive    *bool      `json:"isActive"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 }
 
 // CreateUserRequest is the payload for creating a new user.
 type CreateUserRequest struct {
-	Email       string  `json:"email"`
-	DisplayName string  `json:"displayName"`
-	JobTitle    *string `json:"jobTitle"`
-	Department  *string `json:"department"`
-	Office      *string `json:"office"`
-	Unit        *string `json:"unit"`
-	Phone       *string `json:"phone"`
+	Email       string     `json:"email"`
+	DisplayName string     `json:"displayName"`
+	JobTitle    *string    `json:"jobTitle"`
+	Department  *string    `json:"department"`
+	Office      *string    `json:"office"`
+	Unit        *string    `json:"unit"`
+	Phone       *string    `json:"phone"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 }
 
 // AssignRoleRequest is the payload for assigning a role to a user.

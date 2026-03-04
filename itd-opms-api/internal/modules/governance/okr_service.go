@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -144,6 +145,8 @@ func (s *OKRService) GetOKR(ctx context.Context, tenantID, okrID uuid.UUID) (*OK
 
 // ListOKRs returns a paginated list of OKRs, optionally filtered by level, period, and status.
 func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, period, status string, limit, offset int) ([]OKR, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var levelParam, periodParam, statusParam *string
 	if level != "" {
 		levelParam = &level
@@ -155,20 +158,33 @@ func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, pe
 		statusParam = &status
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=level, $3=period, $4=status.
+	args := []interface{}{tenantID, levelParam, periodParam, statusParam}
+	nextIdx := 5
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM okrs
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR level = $2)
 			AND ($3::text IS NULL OR period = $3)
-			AND ($4::text IS NULL OR status = $4)`
+			AND ($4::text IS NULL OR status = $4)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, levelParam, periodParam, statusParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count OKRs", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, parent_id, level, scope_id,
 			objective, period, owner_id, status,
 			progress_pct, scoring_method, created_at
@@ -176,11 +192,12 @@ func (s *OKRService) ListOKRs(ctx context.Context, tenantID uuid.UUID, level, pe
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR level = $2)
 			AND ($3::text IS NULL OR period = $3)
-			AND ($4::text IS NULL OR status = $4)
+			AND ($4::text IS NULL OR status = $4)%s
 		ORDER BY created_at DESC
-		LIMIT $5 OFFSET $6`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, levelParam, periodParam, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list OKRs", err)
 	}
