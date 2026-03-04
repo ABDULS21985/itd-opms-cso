@@ -68,6 +68,13 @@ func (s *ImportService) GenerateCSVTemplate() ([]byte, error) {
 		return nil, fmt.Errorf("write examples: %w", err)
 	}
 
+	// Additional sample rows.
+	for _, row := range SampleRows {
+		if err := writer.Write(row); err != nil {
+			return nil, fmt.Errorf("write sample row: %w", err)
+		}
+	}
+
 	writer.Flush()
 	return buf.Bytes(), nil
 }
@@ -121,6 +128,17 @@ func (s *ImportService) GenerateXLSXTemplate() ([]byte, error) {
 			exCell, _ := excelize.CoordinatesToCellName(i+1, 2)
 			f.SetCellValue(dataSheet, exCell, col.Example)
 			f.SetCellStyle(dataSheet, exCell, exCell, exampleStyle)
+		}
+	}
+
+	// Write additional sample rows.
+	for rowIdx, sampleRow := range SampleRows {
+		for colIdx, val := range sampleRow {
+			if val != "" {
+				cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+3) // starts at row 3
+				f.SetCellValue(dataSheet, cell, val)
+				f.SetCellStyle(dataSheet, cell, cell, exampleStyle)
+			}
 		}
 	}
 

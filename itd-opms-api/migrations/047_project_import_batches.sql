@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS project_import_batches (
     completed_at    TIMESTAMPTZ
 );
 
-CREATE INDEX idx_import_batches_tenant ON project_import_batches(tenant_id);
-CREATE INDEX idx_import_batches_status ON project_import_batches(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_import_batches_tenant ON project_import_batches(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_import_batches_status ON project_import_batches(tenant_id, status);
 
 CREATE TABLE IF NOT EXISTS project_import_batch_errors (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS project_import_batch_errors (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_import_batch_errors_batch ON project_import_batch_errors(batch_id);
+CREATE INDEX IF NOT EXISTS idx_import_batch_errors_batch ON project_import_batch_errors(batch_id);
 
 -- +goose Down
 DROP TABLE IF EXISTS project_import_batch_errors;

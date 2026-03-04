@@ -80,9 +80,51 @@ var ProjectTemplateColumns = []TemplateColumn{
 	{Header: "Planned Start Date", Field: "plannedStart", Required: false, Description: "Planned start date (YYYY-MM-DD)", Example: "2026-04-01"},
 	{Header: "Planned End Date", Field: "plannedEnd", Required: false, Description: "Planned end date (YYYY-MM-DD)", Example: "2026-12-31"},
 	{Header: "Budget Approved", Field: "budgetApproved", Required: false, Description: "Approved budget amount (numeric)", Example: "500000.00"},
-	{Header: "Charter", Field: "charter", Required: false, Description: "Project charter text", Example: ""},
-	{Header: "Scope", Field: "scope", Required: false, Description: "Scope statement", Example: ""},
-	{Header: "Business Case", Field: "businessCase", Required: false, Description: "Business justification", Example: ""},
+	{Header: "Charter", Field: "charter", Required: false, Description: "Project charter text", Example: "Modernise the core banking platform to improve reliability"},
+	{Header: "Scope", Field: "scope", Required: false, Description: "Scope statement", Example: "All production banking services and supporting infrastructure"},
+	{Header: "Business Case", Field: "businessCase", Required: false, Description: "Business justification", Example: "Reduce downtime by 40% and improve transaction processing speed"},
+}
+
+// SampleRows provides additional example data rows for the import template.
+// These rows demonstrate different valid combinations to help users understand expected input.
+var SampleRows = [][]string{
+	// Row 2 is auto-generated from ProjectTemplateColumns.Example above.
+	// Row 3:
+	{
+		"Network Security Enhancement",
+		"PRJ-2026-002",
+		"Implement next-gen firewall and intrusion detection systems",
+		"FY2026 IT Portfolio",
+		"Information Technology",
+		"sponsor@example.com",
+		"pm@example.com",
+		"approved",
+		"critical",
+		"2026-05-01",
+		"2026-11-30",
+		"2500000.00",
+		"Strengthen perimeter and internal network security",
+		"Network infrastructure across all offices",
+		"Mitigate growing cyber threats and meet compliance requirements",
+	},
+	// Row 4:
+	{
+		"Staff Portal Redesign",
+		"PRJ-2026-003",
+		"Redesign the internal staff portal for improved usability",
+		"",
+		"",
+		"",
+		"",
+		"proposed",
+		"medium",
+		"2026-07-01",
+		"2027-03-31",
+		"800000.00",
+		"",
+		"",
+		"",
+	},
 }
 
 // ──────────────────────────────────────────────
