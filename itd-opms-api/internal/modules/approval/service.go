@@ -13,6 +13,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // Service handles business logic for the approval workflow engine.
@@ -35,6 +36,8 @@ func NewService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Service {
 
 // ListWorkflowDefinitions returns all active workflow definitions, optionally filtered by entity type.
 func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUID, entityType string) ([]WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var conditions []string
 	var args []any
 	argIdx := 0
@@ -48,6 +51,14 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 		args = append(args, entityType)
 	}
 
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", argIdx+1)
+	if orgClause != "" {
+		conditions = append(conditions, orgClause)
+		args = append(args, orgParam)
+		argIdx++
+	}
+
 	whereClause := ""
 	for i, c := range conditions {
 		if i == 0 {
@@ -59,7 +70,7 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
 		FROM workflow_definitions
 		%s
 		ORDER BY created_at DESC`, whereClause)
@@ -76,7 +87,7 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 		var stepsJSON []byte
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &stepsJSON,
-			&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan workflow definition", err)
 		}
@@ -103,9 +114,11 @@ func (s *Service) ListWorkflowDefinitions(ctx context.Context, tenantID uuid.UUI
 
 // GetWorkflowDefinition retrieves a single workflow definition by ID.
 func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.UUID) (*WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	query := `
 		SELECT id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
 		FROM workflow_definitions
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -113,7 +126,7 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 	var stepsJSON []byte
 	err := s.pool.QueryRow(ctx, query, id, tenantID).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &stepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -121,6 +134,12 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 		}
 		return nil, apperrors.Internal("failed to get workflow definition", err)
 	}
+
+	// Org-scope access check.
+	if auth != nil && d.OrgUnitID != nil && !auth.HasOrgAccess(*d.OrgUnitID) {
+		return nil, apperrors.NotFound("WorkflowDefinition", id.String())
+	}
+
 	if stepsJSON != nil {
 		if err := json.Unmarshal(stepsJSON, &d.Steps); err != nil {
 			return nil, apperrors.Internal("failed to parse workflow steps", err)
@@ -135,6 +154,8 @@ func (s *Service) GetWorkflowDefinition(ctx context.Context, tenantID, id uuid.U
 
 // CreateWorkflowDefinition creates a new workflow definition.
 func (s *Service) CreateWorkflowDefinition(ctx context.Context, tenantID, createdBy uuid.UUID, req CreateWorkflowDefinitionRequest) (*WorkflowDefinition, error) {
+	auth := types.GetAuthContext(ctx)
+
 	if req.Name == "" {
 		return nil, apperrors.BadRequest("Name is required")
 	}
@@ -153,22 +174,29 @@ func (s *Service) CreateWorkflowDefinition(ctx context.Context, tenantID, create
 		return nil, apperrors.Internal("failed to marshal workflow steps", err)
 	}
 
+	// Derive org_unit_id from auth context.
+	var orgUnitID *uuid.UUID
+	if auth != nil && auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	query := `
 		INSERT INTO workflow_definitions (
 			id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at`
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at`
 
 	var d WorkflowDefinition
 	var returnedStepsJSON []byte
 	err = s.pool.QueryRow(ctx, query,
 		id, tenantID, req.Name, req.Description, req.EntityType, stepsJSON,
-		true, 1, req.AutoAssignRules, createdBy, now, now,
+		true, 1, req.AutoAssignRules, createdBy, orgUnitID, now, now,
 	).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &returnedStepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to create workflow definition", err)
@@ -232,7 +260,7 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 			updated_at = $8
 		WHERE id = $9 AND tenant_id = $10
 		RETURNING id, tenant_id, name, description, entity_type, steps, is_active,
-			version, auto_assign_rules, created_by, created_at, updated_at`
+			version, auto_assign_rules, created_by, org_unit_id, created_at, updated_at`
 
 	var d WorkflowDefinition
 	var returnedStepsJSON []byte
@@ -242,7 +270,7 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 		id, tenantID,
 	).Scan(
 		&d.ID, &d.TenantID, &d.Name, &d.Description, &d.EntityType, &returnedStepsJSON,
-		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.IsActive, &d.Version, &d.AutoAssignRules, &d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to update workflow definition", err)

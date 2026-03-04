@@ -99,6 +99,18 @@ func (s *Service) ListDocuments(ctx context.Context, folderID *uuid.UUID, classi
 	conditions = append(conditions, "d.tenant_id = "+nextArg())
 	args = append(args, auth.TenantID)
 
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "d.org_unit_id", argIdx+1)
+	if orgClause != "" {
+		if orgParam != nil {
+			conditions = append(conditions, orgClause)
+			args = append(args, orgParam)
+			argIdx++
+		} else {
+			conditions = append(conditions, orgClause)
+		}
+	}
+
 	conditions = append(conditions, "d.is_latest = true")
 	conditions = append(conditions, "d.status != 'deleted'")
 
@@ -146,7 +158,7 @@ func (s *Service) ListDocuments(ctx context.Context, folderID *uuid.UUID, classi
 			d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
 			d.retention_until, d.tags, d.folder_id, d.version,
 			d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
-			d.status, d.access_level, d.uploaded_by, d.created_at, d.updated_at,
+			d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
 			COALESCE(u.display_name, ''),
 			f.name,
 			lu.display_name
@@ -175,7 +187,7 @@ func (s *Service) ListDocuments(ctx context.Context, folderID *uuid.UUID, classi
 			&doc.ContentType, &doc.SizeBytes, &doc.ChecksumSHA256, &doc.Classification,
 			&doc.RetentionUntil, &doc.Tags, &doc.FolderID, &doc.Version,
 			&doc.ParentDocumentID, &doc.IsLatest, &doc.LockedBy, &doc.LockedAt,
-			&doc.Status, &doc.AccessLevel, &doc.UploadedBy, &doc.CreatedAt, &doc.UpdatedAt,
+			&doc.Status, &doc.AccessLevel, &doc.UploadedBy, &doc.OrgUnitID, &doc.CreatedAt, &doc.UpdatedAt,
 			&doc.UploaderName,
 			&doc.FolderName,
 			&doc.LockedByName,
@@ -212,7 +224,7 @@ func (s *Service) GetDocument(ctx context.Context, id uuid.UUID) (VaultDocument,
 			d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
 			d.retention_until, d.tags, d.folder_id, d.version,
 			d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
-			d.status, d.access_level, d.uploaded_by, d.created_at, d.updated_at,
+			d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
 			COALESCE(u.display_name, ''),
 			f.name,
 			lu.display_name
@@ -228,7 +240,7 @@ func (s *Service) GetDocument(ctx context.Context, id uuid.UUID) (VaultDocument,
 		&doc.ContentType, &doc.SizeBytes, &doc.ChecksumSHA256, &doc.Classification,
 		&doc.RetentionUntil, &doc.Tags, &doc.FolderID, &doc.Version,
 		&doc.ParentDocumentID, &doc.IsLatest, &doc.LockedBy, &doc.LockedAt,
-		&doc.Status, &doc.AccessLevel, &doc.UploadedBy, &doc.CreatedAt, &doc.UpdatedAt,
+		&doc.Status, &doc.AccessLevel, &doc.UploadedBy, &doc.OrgUnitID, &doc.CreatedAt, &doc.UpdatedAt,
 		&doc.UploaderName,
 		&doc.FolderName,
 		&doc.LockedByName,
@@ -238,6 +250,11 @@ func (s *Service) GetDocument(ctx context.Context, id uuid.UUID) (VaultDocument,
 			return VaultDocument{}, apperrors.NotFound("Document", id.String())
 		}
 		return VaultDocument{}, apperrors.Internal("failed to get vault document", err)
+	}
+
+	// Org-scope access check.
+	if doc.OrgUnitID != nil && !auth.HasOrgAccess(*doc.OrgUnitID) {
+		return VaultDocument{}, apperrors.NotFound("Document", id.String())
 	}
 
 	doc.FileName = filepath.Base(doc.FileKey)
@@ -351,23 +368,30 @@ func (s *Service) UploadDocument(
 		desc = &description
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	// INSERT into documents table.
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO documents (
 			id, tenant_id, title, description, file_key,
 			content_type, size_bytes, checksum_sha256, classification,
 			tags, folder_id, version, parent_document_id, is_latest,
-			status, access_level, uploaded_by, created_at, updated_at
+			status, access_level, uploaded_by, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
 			$10, $11, 1, NULL, true,
-			'active', $12, $13, $14, $15
+			'active', $12, $13, $14, $15, $16
 		)`,
 		docID, auth.TenantID, title, desc, objectKey,
 		contentType, int64(len(fileBytes)), checksum, classification,
 		tags, folderID,
-		accessLevel, auth.UserID, now, now,
+		accessLevel, auth.UserID, orgUnitID, now, now,
 	)
 	if err != nil {
 		_ = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, objectKey, minio.RemoveObjectOptions{})
@@ -564,18 +588,24 @@ func (s *Service) GetDownloadURL(ctx context.Context, id uuid.UUID) (string, str
 	}
 
 	var (
-		fileKey string
-		title   string
+		fileKey   string
+		title     string
+		orgUnitID *uuid.UUID
 	)
 	err := s.pool.QueryRow(ctx,
-		`SELECT file_key, title FROM documents WHERE id = $1 AND tenant_id = $2 AND status != 'deleted'`,
+		`SELECT file_key, title, org_unit_id FROM documents WHERE id = $1 AND tenant_id = $2 AND status != 'deleted'`,
 		id, auth.TenantID,
-	).Scan(&fileKey, &title)
+	).Scan(&fileKey, &title, &orgUnitID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return "", "", apperrors.NotFound("Document", id.String())
 		}
 		return "", "", apperrors.Internal("failed to get document for download", err)
+	}
+
+	// Org-scope access check.
+	if orgUnitID != nil && !auth.HasOrgAccess(*orgUnitID) {
+		return "", "", apperrors.NotFound("Document", id.String())
 	}
 
 	// Generate presigned URL valid for 15 minutes.
@@ -682,17 +712,17 @@ func (s *Service) UploadVersion(ctx context.Context, docID uuid.UUID, file multi
 			id, tenant_id, title, description, file_key,
 			content_type, size_bytes, checksum_sha256, classification,
 			tags, folder_id, version, parent_document_id, is_latest,
-			status, access_level, uploaded_by, created_at, updated_at
+			status, access_level, uploaded_by, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
 			$10, $11, $12, $13, true,
-			'active', $14, $15, $16, $17
+			'active', $14, $15, $16, $17, $18
 		)`,
 		newDocID, auth.TenantID, existing.Title, existing.Description, objectKey,
 		contentType, int64(len(fileBytes)), checksum, existing.Classification,
 		tags, existing.FolderID, newVersion, parentID,
-		existing.AccessLevel, auth.UserID, now, now,
+		existing.AccessLevel, auth.UserID, existing.OrgUnitID, now, now,
 	)
 	if err != nil {
 		_ = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, objectKey, minio.RemoveObjectOptions{})
@@ -751,7 +781,7 @@ func (s *Service) ListVersions(ctx context.Context, docID uuid.UUID) ([]VaultDoc
 			d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
 			d.retention_until, d.tags, d.folder_id, d.version,
 			d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
-			d.status, d.access_level, d.uploaded_by, d.created_at, d.updated_at,
+			d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
 			COALESCE(u.display_name, ''),
 			f.name,
 			lu.display_name
@@ -778,7 +808,7 @@ func (s *Service) ListVersions(ctx context.Context, docID uuid.UUID) ([]VaultDoc
 			&d.ContentType, &d.SizeBytes, &d.ChecksumSHA256, &d.Classification,
 			&d.RetentionUntil, &d.Tags, &d.FolderID, &d.Version,
 			&d.ParentDocumentID, &d.IsLatest, &d.LockedBy, &d.LockedAt,
-			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 			&d.UploaderName,
 			&d.FolderName,
 			&d.LockedByName,
@@ -1044,6 +1074,11 @@ func (s *Service) GetAccessLog(ctx context.Context, docID uuid.UUID, limit, offs
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Verify the document exists and the caller has org access.
+	if _, err := s.GetDocument(ctx, docID); err != nil {
+		return nil, 0, err
+	}
+
 	// Count total.
 	var total int64
 	if err := s.pool.QueryRow(ctx,
@@ -1100,9 +1135,17 @@ func (s *Service) ListFolders(ctx context.Context) ([]DocumentFolder, error) {
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "f.org_unit_id", 2)
+
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT f.id, f.tenant_id, f.parent_id, f.name, f.description,
-			f.path, f.color, f.created_by, f.created_at, f.updated_at,
+			f.path, f.color, f.created_by, f.org_unit_id, f.created_at, f.updated_at,
 			COALESCE(dc.cnt, 0)
 		FROM document_folders f
 		LEFT JOIN (
@@ -1111,10 +1154,15 @@ func (s *Service) ListFolders(ctx context.Context) ([]DocumentFolder, error) {
 			WHERE tenant_id = $1 AND status != 'deleted' AND is_latest = true
 			GROUP BY folder_id
 		) dc ON dc.folder_id = f.id
-		WHERE f.tenant_id = $1
-		ORDER BY f.path ASC, f.name ASC`
+		WHERE f.tenant_id = $1%s
+		ORDER BY f.path ASC, f.name ASC`, orgSQL)
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID)
+	args := []interface{}{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list folders", err)
 	}
@@ -1125,7 +1173,7 @@ func (s *Service) ListFolders(ctx context.Context) ([]DocumentFolder, error) {
 		var f DocumentFolder
 		if err := rows.Scan(
 			&f.ID, &f.TenantID, &f.ParentID, &f.Name, &f.Description,
-			&f.Path, &f.Color, &f.CreatedBy, &f.CreatedAt, &f.UpdatedAt,
+			&f.Path, &f.Color, &f.CreatedBy, &f.OrgUnitID, &f.CreatedAt, &f.UpdatedAt,
 			&f.DocumentCount,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan folder", err)
@@ -1171,12 +1219,19 @@ func (s *Service) CreateFolder(ctx context.Context, req CreateFolderRequest) (Do
 	folderID := uuid.New()
 	now := time.Now().UTC()
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO document_folders (
-			id, tenant_id, parent_id, name, description, path, color, created_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			id, tenant_id, parent_id, name, description, path, color, created_by, org_unit_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		folderID, auth.TenantID, req.ParentID, req.Name, req.Description,
-		path, req.Color, auth.UserID, now, now,
+		path, req.Color, auth.UserID, orgUnitID, now, now,
 	)
 	if err != nil {
 		return DocumentFolder{}, apperrors.Internal("failed to create folder", err)
@@ -1204,6 +1259,7 @@ func (s *Service) CreateFolder(ctx context.Context, req CreateFolderRequest) (Do
 		Path:        path,
 		Color:       req.Color,
 		CreatedBy:   auth.UserID,
+		OrgUnitID:   orgUnitID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
@@ -1267,10 +1323,10 @@ func (s *Service) UpdateFolder(ctx context.Context, id uuid.UUID, req UpdateFold
 	// Refetch.
 	var f DocumentFolder
 	err = s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, parent_id, name, description, path, color, created_by, created_at, updated_at
+		`SELECT id, tenant_id, parent_id, name, description, path, color, created_by, org_unit_id, created_at, updated_at
 		FROM document_folders WHERE id = $1 AND tenant_id = $2`,
 		id, auth.TenantID,
-	).Scan(&f.ID, &f.TenantID, &f.ParentID, &f.Name, &f.Description, &f.Path, &f.Color, &f.CreatedBy, &f.CreatedAt, &f.UpdatedAt)
+	).Scan(&f.ID, &f.TenantID, &f.ParentID, &f.Name, &f.Description, &f.Path, &f.Color, &f.CreatedBy, &f.OrgUnitID, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		return DocumentFolder{}, apperrors.Internal("failed to refetch folder", err)
 	}
@@ -1352,6 +1408,9 @@ func (s *Service) SearchDocuments(ctx context.Context, query string, limit, offs
 
 	searchPattern := "%" + strings.ToLower(query) + "%"
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "d.org_unit_id", 3)
+
 	// Count total.
 	var total int64
 	countQuery := `
@@ -1366,16 +1425,30 @@ func (s *Service) SearchDocuments(ctx context.Context, query string, limit, offs
 				OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t WHERE LOWER(t) LIKE $2)
 			)`
 
-	if err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, searchPattern).Scan(&total); err != nil {
+	countArgs := []interface{}{auth.TenantID, searchPattern}
+	if orgClause != "" {
+		countQuery += " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
+	if err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	dataQuery := `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" && orgParam != nil {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
 		SELECT d.id, d.tenant_id, d.title, d.description, d.file_key,
 			d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
 			d.retention_until, d.tags, d.folder_id, d.version,
 			d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
-			d.status, d.access_level, d.uploaded_by, d.created_at, d.updated_at,
+			d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
 			COALESCE(u.display_name, ''),
 			f.name,
 			lu.display_name
@@ -1390,11 +1463,23 @@ func (s *Service) SearchDocuments(ctx context.Context, query string, limit, offs
 				LOWER(d.title) LIKE $2
 				OR LOWER(COALESCE(d.description, '')) LIKE $2
 				OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t WHERE LOWER(t) LIKE $2)
-			)
+			)%s
 		ORDER BY d.created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, searchPattern, limit, offset)
+	dataArgs := []interface{}{auth.TenantID, searchPattern}
+	if orgClause != "" && orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to search documents", err)
 	}
@@ -1408,7 +1493,7 @@ func (s *Service) SearchDocuments(ctx context.Context, query string, limit, offs
 			&d.ContentType, &d.SizeBytes, &d.ChecksumSHA256, &d.Classification,
 			&d.RetentionUntil, &d.Tags, &d.FolderID, &d.Version,
 			&d.ParentDocumentID, &d.IsLatest, &d.LockedBy, &d.LockedAt,
-			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 			&d.UploaderName,
 			&d.FolderName,
 			&d.LockedByName,
@@ -1449,7 +1534,7 @@ func (s *Service) GetRecentDocuments(ctx context.Context, limit int) ([]VaultDoc
 			d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
 			d.retention_until, d.tags, d.folder_id, d.version,
 			d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
-			d.status, d.access_level, d.uploaded_by, d.created_at, d.updated_at,
+			d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
 			COALESCE(u.display_name, ''),
 			f.name,
 			lu.display_name
@@ -1478,7 +1563,7 @@ func (s *Service) GetRecentDocuments(ctx context.Context, limit int) ([]VaultDoc
 			&d.ContentType, &d.SizeBytes, &d.ChecksumSHA256, &d.Classification,
 			&d.RetentionUntil, &d.Tags, &d.FolderID, &d.Version,
 			&d.ParentDocumentID, &d.IsLatest, &d.LockedBy, &d.LockedAt,
-			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.Status, &d.AccessLevel, &d.UploadedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 			&d.UploaderName,
 			&d.FolderName,
 			&d.LockedByName,
@@ -1514,34 +1599,61 @@ func (s *Service) GetStats(ctx context.Context) (VaultStats, error) {
 		ByClassification: make(map[string]int64),
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
 	// Total documents and size.
-	err := s.pool.QueryRow(ctx, `
+	docStatsQuery := fmt.Sprintf(`
 		SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(size_bytes), 0)
 		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'`,
-		auth.TenantID,
-	).Scan(&stats.TotalDocuments, &stats.TotalSizeBytes)
+		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'%s`, orgSQL)
+
+	docStatsArgs := []interface{}{auth.TenantID}
+	if orgParam != nil {
+		docStatsArgs = append(docStatsArgs, orgParam)
+	}
+
+	err := s.pool.QueryRow(ctx, docStatsQuery, docStatsArgs...).Scan(&stats.TotalDocuments, &stats.TotalSizeBytes)
 	if err != nil {
 		return VaultStats{}, apperrors.Internal("failed to get document stats", err)
 	}
 
 	// Total folders.
-	err = s.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM document_folders WHERE tenant_id = $1`,
-		auth.TenantID,
-	).Scan(&stats.TotalFolders)
+	// Build folder org-scope filter clause.
+	folderOrgClause, folderOrgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	folderOrgSQL := ""
+	if folderOrgClause != "" {
+		folderOrgSQL = " AND " + folderOrgClause
+	}
+
+	folderCountQuery := fmt.Sprintf(`SELECT COUNT(*) FROM document_folders WHERE tenant_id = $1%s`, folderOrgSQL)
+	folderCountArgs := []interface{}{auth.TenantID}
+	if folderOrgParam != nil {
+		folderCountArgs = append(folderCountArgs, folderOrgParam)
+	}
+
+	err = s.pool.QueryRow(ctx, folderCountQuery, folderCountArgs...).Scan(&stats.TotalFolders)
 	if err != nil {
 		return VaultStats{}, apperrors.Internal("failed to get folder count", err)
 	}
 
 	// Documents by classification.
-	rows, err := s.pool.Query(ctx, `
+	classQuery := fmt.Sprintf(`
 		SELECT classification::text, COUNT(*)
 		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'
-		GROUP BY classification`,
-		auth.TenantID,
-	)
+		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'%s
+		GROUP BY classification`, orgSQL)
+
+	classArgs := []interface{}{auth.TenantID}
+	if orgParam != nil {
+		classArgs = append(classArgs, orgParam)
+	}
+
+	rows, err := s.pool.Query(ctx, classQuery, classArgs...)
 	if err != nil {
 		return VaultStats{}, apperrors.Internal("failed to get classification stats", err)
 	}
@@ -1561,13 +1673,18 @@ func (s *Service) GetStats(ctx context.Context) (VaultStats, error) {
 	}
 
 	// Recent uploads (last 7 days).
-	err = s.pool.QueryRow(ctx, `
+	recentQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM documents
 		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'
-			AND created_at >= NOW() - INTERVAL '7 days'`,
-		auth.TenantID,
-	).Scan(&stats.RecentUploads)
+			AND created_at >= NOW() - INTERVAL '7 days'%s`, orgSQL)
+
+	recentArgs := []interface{}{auth.TenantID}
+	if orgParam != nil {
+		recentArgs = append(recentArgs, orgParam)
+	}
+
+	err = s.pool.QueryRow(ctx, recentQuery, recentArgs...).Scan(&stats.RecentUploads)
 	if err != nil {
 		return VaultStats{}, apperrors.Internal("failed to get recent upload count", err)
 	}

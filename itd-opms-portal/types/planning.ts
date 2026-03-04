@@ -565,3 +565,79 @@ export interface PortfolioBudgetItem {
   remainingBudget: number;
   variancePct: number;
 }
+
+/* =============================================================================
+   Bulk Project Import Types
+   ============================================================================= */
+
+export interface ImportRowError {
+  column: string;
+  code: string;
+  message: string;
+}
+
+export interface ImportRow {
+  rowNumber: number;
+  title: string;
+  code: string;
+  description: string;
+  portfolioName: string;
+  divisionName: string;
+  sponsorEmail: string;
+  projectManagerEmail: string;
+  status: string;
+  priority: string;
+  plannedStart: string;
+  plannedEnd: string;
+  budgetApproved: string;
+  charter: string;
+  scope: string;
+  businessCase: string;
+  isValid: boolean;
+  errors?: ImportRowError[];
+}
+
+export interface ValidateImportResponse {
+  batchId: string;
+  fileName: string;
+  fileFormat: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  rows: ImportRow[];
+}
+
+export interface CommitImportResponse {
+  batchId: string;
+  totalRows: number;
+  importedRows: number;
+  failedRows: number;
+  createdIds?: string[];
+  status: string;
+}
+
+export interface ImportBatch {
+  id: string;
+  tenantId: string;
+  uploadedBy: string;
+  fileName: string;
+  fileFormat: string;
+  status: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  importedRows: number;
+  failedRows: number;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface ImportBatchError {
+  id: string;
+  batchId: string;
+  rowNumber: number;
+  columnName: string;
+  fieldValue: string;
+  errorCode: string;
+  message: string;
+}

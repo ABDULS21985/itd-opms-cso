@@ -22,6 +22,7 @@ type Handler struct {
 	pir          *PIRHandler
 	budget       *BudgetHandler
 	costCategory *CostCategoryHandler
+	projectImport *ImportHandler
 }
 
 // NewHandler creates a new planning Handler with all sub-handlers wired up.
@@ -39,16 +40,20 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *m
 	projectHandler.doc = NewDocumentHandler(documentSvc)
 	projectHandler.budget = NewBudgetHandler(budgetSvc)
 
+	importSvc := NewImportService(pool, auditSvc)
+	importHandler := NewImportHandler(importSvc)
+
 	return &Handler{
-		portfolio:    NewPortfolioHandler(portfolioSvc),
-		project:      projectHandler,
-		workItem:     NewWorkItemHandler(workItemSvc),
-		milestone:    NewMilestoneHandler(workItemSvc),
-		risk:         NewRiskHandler(riskSvc),
-		timeline:     NewTimelineHandler(timelineSvc),
-		pir:          NewPIRHandler(pirSvc),
-		budget:       NewBudgetHandler(budgetSvc),
-		costCategory: NewCostCategoryHandler(budgetSvc),
+		portfolio:     NewPortfolioHandler(portfolioSvc),
+		project:       projectHandler,
+		workItem:      NewWorkItemHandler(workItemSvc),
+		milestone:     NewMilestoneHandler(workItemSvc),
+		risk:          NewRiskHandler(riskSvc),
+		timeline:      NewTimelineHandler(timelineSvc),
+		pir:           NewPIRHandler(pirSvc),
+		budget:        NewBudgetHandler(budgetSvc),
+		costCategory:  NewCostCategoryHandler(budgetSvc),
+		projectImport: importHandler,
 	}
 }
 
@@ -88,5 +93,10 @@ func (h *Handler) Routes(r chi.Router) {
 	// Budget — cost categories & portfolio summary
 	r.Route("/budget", func(r chi.Router) {
 		h.costCategory.Routes(r)
+	})
+
+	// Bulk project import
+	r.Route("/projects/import", func(r chi.Router) {
+		h.projectImport.Routes(r)
 	})
 }
