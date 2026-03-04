@@ -43,7 +43,7 @@ const ruleColumns = `
 	id, tenant_id, name, description, is_active, trigger_type,
 	trigger_config, condition_config, actions,
 	max_executions_per_hour, cooldown_minutes, execution_count,
-	last_executed_at, created_by, created_at, updated_at`
+	last_executed_at, created_by, org_unit_id, created_at, updated_at`
 
 const executionColumns = `
 	id, rule_id, tenant_id, trigger_event, entity_type, entity_id,
@@ -55,7 +55,7 @@ func scanRule(row pgx.Row) (AutomationRule, error) {
 		&r.ID, &r.TenantID, &r.Name, &r.Description, &r.IsActive, &r.TriggerType,
 		&r.TriggerConfig, &r.ConditionConfig, &r.Actions,
 		&r.MaxExecutionsPerHour, &r.CooldownMinutes, &r.ExecutionCount,
-		&r.LastExecutedAt, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
+		&r.LastExecutedAt, &r.CreatedBy, &r.OrgUnitID, &r.CreatedAt, &r.UpdatedAt,
 	)
 	return r, err
 }
@@ -68,7 +68,7 @@ func scanRules(rows pgx.Rows) ([]AutomationRule, error) {
 			&r.ID, &r.TenantID, &r.Name, &r.Description, &r.IsActive, &r.TriggerType,
 			&r.TriggerConfig, &r.ConditionConfig, &r.Actions,
 			&r.MaxExecutionsPerHour, &r.CooldownMinutes, &r.ExecutionCount,
-			&r.LastExecutedAt, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
+			&r.LastExecutedAt, &r.CreatedBy, &r.OrgUnitID, &r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

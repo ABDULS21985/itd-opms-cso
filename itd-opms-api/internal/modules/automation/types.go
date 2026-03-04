@@ -125,6 +125,7 @@ type AutomationRule struct {
 	ExecutionCount       int             `json:"executionCount"`
 	LastExecutedAt       *time.Time      `json:"lastExecutedAt"`
 	CreatedBy            uuid.UUID       `json:"createdBy"`
+	OrgUnitID            *uuid.UUID      `json:"orgUnitId,omitempty"`
 	CreatedAt            time.Time       `json:"createdAt"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 }

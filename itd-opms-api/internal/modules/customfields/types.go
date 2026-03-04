@@ -28,6 +28,7 @@ type CustomFieldDefinition struct {
 	DefaultValue    *string         `json:"defaultValue"`
 	IsActive        bool            `json:"isActive"`
 	CreatedBy       uuid.UUID       `json:"createdBy"`
+	OrgUnitID       *uuid.UUID      `json:"orgUnitId,omitempty"`
 	CreatedAt       time.Time       `json:"createdAt"`
 	UpdatedAt       time.Time       `json:"updatedAt"`
 }

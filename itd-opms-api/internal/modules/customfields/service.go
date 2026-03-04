@@ -44,7 +44,7 @@ const definitionColumns = `
 	id, tenant_id, entity_type, field_key, field_label,
 	field_type, description, is_required, is_filterable, is_visible_in_list,
 	display_order, validation_rules, default_value, is_active,
-	created_by, created_at, updated_at`
+	created_by, org_unit_id, created_at, updated_at`
 
 func scanDefinition(row pgx.Row) (CustomFieldDefinition, error) {
 	var d CustomFieldDefinition
@@ -52,7 +52,7 @@ func scanDefinition(row pgx.Row) (CustomFieldDefinition, error) {
 		&d.ID, &d.TenantID, &d.EntityType, &d.FieldKey, &d.FieldLabel,
 		&d.FieldType, &d.Description, &d.IsRequired, &d.IsFilterable, &d.IsVisibleInList,
 		&d.DisplayOrder, &d.ValidationRules, &d.DefaultValue, &d.IsActive,
-		&d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	return d, err
 }
@@ -65,7 +65,7 @@ func scanDefinitions(rows pgx.Rows) ([]CustomFieldDefinition, error) {
 			&d.ID, &d.TenantID, &d.EntityType, &d.FieldKey, &d.FieldLabel,
 			&d.FieldType, &d.Description, &d.IsRequired, &d.IsFilterable, &d.IsVisibleInList,
 			&d.DisplayOrder, &d.ValidationRules, &d.DefaultValue, &d.IsActive,
-			&d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
+			&d.CreatedBy, &d.OrgUnitID, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -115,13 +115,27 @@ func (s *Service) ListDefinitions(ctx context.Context, entityType string) ([]Cus
 		return nil, apperrors.BadRequest(fmt.Sprintf("invalid entity type: %s", entityType))
 	}
 
-	query := `
-		SELECT ` + definitionColumns + `
-		FROM custom_field_definitions
-		WHERE tenant_id = $1 AND entity_type = $2 AND is_active = true
-		ORDER BY display_order ASC, created_at ASC`
+	args := []interface{}{auth.TenantID, entityType}
+	nextIdx := 3
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID, entityType)
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		if orgParam != nil {
+			args = append(args, orgParam)
+			nextIdx++
+		}
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM custom_field_definitions
+		WHERE tenant_id = $1 AND entity_type = $2 AND is_active = true%s
+		ORDER BY display_order ASC, created_at ASC`, definitionColumns, orgClause)
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list custom field definitions", err)
 	}
@@ -150,6 +164,11 @@ func (s *Service) GetDefinition(ctx context.Context, id uuid.UUID) (*CustomField
 			return nil, apperrors.NotFound("CustomFieldDefinition", id.String())
 		}
 		return nil, apperrors.Internal("failed to get custom field definition", err)
+	}
+
+	// Org-scope access check.
+	if def.OrgUnitID != nil && !auth.HasOrgAccess(*def.OrgUnitID) {
+		return nil, apperrors.NotFound("CustomFieldDefinition", id.String())
 	}
 
 	return &def, nil
@@ -209,17 +228,24 @@ func (s *Service) CreateDefinition(ctx context.Context, req CreateCustomFieldDef
 	id := uuid.New()
 	now := time.Now().UTC()
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		id2 := auth.OrgUnitID
+		orgUnitID = &id2
+	}
+
 	query := `
 		INSERT INTO custom_field_definitions (
 			id, tenant_id, entity_type, field_key, field_label,
 			field_type, description, is_required, is_filterable, is_visible_in_list,
 			display_order, validation_rules, default_value, is_active,
-			created_by, created_at, updated_at
+			created_by, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9, $10,
 			$11, $12, $13, true,
-			$14, $15, $16
+			$14, $15, $16, $17
 		)
 		RETURNING ` + definitionColumns
 
@@ -227,7 +253,7 @@ func (s *Service) CreateDefinition(ctx context.Context, req CreateCustomFieldDef
 		id, auth.TenantID, req.EntityType, fieldKey, req.FieldLabel,
 		req.FieldType, req.Description, req.IsRequired, req.IsFilterable, req.IsVisibleInList,
 		req.DisplayOrder, validationRules, req.DefaultValue,
-		auth.UserID, now, now,
+		auth.UserID, orgUnitID, now, now,
 	))
 	if err != nil {
 		return nil, apperrors.Internal("failed to create custom field definition", err)

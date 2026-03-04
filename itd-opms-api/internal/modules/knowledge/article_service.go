@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -55,7 +56,7 @@ func scanArticle(row pgx.Row) (KBArticle, error) {
 		&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
 		&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
 		&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-		&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
+		&a.LinkedTicketIDs, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
 	)
 	return a, err
 }
@@ -270,7 +271,7 @@ const articleColumns = `id, tenant_id, category_id, title, slug,
 	content, status, version, type, tags,
 	author_id, reviewer_id, published_at,
 	view_count, helpful_count, not_helpful_count,
-	linked_ticket_ids, created_at, updated_at`
+	linked_ticket_ids, org_unit_id, created_at, updated_at`
 
 // CreateArticle creates a new KB article.
 func (s *ArticleService) CreateArticle(ctx context.Context, req CreateKBArticleRequest) (KBArticle, error) {
@@ -287,17 +288,24 @@ func (s *ArticleService) CreateArticle(ctx context.Context, req CreateKBArticleR
 		tags = []string{}
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		oid := auth.OrgUnitID
+		orgUnitID = &oid
+	}
+
 	query := `
 		INSERT INTO kb_articles (
 			id, tenant_id, category_id, title, slug,
 			content, status, version, type, tags,
 			author_id, view_count, helpful_count, not_helpful_count,
-			linked_ticket_ids, created_at, updated_at
+			linked_ticket_ids, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9, $10,
 			$11, $12, $13, $14,
-			$15, $16, $17
+			$15, $16, $17, $18
 		)
 		RETURNING ` + articleColumns
 
@@ -305,7 +313,7 @@ func (s *ArticleService) CreateArticle(ctx context.Context, req CreateKBArticleR
 		id, auth.TenantID, req.CategoryID, req.Title, req.Slug,
 		req.Content, ArticleStatusDraft, 1, req.Type, tags,
 		auth.UserID, 0, 0, 0,
-		[]uuid.UUID{}, now, now,
+		[]uuid.UUID{}, orgUnitID, now, now,
 	))
 	if err != nil {
 		return KBArticle{}, apperrors.Internal("failed to create KB article", err)
@@ -343,6 +351,11 @@ func (s *ArticleService) GetArticle(ctx context.Context, id uuid.UUID) (KBArticl
 		return KBArticle{}, apperrors.Internal("failed to get KB article", err)
 	}
 
+	// Org-scope access check.
+	if a.OrgUnitID != nil && !auth.HasOrgAccess(*a.OrgUnitID) {
+		return KBArticle{}, apperrors.NotFound("KBArticle", id.String())
+	}
+
 	return a, nil
 }
 
@@ -363,6 +376,11 @@ func (s *ArticleService) GetArticleBySlug(ctx context.Context, slug string) (KBA
 		return KBArticle{}, apperrors.Internal("failed to get KB article by slug", err)
 	}
 
+	// Org-scope access check.
+	if a.OrgUnitID != nil && !auth.HasOrgAccess(*a.OrgUnitID) {
+		return KBArticle{}, apperrors.NotFound("KBArticle", slug)
+	}
+
 	return a, nil
 }
 
@@ -373,6 +391,9 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 6)
+
 	countQuery := `
 		SELECT COUNT(*)
 		FROM kb_articles
@@ -382,24 +403,50 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 			AND ($4::text IS NULL OR type = $4)
 			AND ($5::text IS NULL OR author_id::text = $5)`
 
+	countArgs := []interface{}{auth.TenantID, categoryID, status, articleType, authorID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, categoryID, status, articleType, authorID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count KB articles", err)
 	}
 
-	dataQuery := `
-		SELECT ` + articleColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 6
+	if orgClause != "" && orgParam != nil {
+		nextIdx = 7
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleColumns+`
 		FROM kb_articles
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR category_id = $2)
 			AND ($3::text IS NULL OR status = $3)
 			AND ($4::text IS NULL OR type = $4)
-			AND ($5::text IS NULL OR author_id::text = $5)
+			AND ($5::text IS NULL OR author_id::text = $5)%s
 		ORDER BY created_at DESC
-		LIMIT $6 OFFSET $7`
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, categoryID, status, articleType, authorID, params.Limit, params.Offset())
+	dataArgs := []interface{}{auth.TenantID, categoryID, status, articleType, authorID}
+	if orgClause != "" && orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list KB articles", err)
 	}
@@ -413,7 +460,7 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 			&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
 			&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
 			&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-			&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
+			&a.LinkedTicketIDs, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan KB article", err)
 		}
@@ -650,6 +697,9 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
 	countQuery := `
 		SELECT COUNT(*)
 		FROM kb_articles
@@ -660,28 +710,54 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 				OR $2 = ANY(tags)
 			)`
 
+	countArgs := []interface{}{auth.TenantID, query}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, query).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	dataQuery := `
-		SELECT ` + articleColumns + `
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" && orgParam != nil {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleColumns+`
 		FROM kb_articles
 		WHERE tenant_id = $1
 			AND (
-				title ILIKE '%' || $2 || '%'
-				OR content ILIKE '%' || $2 || '%'
+				title ILIKE '%%' || $2 || '%%'
+				OR content ILIKE '%%' || $2 || '%%'
 				OR $2 = ANY(tags)
-			)
+			)%s
 		ORDER BY
-			CASE WHEN title ILIKE '%' || $2 || '%' THEN 0 ELSE 1 END,
+			CASE WHEN title ILIKE '%%' || $2 || '%%' THEN 0 ELSE 1 END,
 			view_count DESC,
 			created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClause != "" {
+				return " AND " + orgClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, query, params.Limit, params.Offset())
+	dataArgs := []interface{}{auth.TenantID, query}
+	if orgClause != "" && orgParam != nil {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to search KB articles", err)
 	}
@@ -695,7 +771,7 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 			&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
 			&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
 			&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-			&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
+			&a.LinkedTicketIDs, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan search result", err)
 		}

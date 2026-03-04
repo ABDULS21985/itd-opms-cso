@@ -85,6 +85,7 @@ type WorkflowDefinition struct {
 	Version         int               `json:"version"`
 	AutoAssignRules json.RawMessage   `json:"autoAssignRules,omitempty"`
 	CreatedBy       uuid.UUID         `json:"createdBy"`
+	OrgUnitID       *uuid.UUID        `json:"orgUnitId,omitempty"`
 	CreatedAt       time.Time         `json:"createdAt"`
 	UpdatedAt       time.Time         `json:"updatedAt"`
 }
@@ -106,6 +107,7 @@ type ApprovalChain struct {
 	Urgency              string          `json:"urgency"`
 	Metadata             json.RawMessage `json:"metadata,omitempty"`
 	CreatedBy            uuid.UUID       `json:"createdBy"`
+	OrgUnitID            *uuid.UUID      `json:"orgUnitId,omitempty"`
 	CreatedAt            time.Time       `json:"createdAt"`
 	CompletedAt          *time.Time      `json:"completedAt"`
 	Steps                []ApprovalStep  `json:"steps"`
