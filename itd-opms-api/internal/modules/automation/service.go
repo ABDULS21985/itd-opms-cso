@@ -145,6 +145,16 @@ func (s *Service) ListRules(ctx context.Context, isActive *bool, triggerType str
 		args = append(args, triggerType)
 	}
 
+	// Org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", argIdx+1)
+	if orgClause != "" {
+		whereClauses = append(whereClauses, orgClause)
+		if orgParam != nil {
+			args = append(args, orgParam)
+			argIdx++
+		}
+	}
+
 	where := strings.Join(whereClauses, " AND ")
 
 	// Count total matching rules.
@@ -194,6 +204,11 @@ func (s *Service) GetRule(ctx context.Context, id uuid.UUID) (*AutomationRule, e
 			return nil, apperrors.NotFound("AutomationRule", id.String())
 		}
 		return nil, apperrors.Internal("failed to get automation rule", err)
+	}
+
+	// Org-scope access check.
+	if rule.OrgUnitID != nil && !auth.HasOrgAccess(*rule.OrgUnitID) {
+		return nil, apperrors.NotFound("AutomationRule", id.String())
 	}
 
 	return &rule, nil
@@ -247,17 +262,24 @@ func (s *Service) CreateRule(ctx context.Context, req CreateAutomationRuleReques
 	id := uuid.New()
 	now := time.Now().UTC()
 
+	// Derive org_unit_id from authenticated user's scope.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		id2 := auth.OrgUnitID
+		orgUnitID = &id2
+	}
+
 	query := `
 		INSERT INTO automation_rules (
 			id, tenant_id, name, description, is_active, trigger_type,
 			trigger_config, condition_config, actions,
 			max_executions_per_hour, cooldown_minutes, execution_count,
-			last_executed_at, created_by, created_at, updated_at
+			last_executed_at, created_by, org_unit_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, true, $5,
 			$6, $7, $8,
 			$9, $10, 0,
-			NULL, $11, $12, $13
+			NULL, $11, $12, $13, $14
 		)
 		RETURNING ` + ruleColumns
 
@@ -265,7 +287,7 @@ func (s *Service) CreateRule(ctx context.Context, req CreateAutomationRuleReques
 		id, auth.TenantID, req.Name, req.Description, req.TriggerType,
 		triggerConfig, conditionConfig, actions,
 		maxExec, cooldown,
-		auth.UserID, now, now,
+		auth.UserID, orgUnitID, now, now,
 	))
 	if err != nil {
 		return nil, apperrors.Internal("failed to create automation rule", err)
