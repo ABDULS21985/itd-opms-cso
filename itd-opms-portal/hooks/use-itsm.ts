@@ -174,6 +174,25 @@ export function useRelatedCatalogItems(id: string | undefined) {
 /* ================================================================== */
 
 /**
+ * POST /itsm/catalog/items/bulk/status - bulk update status for multiple items.
+ */
+export function useBulkUpdateCatalogItemStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; status: string }) =>
+      apiClient.post<{ updated: number }>("/itsm/catalog/items/bulk/status", body),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["catalog-items"] });
+      queryClient.invalidateQueries({ queryKey: ["catalog-items-entitled"] });
+      toast.success(`${variables.ids.length} item(s) updated to ${variables.status}`);
+    },
+    onError: () => {
+      toast.error("Failed to bulk update item statuses");
+    },
+  });
+}
+
+/**
  * POST /itsm/catalog/items - create a catalog item.
  */
 export function useCreateCatalogItem() {

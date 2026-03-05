@@ -33,6 +33,7 @@ type UserProfile struct {
 	Email       string     `json:"email"`
 	DisplayName string     `json:"displayName"`
 	TenantID    uuid.UUID  `json:"tenantId"`
+	TenantName  string     `json:"tenantName"`
 	JobTitle    *string    `json:"jobTitle,omitempty"`
 	Department  *string    `json:"department,omitempty"`
 	Office      *string    `json:"office,omitempty"`
@@ -43,6 +44,8 @@ type UserProfile struct {
 	Permissions []string   `json:"permissions"`
 	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	OrgLevel    string     `json:"orgLevel,omitempty"`
+	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
+	CreatedAt   *time.Time `json:"createdAt,omitempty"`
 }
 
 // UpdateProfileRequest is the payload for self-service profile updates.
@@ -88,6 +91,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	var (
 		userID       uuid.UUID
 		tenantID     uuid.UUID
+		tenantName   string
 		displayName  string
 		passwordHash *string
 		jobTitle     *string
@@ -98,16 +102,19 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		photoURL     *string
 		orgUnitID    *uuid.UUID
 		orgLevel     *string
+		lastLoginAt  *time.Time
+		createdAt    *time.Time
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT u.id, u.tenant_id, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text
+		`SELECT u.id, u.tenant_id, t.name, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
 		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel)
+	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.Unauthorized("Invalid email or password")
@@ -160,11 +167,13 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	// Update last login timestamp.
 	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
 
+	now := time.Now()
 	profile := UserProfile{
 		ID:          userID,
 		Email:       email,
 		DisplayName: displayName,
 		TenantID:    tenantID,
+		TenantName:  tenantName,
 		JobTitle:    jobTitle,
 		Department:  department,
 		Office:      office,
@@ -174,6 +183,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		Roles:       roles,
 		Permissions: permissions,
 		OrgUnitID:   orgUnitID,
+		LastLoginAt: &now,
+		CreatedAt:   createdAt,
 	}
 	if orgLevel != nil {
 		profile.OrgLevel = *orgLevel
@@ -401,6 +412,7 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		email       string
 		displayName string
 		tenantID    uuid.UUID
+		tenantName  string
 		jobTitle    *string
 		department  *string
 		office      *string
@@ -409,16 +421,19 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		photoURL    *string
 		orgUnitID   *uuid.UUID
 		orgLevel    *string
+		lastLoginAt *time.Time
+		createdAt   *time.Time
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT u.email, u.display_name, u.tenant_id, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text
+		`SELECT u.email, u.display_name, u.tenant_id, t.name, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
 		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.id = $1 AND u.is_active = true`,
 		userID,
-	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel)
+	).Scan(&email, &displayName, &tenantID, &tenantName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("user", userID.String())
@@ -436,15 +451,18 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		Email:       email,
 		DisplayName: displayName,
 		TenantID:    tenantID,
+		TenantName:  tenantName,
 		JobTitle:    jobTitle,
 		Department:  department,
 		Office:      office,
 		Unit:        unit,
 		Phone:       phone,
-		PhotoURL:    photoURL,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
 		Roles:       roles,
 		Permissions: permissions,
 		OrgUnitID:   orgUnitID,
+		LastLoginAt: lastLoginAt,
+		CreatedAt:   createdAt,
 	}
 	if orgLevel != nil {
 		profile.OrgLevel = *orgLevel
@@ -695,6 +713,12 @@ func (s *AuthService) UploadProfilePhoto(ctx context.Context, userID, tenantID u
 	}
 
 	slog.Info("profile photo uploaded", "user_id", userID, "object_key", objectKey)
+
+	// Return a presigned URL so the frontend can display it immediately.
+	resolved := s.resolvePhotoURL(ctx, &objectKey)
+	if resolved != nil {
+		return *resolved, nil
+	}
 	return objectKey, nil
 }
 

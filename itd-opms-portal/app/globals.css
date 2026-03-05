@@ -431,48 +431,6 @@ h1, h2, h3, h4, h5, h6,
   animation: shimmer 2s infinite;
 }
 
-/* ===== Bento KPI Card — Glassmorphism Dashboard ===== */
-
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes bento-rotate-gradient {
-  from { --angle: 0deg; }
-  to { --angle: 360deg; }
-}
-
-@keyframes bento-breathe-anim {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.005); }
-}
-
-.bento-gradient-border {
-  animation: bento-rotate-gradient 3s linear infinite;
-}
-
-.bento-breathe {
-  animation: bento-breathe-anim 4s ease-in-out infinite;
-}
-
-/* Dark mode glass override */
-[data-theme="dark"] .bento-glass-card {
-  background: rgba(15, 23, 42, 0.6) !important;
-  border-color: rgba(51, 65, 85, 0.4) !important;
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .bento-gradient-border {
-    animation: none;
-  }
-  .bento-breathe {
-    animation: none;
-  }
-}
-
 /* ===== Micro-Interaction Keyframes ===== */
 
 @keyframes input-focus-glow {
@@ -877,6 +835,12 @@ h1, h2, h3, h4, h5, h6,
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
     0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode override for inline-styled bento cards */
+[data-theme="dark"] .bento-glass-card {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(51, 65, 85, 0.4) !important;
 }
 
 [data-theme="dark"] .bento-glass:hover {

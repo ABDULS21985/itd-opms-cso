@@ -674,7 +674,7 @@ func (s *CatalogService) BulkUpdateItemStatus(ctx context.Context, ids []uuid.UU
 	}
 
 	if len(ids) == 0 {
-		return 0, apperrors.Validation("at least one item ID is required")
+		return 0, apperrors.Validation("ids", "at least one item ID is required")
 	}
 
 	now := time.Now().UTC()

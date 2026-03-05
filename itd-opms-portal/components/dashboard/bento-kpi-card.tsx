@@ -136,7 +136,7 @@ export default function BentoKPICard({
     cfg.radius,
     cfg.padding,
     "transition-shadow duration-300 ease-out",
-    "bento-glass-card", // dark-mode glass override
+    "bento-glass-card", // dark-mode glass override target
     href ? "cursor-pointer" : "",
     needsAttention
       ? `bento-pulse-glow-${pulseId}`
