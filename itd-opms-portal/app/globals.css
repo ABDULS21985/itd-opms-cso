@@ -296,6 +296,36 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
+/* ===== Sidebar Section Header — CBN Gold Styling ===== */
+
+.sidebar-gold-text {
+  background: linear-gradient(135deg, #C4A962 0%, #A8893D 40%, #D4B96E 60%, #8B6F2E 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sidebar-gold-active {
+  color: #C4A962;
+}
+
+.sidebar-gold-active .sidebar-gold-text {
+  animation: sidebar-gold-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes sidebar-gold-shimmer {
+  0% { background-position: 0% center; }
+  50% { background-position: 100% center; }
+  100% { background-position: 0% center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-gold-active .sidebar-gold-text {
+    animation: none;
+  }
+}
+
 /* ===== Login Page Animations ===== */
 
 @keyframes float {
@@ -399,6 +429,48 @@ h1, h2, h3, h4, h5, h6,
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
   animation: shimmer 2s infinite;
+}
+
+/* ===== Bento KPI Card — Glassmorphism Dashboard ===== */
+
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes bento-rotate-gradient {
+  from { --angle: 0deg; }
+  to { --angle: 360deg; }
+}
+
+@keyframes bento-breathe-anim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.005); }
+}
+
+.bento-gradient-border {
+  animation: bento-rotate-gradient 3s linear infinite;
+}
+
+.bento-breathe {
+  animation: bento-breathe-anim 4s ease-in-out infinite;
+}
+
+/* Dark mode glass override */
+[data-theme="dark"] .bento-glass-card {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .bento-gradient-border {
+    animation: none;
+  }
+  .bento-breathe {
+    animation: none;
+  }
 }
 
 /* ===== Micro-Interaction Keyframes ===== */
@@ -670,4 +742,229 @@ h1, h2, h3, h4, h5, h6,
     --text-muted: #475569;
     --border: #e5e5e5;
   }
+}
+
+/* ================================================================== */
+/* Bento Dashboard — Glassmorphism & Animation System                  */
+/* ================================================================== */
+
+/* Animated gradient border rotation */
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes bento-border-rotate {
+  from { --angle: 0deg; }
+  to { --angle: 360deg; }
+}
+
+/* Pulsing glow for critical items */
+@keyframes bento-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--pulse-color, rgba(239, 68, 68, 0.3)),
+                0 8px 32px rgba(0, 0, 0, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--pulse-color, rgba(239, 68, 68, 0.5)),
+                0 0 60px var(--pulse-color, rgba(239, 68, 68, 0.2)),
+                0 8px 32px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Breathing animation for healthy metrics */
+@keyframes bento-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.005); }
+}
+
+/* Activity pulse dot */
+@keyframes bento-dot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
+  }
+}
+
+/* Shimmer effect for glassmorphism cards */
+@keyframes bento-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Central hub ring rotation */
+@keyframes bento-ring-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Fade slide up for timeline items */
+@keyframes bento-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Live indicator pulse */
+@keyframes bento-live-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+/* Utility Classes */
+.bento-gradient-border {
+  animation: bento-border-rotate 4s linear infinite;
+}
+
+.bento-pulse-glow {
+  animation: bento-pulse-glow 2.5s ease-in-out infinite;
+}
+
+.bento-breathe {
+  animation: bento-breathe 4s ease-in-out infinite;
+}
+
+.bento-dot-pulse {
+  animation: bento-dot-pulse 2s ease-in-out infinite;
+}
+
+.bento-live-pulse {
+  animation: bento-live-pulse 2s ease-in-out infinite;
+}
+
+.bento-ring-rotate {
+  animation: bento-ring-rotate 20s linear infinite;
+}
+
+/* Bento card glassmorphism base */
+.bento-glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bento-glass:hover {
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+[data-theme="dark"] .bento-glass {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .bento-glass:hover {
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Bento gradient border wrapper */
+.bento-border-glow {
+  position: relative;
+  z-index: 0;
+}
+
+.bento-border-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 30%,
+    var(--glow-color, rgba(27, 115, 64, 0.4)) 50%,
+    transparent 70%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: bento-border-rotate 4s linear infinite;
+}
+
+.bento-border-glow:hover::before {
+  opacity: 1;
+}
+
+/* Activity timeline connector */
+.bento-timeline-line {
+  position: absolute;
+  left: 17px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    var(--border) 0%,
+    transparent 100%
+  );
+}
+
+/* Severity dot styles */
+.bento-severity-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.bento-severity-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.3;
+  filter: blur(4px);
+}
+
+/* Hex node hover effect */
+.bento-hex-node {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bento-hex-node:hover {
+  transform: scale(1.08) translateY(-4px);
+}
+
+/* Connecting lines from center to nodes */
+.bento-connect-line {
+  stroke-dasharray: 4 4;
+  stroke: var(--border);
+  opacity: 0.4;
+  transition: opacity 0.3s ease;
+}
+
+.bento-connect-line:hover {
+  opacity: 0.8;
 }

@@ -10,7 +10,6 @@ import {
   Headphones,
   HardDrive,
   Settings,
-  ArrowRight,
   Ticket,
   Activity,
   AlertTriangle,
@@ -20,7 +19,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { useExecutiveSummary } from "@/hooks/use-reporting";
 import { CriticalAlertsBanner } from "@/components/dashboard/critical-alerts-banner";
-import { EnhancedKPICard } from "@/components/dashboard/enhanced-kpi-card";
+import BentoKPICard from "@/components/dashboard/bento-kpi-card";
 import { SecondaryMetricsStrip } from "@/components/dashboard/secondary-metrics-strip";
 import { SparkLine } from "@/components/dashboard/charts/spark-line";
 import { GaugeChart } from "@/components/dashboard/charts/gauge-chart";
@@ -29,12 +28,13 @@ import { ProgressRing } from "@/components/dashboard/charts/progress-ring";
 import { MiniBarChart } from "@/components/dashboard/charts/mini-bar-chart";
 import { AnalyticsGrid } from "@/components/dashboard/analytics/analytics-grid";
 import { DivisionPerformanceSection } from "@/components/dashboard/division-performance/division-performance-section";
+import { ActivityPulse } from "@/components/dashboard/activity-pulse";
+import { HexNavigationHub } from "@/components/dashboard/hex-navigation-hub";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Generate a plausible 7-point trend ending at `currentValue`. */
 function generateTrend(currentValue: number, length = 7): number[] {
   if (!currentValue && currentValue !== 0) return [];
   const base = Math.max(0, currentValue * 0.65);
@@ -46,7 +46,6 @@ function generateTrend(currentValue: number, length = 7): number[] {
   });
 }
 
-/** Format elapsed seconds into a human-readable string. */
 function formatElapsed(seconds: number): string {
   if (seconds < 5) return "just now";
   if (seconds < 60) return `${seconds}s ago`;
@@ -55,7 +54,7 @@ function formatElapsed(seconds: number): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Module cards config                                                */
+/*  Module config (shared with HexNavigationHub)                       */
 /* ------------------------------------------------------------------ */
 
 interface ModuleCard {
@@ -154,7 +153,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!dataUpdatedAt) return;
-    // Reset on fresh data
     setElapsed(Math.floor((Date.now() - dataUpdatedAt) / 1000));
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - dataUpdatedAt) / 1000));
@@ -209,6 +207,52 @@ export default function DashboardPage() {
 
   const totalHighCriticalRisks = (summary?.highRisks ?? 0) + (summary?.criticalRisks ?? 0);
 
+  /* ---- Central hub status ---- */
+  const centralStatus = useMemo(() => {
+    if (
+      (summary?.openP1Incidents ?? 0) > 0 ||
+      (summary?.criticalRisks ?? 0) > 2 ||
+      (summary?.slaCompliancePct ?? 100) < 80
+    )
+      return "critical" as const;
+    if (
+      totalHighCriticalRisks > 3 ||
+      (summary?.slaCompliancePct ?? 100) < 90 ||
+      (summary?.onTimeDeliveryPct ?? 100) < 80
+    )
+      return "warning" as const;
+    return "healthy" as const;
+  }, [summary, totalHighCriticalRisks]);
+
+  /* ---- SLA color helpers ---- */
+  const slaColor =
+    (summary?.slaCompliancePct ?? 100) >= 95
+      ? "#22C55E"
+      : (summary?.slaCompliancePct ?? 100) >= 85
+        ? "#F59E0B"
+        : "#EF4444";
+
+  const slaBgColor =
+    (summary?.slaCompliancePct ?? 100) >= 95
+      ? "rgba(34, 197, 94, 0.1)"
+      : (summary?.slaCompliancePct ?? 100) >= 85
+        ? "rgba(245, 158, 11, 0.1)"
+        : "rgba(239, 68, 68, 0.1)";
+
+  const otdColor =
+    (summary?.onTimeDeliveryPct ?? 100) >= 90
+      ? "#22C55E"
+      : (summary?.onTimeDeliveryPct ?? 100) >= 75
+        ? "#F59E0B"
+        : "#EF4444";
+
+  const otdBgColor =
+    (summary?.onTimeDeliveryPct ?? 100) >= 90
+      ? "rgba(34, 197, 94, 0.1)"
+      : (summary?.onTimeDeliveryPct ?? 100) >= 75
+        ? "rgba(245, 158, 11, 0.1)"
+        : "rgba(239, 68, 68, 0.1)";
+
   return (
     <div className="space-y-6 pb-8">
       {/* ============================================================ */}
@@ -229,7 +273,6 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Last updated badge */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
             Updated {formatElapsed(elapsed)}
@@ -254,7 +297,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ============================================================ */}
-      {/* ROW 1 — Critical Alerts Banner                               */}
+      {/* Critical Alerts Banner                                       */}
       {/* ============================================================ */}
       {!summaryLoading && (
         <CriticalAlertsBanner
@@ -265,154 +308,133 @@ export default function DashboardPage() {
       )}
 
       {/* ============================================================ */}
-      {/* ROW 2 — Primary KPI Cards (6 cards)                          */}
+      {/* BENTO GRID + ACTIVITY PULSE                                  */}
+      {/* Two-column layout: Bento KPIs left, Activity feed right      */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto">
-        {/* 1. Open Tickets — SparkLine */}
-        <EnhancedKPICard
-          label="Open Tickets"
-          value={summary?.openTickets}
-          icon={Ticket}
-          color="#EF4444"
-          bgColor="rgba(239, 68, 68, 0.1)"
-          isLoading={summaryLoading}
-          index={0}
-          href="/dashboard/itsm"
-          needsAttention={(summary?.openTickets ?? 0) > 50}
-          subtitle={`P1: ${summary?.openTicketsP1 ?? 0} · P2: ${summary?.openTicketsP2 ?? 0}`}
-        >
-          <SparkLine data={ticketTrend} color="#EF4444" width={72} height={28} />
-        </EnhancedKPICard>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+        {/* ---- LEFT: Bento KPI Grid ---- */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 auto-rows-min">
+          {/* HERO CARD — Open Tickets (2x2) */}
+          <BentoKPICard
+            label="Open Tickets"
+            value={summary?.openTickets}
+            icon={Ticket}
+            color="#EF4444"
+            size="hero"
+            isLoading={summaryLoading}
+            index={0}
+            href="/dashboard/itsm"
+            needsAttention={(summary?.openTickets ?? 0) > 50}
+            subtitle={`P1: ${summary?.openTicketsP1 ?? 0} · P2: ${summary?.openTicketsP2 ?? 0}`}
+          >
+            <SparkLine data={ticketTrend} color="#EF4444" width={120} height={48} />
+          </BentoKPICard>
 
-        {/* 2. SLA Compliance — GaugeChart */}
-        <EnhancedKPICard
-          label="SLA Compliance"
-          value={summary?.slaCompliancePct !== undefined ? Math.round(summary.slaCompliancePct) : undefined}
-          icon={Activity}
-          color={
-            (summary?.slaCompliancePct ?? 100) >= 95
-              ? "#22C55E"
-              : (summary?.slaCompliancePct ?? 100) >= 85
-                ? "#F59E0B"
-                : "#EF4444"
-          }
-          bgColor={
-            (summary?.slaCompliancePct ?? 100) >= 95
-              ? "rgba(34, 197, 94, 0.1)"
-              : (summary?.slaCompliancePct ?? 100) >= 85
-                ? "rgba(245, 158, 11, 0.1)"
-                : "rgba(239, 68, 68, 0.1)"
-          }
-          isLoading={summaryLoading}
-          index={1}
-          suffix="%"
-          href="/dashboard/itsm?tab=sla"
-          needsAttention={(summary?.slaCompliancePct ?? 100) < 85}
-        >
-          <GaugeChart
-            value={summary?.slaCompliancePct ?? 0}
-            size={64}
-            thresholds={{ good: 95, warning: 85 }}
-            delay={0.4}
-            showValue={false}
+          {/* SLA Compliance — compact */}
+          <BentoKPICard
+            label="SLA Compliance"
+            value={summary?.slaCompliancePct !== undefined ? Math.round(summary.slaCompliancePct) : undefined}
+            icon={Activity}
+            color={slaColor}
+            size="compact"
+            isLoading={summaryLoading}
+            index={1}
+            suffix="%"
+            href="/dashboard/itsm?tab=sla"
+            needsAttention={(summary?.slaCompliancePct ?? 100) < 85}
+          >
+            <GaugeChart
+              value={summary?.slaCompliancePct ?? 0}
+              size={52}
+              thresholds={{ good: 95, warning: 85 }}
+              delay={0.4}
+              showValue={false}
+            />
+          </BentoKPICard>
+
+          {/* On-Time Delivery — compact */}
+          <BentoKPICard
+            label="On-Time Delivery"
+            value={summary?.onTimeDeliveryPct !== undefined ? Math.round(summary.onTimeDeliveryPct) : undefined}
+            icon={Activity}
+            color={otdColor}
+            size="compact"
+            isLoading={summaryLoading}
+            index={2}
+            suffix="%"
+            href="/dashboard/planning"
+            needsAttention={(summary?.onTimeDeliveryPct ?? 100) < 75}
+          >
+            <ProgressRing
+              value={summary?.onTimeDeliveryPct ?? 0}
+              size={44}
+              strokeWidth={5}
+              delay={0.5}
+              showPercentage={false}
+            />
+          </BentoKPICard>
+
+          {/* Active Projects — wide (spans 2 cols) */}
+          <BentoKPICard
+            label="Active Projects"
+            value={summary?.activeProjects}
+            icon={FolderKanban}
+            color="#8B5CF6"
+            size="wide"
+            isLoading={summaryLoading}
+            index={3}
+            href="/dashboard/planning"
+            subtitle={`G:${summary?.projectsRagGreen ?? 0} A:${summary?.projectsRagAmber ?? 0} R:${summary?.projectsRagRed ?? 0}`}
+          >
+            <DonutChart
+              data={ragDonutData}
+              height={48}
+              innerRadius={12}
+              outerRadius={20}
+              showLegend={false}
+            />
+          </BentoKPICard>
+
+          {/* Active Assets — compact */}
+          <BentoKPICard
+            label="Active Assets"
+            value={summary?.activeAssets}
+            icon={HardDrive}
+            color="#F59E0B"
+            size="compact"
+            isLoading={summaryLoading}
+            index={4}
+            href="/dashboard/assets"
+          >
+            <MiniBarChart data={assetBarData} width={68} height={24} defaultColor="#F59E0B" />
+          </BentoKPICard>
+
+          {/* High/Critical Risks — compact */}
+          <BentoKPICard
+            label="High/Critical Risks"
+            value={totalHighCriticalRisks}
+            icon={AlertTriangle}
+            color={totalHighCriticalRisks > 0 ? "#EF4444" : "#22C55E"}
+            size="compact"
+            isLoading={summaryLoading}
+            index={5}
+            href="/dashboard/grc/risks"
+            needsAttention={totalHighCriticalRisks > 5}
+            trend={totalHighCriticalRisks > 3 ? "up" : totalHighCriticalRisks === 0 ? "down" : "flat"}
+            trendValue={
+              totalHighCriticalRisks > 0
+                ? `${summary?.criticalRisks ?? 0} critical`
+                : "None"
+            }
           />
-        </EnhancedKPICard>
+        </div>
 
-        {/* 3. Active Projects — RAG Donut */}
-        <EnhancedKPICard
-          label="Active Projects"
-          value={summary?.activeProjects}
-          icon={FolderKanban}
-          color="#8B5CF6"
-          bgColor="rgba(139, 92, 246, 0.1)"
-          isLoading={summaryLoading}
-          index={2}
-          href="/dashboard/planning"
-          subtitle={`G:${summary?.projectsRagGreen ?? 0} A:${summary?.projectsRagAmber ?? 0} R:${summary?.projectsRagRed ?? 0}`}
-        >
-          <DonutChart
-            data={ragDonutData}
-            height={56}
-            innerRadius={14}
-            outerRadius={22}
-            showLegend={false}
-          />
-        </EnhancedKPICard>
-
-        {/* 4. On-Time Delivery — ProgressRing */}
-        <EnhancedKPICard
-          label="On-Time Delivery"
-          value={summary?.onTimeDeliveryPct !== undefined ? Math.round(summary.onTimeDeliveryPct) : undefined}
-          icon={Activity}
-          color={
-            (summary?.onTimeDeliveryPct ?? 100) >= 90
-              ? "#22C55E"
-              : (summary?.onTimeDeliveryPct ?? 100) >= 75
-                ? "#F59E0B"
-                : "#EF4444"
-          }
-          bgColor={
-            (summary?.onTimeDeliveryPct ?? 100) >= 90
-              ? "rgba(34, 197, 94, 0.1)"
-              : (summary?.onTimeDeliveryPct ?? 100) >= 75
-                ? "rgba(245, 158, 11, 0.1)"
-                : "rgba(239, 68, 68, 0.1)"
-          }
-          isLoading={summaryLoading}
-          index={3}
-          suffix="%"
-          href="/dashboard/planning"
-          needsAttention={(summary?.onTimeDeliveryPct ?? 100) < 75}
-        >
-          <ProgressRing
-            value={summary?.onTimeDeliveryPct ?? 0}
-            size={52}
-            strokeWidth={5}
-            delay={0.5}
-            showPercentage={false}
-          />
-        </EnhancedKPICard>
-
-        {/* 5. Active Assets — MiniBarChart by type */}
-        <EnhancedKPICard
-          label="Active Assets"
-          value={summary?.activeAssets}
-          icon={HardDrive}
-          color="#F59E0B"
-          bgColor="rgba(245, 158, 11, 0.1)"
-          isLoading={summaryLoading}
-          index={4}
-          href="/dashboard/assets"
-        >
-          <MiniBarChart data={assetBarData} width={72} height={28} defaultColor="#F59E0B" />
-        </EnhancedKPICard>
-
-        {/* 6. High/Critical Risks — trend indicator */}
-        <EnhancedKPICard
-          label="High/Critical Risks"
-          value={totalHighCriticalRisks}
-          icon={AlertTriangle}
-          color={totalHighCriticalRisks > 0 ? "#EF4444" : "#22C55E"}
-          bgColor={
-            totalHighCriticalRisks > 0
-              ? "rgba(239, 68, 68, 0.1)"
-              : "rgba(34, 197, 94, 0.1)"
-          }
-          isLoading={summaryLoading}
-          index={5}
-          href="/dashboard/grc/risks"
-          needsAttention={totalHighCriticalRisks > 5}
-          trend={totalHighCriticalRisks > 3 ? "up" : totalHighCriticalRisks === 0 ? "down" : "flat"}
-          trendValue={
-            totalHighCriticalRisks > 0
-              ? `${summary?.criticalRisks ?? 0} critical`
-              : "None"
-          }
-        />
+        {/* ---- RIGHT: Live Activity Pulse ---- */}
+        <ActivityPulse className="hidden xl:flex" />
       </div>
 
       {/* ============================================================ */}
-      {/* ROW 3 — Secondary Metrics Strip                              */}
+      {/* Secondary Metrics Strip                                      */}
       {/* ============================================================ */}
       <SecondaryMetricsStrip
         mttrMinutes={summary?.mttrMinutes}
@@ -428,56 +450,27 @@ export default function DashboardPage() {
       />
 
       {/* ============================================================ */}
-      {/* ROW 4 — Interactive Analytics Grid                           */}
+      {/* Interactive Analytics Grid                                   */}
       {/* ============================================================ */}
       <AnalyticsGrid delay={0.6} />
 
       {/* ============================================================ */}
-      {/* ROW 5 — Division Performance Drill-Down                      */}
+      {/* Division Performance Drill-Down                              */}
       {/* ============================================================ */}
       <DivisionPerformanceSection delay={0.85} />
 
       {/* ============================================================ */}
-      {/* Module cards                                                 */}
+      {/* Command Hub — Hex Navigation (replaces module cards)         */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {visibleModules.map((mod, index) => {
-          const Icon = mod.icon;
-          return (
-            <motion.a
-              key={mod.title}
-              href={mod.href}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 1.2 + index * 0.05 }}
-              className="group card-interactive bg-[var(--surface-0)] rounded-xl border border-[var(--border)] p-6 shadow-sm block"
-            >
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-                style={{ backgroundColor: mod.bgColor }}
-              >
-                <Icon
-                  size={24}
-                  style={{ color: mod.color }}
-                  className="transition-transform duration-200 group-hover:scale-110"
-                />
-              </div>
-              <h3 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                {mod.title}
-              </h3>
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-4">
-                {mod.description}
-              </p>
-              <div className="flex items-center gap-1.5 text-sm font-medium text-[var(--primary)] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <span>Open module</span>
-                <ArrowRight
-                  size={14}
-                  className="transition-transform duration-200 group-hover:translate-x-1"
-                />
-              </div>
-            </motion.a>
-          );
-        })}
+      <HexNavigationHub
+        modules={visibleModules}
+        centralLabel="OPMS"
+        centralStatus={centralStatus}
+      />
+
+      {/* Activity Pulse for mobile (below the grid) */}
+      <div className="xl:hidden">
+        <ActivityPulse />
       </div>
     </div>
   );

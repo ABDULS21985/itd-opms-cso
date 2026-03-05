@@ -40,6 +40,7 @@ func (h *CatalogHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("itsm.view")).Get("/", h.ListItems)
 		r.With(middleware.RequirePermission("itsm.view")).Get("/entitled", h.ListEntitledItems)
 		r.With(middleware.RequirePermission("itsm.view")).Get("/{id}", h.GetItem)
+		r.With(middleware.RequirePermission("itsm.view")).Get("/{id}/related", h.ListRelatedItems)
 		r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateItem)
 		r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateItem)
 		r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteItem)
@@ -255,6 +256,29 @@ func (h *CatalogHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, item, nil)
+}
+
+// ListRelatedItems handles GET /items/{id}/related — returns other active items in the same category.
+func (h *CatalogHandler) ListRelatedItems(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid item ID")
+		return
+	}
+
+	items, err := h.svc.ListRelatedItems(r.Context(), id, 5)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, items, nil)
 }
 
 // CreateItem handles POST /items — creates a new catalog item.

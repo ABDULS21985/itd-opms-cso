@@ -3,6 +3,7 @@ package itsm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -539,6 +540,70 @@ func (s *CatalogService) DeleteItem(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// ListRelatedItems returns other active items in the same category as the given item,
+// excluding the item itself. Results are limited to `limit` items.
+func (s *CatalogService) ListRelatedItems(ctx context.Context, itemID uuid.UUID, limit int) ([]CatalogItem, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	// First get the item to find its category.
+	item, err := s.GetItem(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+
+	if item.CategoryID == nil {
+		return []CatalogItem{}, nil
+	}
+
+	query := `
+		SELECT id, tenant_id, category_id, name, description,
+			fulfillment_workflow_id, approval_required, approval_chain_config,
+			sla_policy_id, form_schema, entitlement_roles,
+			estimated_delivery, status, version,
+			created_at, updated_at
+		FROM catalog_items
+		WHERE tenant_id = $1
+			AND category_id = $2
+			AND id != $3
+			AND status = 'active'
+		ORDER BY name ASC
+		LIMIT $4`
+
+	rows, err := s.pool.Query(ctx, query, auth.TenantID, item.CategoryID, itemID, limit)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list related catalog items", err)
+	}
+	defer rows.Close()
+
+	var items []CatalogItem
+	for rows.Next() {
+		var ri CatalogItem
+		if err := rows.Scan(
+			&ri.ID, &ri.TenantID, &ri.CategoryID, &ri.Name, &ri.Description,
+			&ri.FulfillmentWorkflowID, &ri.ApprovalRequired, &ri.ApprovalChainConfig,
+			&ri.SLAPolicyID, &ri.FormSchema, &ri.EntitlementRoles,
+			&ri.EstimatedDelivery, &ri.Status, &ri.Version,
+			&ri.CreatedAt, &ri.UpdatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan related catalog item", err)
+		}
+		items = append(items, ri)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate related catalog items", err)
+	}
+
+	if items == nil {
+		items = []CatalogItem{}
+	}
+
+	return items, nil
+}
+
 // ListItemsByEntitlement returns active catalog items whose entitlement_roles
 // overlap with the given set of roles.
 func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []string) ([]CatalogItem, error) {
@@ -589,4 +654,58 @@ func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []str
 	}
 
 	return items, nil
+}
+
+// BulkUpdateItemStatus updates the status of multiple catalog items in a single operation.
+func (s *CatalogService) BulkUpdateItemStatus(ctx context.Context, ids []uuid.UUID, status string) (int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return 0, apperrors.Unauthorized("authentication required")
+	}
+
+	// Validate status.
+	validStatuses := map[string]bool{
+		CatalogItemStatusActive:     true,
+		CatalogItemStatusInactive:   true,
+		CatalogItemStatusDeprecated: true,
+	}
+	if !validStatuses[status] {
+		return 0, apperrors.Validation("status", fmt.Sprintf("invalid status %q: must be one of active, inactive, deprecated", status))
+	}
+
+	if len(ids) == 0 {
+		return 0, apperrors.Validation("at least one item ID is required")
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE catalog_items
+		SET status = $1, updated_at = $2
+		WHERE tenant_id = $3 AND id = ANY($4)`
+
+	result, err := s.pool.Exec(ctx, query, status, now, auth.TenantID, ids)
+	if err != nil {
+		return 0, apperrors.Internal("failed to bulk update catalog item statuses", err)
+	}
+
+	updated := result.RowsAffected()
+
+	// Log audit event.
+	changes, _ := json.Marshal(map[string]any{
+		"ids":    ids,
+		"status": status,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "bulk_update_status:catalog_item",
+		EntityType: "catalog_item",
+		EntityID:   uuid.Nil,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return updated, nil
 }

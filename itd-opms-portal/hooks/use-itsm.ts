@@ -157,6 +157,18 @@ export function useCatalogItem(id: string | undefined) {
   });
 }
 
+/**
+ * GET /itsm/catalog/items/{id}/related - related items in the same category.
+ */
+export function useRelatedCatalogItems(id: string | undefined) {
+  return useQuery({
+    queryKey: ["catalog-item-related", id],
+    queryFn: () =>
+      apiClient.get<CatalogItem[]>(`/itsm/catalog/items/${id}/related`),
+    enabled: !!id,
+  });
+}
+
 /* ================================================================== */
 /*  Catalog Items — Mutations                                           */
 /* ================================================================== */

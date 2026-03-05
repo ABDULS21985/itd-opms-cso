@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -169,7 +170,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		Office:      office,
 		Unit:        unit,
 		Phone:       phone,
-		PhotoURL:    photoURL,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
 		Roles:       roles,
 		Permissions: permissions,
 		OrgUnitID:   orgUnitID,
@@ -734,6 +735,21 @@ func (s *AuthService) DeleteProfilePhoto(ctx context.Context, userID, tenantID u
 
 	slog.Info("profile photo deleted", "user_id", userID)
 	return nil
+}
+
+// resolvePhotoURL replaces a raw MinIO object key with a presigned URL
+// so the frontend can display the image directly.
+func (s *AuthService) resolvePhotoURL(ctx context.Context, photoURL *string) *string {
+	if photoURL == nil || *photoURL == "" || s.minio == nil {
+		return nil
+	}
+	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 1*time.Hour, url.Values{})
+	if err != nil {
+		slog.Warn("failed to generate presigned photo URL", "error", err, "key", *photoURL)
+		return nil
+	}
+	u := presigned.String()
+	return &u
 }
 
 // parsePermissions unmarshals a JSON array of permission strings and adds

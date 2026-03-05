@@ -76,13 +76,8 @@ export default function ServiceCatalogPage() {
 
   const isLoading = categoriesLoading || itemsLoading;
 
-  const handleRequestItem = (item: CatalogItem) => {
-    const params = new URLSearchParams({
-      catalogItemId: item.id,
-      type: "service_request",
-      title: item.name,
-    });
-    router.push(`/dashboard/itsm/tickets/new?${params.toString()}`);
+  const handleViewItem = (item: CatalogItem) => {
+    router.push(`/dashboard/itsm/service-catalog/${item.id}`);
   };
 
   return (
@@ -253,7 +248,7 @@ export default function ServiceCatalogPage() {
                         }}
                       >
                         <button
-                          onClick={() => handleRequestItem(item)}
+                          onClick={() => handleViewItem(item)}
                           className="group block w-full text-left rounded-xl border p-5 transition-all duration-200 hover:shadow-md"
                           style={{
                             backgroundColor: "var(--surface-0)",

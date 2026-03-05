@@ -107,7 +107,7 @@ export function SidebarNavSection({
     return (
       <div className={groupIndex > 0 ? "mt-2" : ""}>
         {groupIndex > 0 && (
-          <div className="hidden lg:block mx-3 mb-2 border-t border-[#1B7340]/15" />
+          <div className="hidden lg:block mx-3 mb-2 border-t border-[#8B6F2E]/20" />
         )}
         <div className="space-y-0.5">
           {group.items.map((item) => (
@@ -145,7 +145,7 @@ export function SidebarNavSection({
       } ${isSectionHidden && isCustomizing ? "opacity-50" : ""}`}
     >
       {/* Section header */}
-      <div className="group/header flex items-center px-3 mb-1">
+      <div className="group/header flex items-center px-3 mb-1 relative">
         {/* Drag handle — customize mode */}
         {isCustomizing && !isOverview && (
           <button
@@ -161,27 +161,47 @@ export function SidebarNavSection({
         <button
           onClick={() => onToggleSection(group.label)}
           className={`
-            flex-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest
-            transition-colors duration-200 py-1
+            flex-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.15em]
+            transition-all duration-300 py-1.5 group/section-btn
             ${
               hasActiveItem
-                ? "bg-gradient-to-r from-[#1B7340] to-[#2D9B58] bg-clip-text text-transparent"
-                : "text-gray-300 hover:text-gray-100"
+                ? "sidebar-gold-active"
+                : "text-[#A8893D]/70 hover:text-[#C4A962]"
             }
           `}
         >
+          {/* Golden accent bar */}
+          <motion.span
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] rounded-full"
+            initial={false}
+            animate={{
+              height: hasActiveItem ? 18 : 0,
+              opacity: hasActiveItem ? 1 : 0,
+            }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            style={{
+              background: "linear-gradient(180deg, #C4A962, #8B6F2E)",
+            }}
+          />
+
           <motion.span
             animate={{ rotate: expanded ? 0 : -90 }}
             transition={{ duration: dur }}
-            className="flex-shrink-0 text-gray-400"
+            className={`flex-shrink-0 transition-colors duration-300 ${
+              hasActiveItem ? "text-[#C4A962]" : "text-[#8B6F2E]/50 group-hover/section-btn:text-[#A8893D]"
+            }`}
           >
-            <ChevronDown size={11} />
+            <ChevronDown size={12} />
           </motion.span>
-          <span className={isSectionHidden && isCustomizing ? "line-through" : ""}>
+          <span
+            className={`${isSectionHidden && isCustomizing ? "line-through" : ""} ${
+              hasActiveItem ? "sidebar-gold-text" : ""
+            }`}
+          >
             {group.label}
           </span>
           {!expanded && (
-            <span className="text-[9px] text-gray-400 ml-1 font-normal">
+            <span className="text-[9px] text-[#8B6F2E]/50 ml-1 font-normal tabular-nums">
               ({group.items.length})
             </span>
           )}
@@ -204,7 +224,7 @@ export function SidebarNavSection({
 
         {/* Item count badge — customize mode */}
         {isCustomizing && (
-          <span className="text-[9px] text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full mr-1">
+          <span className="text-[9px] text-[#A8893D] bg-[#8B6F2E]/10 px-1.5 py-0.5 rounded-full mr-1 border border-[#8B6F2E]/20">
             {group.items.length}
           </span>
         )}
@@ -217,8 +237,8 @@ export function SidebarNavSection({
               flex-shrink-0 p-0.5 rounded transition-all duration-200
               ${
                 pinned
-                  ? "opacity-100 text-[#1B7340]"
-                  : "opacity-0 group-hover/header:opacity-100 text-gray-400 hover:text-gray-400"
+                  ? "opacity-100 text-[#C4A962]"
+                  : "opacity-0 group-hover/header:opacity-100 text-[#8B6F2E]/50 hover:text-[#A8893D]"
               }
             `}
             title={pinned ? "Unpin section" : "Pin section open"}
@@ -298,7 +318,7 @@ export function SidebarNavSection({
 export function SidebarNavSectionOverlay({ label }: { label: string }) {
   return (
     <div
-      className="flex items-center gap-2 rounded-xl text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 bg-[#031A0B] border border-[#1B7340]/30 text-[#2D9B58] shadow-2xl shadow-black/50"
+      className="flex items-center gap-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-2.5 bg-[#0B0A06] border border-[#8B6F2E]/30 text-[#C4A962] shadow-2xl shadow-black/50"
       style={{ transform: "rotate(3deg)", opacity: 0.9, width: 240 }}
     >
       <GripVertical size={12} className="text-gray-400" />

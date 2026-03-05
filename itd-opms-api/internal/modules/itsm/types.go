@@ -407,6 +407,12 @@ type CreateCatalogItemRequest struct {
 	Status                *string         `json:"status"`
 }
 
+// BulkUpdateItemStatusRequest is the payload for bulk-updating catalog item statuses.
+type BulkUpdateItemStatusRequest struct {
+	IDs    []uuid.UUID `json:"ids" validate:"required"`
+	Status string      `json:"status" validate:"required"`
+}
+
 // UpdateCatalogItemRequest is the payload for updating a service catalog item.
 type UpdateCatalogItemRequest struct {
 	CategoryID            *uuid.UUID      `json:"categoryId"`
