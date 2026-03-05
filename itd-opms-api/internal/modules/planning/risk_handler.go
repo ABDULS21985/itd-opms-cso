@@ -409,7 +409,17 @@ func (h *RiskHandler) ListChangeRequests(w http.ResponseWriter, r *http.Request)
 		status = &v
 	}
 
-	crs, total, err := h.svc.ListChangeRequests(r.Context(), projectID, status, params.Limit, params.Offset())
+	var priority *string
+	if v := r.URL.Query().Get("priority"); v != "" {
+		priority = &v
+	}
+
+	var category *string
+	if v := r.URL.Query().Get("category"); v != "" {
+		category = &v
+	}
+
+	crs, total, err := h.svc.ListChangeRequests(r.Context(), projectID, status, priority, category, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return
@@ -460,7 +470,7 @@ func (h *RiskHandler) GetChangeRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cr, err := h.svc.GetChangeRequest(r.Context(), id)
+	cr, err := h.svc.GetChangeRequestEnriched(r.Context(), id)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

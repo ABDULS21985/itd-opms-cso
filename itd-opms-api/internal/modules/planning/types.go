@@ -112,6 +112,24 @@ const (
 	CRStatusImplemented = "implemented"
 )
 
+// Change request priority constants
+const (
+	CRPriorityLow      = "low"
+	CRPriorityMedium   = "medium"
+	CRPriorityHigh     = "high"
+	CRPriorityCritical = "critical"
+)
+
+// Change request category constants
+const (
+	CRCategoryScope     = "scope"
+	CRCategorySchedule  = "schedule"
+	CRCategoryBudget    = "budget"
+	CRCategoryResource  = "resource"
+	CRCategoryTechnical = "technical"
+	CRCategoryOther     = "other"
+)
+
 // ──────────────────────────────────────────────
 // Milestone status constants
 // ──────────────────────────────────────────────
@@ -327,11 +345,21 @@ type ChangeRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           string     `json:"status"`
+	Priority         string     `json:"priority"`
+	Category         *string    `json:"category,omitempty"`
 	RequestedBy      uuid.UUID  `json:"requestedBy"`
 	ReviewedBy       *uuid.UUID `json:"reviewedBy"`
 	ApprovalChainID  *uuid.UUID `json:"approvalChainId"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
+}
+
+// ChangeRequestResponse is the enriched API response with resolved names.
+type ChangeRequestResponse struct {
+	ChangeRequest
+	RequestedByName string  `json:"requestedByName"`
+	ReviewedByName  *string `json:"reviewedByName,omitempty"`
+	ProjectTitle    *string `json:"projectTitle,omitempty"`
 }
 
 // ──────────────────────────────────────────────
@@ -598,6 +626,8 @@ type CreateChangeRequestRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           *string    `json:"status"`
+	Priority         *string    `json:"priority"`
+	Category         *string    `json:"category"`
 }
 
 // UpdateChangeRequestRequest is the payload for updating a change request.
@@ -608,6 +638,8 @@ type UpdateChangeRequestRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           *string    `json:"status"`
+	Priority         *string    `json:"priority"`
+	Category         *string    `json:"category"`
 	ReviewedBy       *uuid.UUID `json:"reviewedBy"`
 	ApprovalChainID  *uuid.UUID `json:"approvalChainId"`
 }
