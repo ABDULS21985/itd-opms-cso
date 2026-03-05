@@ -1176,3 +1176,186 @@ export function useBulkUpdateTickets() {
     },
   });
 }
+
+/* ================================================================== */
+/*  Service Requests — Types                                           */
+/* ================================================================== */
+
+export interface ServiceRequest {
+  id: string;
+  tenantId: string;
+  requestNumber: string;
+  catalogItemId: string;
+  requesterId: string;
+  status: string;
+  formData?: Record<string, unknown>;
+  assignedTo?: string;
+  priority: string;
+  ticketId?: string;
+  rejectionReason?: string;
+  fulfillmentNotes?: string;
+  fulfilledAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  catalogItemName?: string;
+}
+
+export interface ApprovalTask {
+  id: string;
+  tenantId: string;
+  requestId: string;
+  approverId: string;
+  sequenceOrder: number;
+  status: string;
+  decisionAt?: string;
+  comment?: string;
+  delegatedTo?: string;
+  createdAt: string;
+}
+
+export interface RequestTimelineEntry {
+  id: string;
+  requestId: string;
+  eventType: string;
+  actorId: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ServiceRequestDetail extends ServiceRequest {
+  approvalTasks: ApprovalTask[];
+  timeline: RequestTimelineEntry[];
+}
+
+/* ================================================================== */
+/*  Service Requests — Queries                                         */
+/* ================================================================== */
+
+/**
+ * GET /itsm/catalog/requests - list service requests for the current user.
+ */
+export function useMyServiceRequests(page = 1, limit = 20, status?: string) {
+  return useQuery({
+    queryKey: ["service-requests", page, limit, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ServiceRequest>>(
+        "/itsm/catalog/requests",
+        { page, limit, status },
+      ),
+  });
+}
+
+/**
+ * GET /itsm/catalog/requests/{id} - single service request detail.
+ */
+export function useServiceRequestDetail(id: string | undefined) {
+  return useQuery({
+    queryKey: ["service-request", id],
+    queryFn: () =>
+      apiClient.get<ServiceRequestDetail>(`/itsm/catalog/requests/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /itsm/catalog/requests/pending-approvals - requests pending approval by the current user.
+ */
+export function usePendingApprovals(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["pending-approvals", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ServiceRequest>>(
+        "/itsm/catalog/requests/pending-approvals",
+        { page, limit },
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Service Requests — Mutations                                       */
+/* ================================================================== */
+
+/**
+ * POST /itsm/catalog/requests - submit a new service request.
+ */
+export function useSubmitServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      catalogItemId: string;
+      formData?: Record<string, unknown>;
+    }) => apiClient.post<ServiceRequest>("/itsm/catalog/requests", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      toast.success("Service request submitted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to submit service request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/approve - approve a service request.
+ */
+export function useApproveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/approve`, { comment }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      toast.success("Request approved");
+    },
+    onError: () => {
+      toast.error("Failed to approve request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/reject - reject a service request.
+ */
+export function useRejectRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/reject`, { reason }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      toast.success("Request rejected");
+    },
+    onError: () => {
+      toast.error("Failed to reject request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/cancel - cancel a service request.
+ */
+export function useCancelServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/cancel`),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["service-request", id] });
+      toast.success("Request cancelled");
+    },
+    onError: () => {
+      toast.error("Failed to cancel request");
+    },
+  });
+}

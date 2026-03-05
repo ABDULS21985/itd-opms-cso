@@ -554,8 +554,8 @@ function OverviewTab({
           <div className="p-6 space-y-4">
             <InfoRow
               icon={Globe}
-              label="Tenant"
-              value={(u?.tenantId as string)?.slice(0, 8) + "..."}
+              label="Organization"
+              value={(u?.tenantName as string) || (u?.tenantId as string) || "-"}
             />
             <InfoRow
               icon={Network}
