@@ -35,12 +35,12 @@ const MaxFileSize = 50 << 20
 
 // AllowedContentTypes is the set of MIME types accepted for document uploads.
 var AllowedContentTypes = map[string]bool{
-	"application/pdf":                                                          true,
-	"application/msword":                                                       true,
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":  true,
-	"application/vnd.ms-excel":                                                 true,
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":        true,
-	"application/vnd.ms-powerpoint":                                            true,
+	"application/pdf":    true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+	"application/vnd.ms-powerpoint":                                             true,
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
 	"image/png":                    true,
 	"image/jpeg":                   true,
@@ -2780,4 +2780,100 @@ func (s *Service) logLifecycleTransition(ctx context.Context, docID, tenantID uu
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to log lifecycle transition", "error", err, "documentId", docID)
 	}
+}
+
+// ──────────────────────────────────────────────
+// Retention Enforcement
+// ──────────────────────────────────────────────
+
+// EnforceRetentionPolicies finds documents that have passed their retention_until date
+// and permanently hard deletes them from the database and MinIO.
+func (s *Service) EnforceRetentionPolicies(ctx context.Context) (int, error) {
+	// Find all documents with retention_until <= NOW()
+	// Select their IDs, TenantIDs, and file keys for deletion.
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tenant_id, file_key
+		FROM documents
+		WHERE retention_until IS NOT NULL
+		  AND retention_until <= NOW()
+	`)
+	if err != nil {
+		return 0, apperrors.Internal("failed to query expired documents for retention", err)
+	}
+	defer rows.Close()
+
+	type docToPurge struct {
+		id       uuid.UUID
+		tenantID uuid.UUID
+		fileKey  string
+	}
+	var toPurge []docToPurge
+
+	for rows.Next() {
+		var doc docToPurge
+		if err := rows.Scan(&doc.id, &doc.tenantID, &doc.fileKey); err != nil {
+			return 0, apperrors.Internal("failed to scan expired document", err)
+		}
+		toPurge = append(toPurge, doc)
+	}
+
+	if err := rows.Err(); err != nil {
+		return 0, apperrors.Internal("failed to iterate expired documents", err)
+	}
+
+	if len(toPurge) == 0 {
+		return 0, nil
+	}
+
+	purgedCount := 0
+	for _, doc := range toPurge {
+		// Attempt to delete from MinIO first.
+		if doc.fileKey != "" {
+			err := s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, doc.fileKey, minio.RemoveObjectOptions{})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to remove object from minio during retention enforcement",
+					"docID", doc.id, "fileKey", doc.fileKey, "error", err)
+				// Skip DB deletion if MinIO deletion failed to avoid orphans
+				continue
+			}
+		}
+
+		// Hard delete from DB. We run a transaction to delete dependencies (access logs, shares, comments, lifecycle).
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to begin tx for retention purge", "docID", doc.id, "error", err)
+			continue
+		}
+
+		// Delete dependencies
+		_, _ = tx.Exec(ctx, "DELETE FROM document_access_log WHERE document_id = $1", doc.id)
+		_, _ = tx.Exec(ctx, "DELETE FROM document_shares WHERE document_id = $1", doc.id)
+		_, _ = tx.Exec(ctx, "DELETE FROM document_comments WHERE document_id = $1", doc.id)
+		_, _ = tx.Exec(ctx, "DELETE FROM document_lifecycle_log WHERE document_id = $1", doc.id)
+
+		// Delete the document row
+		_, err = tx.Exec(ctx, "DELETE FROM documents WHERE id = $1", doc.id)
+		if err != nil {
+			tx.Rollback(ctx)
+			slog.ErrorContext(ctx, "failed to delete document row for retention purge", "docID", doc.id, "error", err)
+			continue
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to commit tx for retention purge", "docID", doc.id, "error", err)
+			continue
+		}
+
+		purgedCount++
+
+		// Log the audit event for system deletion
+		_ = s.auditSvc.Log(ctx, audit.AuditEntry{
+			TenantID:   doc.tenantID,
+			Action:     "delete:vault_document_retention",
+			EntityType: "vault_document",
+			EntityID:   doc.id,
+		})
+	}
+
+	return purgedCount, nil
 }

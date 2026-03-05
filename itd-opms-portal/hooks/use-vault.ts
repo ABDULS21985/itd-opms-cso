@@ -1,132 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
-import type { PaginatedResponse } from "@/types";
+import type {
+  PaginatedResponse,
+  VaultDocument,
+  DocumentFolder,
+  DocumentAccessLogEntry,
+  DocumentShare,
+  DocumentComment,
+  DocumentLifecycleEntry,
+  VaultStats,
+} from "@/types";
 
 /* ================================================================== */
 /*  Types                                                              */
 /* ================================================================== */
 
-export interface VaultDocument {
-  id: string;
-  tenantId: string;
-  title: string;
-  description: string | null;
-  fileKey: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  checksumSha256: string;
-  classification: string;
-  retentionUntil: string | null;
-  tags: string[];
-  folderId: string | null;
-  version: number;
-  parentDocumentId: string | null;
-  isLatest: boolean;
-  lockedBy: string | null;
-  lockedAt: string | null;
-  status: string;
-  accessLevel: string;
-  uploadedBy: string;
-  orgUnitId?: string;
-  createdAt: string;
-  updatedAt: string;
-  // Extended DMS metadata
-  ownerId?: string;
-  documentCode?: string;
-  sourceModule?: string;
-  sourceEntityId?: string;
-  effectiveDate?: string;
-  expiryDate?: string;
-  confidential: boolean;
-  legalHold: boolean;
-  archivedAt?: string;
-  archivedBy?: string;
-  deletedAt?: string;
-  deletedBy?: string;
-  // Joined fields
-  uploaderName: string;
-  folderName: string | null;
-  lockedByName: string | null;
-  ownerName?: string;
-}
-
-export interface DocumentFolder {
-  id: string;
-  tenantId: string;
-  parentId: string | null;
-  name: string;
-  description: string | null;
-  path: string;
-  color: string | null;
-  createdBy: string;
-  orgUnitId?: string;
-  createdAt: string;
-  updatedAt: string;
-  documentCount: number;
-  children?: DocumentFolder[];
-}
-
-export interface DocumentAccessLogEntry {
-  id: string;
-  documentId: string;
-  tenantId: string;
-  userId: string;
-  action: string;
-  ipAddress: string;
-  createdAt: string;
-  userName: string;
-}
-
-export interface DocumentShare {
-  id: string;
-  documentId: string;
-  tenantId: string;
-  sharedWithUserId: string | null;
-  sharedWithRole: string | null;
-  permission: string;
-  sharedBy: string;
-  expiresAt: string | null;
-  revokedAt?: string;
-  revokedBy?: string;
-  createdAt: string;
-  sharedWithName: string;
-  sharedByName: string;
-}
-
-export interface DocumentComment {
-  id: string;
-  documentId: string;
-  tenantId: string;
-  userId: string;
-  content: string;
-  parentId?: string;
-  createdAt: string;
-  updatedAt: string;
-  userName: string;
-}
-
-export interface DocumentLifecycleEntry {
-  id: string;
-  documentId: string;
-  tenantId: string;
-  fromStatus: string;
-  toStatus: string;
-  changedBy: string;
-  reason?: string;
-  createdAt: string;
-  changedByName: string;
-}
-
-export interface VaultStats {
-  totalDocuments: number;
-  totalSizeBytes: number;
-  totalFolders: number;
-  byClassification: Record<string, number>;
-  byStatus: Record<string, number>;
-  recentUploads: number;
-}
+export type {
+  VaultDocument,
+  DocumentFolder,
+  DocumentAccessLogEntry,
+  DocumentShare,
+  DocumentComment,
+  DocumentLifecycleEntry,
+  VaultStats,
+};
 
 /* ================================================================== */
 /*  Documents — Queries                                                */

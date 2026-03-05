@@ -35,7 +35,7 @@ func NewHandler(pool *pgxpool.Pool, minioClient *minio.Client, minioCfg config.M
 	svc := NewService(pool, minioClient, minioCfg, auditSvc)
 	return &Handler{
 		svc:    svc,
-		Worker: NewVaultWorker(pool, auditSvc),
+		Worker: NewVaultWorker(pool, auditSvc, svc),
 	}
 }
 
