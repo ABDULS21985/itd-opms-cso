@@ -1420,8 +1420,8 @@ func (s *Service) UnlockDocument(ctx context.Context, id uuid.UUID) (VaultDocume
 		return VaultDocument{}, apperrors.BadRequest("document is not locked")
 	}
 
-	if *lockedBy != auth.UserID {
-		return VaultDocument{}, apperrors.Forbidden("only the lock owner can unlock the document")
+	if *lockedBy != auth.UserID && !auth.HasPermission(PermDocumentsAdmin) {
+		return VaultDocument{}, apperrors.Forbidden("only the lock owner or an admin can unlock the document")
 	}
 
 	now := time.Now().UTC()
@@ -2392,15 +2392,11 @@ func (s *Service) GetRecentDocuments(ctx context.Context, limit int) ([]VaultDoc
 // ──────────────────────────────────────────────
 
 // GetStats returns aggregate statistics for the document vault.
+// Uses a single CTE-based query to compute all stats in one database round-trip.
 func (s *Service) GetStats(ctx context.Context) (VaultStats, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return VaultStats{}, apperrors.Unauthorized("authentication required")
-	}
-
-	stats := VaultStats{
-		ByClassification: make(map[string]int64),
-		ByStatus:         make(map[string]int64),
 	}
 
 	// Build org-scope filter clause.
@@ -2410,117 +2406,58 @@ func (s *Service) GetStats(ctx context.Context) (VaultStats, error) {
 		orgSQL = " AND " + orgClause
 	}
 
-	// Total documents and size.
-	docStatsQuery := fmt.Sprintf(`
-		SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(size_bytes), 0)
-		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'%s`, orgSQL)
+	// Single query: CTE scans documents once; subquery counts folders.
+	query := fmt.Sprintf(`
+		WITH base AS (
+			SELECT classification::text, status::text, size_bytes, created_at
+			FROM documents
+			WHERE tenant_id = $1 AND is_latest = true%s
+		),
+		by_class AS (
+			SELECT json_object_agg(classification, cnt) AS data
+			FROM (SELECT classification, COUNT(*) AS cnt FROM base WHERE status != 'deleted' GROUP BY classification) sub
+		),
+		by_status AS (
+			SELECT json_object_agg(status, cnt) AS data
+			FROM (SELECT status, COUNT(*) AS cnt FROM base GROUP BY status) sub
+		)
+		SELECT
+			COUNT(*) FILTER (WHERE status != 'deleted'),
+			COALESCE(SUM(size_bytes) FILTER (WHERE status != 'deleted'), 0),
+			COUNT(*) FILTER (WHERE status != 'deleted' AND created_at >= NOW() - INTERVAL '7 days'),
+			(SELECT COUNT(*) FROM document_folders WHERE tenant_id = $1%s),
+			COALESCE((SELECT data FROM by_class), '{}'),
+			COALESCE((SELECT data FROM by_status), '{}')
+		FROM base`, orgSQL, orgSQL)
 
-	docStatsArgs := []interface{}{auth.TenantID}
+	args := []interface{}{auth.TenantID}
 	if orgParam != nil {
-		docStatsArgs = append(docStatsArgs, orgParam)
+		args = append(args, orgParam)
 	}
 
-	err := s.pool.QueryRow(ctx, docStatsQuery, docStatsArgs...).Scan(&stats.TotalDocuments, &stats.TotalSizeBytes)
+	stats := VaultStats{
+		ByClassification: make(map[string]int64),
+		ByStatus:         make(map[string]int64),
+	}
+
+	var classJSON, statusJSON []byte
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
+		&stats.TotalDocuments,
+		&stats.TotalSizeBytes,
+		&stats.RecentUploads,
+		&stats.TotalFolders,
+		&classJSON,
+		&statusJSON,
+	)
 	if err != nil {
-		return VaultStats{}, apperrors.Internal("failed to get document stats", err)
+		return VaultStats{}, apperrors.Internal("failed to get vault stats", err)
 	}
 
-	// Total folders.
-	folderOrgClause, folderOrgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
-	folderOrgSQL := ""
-	if folderOrgClause != "" {
-		folderOrgSQL = " AND " + folderOrgClause
+	if err := json.Unmarshal(classJSON, &stats.ByClassification); err != nil {
+		return VaultStats{}, apperrors.Internal("failed to parse classification stats", err)
 	}
-
-	folderCountQuery := fmt.Sprintf(`SELECT COUNT(*) FROM document_folders WHERE tenant_id = $1%s`, folderOrgSQL)
-	folderCountArgs := []interface{}{auth.TenantID}
-	if folderOrgParam != nil {
-		folderCountArgs = append(folderCountArgs, folderOrgParam)
-	}
-
-	err = s.pool.QueryRow(ctx, folderCountQuery, folderCountArgs...).Scan(&stats.TotalFolders)
-	if err != nil {
-		return VaultStats{}, apperrors.Internal("failed to get folder count", err)
-	}
-
-	// Documents by classification.
-	classQuery := fmt.Sprintf(`
-		SELECT classification::text, COUNT(*)
-		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'%s
-		GROUP BY classification`, orgSQL)
-
-	classArgs := []interface{}{auth.TenantID}
-	if orgParam != nil {
-		classArgs = append(classArgs, orgParam)
-	}
-
-	rows, err := s.pool.Query(ctx, classQuery, classArgs...)
-	if err != nil {
-		return VaultStats{}, apperrors.Internal("failed to get classification stats", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cls string
-		var cnt int64
-		if err := rows.Scan(&cls, &cnt); err != nil {
-			return VaultStats{}, apperrors.Internal("failed to scan classification stat", err)
-		}
-		stats.ByClassification[cls] = cnt
-	}
-
-	if err := rows.Err(); err != nil {
-		return VaultStats{}, apperrors.Internal("failed to iterate classification stats", err)
-	}
-
-	// Documents by status.
-	statusQuery := fmt.Sprintf(`
-		SELECT status::text, COUNT(*)
-		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true%s
-		GROUP BY status`, orgSQL)
-
-	statusArgs := []interface{}{auth.TenantID}
-	if orgParam != nil {
-		statusArgs = append(statusArgs, orgParam)
-	}
-
-	statusRows, err := s.pool.Query(ctx, statusQuery, statusArgs...)
-	if err != nil {
-		return VaultStats{}, apperrors.Internal("failed to get status stats", err)
-	}
-	defer statusRows.Close()
-
-	for statusRows.Next() {
-		var st string
-		var cnt int64
-		if err := statusRows.Scan(&st, &cnt); err != nil {
-			return VaultStats{}, apperrors.Internal("failed to scan status stat", err)
-		}
-		stats.ByStatus[st] = cnt
-	}
-
-	if err := statusRows.Err(); err != nil {
-		return VaultStats{}, apperrors.Internal("failed to iterate status stats", err)
-	}
-
-	// Recent uploads (last 7 days).
-	recentQuery := fmt.Sprintf(`
-		SELECT COUNT(*)
-		FROM documents
-		WHERE tenant_id = $1 AND is_latest = true AND status != 'deleted'
-			AND created_at >= NOW() - INTERVAL '7 days'%s`, orgSQL)
-
-	recentArgs := []interface{}{auth.TenantID}
-	if orgParam != nil {
-		recentArgs = append(recentArgs, orgParam)
-	}
-
-	err = s.pool.QueryRow(ctx, recentQuery, recentArgs...).Scan(&stats.RecentUploads)
-	if err != nil {
-		return VaultStats{}, apperrors.Internal("failed to get recent upload count", err)
+	if err := json.Unmarshal(statusJSON, &stats.ByStatus); err != nil {
+		return VaultStats{}, apperrors.Internal("failed to parse status stats", err)
 	}
 
 	return stats, nil
@@ -2626,7 +2563,6 @@ func (s *Service) GetExpiringSoon(ctx context.Context, days, limit, offset int) 
 	var total int64
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM documents d
-		LEFT JOIN users ou ON ou.id = d.owner_id
 		WHERE d.tenant_id = $1
 			AND d.is_latest = true
 			AND d.status NOT IN ('deleted', 'expired', 'archived')
@@ -2659,7 +2595,11 @@ func (s *Service) GetExpiringSoon(ctx context.Context, days, limit, offset int) 
 	}
 	defer rows.Close()
 
-	return scanComplianceDocs(rows)
+	docs, err := scanComplianceDocs(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return docs, total, nil
 }
 
 // GetExpiredDocuments returns documents that have status = 'expired'.
@@ -2696,7 +2636,11 @@ func (s *Service) GetExpiredDocuments(ctx context.Context, limit, offset int) ([
 	}
 	defer rows.Close()
 
-	return scanComplianceDocs(rows)
+	docs, err := scanComplianceDocs(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return docs, total, nil
 }
 
 // GetRetentionReport returns aggregate retention and compliance statistics.
@@ -2729,8 +2673,8 @@ func (s *Service) GetRetentionReport(ctx context.Context) (RetentionReport, erro
 	return r, nil
 }
 
-// scanComplianceDocs scans rows into ComplianceDocument slice and returns total.
-func scanComplianceDocs(rows pgx.Rows) ([]ComplianceDocument, int64, error) {
+// scanComplianceDocs scans rows into a ComplianceDocument slice.
+func scanComplianceDocs(rows pgx.Rows) ([]ComplianceDocument, error) {
 	docs := make([]ComplianceDocument, 0)
 	for rows.Next() {
 		var d ComplianceDocument
@@ -2738,15 +2682,14 @@ func scanComplianceDocs(rows pgx.Rows) ([]ComplianceDocument, int64, error) {
 			&d.ID, &d.Title, &d.Classification, &d.AccessLevel, &d.Status,
 			&d.ExpiryDate, &d.RetentionUntil, &d.OwnerName, &d.OrgUnitID, &d.CreatedAt,
 		); err != nil {
-			return nil, 0, apperrors.Internal("failed to scan compliance document", err)
+			return nil, apperrors.Internal("failed to scan compliance document", err)
 		}
 		docs = append(docs, d)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, apperrors.Internal("failed to iterate compliance documents", err)
+		return nil, apperrors.Internal("failed to iterate compliance documents", err)
 	}
-	// Note: total is passed separately from the caller's count query.
-	return docs, 0, nil
+	return docs, nil
 }
 
 // ──────────────────────────────────────────────
@@ -2780,100 +2723,4 @@ func (s *Service) logLifecycleTransition(ctx context.Context, docID, tenantID uu
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to log lifecycle transition", "error", err, "documentId", docID)
 	}
-}
-
-// ──────────────────────────────────────────────
-// Retention Enforcement
-// ──────────────────────────────────────────────
-
-// EnforceRetentionPolicies finds documents that have passed their retention_until date
-// and permanently hard deletes them from the database and MinIO.
-func (s *Service) EnforceRetentionPolicies(ctx context.Context) (int, error) {
-	// Find all documents with retention_until <= NOW()
-	// Select their IDs, TenantIDs, and file keys for deletion.
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, tenant_id, file_key
-		FROM documents
-		WHERE retention_until IS NOT NULL
-		  AND retention_until <= NOW()
-	`)
-	if err != nil {
-		return 0, apperrors.Internal("failed to query expired documents for retention", err)
-	}
-	defer rows.Close()
-
-	type docToPurge struct {
-		id       uuid.UUID
-		tenantID uuid.UUID
-		fileKey  string
-	}
-	var toPurge []docToPurge
-
-	for rows.Next() {
-		var doc docToPurge
-		if err := rows.Scan(&doc.id, &doc.tenantID, &doc.fileKey); err != nil {
-			return 0, apperrors.Internal("failed to scan expired document", err)
-		}
-		toPurge = append(toPurge, doc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return 0, apperrors.Internal("failed to iterate expired documents", err)
-	}
-
-	if len(toPurge) == 0 {
-		return 0, nil
-	}
-
-	purgedCount := 0
-	for _, doc := range toPurge {
-		// Attempt to delete from MinIO first.
-		if doc.fileKey != "" {
-			err := s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, doc.fileKey, minio.RemoveObjectOptions{})
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to remove object from minio during retention enforcement",
-					"docID", doc.id, "fileKey", doc.fileKey, "error", err)
-				// Skip DB deletion if MinIO deletion failed to avoid orphans
-				continue
-			}
-		}
-
-		// Hard delete from DB. We run a transaction to delete dependencies (access logs, shares, comments, lifecycle).
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to begin tx for retention purge", "docID", doc.id, "error", err)
-			continue
-		}
-
-		// Delete dependencies
-		_, _ = tx.Exec(ctx, "DELETE FROM document_access_log WHERE document_id = $1", doc.id)
-		_, _ = tx.Exec(ctx, "DELETE FROM document_shares WHERE document_id = $1", doc.id)
-		_, _ = tx.Exec(ctx, "DELETE FROM document_comments WHERE document_id = $1", doc.id)
-		_, _ = tx.Exec(ctx, "DELETE FROM document_lifecycle_log WHERE document_id = $1", doc.id)
-
-		// Delete the document row
-		_, err = tx.Exec(ctx, "DELETE FROM documents WHERE id = $1", doc.id)
-		if err != nil {
-			tx.Rollback(ctx)
-			slog.ErrorContext(ctx, "failed to delete document row for retention purge", "docID", doc.id, "error", err)
-			continue
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			slog.ErrorContext(ctx, "failed to commit tx for retention purge", "docID", doc.id, "error", err)
-			continue
-		}
-
-		purgedCount++
-
-		// Log the audit event for system deletion
-		_ = s.auditSvc.Log(ctx, audit.AuditEntry{
-			TenantID:   doc.tenantID,
-			Action:     "delete:vault_document_retention",
-			EntityType: "vault_document",
-			EntityID:   doc.id,
-		})
-	}
-
-	return purgedCount, nil
 }

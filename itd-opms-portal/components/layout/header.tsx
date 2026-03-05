@@ -115,7 +115,7 @@ function UserMenu() {
   const userInitial = (user?.displayName || user?.email || "U")
     .charAt(0)
     .toUpperCase();
-  const photoUrl = (user as Record<string, unknown>)?.photoUrl as string | undefined;
+  const photoUrl = user?.photoUrl;
 
   useEffect(() => {
     if (!open) return;

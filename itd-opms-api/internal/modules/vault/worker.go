@@ -15,16 +15,14 @@ import (
 type VaultWorker struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
-	svc      *Service
 	stopCh   chan struct{}
 }
 
 // NewVaultWorker creates a new VaultWorker.
-func NewVaultWorker(pool *pgxpool.Pool, auditSvc *audit.AuditService, svc *Service) *VaultWorker {
+func NewVaultWorker(pool *pgxpool.Pool, auditSvc *audit.AuditService) *VaultWorker {
 	return &VaultWorker{
 		pool:     pool,
 		auditSvc: auditSvc,
-		svc:      svc,
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -148,14 +146,27 @@ func (w *VaultWorker) expireDocuments(ctx context.Context) {
 	slog.Info("vault worker: document expiry complete", "expired", len(docs))
 }
 
-// checkRetention enforces retention policy by hard deleting expired documents
+// checkRetention logs warnings for documents past their retention_until date
+// that are still in an active state (informational only, no auto-action).
 func (w *VaultWorker) checkRetention(ctx context.Context) {
-	purged, err := w.svc.EnforceRetentionPolicies(ctx)
+	now := time.Now().UTC()
+
+	var count int
+	err := w.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM documents
+		WHERE retention_until IS NOT NULL
+			AND retention_until < $1
+			AND is_latest = true
+			AND status NOT IN ('deleted', 'archived')`, now).Scan(&count)
 	if err != nil {
-		slog.Error("vault worker: failed to enforce retention policies", "error", err)
+		slog.Error("vault worker: failed to check retention", "error", err)
 		return
 	}
-	if purged > 0 {
-		slog.Info("vault worker: retention policies enforced", "purged_count", purged)
+
+	if count > 0 {
+		slog.Warn("vault worker: documents past retention period found",
+			"count", count,
+			"note", "these documents are past their retention_until date but still active")
 	}
 }

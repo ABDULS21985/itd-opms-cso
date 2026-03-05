@@ -1037,3 +1037,70 @@ func TestHandler_RoutesRegistered(t *testing.T) {
 		})
 	}
 }
+
+// ══════════════════════════════════════════════
+// Additional input validation tests (400)
+// ══════════════════════════════════════════════
+
+func TestUploadDocument_MissingMultipartForm(t *testing.T) {
+	h := newTestHandler()
+	req := requestWithAuth(http.MethodPost, "/documents", "")
+	w := httptest.NewRecorder()
+
+	h.UploadDocument(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing multipart form, got %d", w.Code)
+	}
+}
+
+// Note: Tests that exercise service-layer validation (e.g. empty permission,
+// missing folder name, empty comment content) require a database connection
+// and are not testable with nil pool. The handler tests here focus on
+// handler-level parsing, auth guards, and input validation that happens
+// before the service layer is invoked.
+
+// ══════════════════════════════════════════════
+// GetExpiringSoon — query parameter parsing
+// ══════════════════════════════════════════════
+
+// Note: GetExpiringSoon days parameter parsing is tested at service layer
+// via the compliance query tests. Handler tests for this endpoint would
+// require a database connection.
+
+// ══════════════════════════════════════════════
+// Version upload — auth guard (401)
+// ══════════════════════════════════════════════
+
+func TestGetAccessLog_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Get("/{id}/access-log", h.GetAccessLog)
+
+	req := requestWithAuth(http.MethodGet, "/bad-uuid/access-log", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+func TestUploadVersion_InvalidID(t *testing.T) {
+	h := newTestHandler()
+	r := chi.NewRouter()
+	r.Post("/{id}/version", h.UploadVersion)
+
+	req := requestWithAuth(http.MethodPost, "/bad-uuid/version", "")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid UUID, got %d", w.Code)
+	}
+}
+
+// Note: Tests that verify authenticated requests pass auth checks but fail
+// at the service/DB layer (nil pool) would panic. These are omitted from
+// handler_test.go and should be covered by integration tests with a real
+// database connection.
