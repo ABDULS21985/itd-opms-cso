@@ -78,7 +78,7 @@ export function useSearchUsers(query: string) {
     queryKey: ["system-users-search", query],
     queryFn: () =>
       apiClient.get<UserSearchResult[]>("/system/users/search", { q: query }),
-    enabled: query.length >= 2,
+    enabled: true,
   });
 }
 

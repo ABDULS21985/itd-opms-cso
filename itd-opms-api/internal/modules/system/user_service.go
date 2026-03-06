@@ -722,7 +722,7 @@ func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query
 		SELECT id, display_name, email, photo_url, department, is_active
 		FROM users
 		WHERE tenant_id = $1 AND is_active = true
-		  AND (display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')
 		ORDER BY display_name
 		LIMIT 20`
 

@@ -376,10 +376,6 @@ func (h *UserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := r.URL.Query().Get("q")
-	if query == "" {
-		types.OK(w, []UserSearchResult{}, nil)
-		return
-	}
 
 	results, err := h.svc.SearchUsers(r.Context(), auth.TenantID, query)
 	if err != nil {

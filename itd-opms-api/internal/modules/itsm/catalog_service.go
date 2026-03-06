@@ -54,7 +54,7 @@ func (s *CatalogService) CreateCategory(ctx context.Context, req CreateCatalogCa
 	}
 
 	query := `
-		INSERT INTO catalog_categories (
+		INSERT INTO service_catalog_categories (
 			id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
 		) VALUES (
@@ -105,7 +105,7 @@ func (s *CatalogService) GetCategory(ctx context.Context, id uuid.UUID) (Catalog
 	query := `
 		SELECT id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
-		FROM catalog_categories
+		FROM service_catalog_categories
 		WHERE id = $1 AND tenant_id = $2`
 
 	var cat CatalogCategory
@@ -133,7 +133,7 @@ func (s *CatalogService) ListCategories(ctx context.Context, parentID *uuid.UUID
 	query := `
 		SELECT id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
-		FROM catalog_categories
+		FROM service_catalog_categories
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR parent_id = $2)
 		ORDER BY sort_order ASC, name ASC`
@@ -183,7 +183,7 @@ func (s *CatalogService) UpdateCategory(ctx context.Context, id uuid.UUID, req U
 	now := time.Now().UTC()
 
 	updateQuery := `
-		UPDATE catalog_categories SET
+		UPDATE service_catalog_categories SET
 			name = COALESCE($1, name),
 			description = COALESCE($2, description),
 			icon = COALESCE($3, icon),
@@ -230,7 +230,7 @@ func (s *CatalogService) DeleteCategory(ctx context.Context, id uuid.UUID) error
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	query := `DELETE FROM catalog_categories WHERE id = $1 AND tenant_id = $2`
+	query := `DELETE FROM service_catalog_categories WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.pool.Exec(ctx, query, id, auth.TenantID)
 	if err != nil {
@@ -280,7 +280,7 @@ func (s *CatalogService) CreateItem(ctx context.Context, req CreateCatalogItemRe
 	}
 
 	query := `
-		INSERT INTO catalog_items (
+		INSERT INTO service_catalog_items (
 			id, tenant_id, category_id, name, description,
 			fulfillment_workflow_id, approval_required, approval_chain_config,
 			sla_policy_id, form_schema, entitlement_roles,
@@ -349,7 +349,7 @@ func (s *CatalogService) GetItem(ctx context.Context, id uuid.UUID) (CatalogItem
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE id = $1 AND tenant_id = $2`
 
 	var item CatalogItem
@@ -380,7 +380,7 @@ func (s *CatalogService) ListItems(ctx context.Context, categoryID *uuid.UUID, s
 	// Count total matching records.
 	countQuery := `
 		SELECT COUNT(*)
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR category_id = $2)
 			AND ($3::text IS NULL OR status = $3)`
@@ -398,7 +398,7 @@ func (s *CatalogService) ListItems(ctx context.Context, categoryID *uuid.UUID, s
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR category_id = $2)
 			AND ($3::text IS NULL OR status = $3)
@@ -453,7 +453,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, id uuid.UUID, req Updat
 	now := time.Now().UTC()
 
 	updateQuery := `
-		UPDATE catalog_items SET
+		UPDATE service_catalog_items SET
 			category_id = COALESCE($1, category_id),
 			name = COALESCE($2, name),
 			description = COALESCE($3, description),
@@ -515,7 +515,7 @@ func (s *CatalogService) DeleteItem(ctx context.Context, id uuid.UUID) error {
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	query := `DELETE FROM catalog_items WHERE id = $1 AND tenant_id = $2`
+	query := `DELETE FROM service_catalog_items WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.pool.Exec(ctx, query, id, auth.TenantID)
 	if err != nil {
@@ -564,7 +564,7 @@ func (s *CatalogService) ListRelatedItems(ctx context.Context, itemID uuid.UUID,
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND category_id = $2
 			AND id != $3
@@ -618,7 +618,7 @@ func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []str
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND status = 'active'
 			AND (entitlement_roles IS NULL OR entitlement_roles = '{}' OR entitlement_roles && $2)
@@ -680,7 +680,7 @@ func (s *CatalogService) BulkUpdateItemStatus(ctx context.Context, ids []uuid.UU
 	now := time.Now().UTC()
 
 	query := `
-		UPDATE catalog_items
+		UPDATE service_catalog_items
 		SET status = $1, updated_at = $2
 		WHERE tenant_id = $3 AND id = ANY($4)`
 

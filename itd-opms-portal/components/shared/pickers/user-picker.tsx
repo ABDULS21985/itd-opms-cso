@@ -48,7 +48,7 @@ export function UserPicker({
       getItemLabel={(u) => u.displayName}
       getItemSubtitle={(u) => u.email}
       onSearch={setSearchQuery}
-      minSearchLength={2}
+      minSearchLength={0}
       renderOption={(user, isHighlighted) => (
         <div
           className={`flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--surface-1)] ${
