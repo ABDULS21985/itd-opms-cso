@@ -280,7 +280,7 @@ export default function ExecutiveAnalyticsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                Head AMD Executive Dashboard
+                Divisional Executive Dashboard
               </h1>
               <p className="text-sm text-[var(--text-secondary)]">
                 Cross-module performance overview and strategic insights

@@ -396,7 +396,7 @@ describe("ExecutiveAnalyticsPage", () => {
     render(<ExecutiveAnalyticsPage />);
 
     // Page should still render without crashing
-    expect(screen.getByText("Head AMD Executive Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Divisional Executive Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Total Projects")).toBeInTheDocument();
   });
 
@@ -409,7 +409,7 @@ describe("ExecutiveAnalyticsPage", () => {
     render(<ExecutiveAnalyticsPage />);
 
     // Page should still render without crashing
-    expect(screen.getByText("Head AMD Executive Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Divisional Executive Dashboard")).toBeInTheDocument();
   });
 
   it("renders RAG status progress rings when data is loaded", () => {

@@ -402,6 +402,7 @@ export function useTransitionTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket status updated");
@@ -436,6 +437,9 @@ export function useAssignTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-comments", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       queryClient.invalidateQueries({ queryKey: ["team-queue"] });
       toast.success("Ticket assigned successfully");
@@ -465,6 +469,7 @@ export function useResolveTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket resolved");
@@ -553,7 +558,9 @@ export function useTicketComments(ticketId: string | undefined) {
   return useQuery({
     queryKey: ["ticket-comments", ticketId],
     queryFn: () =>
-      apiClient.get<TicketComment[]>(`/itsm/tickets/${ticketId}/comments`),
+      apiClient.get<TicketComment[]>(`/itsm/tickets/${ticketId}/comments`, {
+        includeInternal: true,
+      }),
     enabled: !!ticketId,
   });
 }

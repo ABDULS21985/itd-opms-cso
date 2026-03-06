@@ -217,6 +217,13 @@ type Ticket struct {
 	CustomFields            json.RawMessage `json:"customFields"`
 	CreatedAt               time.Time       `json:"createdAt"`
 	UpdatedAt               time.Time       `json:"updatedAt"`
+
+	// Enrichment fields (populated via JOINs on SELECT queries, not on INSERT/UPDATE RETURNING).
+	ReporterName       *string `json:"reporterName,omitempty"`
+	ReporterDepartment *string `json:"reporterDepartment,omitempty"`
+	AssigneeName       *string `json:"assigneeName,omitempty"`
+	AssigneeDepartment *string `json:"assigneeDepartment,omitempty"`
+	TeamQueueName      *string `json:"teamQueueName,omitempty"`
 }
 
 // TicketComment represents a comment or note on a ticket.

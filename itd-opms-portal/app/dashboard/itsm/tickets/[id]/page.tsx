@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
+import { useSearchUsers } from "@/hooks/use-system";
 import {
   useTicket,
   useTicketComments,
@@ -543,7 +544,7 @@ type TimelineItem =
   | { kind: "comment"; data: TicketComment; timestamp: string }
   | { kind: "status"; data: TicketStatusHistory; timestamp: string };
 
-function TimelineEntry({ item, index }: { item: TimelineItem; index: number }) {
+function TimelineEntry({ item, index, resolveUser }: { item: TimelineItem; index: number; resolveUser: (id: string | undefined | null) => string }) {
   if (item.kind === "status") {
     const h = item.data;
     return (
@@ -565,7 +566,7 @@ function TimelineEntry({ item, index }: { item: TimelineItem; index: number }) {
         <div className="flex-1 pb-2">
           <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1">
             <span className="text-xs font-semibold text-[var(--text-primary)]">
-              {h.changedBy.slice(0, 8)}...
+              {resolveUser(h.changedBy)}
             </span>
             <span className="text-xs text-[var(--text-secondary)]">changed status</span>
             <StatusBadge status={h.fromStatus} dot={false} />
@@ -614,7 +615,7 @@ function TimelineEntry({ item, index }: { item: TimelineItem; index: number }) {
       <div className="flex-1 pb-2">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-xs font-semibold text-[var(--text-primary)]">
-            {c.authorId.slice(0, 8)}...
+            {resolveUser(c.authorId)}
           </span>
           {isInternal && (
             <span
@@ -686,6 +687,20 @@ export default function TicketDetailPage({
   const resolveTicket = useResolveTicket();
   const closeTicket = useCloseTicket();
   const declareMajor = useDeclareMajorIncident();
+
+  /* ---- User name resolution ---- */
+  const { data: allUsers } = useSearchUsers("");
+  const userMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (allUsers) {
+      for (const u of allUsers) {
+        map.set(u.id, u.displayName);
+      }
+    }
+    return map;
+  }, [allUsers]);
+  const resolveUser = (userId: string | undefined | null) =>
+    userId ? userMap.get(userId) ?? userId.slice(0, 12) + "..." : "—";
 
   /* ---- Local state ---- */
   const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla">(
@@ -1500,6 +1515,7 @@ export default function TicketDetailPage({
                             key={`${item.kind}-${item.data.id}-${idx}`}
                             item={item}
                             index={idx}
+                            resolveUser={resolveUser}
                           />
                         ))}
                       </div>
@@ -1682,57 +1698,66 @@ export default function TicketDetailPage({
               People
             </h3>
             <div className="space-y-2.5">
+              {/* Reporter */}
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10">
-                  <User size={14} style={{ color: "#3B82F6" }} />
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10 text-sm font-bold text-blue-600 shrink-0">
+                  {(ticket.reporterName || resolveUser(ticket.reporterId)).charAt(0).toUpperCase()}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
                     Reporter
                   </p>
-                  <p className="text-xs font-medium text-[var(--text-primary)] truncate">
-                    {ticket.reporterId.slice(0, 12)}...
+                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                    {ticket.reporterName || resolveUser(ticket.reporterId)}
                   </p>
+                  {ticket.reporterDepartment && (
+                    <p className="text-[11px] text-[var(--text-secondary)] truncate">
+                      {ticket.reporterDepartment}
+                    </p>
+                  )}
                 </div>
               </div>
+              {/* Assignee */}
               <div className="flex items-center gap-3">
                 <div
-                  className="flex h-8 w-8 items-center justify-center rounded-full"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold shrink-0"
                   style={{
                     backgroundColor: ticket.assigneeId
                       ? "rgba(16, 185, 129, 0.1)"
                       : "var(--surface-2)",
+                    color: ticket.assigneeId ? "#10B981" : "var(--neutral-gray)",
                   }}
                 >
-                  <UserPlus
-                    size={14}
-                    style={{
-                      color: ticket.assigneeId ? "#10B981" : "var(--neutral-gray)",
-                    }}
-                  />
+                  {ticket.assigneeName
+                    ? ticket.assigneeName.charAt(0).toUpperCase()
+                    : <UserPlus size={14} />}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
                     Assignee
                   </p>
-                  <p className="text-xs font-medium text-[var(--text-primary)] truncate">
-                    {ticket.assigneeId
-                      ? ticket.assigneeId.slice(0, 12) + "..."
-                      : "Unassigned"}
+                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                    {ticket.assigneeName || (ticket.assigneeId ? resolveUser(ticket.assigneeId) : "Unassigned")}
                   </p>
+                  {ticket.assigneeDepartment && (
+                    <p className="text-[11px] text-[var(--text-secondary)] truncate">
+                      {ticket.assigneeDepartment}
+                    </p>
+                  )}
                 </div>
               </div>
+              {/* Team Queue */}
               {ticket.teamQueueId && (
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/10">
-                    <Users size={14} style={{ color: "#8B5CF6" }} />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-500/10 shrink-0">
+                    <Layers size={14} style={{ color: "#8B5CF6" }} />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
                       Team Queue
                     </p>
-                    <p className="text-xs font-medium text-[var(--text-primary)] truncate">
-                      {ticket.teamQueueId.slice(0, 12)}...
+                    <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                      {ticket.teamQueueName || ticket.teamQueueId.slice(0, 12) + "..."}
                     </p>
                   </div>
                 </div>

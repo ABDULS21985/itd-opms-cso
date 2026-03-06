@@ -303,9 +303,9 @@ export default function TicketsPage() {
         <span
           className={`text-sm ${item.assigneeId ? "text-[var(--text-secondary)]" : "text-[var(--text-muted)] italic"}`}
         >
-          {item.assigneeId
+          {item.assigneeName || (item.assigneeId
             ? item.assigneeId.slice(0, 8) + "..."
-            : "Unassigned"}
+            : "Unassigned")}
         </span>
       ),
     },
