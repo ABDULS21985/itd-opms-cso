@@ -41,6 +41,7 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
+import { OrgUnitPicker } from "@/components/shared/pickers";
 import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 import {
   useUser,
@@ -199,6 +200,7 @@ export default function UserDetailPage() {
     scopeId: "",
     expiresAt: "",
   });
+  const [scopeDisplay, setScopeDisplay] = useState("");
 
   // Revoke role confirm
   const [revokeRoleTarget, setRevokeRoleTarget] = useState<{
@@ -277,6 +279,7 @@ export default function UserDetailPage() {
         onSuccess: () => {
           setShowAssignRole(false);
           setRoleForm({ roleId: "", scopeType: "global", scopeId: "", expiresAt: "" });
+          setScopeDisplay("");
         },
       },
     );
@@ -428,12 +431,20 @@ export default function UserDetailPage() {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4 -mt-10 sm:-mt-12">
                 <div className="relative">
-                  <div
-                    className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24 sm:text-3xl"
-                    style={{ background: "linear-gradient(135deg, #1B7340 0%, #22c55e 100%)" }}
-                  >
-                    {getInitials(user.displayName)}
-                  </div>
+                  {user.photoUrl ? (
+                    <img
+                      src={user.photoUrl}
+                      alt={user.displayName}
+                      className="h-20 w-20 shrink-0 rounded-2xl object-cover shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24 sm:text-3xl"
+                      style={{ background: "linear-gradient(135deg, #1B7340 0%, #22c55e 100%)" }}
+                    >
+                      {getInitials(user.displayName)}
+                    </div>
+                  )}
                   {/* Online indicator */}
                   <div className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-[3px] border-[var(--surface-0)] ${isActive ? "bg-[var(--success)]" : "bg-[var(--surface-4)]"}`} />
                 </div>
@@ -682,15 +693,17 @@ export default function UserDetailPage() {
             </FormField>
 
             {roleForm.scopeType !== "global" && (
-              <FormField label="Scope ID">
-                <input
-                  type="text"
-                  value={roleForm.scopeId}
-                  onChange={(e) => setRoleForm((f) => ({ ...f, scopeId: e.target.value }))}
-                  placeholder={`Enter ${roleForm.scopeType} ID...`}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                />
-              </FormField>
+              <OrgUnitPicker
+                label="Scope"
+                required
+                placeholder="Search organizational units..."
+                value={roleForm.scopeId || undefined}
+                displayValue={scopeDisplay}
+                onChange={(orgUnitId, name) => {
+                  setRoleForm((f) => ({ ...f, scopeId: orgUnitId ?? "" }));
+                  setScopeDisplay(name);
+                }}
+              />
             )}
 
             <FormField label="Expires At" hint="optional">

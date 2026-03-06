@@ -70,6 +70,12 @@ export interface Ticket {
   customFields?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // Enrichment fields (from JOINs)
+  reporterName?: string;
+  reporterDepartment?: string;
+  assigneeName?: string;
+  assigneeDepartment?: string;
+  teamQueueName?: string;
 }
 
 export interface TicketComment {

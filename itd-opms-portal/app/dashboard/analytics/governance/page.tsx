@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import {
   Shield,
   FileCheck,
@@ -11,6 +11,7 @@ import {
   Target,
   ClipboardCheck,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   useExecutiveSummary,
   useTicketsByPriority,
@@ -125,26 +126,42 @@ export default function GovernanceCompliancePage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPIStatCard label="Active Policies" value={summaryLoading ? undefined : summary?.activePolicies ?? 0}
-          icon={Shield} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={summaryLoading} index={0}
-          href="/dashboard/governance/policies" />
-        <KPIStatCard label="Overdue Actions" value={summaryLoading ? undefined : summary?.overdueActions ?? 0}
-          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
-          href="/dashboard/governance/actions" />
-        <KPIStatCard label="Pending Attestations" value={summaryLoading ? undefined : summary?.pendingAttestations ?? 0}
-          icon={FileCheck} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
-          href="/dashboard/governance/policies" />
-        <KPIStatCard label="OKR Progress" value={summaryLoading ? undefined : summary?.avgOkrProgress ?? 0}
-          icon={Target} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={summaryLoading} index={3} suffix="%"
-          href="/dashboard/governance/okrs" />
-        <KPIStatCard label="Audit Readiness" value={summaryLoading ? undefined : summary?.auditReadinessScore ?? 0}
-          icon={ClipboardCheck} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={summaryLoading} index={4} suffix="%"
-          href="/dashboard/governance/policies" />
+        <div className="relative">
+          <KPIStatCard label="Active Policies" value={summaryLoading ? undefined : summary?.activePolicies ?? 0}
+            icon={Shield} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={summaryLoading} index={0}
+            href="/dashboard/governance/policies" />
+          <span className="absolute top-2 right-2"><InfoHint text="Number of governance policies currently in effect. Policies define organizational standards and procedures." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Overdue Actions" value={summaryLoading ? undefined : summary?.overdueActions ?? 0}
+            icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
+            href="/dashboard/governance/actions" />
+          <span className="absolute top-2 right-2"><InfoHint text="Action items past their due date. May impact compliance and audit readiness." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Pending Attestations" value={summaryLoading ? undefined : summary?.pendingAttestations ?? 0}
+            icon={FileCheck} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
+            href="/dashboard/governance/policies" />
+          <span className="absolute top-2 right-2"><InfoHint text="Policy attestations awaiting acknowledgment. Staff must attest to demonstrate compliance awareness." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="OKR Progress" value={summaryLoading ? undefined : summary?.avgOkrProgress ?? 0}
+            icon={Target} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={summaryLoading} index={3} suffix="%"
+            href="/dashboard/governance/okrs" />
+          <span className="absolute top-2 right-2"><InfoHint text="Average progress across all Objectives and Key Results. Target is typically 70% or higher." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Audit Readiness" value={summaryLoading ? undefined : summary?.auditReadinessScore ?? 0}
+            icon={ClipboardCheck} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={summaryLoading} index={4} suffix="%"
+            href="/dashboard/governance/policies" />
+          <span className="absolute top-2 right-2"><InfoHint text="Composite score measuring preparedness for internal/external audits based on policy compliance and documentation." position="bottom" size={13} /></span>
+        </div>
       </div>
 
       {/* Row 1 — OKR + Audit Gauges */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <ChartCard title="OKR Progress" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Ring chart showing average OKR achievement. 70%+ is typically considered healthy for stretch goals.</span></div>
           <div className="flex items-center justify-center py-4">
             <ProgressRing value={summary?.avgOkrProgress ?? 0} size={140} strokeWidth={10}
               label="Avg OKR" delay={0.4} />
@@ -152,6 +169,7 @@ export default function GovernanceCompliancePage() {
         </ChartCard>
 
         <ChartCard title="SLA Compliance" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Gauge showing the percentage of service level agreements being met. Green (90%+) = good, Yellow (75-89%) = needs attention, Red (&lt;75%) = critical.</span></div>
           <div className="flex items-center justify-center py-2">
             <GaugeChart value={slaRate} label="Compliance" size={180}
               thresholds={{ good: 90, warning: 75 }} />
@@ -159,6 +177,7 @@ export default function GovernanceCompliancePage() {
         </ChartCard>
 
         <ChartCard title="Audit Readiness" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Ring chart showing overall audit preparedness score. Higher values indicate better documentation and policy compliance.</span></div>
           <div className="flex items-center justify-center py-4">
             <ProgressRing value={summary?.auditReadinessScore ?? 0} size={140} strokeWidth={10}
               label="Readiness" delay={0.5} />
@@ -169,12 +188,14 @@ export default function GovernanceCompliancePage() {
       {/* Row 2 — Ticket Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Tickets by Priority" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Distribution of ITSM tickets by priority level. High concentration in critical/high may require additional support resources.</span></div>
           {ticketsPriorityLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={ticketPriorityDonut} height={240} innerRadius={45} outerRadius={75}
                 centerLabel="Tickets" showLabel />}
         </ChartCard>
 
         <ChartCard title="Tickets by Status" delay={0.4}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Current status distribution of all tickets. Healthy service desks show most tickets in resolved/closed.</span></div>
           {ticketsStatusLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={ticketStatusDonut} height={240} innerRadius={45} outerRadius={75}
                 centerLabel="Tickets" showLabel />}
@@ -184,12 +205,14 @@ export default function GovernanceCompliancePage() {
       {/* Row 3 — Asset Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Assets by Type" delay={0.45}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Breakdown of CMDB assets by category. Helps understand the technology landscape and maintenance requirements.</span></div>
           {assetsTypeLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={assetTypeDonut} height={240} innerRadius={45} outerRadius={75}
                 centerLabel="Assets" showLabel />}
         </ChartCard>
 
         <ChartCard title="Assets by Status" delay={0.5}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Current status of all tracked assets. Ideally most assets should be in 'active' or 'deployed' status.</span></div>
           {assetsStatusLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={assetStatusDonut} height={240} innerRadius={45} outerRadius={75}
                 centerLabel="Assets" showLabel />}
@@ -198,6 +221,7 @@ export default function GovernanceCompliancePage() {
 
       {/* Summary Metrics */}
       <ChartCard title="Cross-Module Metrics" delay={0.55}>
+        <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Key performance indicators pulled from across ITSM, CMDB, and compliance modules. Click any metric to navigate to its source.</span></div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
             { label: "Open Tickets", value: summary?.openTickets ?? 0, color: "#F59E0B", href: "/dashboard/itsm/tickets" },

@@ -167,7 +167,7 @@ func resolveEntraUser(ctx context.Context, pool *pgxpool.Pool, claims *auth.Entr
 	}
 
 	// Fetch roles and permissions using an ephemeral AuthService.
-	authService := auth.NewAuthService(pool, config.JWTConfig{})
+	authService := auth.NewAuthService(pool, config.JWTConfig{}, nil, config.MinIOConfig{})
 	roles, permissions, err := authService.GetUserRolesAndPermissions(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch roles: %w", err)

@@ -42,6 +42,7 @@ import {
   useCreateChecklistTask,
   useDeleteChecklistTask,
 } from "@/hooks/use-people";
+import { UserPicker } from "@/components/shared/pickers";
 import type {
   PeopleChecklist,
   ChecklistTask,
@@ -723,6 +724,7 @@ function CreateChecklistModal({
   templates: PeopleChecklistTemplate[];
 }) {
   const [userId, setUserId] = useState("");
+  const [userDisplay, setUserDisplay] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const createChecklist = useCreateChecklist();
 
@@ -737,6 +739,7 @@ function CreateChecklistModal({
       {
         onSuccess: () => {
           setUserId("");
+          setUserDisplay("");
           setSelectedTemplateId("");
           onClose();
         },
@@ -801,18 +804,17 @@ function CreateChecklistModal({
             </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1.5">
-              User ID <span className="text-[#EF4444]">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter user UUID or employee ID of departing member"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-            />
-          </div>
+          <UserPicker
+            label="Departing Member"
+            required
+            placeholder="Search for the departing team member..."
+            value={userId}
+            displayValue={userDisplay}
+            onChange={(id, name) => {
+              setUserId(id ?? "");
+              setUserDisplay(name);
+            }}
+          />
 
           <div>
             <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1.5">

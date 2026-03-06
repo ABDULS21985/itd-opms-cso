@@ -475,77 +475,8 @@ export interface ConflictResult {
 }
 
 /* =============================================================================
-   Document Vault Types
+   Document Vault Types — defined in hooks/use-vault.ts (single source of truth)
    ============================================================================= */
-
-export interface VaultDocument {
-  id: string;
-  tenantId: string;
-  title: string;
-  description?: string;
-  fileKey: string;
-  contentType: string;
-  sizeBytes: number;
-  checksumSha256: string;
-  classification: string;
-  retentionUntil?: string;
-  tags: string[];
-  folderId?: string;
-  folderName?: string;
-  version: number;
-  parentDocumentId?: string;
-  isLatest: boolean;
-  lockedBy?: string;
-  lockedAt?: string;
-  status: string;
-  accessLevel: string;
-  uploadedBy: string;
-  uploaderName?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface DocumentFolder {
-  id: string;
-  tenantId: string;
-  parentId?: string;
-  name: string;
-  description?: string;
-  path: string;
-  color?: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  children?: DocumentFolder[];
-}
-
-export interface DocumentAccessLogEntry {
-  id: string;
-  documentId: string;
-  userId: string;
-  userName?: string;
-  action: string;
-  ipAddress?: string;
-  createdAt: string;
-}
-
-export interface DocumentShare {
-  id: string;
-  documentId: string;
-  sharedWithUserId?: string;
-  sharedWithUserName?: string;
-  sharedWithRole?: string;
-  permission: string;
-  sharedBy: string;
-  expiresAt?: string;
-  createdAt: string;
-}
-
-export interface VaultStats {
-  totalDocuments: number;
-  totalSizeBytes: number;
-  byClassification: Record<string, number>;
-}
 
 /* =============================================================================
    Workflow Automation Types

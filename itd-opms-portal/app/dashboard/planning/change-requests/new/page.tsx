@@ -14,7 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
-import { useCreateChangeRequest, useProjects } from "@/hooks/use-planning";
+import { ProjectPicker } from "@/components/shared/pickers";
+import { useCreateChangeRequest } from "@/hooks/use-planning";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -50,17 +51,6 @@ export default function NewChangeRequestPage() {
   const router = useRouter();
   const createChangeRequest = useCreateChangeRequest();
 
-  const { data: projectsData } = useProjects(1, 200);
-  const projects = Array.isArray(projectsData)
-    ? projectsData
-    : projectsData?.data ?? [];
-  const projectOptions = projects.map(
-    (p: { id: string; title?: string; code: string }) => ({
-      value: p.id,
-      label: p.title || p.code,
-    }),
-  );
-
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -69,8 +59,11 @@ export default function NewChangeRequestPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [projectDisplay, setProjectDisplay] = useState("");
   const [justification, setJustification] = useState("");
   const [impactAssessment, setImpactAssessment] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [category, setCategory] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -122,6 +115,8 @@ export default function NewChangeRequestPage() {
         projectId: projectId.trim() || undefined,
         justification: justification.trim(),
         impactAssessment: impactAssessment.trim() || undefined,
+        priority: priority,
+        category: category || undefined,
       },
       {
         onSuccess: () => {
@@ -130,12 +125,6 @@ export default function NewChangeRequestPage() {
       },
     );
   }
-
-  /* ---- Helpers ---- */
-  const findLabel = (
-    opts: { value: string; label: string }[],
-    val: string,
-  ) => opts.find((o) => o.value === val)?.label || "—";
 
   const isLastStep = step === STEPS.length - 1;
 
@@ -299,16 +288,48 @@ export default function NewChangeRequestPage() {
                     placeholder="Detailed description of the proposed change"
                     rows={4}
                   />
-                  <FormField
+                  <ProjectPicker
                     label="Project"
-                    name="projectId"
-                    type="select"
-                    value={projectId}
-                    onChange={setProjectId}
-                    options={projectOptions}
-                    placeholder="Select project (optional)"
+                    value={projectId || undefined}
+                    displayValue={projectDisplay}
+                    onChange={(id, title) => { setProjectId(id ?? ""); setProjectDisplay(title); }}
                     description="The project this change request applies to"
                   />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
+                        Priority
+                      </label>
+                      <select
+                        value={priority}
+                        onChange={(e) => setPriority(e.target.value)}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
+                        Category
+                      </label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                      >
+                        <option value="">None</option>
+                        <option value="scope">Scope</option>
+                        <option value="schedule">Schedule</option>
+                        <option value="budget">Budget</option>
+                        <option value="resource">Resource</option>
+                        <option value="technical">Technical</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -379,8 +400,10 @@ export default function NewChangeRequestPage() {
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Project"
-                        value={findLabel(projectOptions, projectId)}
+                        value={projectDisplay || "—"}
                       />
+                      <ReviewField label="Priority" value={priority} />
+                      <ReviewField label="Category" value={category || "—"} />
                     </div>
                     {description && (
                       <div className="mt-2">

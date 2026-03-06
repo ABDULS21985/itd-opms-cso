@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { QueuePicker } from "@/components/shared/pickers";
 import { useCreateTicket } from "@/hooks/use-itsm";
 import { useUsers } from "@/hooks/use-system";
 
@@ -164,6 +165,7 @@ export default function NewTicketPage() {
   const [impact, setImpact] = useState<ImpactLevel | "">("");
   const [assigneeId, setAssigneeId] = useState("");
   const [teamQueueId, setTeamQueueId] = useState("");
+  const [queueDisplay, setQueueDisplay] = useState("");
   const [tags, setTags] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -634,12 +636,15 @@ export default function NewTicketPage() {
                       options={userOptions}
                       placeholder="Select assignee (optional)"
                     />
-                    <FormField
-                      label="Team Queue ID"
-                      name="teamQueueId"
-                      value={teamQueueId}
-                      onChange={setTeamQueueId}
-                      placeholder="Queue UUID (optional)"
+                    <QueuePicker
+                      label="Team Queue"
+                      value={teamQueueId || undefined}
+                      displayValue={queueDisplay}
+                      onChange={(id, name) => {
+                        setTeamQueueId(id ?? "");
+                        setQueueDisplay(name);
+                      }}
+                      placeholder="Select queue (optional)"
                     />
                   </div>
                   <FormField
@@ -785,7 +790,7 @@ export default function NewTicketPage() {
                       />
                       <ReviewField
                         label="Team Queue"
-                        value={teamQueueId || "—"}
+                        value={queueDisplay || "—"}
                       />
                       <ReviewField
                         label="Tags"

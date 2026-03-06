@@ -59,6 +59,7 @@ type Server struct {
 	dashboardRefresh      *reporting.DashboardRefresher
 	reportScheduler       *reporting.ReportScheduler
 	maintenanceWorker     *system.MaintenanceWorker
+	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
 }
 
@@ -110,7 +111,7 @@ func (s *Server) Setup() {
 	}
 
 	// --- Core services ---
-	authService := auth.NewAuthService(s.pool, s.cfg.JWT)
+	authService := auth.NewAuthService(s.pool, s.cfg.JWT, s.minio, s.cfg.MinIO)
 	auditService := audit.NewAuditService(s.pool)
 	revocationService := auth.NewRevocationService(s.redis)
 	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
@@ -180,7 +181,7 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO)
 	approvalHandler := approval.NewHandler(s.pool, auditService)
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
@@ -188,6 +189,7 @@ func (s *Server) Setup() {
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
+	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
 
@@ -206,9 +208,11 @@ func (s *Server) Setup() {
 				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
 			}
 
-			// Public: login, refresh, OIDC config.
+			// Public: login, refresh, forgot/reset password, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/forgot-password", authHandler.ForgotPassword)
+			r.Post("/reset-password", authHandler.ResetPassword)
 
 			// OIDC routes (public, used by frontend PKCE flow).
 			if oidcHandler != nil {
@@ -233,6 +237,9 @@ func (s *Server) Setup() {
 				r.Get("/me", authHandler.Me)
 				r.Post("/logout", authHandler.Logout)
 				r.Post("/change-password", authHandler.ChangePassword)
+				r.Patch("/profile", authHandler.UpdateProfile)
+				r.Post("/profile/photo", authHandler.UploadProfilePhoto)
+				r.Delete("/profile/photo", authHandler.DeleteProfilePhoto)
 			})
 		})
 
@@ -350,6 +357,9 @@ func (s *Server) Start() error {
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)
 	}
+	if s.vaultWorker != nil {
+		s.vaultWorker.Start(ctx)
+	}
 
 	// Start action reminder cron (every hour).
 	if s.actionReminderService != nil {
@@ -408,6 +418,9 @@ func (s *Server) Start() error {
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Stop()
+	}
+	if s.vaultWorker != nil {
+		s.vaultWorker.Stop()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

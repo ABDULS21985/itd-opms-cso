@@ -10,10 +10,10 @@ import {
   AlertTriangle,
   ShieldAlert,
   CheckSquare,
-  X,
-  Plus,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { UserMultiPicker } from "@/components/shared/pickers";
+import type { SelectedEntity } from "@/components/shared/entity-multi-select";
 import { useAsset, useCreateDisposal } from "@/hooks/use-cmdb";
 
 /* ------------------------------------------------------------------ */
@@ -47,24 +47,10 @@ export default function AssetDisposalPage({
   /* ---- Form state ---- */
   const [disposalMethod, setDisposalMethod] = useState("");
   const [reason, setReason] = useState("");
-  const [witnessInput, setWitnessInput] = useState("");
-  const [witnessIds, setWitnessIds] = useState<string[]>([]);
+  const [witnesses, setWitnesses] = useState<SelectedEntity[]>([]);
   const [dataWipeConfirmed, setDataWipeConfirmed] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  /* ---- Witness management ---- */
-  function addWitness() {
-    const trimmed = witnessInput.trim();
-    if (trimmed && !witnessIds.includes(trimmed)) {
-      setWitnessIds((prev) => [...prev, trimmed]);
-      setWitnessInput("");
-    }
-  }
-
-  function removeWitness(witnessId: string) {
-    setWitnessIds((prev) => prev.filter((w) => w !== witnessId));
-  }
 
   /* ---- Validation ---- */
   function validate(): boolean {
@@ -86,7 +72,7 @@ export default function AssetDisposalPage({
         assetId: id,
         disposalMethod,
         reason: reason.trim(),
-        witnessIds,
+        witnessIds: witnesses.map((w) => w.id),
         dataWipeConfirmed,
       },
       {
@@ -217,52 +203,12 @@ export default function AssetDisposalPage({
 
         {/* Witnesses */}
         <div className="border-t border-[var(--border)] pt-6">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
-            Witnesses
-          </h2>
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <input
-                value={witnessInput}
-                onChange={(e) => setWitnessInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addWitness();
-                  }
-                }}
-                placeholder="Enter witness user UUID"
-                className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-              />
-              <button
-                type="button"
-                onClick={addWitness}
-                className="flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
-              >
-                <Plus size={14} />
-                Add
-              </button>
-            </div>
-            {witnessIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {witnessIds.map((wid) => (
-                  <span
-                    key={wid}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]"
-                  >
-                    {wid.slice(0, 8)}...
-                    <button
-                      type="button"
-                      onClick={() => removeWitness(wid)}
-                      className="hover:text-[var(--text-primary)]"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          <UserMultiPicker
+            label="Witnesses"
+            placeholder="Search for witnesses by name or email..."
+            selected={witnesses}
+            onChange={setWitnesses}
+          />
         </div>
 
         {/* Evidence & Data Wipe */}

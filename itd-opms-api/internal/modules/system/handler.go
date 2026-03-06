@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 )
 
@@ -36,8 +37,9 @@ func NewHandler(
 	redisClient *redis.Client,
 	natsConn *nats.Conn,
 	minioClient *minio.Client,
+	minioCfg config.MinIOConfig,
 ) *Handler {
-	userSvc := NewUserService(pool, auditSvc)
+	userSvc := NewUserService(pool, auditSvc, minioClient, minioCfg)
 	roleSvc := NewRoleService(pool, auditSvc)
 	tenantSvc := NewTenantService(pool, auditSvc)
 	orgSvc := NewOrgService(pool, auditSvc)

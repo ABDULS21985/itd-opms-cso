@@ -14,8 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
-import { useCreateRisk, useProjects } from "@/hooks/use-planning";
-import { useUsers } from "@/hooks/use-system";
+import { UserPicker, ProjectPicker } from "@/components/shared/pickers";
+import { useCreateRisk } from "@/hooks/use-planning";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -77,28 +77,6 @@ export default function NewRiskPage() {
   const router = useRouter();
   const createRisk = useCreateRisk();
 
-  const { data: projectsData } = useProjects(1, 200);
-  const projects = Array.isArray(projectsData)
-    ? projectsData
-    : projectsData?.data ?? [];
-  const projectOptions = projects.map(
-    (p: { id: string; title?: string; code: string }) => ({
-      value: p.id,
-      label: p.title || p.code,
-    }),
-  );
-
-  const { data: usersData } = useUsers(1, 200);
-  const users = Array.isArray(usersData)
-    ? usersData
-    : usersData?.data ?? [];
-  const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
-      value: u.id,
-      label: u.displayName || u.email,
-    }),
-  );
-
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -107,12 +85,14 @@ export default function NewRiskPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [projectDisplay, setProjectDisplay] = useState("");
   const [category, setCategory] = useState("");
   const [likelihood, setLikelihood] = useState("");
   const [impact, setImpact] = useState("");
   const [mitigationPlan, setMitigationPlan] = useState("");
   const [contingencyPlan, setContingencyPlan] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
   const [reviewDate, setReviewDate] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -346,14 +326,11 @@ export default function NewRiskPage() {
                     rows={3}
                   />
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
+                    <ProjectPicker
                       label="Project"
-                      name="projectId"
-                      type="select"
-                      value={projectId}
-                      onChange={setProjectId}
-                      options={projectOptions}
-                      placeholder="Select project (optional)"
+                      value={projectId || undefined}
+                      displayValue={projectDisplay}
+                      onChange={(id, title) => { setProjectId(id ?? ""); setProjectDisplay(title); }}
                       description="Leave empty for organization-wide risks"
                     />
                     <FormField
@@ -423,14 +400,11 @@ export default function NewRiskPage() {
                     rows={3}
                   />
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
+                    <UserPicker
                       label="Owner"
-                      name="ownerId"
-                      type="select"
-                      value={ownerId}
-                      onChange={setOwnerId}
-                      options={userOptions}
-                      placeholder="Select risk owner (optional)"
+                      value={ownerId || undefined}
+                      displayValue={ownerDisplay}
+                      onChange={(id, name) => { setOwnerId(id ?? ""); setOwnerDisplay(name); }}
                     />
                     <FormField
                       label="Review Date"
@@ -475,7 +449,7 @@ export default function NewRiskPage() {
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Project"
-                        value={findLabel(projectOptions, projectId)}
+                        value={projectDisplay || "—"}
                       />
                       <ReviewField
                         label="Category"
@@ -522,7 +496,7 @@ export default function NewRiskPage() {
                       />
                       <ReviewField
                         label="Owner"
-                        value={findLabel(userOptions, ownerId)}
+                        value={ownerDisplay || "—"}
                       />
                       <ReviewField
                         label="Review Date"

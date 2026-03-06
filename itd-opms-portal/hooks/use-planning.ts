@@ -172,6 +172,21 @@ export function useProjects(
 }
 
 /**
+ * GET /planning/projects?search=<query> — lightweight project search for pickers.
+ */
+export function useSearchProjects(query: string) {
+  return useQuery({
+    queryKey: ["projects-search", query],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Project>>("/planning/projects", {
+        page: 1,
+        limit: 15,
+        ...(query.length >= 2 ? { search: query } : {}),
+      }),
+  });
+}
+
+/**
  * GET /planning/projects/{id} - single project detail.
  */
 export function useProject(id: string | undefined) {
@@ -904,13 +919,15 @@ export function useChangeRequests(
   limit = 20,
   projectId?: string,
   status?: string,
+  priority?: string,
+  category?: string,
 ) {
   return useQuery({
-    queryKey: ["change-requests", page, limit, projectId, status],
+    queryKey: ["change-requests", page, limit, projectId, status, priority, category],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ChangeRequest>>(
         "/planning/change-requests",
-        { page, limit, project_id: projectId, status },
+        { page, limit, project_id: projectId, status, priority, category },
       ),
   });
 }

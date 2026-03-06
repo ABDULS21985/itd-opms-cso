@@ -3,6 +3,7 @@ package itsm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -53,7 +54,7 @@ func (s *CatalogService) CreateCategory(ctx context.Context, req CreateCatalogCa
 	}
 
 	query := `
-		INSERT INTO catalog_categories (
+		INSERT INTO service_catalog_categories (
 			id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
 		) VALUES (
@@ -104,7 +105,7 @@ func (s *CatalogService) GetCategory(ctx context.Context, id uuid.UUID) (Catalog
 	query := `
 		SELECT id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
-		FROM catalog_categories
+		FROM service_catalog_categories
 		WHERE id = $1 AND tenant_id = $2`
 
 	var cat CatalogCategory
@@ -132,7 +133,7 @@ func (s *CatalogService) ListCategories(ctx context.Context, parentID *uuid.UUID
 	query := `
 		SELECT id, tenant_id, name, description, icon,
 			parent_id, sort_order, created_at, updated_at
-		FROM catalog_categories
+		FROM service_catalog_categories
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR parent_id = $2)
 		ORDER BY sort_order ASC, name ASC`
@@ -182,7 +183,7 @@ func (s *CatalogService) UpdateCategory(ctx context.Context, id uuid.UUID, req U
 	now := time.Now().UTC()
 
 	updateQuery := `
-		UPDATE catalog_categories SET
+		UPDATE service_catalog_categories SET
 			name = COALESCE($1, name),
 			description = COALESCE($2, description),
 			icon = COALESCE($3, icon),
@@ -229,7 +230,7 @@ func (s *CatalogService) DeleteCategory(ctx context.Context, id uuid.UUID) error
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	query := `DELETE FROM catalog_categories WHERE id = $1 AND tenant_id = $2`
+	query := `DELETE FROM service_catalog_categories WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.pool.Exec(ctx, query, id, auth.TenantID)
 	if err != nil {
@@ -279,7 +280,7 @@ func (s *CatalogService) CreateItem(ctx context.Context, req CreateCatalogItemRe
 	}
 
 	query := `
-		INSERT INTO catalog_items (
+		INSERT INTO service_catalog_items (
 			id, tenant_id, category_id, name, description,
 			fulfillment_workflow_id, approval_required, approval_chain_config,
 			sla_policy_id, form_schema, entitlement_roles,
@@ -348,7 +349,7 @@ func (s *CatalogService) GetItem(ctx context.Context, id uuid.UUID) (CatalogItem
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE id = $1 AND tenant_id = $2`
 
 	var item CatalogItem
@@ -379,7 +380,7 @@ func (s *CatalogService) ListItems(ctx context.Context, categoryID *uuid.UUID, s
 	// Count total matching records.
 	countQuery := `
 		SELECT COUNT(*)
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR category_id = $2)
 			AND ($3::text IS NULL OR status = $3)`
@@ -397,7 +398,7 @@ func (s *CatalogService) ListItems(ctx context.Context, categoryID *uuid.UUID, s
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR category_id = $2)
 			AND ($3::text IS NULL OR status = $3)
@@ -452,7 +453,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, id uuid.UUID, req Updat
 	now := time.Now().UTC()
 
 	updateQuery := `
-		UPDATE catalog_items SET
+		UPDATE service_catalog_items SET
 			category_id = COALESCE($1, category_id),
 			name = COALESCE($2, name),
 			description = COALESCE($3, description),
@@ -514,7 +515,7 @@ func (s *CatalogService) DeleteItem(ctx context.Context, id uuid.UUID) error {
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	query := `DELETE FROM catalog_items WHERE id = $1 AND tenant_id = $2`
+	query := `DELETE FROM service_catalog_items WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.pool.Exec(ctx, query, id, auth.TenantID)
 	if err != nil {
@@ -539,6 +540,70 @@ func (s *CatalogService) DeleteItem(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// ListRelatedItems returns other active items in the same category as the given item,
+// excluding the item itself. Results are limited to `limit` items.
+func (s *CatalogService) ListRelatedItems(ctx context.Context, itemID uuid.UUID, limit int) ([]CatalogItem, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	// First get the item to find its category.
+	item, err := s.GetItem(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+
+	if item.CategoryID == nil {
+		return []CatalogItem{}, nil
+	}
+
+	query := `
+		SELECT id, tenant_id, category_id, name, description,
+			fulfillment_workflow_id, approval_required, approval_chain_config,
+			sla_policy_id, form_schema, entitlement_roles,
+			estimated_delivery, status, version,
+			created_at, updated_at
+		FROM service_catalog_items
+		WHERE tenant_id = $1
+			AND category_id = $2
+			AND id != $3
+			AND status = 'active'
+		ORDER BY name ASC
+		LIMIT $4`
+
+	rows, err := s.pool.Query(ctx, query, auth.TenantID, item.CategoryID, itemID, limit)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list related catalog items", err)
+	}
+	defer rows.Close()
+
+	var items []CatalogItem
+	for rows.Next() {
+		var ri CatalogItem
+		if err := rows.Scan(
+			&ri.ID, &ri.TenantID, &ri.CategoryID, &ri.Name, &ri.Description,
+			&ri.FulfillmentWorkflowID, &ri.ApprovalRequired, &ri.ApprovalChainConfig,
+			&ri.SLAPolicyID, &ri.FormSchema, &ri.EntitlementRoles,
+			&ri.EstimatedDelivery, &ri.Status, &ri.Version,
+			&ri.CreatedAt, &ri.UpdatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan related catalog item", err)
+		}
+		items = append(items, ri)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate related catalog items", err)
+	}
+
+	if items == nil {
+		items = []CatalogItem{}
+	}
+
+	return items, nil
+}
+
 // ListItemsByEntitlement returns active catalog items whose entitlement_roles
 // overlap with the given set of roles.
 func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []string) ([]CatalogItem, error) {
@@ -553,7 +618,7 @@ func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []str
 			sla_policy_id, form_schema, entitlement_roles,
 			estimated_delivery, status, version,
 			created_at, updated_at
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE tenant_id = $1
 			AND status = 'active'
 			AND (entitlement_roles IS NULL OR entitlement_roles = '{}' OR entitlement_roles && $2)
@@ -589,4 +654,58 @@ func (s *CatalogService) ListItemsByEntitlement(ctx context.Context, roles []str
 	}
 
 	return items, nil
+}
+
+// BulkUpdateItemStatus updates the status of multiple catalog items in a single operation.
+func (s *CatalogService) BulkUpdateItemStatus(ctx context.Context, ids []uuid.UUID, status string) (int64, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return 0, apperrors.Unauthorized("authentication required")
+	}
+
+	// Validate status.
+	validStatuses := map[string]bool{
+		CatalogItemStatusActive:     true,
+		CatalogItemStatusInactive:   true,
+		CatalogItemStatusDeprecated: true,
+	}
+	if !validStatuses[status] {
+		return 0, apperrors.Validation("status", fmt.Sprintf("invalid status %q: must be one of active, inactive, deprecated", status))
+	}
+
+	if len(ids) == 0 {
+		return 0, apperrors.Validation("ids", "at least one item ID is required")
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE service_catalog_items
+		SET status = $1, updated_at = $2
+		WHERE tenant_id = $3 AND id = ANY($4)`
+
+	result, err := s.pool.Exec(ctx, query, status, now, auth.TenantID, ids)
+	if err != nil {
+		return 0, apperrors.Internal("failed to bulk update catalog item statuses", err)
+	}
+
+	updated := result.RowsAffected()
+
+	// Log audit event.
+	changes, _ := json.Marshal(map[string]any{
+		"ids":    ids,
+		"status": status,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "bulk_update_status:catalog_item",
+		EntityType: "catalog_item",
+		EntityID:   uuid.Nil,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return updated, nil
 }

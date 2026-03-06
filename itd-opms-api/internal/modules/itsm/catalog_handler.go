@@ -40,9 +40,11 @@ func (h *CatalogHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("itsm.view")).Get("/", h.ListItems)
 		r.With(middleware.RequirePermission("itsm.view")).Get("/entitled", h.ListEntitledItems)
 		r.With(middleware.RequirePermission("itsm.view")).Get("/{id}", h.GetItem)
+		r.With(middleware.RequirePermission("itsm.view")).Get("/{id}/related", h.ListRelatedItems)
 		r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateItem)
 		r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateItem)
 		r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteItem)
+		r.With(middleware.RequirePermission("itsm.manage")).Post("/bulk/status", h.BulkUpdateItemStatus)
 	})
 }
 
@@ -257,6 +259,29 @@ func (h *CatalogHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, item, nil)
 }
 
+// ListRelatedItems handles GET /items/{id}/related — returns other active items in the same category.
+func (h *CatalogHandler) ListRelatedItems(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid item ID")
+		return
+	}
+
+	items, err := h.svc.ListRelatedItems(r.Context(), id, 5)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, items, nil)
+}
+
 // CreateItem handles POST /items — creates a new catalog item.
 func (h *CatalogHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	authCtx := types.GetAuthContext(r.Context())
@@ -334,5 +359,38 @@ func (h *CatalogHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// BulkUpdateItemStatus handles POST /items/bulk/status — bulk update status for multiple items.
+func (h *CatalogHandler) BulkUpdateItemStatus(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req BulkUpdateItemStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "At least one item ID is required")
+		return
+	}
+
+	if req.Status == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Status is required")
+		return
+	}
+
+	updated, err := h.svc.BulkUpdateItemStatus(r.Context(), req.IDs, req.Status)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]int64{"updated": updated}, nil)
 }
 

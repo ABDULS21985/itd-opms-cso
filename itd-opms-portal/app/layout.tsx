@@ -7,7 +7,7 @@ import { NotificationProvider } from "@/providers/notification-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ITD-OPMS | CBN IT AMD Projects and Initiatives",
+  title: "ITD-OPMS | CBN Projects and Initiatives",
   description:
     "Central Bank of Nigeria — Information Technology Department. Operations and Project Management System for governance, service management, asset tracking, and strategic planning.",
   keywords: [

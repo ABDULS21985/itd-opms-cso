@@ -13,8 +13,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
-import { useCreateIssue, useProjects } from "@/hooks/use-planning";
-import { useUsers } from "@/hooks/use-system";
+import { UserPicker, ProjectPicker } from "@/components/shared/pickers";
+import { useCreateIssue } from "@/hooks/use-planning";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -66,28 +66,6 @@ export default function NewIssuePage() {
   const router = useRouter();
   const createIssue = useCreateIssue();
 
-  const { data: projectsData } = useProjects(1, 200);
-  const projects = Array.isArray(projectsData)
-    ? projectsData
-    : projectsData?.data ?? [];
-  const projectOptions = projects.map(
-    (p: { id: string; title?: string; code: string }) => ({
-      value: p.id,
-      label: p.title || p.code,
-    }),
-  );
-
-  const { data: usersData } = useUsers(1, 200);
-  const users = Array.isArray(usersData)
-    ? usersData
-    : usersData?.data ?? [];
-  const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
-      value: u.id,
-      label: u.displayName || u.email,
-    }),
-  );
-
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -96,9 +74,11 @@ export default function NewIssuePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [projectDisplay, setProjectDisplay] = useState("");
   const [category, setCategory] = useState("");
   const [severity, setSeverity] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeDisplay, setAssigneeDisplay] = useState("");
   const [dueDate, setDueDate] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -325,14 +305,11 @@ export default function NewIssuePage() {
                     rows={4}
                   />
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
+                    <ProjectPicker
                       label="Project"
-                      name="projectId"
-                      type="select"
-                      value={projectId}
-                      onChange={setProjectId}
-                      options={projectOptions}
-                      placeholder="Select project (optional)"
+                      value={projectId || undefined}
+                      displayValue={projectDisplay}
+                      onChange={(id, title) => { setProjectId(id ?? ""); setProjectDisplay(title); }}
                     />
                     <FormField
                       label="Category"
@@ -356,14 +333,11 @@ export default function NewIssuePage() {
                       required
                       error={errors.severity}
                     />
-                    <FormField
+                    <UserPicker
                       label="Assignee"
-                      name="assigneeId"
-                      type="select"
-                      value={assigneeId}
-                      onChange={setAssigneeId}
-                      options={userOptions}
-                      placeholder="Select assignee (optional)"
+                      value={assigneeId || undefined}
+                      displayValue={assigneeDisplay}
+                      onChange={(id, name) => { setAssigneeId(id ?? ""); setAssigneeDisplay(name); }}
                     />
                   </div>
                   <FormField
@@ -413,7 +387,7 @@ export default function NewIssuePage() {
                       />
                       <ReviewField
                         label="Project"
-                        value={findLabel(projectOptions, projectId)}
+                        value={projectDisplay || "—"}
                       />
                       <ReviewField
                         label="Category"
@@ -421,7 +395,7 @@ export default function NewIssuePage() {
                       />
                       <ReviewField
                         label="Assignee"
-                        value={findLabel(userOptions, assigneeId)}
+                        value={assigneeDisplay || "—"}
                       />
                       <ReviewField
                         label="Due Date"

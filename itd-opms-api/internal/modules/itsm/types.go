@@ -217,6 +217,13 @@ type Ticket struct {
 	CustomFields            json.RawMessage `json:"customFields"`
 	CreatedAt               time.Time       `json:"createdAt"`
 	UpdatedAt               time.Time       `json:"updatedAt"`
+
+	// Enrichment fields (populated via JOINs on SELECT queries, not on INSERT/UPDATE RETURNING).
+	ReporterName       *string `json:"reporterName,omitempty"`
+	ReporterDepartment *string `json:"reporterDepartment,omitempty"`
+	AssigneeName       *string `json:"assigneeName,omitempty"`
+	AssigneeDepartment *string `json:"assigneeDepartment,omitempty"`
+	TeamQueueName      *string `json:"teamQueueName,omitempty"`
 }
 
 // TicketComment represents a comment or note on a ticket.
@@ -405,6 +412,12 @@ type CreateCatalogItemRequest struct {
 	EntitlementRoles      []string        `json:"entitlementRoles"`
 	EstimatedDelivery     *string         `json:"estimatedDelivery"`
 	Status                *string         `json:"status"`
+}
+
+// BulkUpdateItemStatusRequest is the payload for bulk-updating catalog item statuses.
+type BulkUpdateItemStatusRequest struct {
+	IDs    []uuid.UUID `json:"ids" validate:"required"`
+	Status string      `json:"status" validate:"required"`
 }
 
 // UpdateCatalogItemRequest is the payload for updating a service catalog item.

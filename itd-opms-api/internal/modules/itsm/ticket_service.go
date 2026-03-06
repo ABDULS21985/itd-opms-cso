@@ -39,7 +39,7 @@ func NewTicketService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *TicketS
 // Scan helpers
 // ──────────────────────────────────────────────
 
-// ticketColumns is the canonical column list for the tickets table.
+// ticketColumns is the canonical column list for the tickets table (used in RETURNING clauses).
 const ticketColumns = `
 	id, tenant_id, ticket_number, type,
 	category, subcategory, title, description,
@@ -53,7 +53,33 @@ const ticketColumns = `
 	closed_at, first_response_at, satisfaction_score,
 	tags, custom_fields, created_at, updated_at`
 
-// scanTicket scans a single ticket row into a Ticket struct.
+// ticketSelectColumns is the column list for SELECT queries with LEFT JOINs for user enrichment.
+const ticketSelectColumns = `
+	t.id, t.tenant_id, t.ticket_number, t.type,
+	t.category, t.subcategory, t.title, t.description,
+	t.priority, t.urgency, t.impact, t.status, t.channel,
+	t.reporter_id, t.assignee_id, t.team_queue_id,
+	t.sla_policy_id, t.sla_response_target, t.sla_resolution_target,
+	t.sla_response_met, t.sla_resolution_met,
+	t.sla_paused_at, t.sla_paused_duration_minutes,
+	t.is_major_incident, t.related_ticket_ids, t.linked_problem_id,
+	t.linked_asset_ids, t.org_unit_id, t.resolution_notes, t.resolved_at,
+	t.closed_at, t.first_response_at, t.satisfaction_score,
+	t.tags, t.custom_fields, t.created_at, t.updated_at,
+	reporter.display_name AS reporter_name,
+	reporter.department AS reporter_department,
+	assignee.display_name AS assignee_name,
+	assignee.department AS assignee_department,
+	sq.name AS team_queue_name`
+
+// ticketFromJoins is the FROM clause with LEFT JOINs for user enrichment.
+const ticketFromJoins = `
+	FROM tickets t
+	LEFT JOIN users reporter ON reporter.id = t.reporter_id
+	LEFT JOIN users assignee ON assignee.id = t.assignee_id
+	LEFT JOIN support_queues sq ON sq.id = t.team_queue_id`
+
+// scanTicket scans a single ticket row into a Ticket struct (base columns only, for RETURNING clauses).
 func scanTicket(row pgx.Row) (Ticket, error) {
 	var t Ticket
 	err := row.Scan(
@@ -72,7 +98,29 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 	return t, err
 }
 
-// scanTickets scans multiple ticket rows into a slice.
+// scanTicketEnriched scans a single ticket row with enrichment columns (reporter/assignee names).
+func scanTicketEnriched(row pgx.Row) (Ticket, error) {
+	var t Ticket
+	err := row.Scan(
+		&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
+		&t.Category, &t.Subcategory, &t.Title, &t.Description,
+		&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
+		&t.ReporterID, &t.AssigneeID, &t.TeamQueueID,
+		&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
+		&t.SLAResponseMet, &t.SLAResolutionMet,
+		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
+		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
+		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+		&t.ReporterName, &t.ReporterDepartment,
+		&t.AssigneeName, &t.AssigneeDepartment,
+		&t.TeamQueueName,
+	)
+	return t, err
+}
+
+// scanTickets scans multiple ticket rows into a slice (base columns only).
 func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 	var tickets []Ticket
 	for rows.Next() {
@@ -89,6 +137,40 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if tickets == nil {
+		tickets = []Ticket{}
+	}
+	return tickets, nil
+}
+
+// scanTicketsEnriched scans multiple ticket rows with enrichment columns.
+func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
+	var tickets []Ticket
+	for rows.Next() {
+		var t Ticket
+		if err := rows.Scan(
+			&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
+			&t.Category, &t.Subcategory, &t.Title, &t.Description,
+			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
+			&t.ReporterID, &t.AssigneeID, &t.TeamQueueID,
+			&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
+			&t.SLAResponseMet, &t.SLAResolutionMet,
+			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
+			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
+			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+			&t.ReporterName, &t.ReporterDepartment,
+			&t.AssigneeName, &t.AssigneeDepartment,
+			&t.TeamQueueName,
 		); err != nil {
 			return nil, err
 		}
@@ -210,9 +292,9 @@ func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (Ticket, er
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `SELECT ` + ticketColumns + ` FROM tickets WHERE id = $1 AND tenant_id = $2`
+	query := `SELECT ` + ticketSelectColumns + ticketFromJoins + ` WHERE t.id = $1 AND t.tenant_id = $2`
 
-	ticket, err := scanTicket(s.pool.QueryRow(ctx, query, id, auth.TenantID))
+	ticket, err := scanTicketEnriched(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Ticket{}, apperrors.NotFound("Ticket", id.String())
@@ -230,8 +312,9 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Build org-scope filter clause.
+	// Build org-scope filter clauses (one for count query, one for data query with t. prefix).
 	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 8)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 8)
 
 	// Count total matching records.
 	countQuery := `
@@ -268,20 +351,19 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 	}
 
 	dataQuery := fmt.Sprintf(`
-		SELECT `+ticketColumns+`
-		FROM tickets
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR priority = $3)
-			AND ($4::text IS NULL OR type = $4)
-			AND ($5::uuid IS NULL OR assignee_id = $5)
-			AND ($6::uuid IS NULL OR reporter_id = $6)
-			AND ($7::uuid IS NULL OR team_queue_id = $7)%s
-		ORDER BY created_at DESC
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND ($2::text IS NULL OR t.status = $2)
+			AND ($3::text IS NULL OR t.priority = $3)
+			AND ($4::text IS NULL OR t.type = $4)
+			AND ($5::uuid IS NULL OR t.assignee_id = $5)
+			AND ($6::uuid IS NULL OR t.reporter_id = $6)
+			AND ($7::uuid IS NULL OR t.team_queue_id = $7)%s
+		ORDER BY t.created_at DESC
 		LIMIT $%d OFFSET $%d`,
 		func() string {
-			if orgClause != "" {
-				return " AND " + orgClause
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
 			}
 			return ""
 		}(), nextIdx, nextIdx+1)
@@ -301,7 +383,7 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan tickets", err)
 	}
@@ -811,7 +893,7 @@ func (s *TicketService) CloseTicket(ctx context.Context, id uuid.UUID) error {
 
 // priorityOrderSQL maps priority labels to sort order (P1 first).
 const priorityOrderSQL = `
-	CASE priority
+	CASE t.priority
 		WHEN 'P1' THEN 1
 		WHEN 'P2' THEN 2
 		WHEN 'P3' THEN 3
@@ -826,8 +908,9 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Build org-scope filter clause.
+	// Build org-scope filter clauses.
 	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 3)
 
 	// Count total.
 	countQuery := `
@@ -856,16 +939,15 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 	}
 
 	dataQuery := fmt.Sprintf(`
-		SELECT `+ticketColumns+`
-		FROM tickets
-		WHERE tenant_id = $1
-			AND assignee_id = $2
-			AND status NOT IN ('closed', 'cancelled')%s
-		ORDER BY `+priorityOrderSQL+`, created_at ASC
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND t.assignee_id = $2
+			AND t.status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, t.created_at ASC
 		LIMIT $%d OFFSET $%d`,
 		func() string {
-			if orgClause != "" {
-				return " AND " + orgClause
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
 			}
 			return ""
 		}(), nextIdx, nextIdx+1)
@@ -882,7 +964,7 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan my queue", err)
 	}
@@ -897,8 +979,9 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Build org-scope filter clause.
+	// Build org-scope filter clauses.
 	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 3)
 
 	// Count total.
 	countQuery := `
@@ -927,16 +1010,15 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 	}
 
 	dataQuery := fmt.Sprintf(`
-		SELECT `+ticketColumns+`
-		FROM tickets
-		WHERE tenant_id = $1
-			AND team_queue_id = $2
-			AND status NOT IN ('closed', 'cancelled')%s
-		ORDER BY `+priorityOrderSQL+`, created_at ASC
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND t.team_queue_id = $2
+			AND t.status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, t.created_at ASC
 		LIMIT $%d OFFSET $%d`,
 		func() string {
-			if orgClause != "" {
-				return " AND " + orgClause
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
 			}
 			return ""
 		}(), nextIdx, nextIdx+1)
@@ -953,7 +1035,7 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan team queue", err)
 	}
@@ -1328,13 +1410,12 @@ func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priori
 	}
 
 	query := `
-		SELECT ` + ticketColumns + `
-		FROM tickets
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR priority = $3)
-			AND ($4::text IS NULL OR type = $4)
-		ORDER BY created_at DESC
+		SELECT ` + ticketSelectColumns + ticketFromJoins + `
+		WHERE t.tenant_id = $1
+			AND ($2::text IS NULL OR t.status = $2)
+			AND ($3::text IS NULL OR t.priority = $3)
+			AND ($4::text IS NULL OR t.type = $4)
+		ORDER BY t.created_at DESC
 		LIMIT $5`
 
 	rows, err := s.pool.Query(ctx, query, auth.TenantID, status, priority, ticketType, maxRows)
@@ -1343,7 +1424,7 @@ func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priori
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, apperrors.Internal("failed to scan tickets for export", err)
 	}

@@ -7,13 +7,80 @@ import (
 )
 
 // ──────────────────────────────────────────────
-// Document status constants
+// RBAC permission constants
 // ──────────────────────────────────────────────
 
 const (
-	DocumentStatusActive  = "active"
-	DocumentStatusDeleted = "deleted"
+	PermDocumentsView    = "documents.view"
+	PermDocumentsManage  = "documents.manage"
+	PermDocumentsShare   = "documents.share"
+	PermDocumentsApprove = "documents.approve"
+	PermDocumentsDelete  = "documents.delete"
+	PermDocumentsAdmin   = "documents.admin"
 )
+
+// ──────────────────────────────────────────────
+// Access-level policy enforcement
+// ──────────────────────────────────────────────
+
+// AccessLevelPolicy defines behavioral rules for each access level.
+type AccessLevelPolicy struct {
+	VisibleInList          bool // appears in general list/search for org-scoped users
+	RequiresExplicitAccess bool // only visible to owner/uploader/shared users/admin
+	AllowRoleSharing       bool // can be shared via role (not just specific user)
+	RequiresShareExpiry    bool // shares must have an expiry date
+}
+
+// AccessLevelPolicies maps each access level to its enforcement rules.
+var AccessLevelPolicies = map[string]AccessLevelPolicy{
+	AccessLevelPublic:       {VisibleInList: true, RequiresExplicitAccess: false, AllowRoleSharing: true, RequiresShareExpiry: false},
+	AccessLevelInternal:     {VisibleInList: true, RequiresExplicitAccess: false, AllowRoleSharing: true, RequiresShareExpiry: false},
+	AccessLevelRestricted:   {VisibleInList: false, RequiresExplicitAccess: true, AllowRoleSharing: true, RequiresShareExpiry: true},
+	AccessLevelConfidential: {VisibleInList: false, RequiresExplicitAccess: true, AllowRoleSharing: false, RequiresShareExpiry: true},
+}
+
+// ──────────────────────────────────────────────
+// Document status constants (lifecycle states)
+// ──────────────────────────────────────────────
+
+const (
+	DocumentStatusDraft       = "draft"
+	DocumentStatusActive      = "active"
+	DocumentStatusUnderReview = "under_review"
+	DocumentStatusApproved    = "approved"
+	DocumentStatusRejected    = "rejected"
+	DocumentStatusArchived    = "archived"
+	DocumentStatusExpired     = "expired"
+	DocumentStatusDeleted     = "deleted"
+	DocumentStatusRestored    = "restored"
+)
+
+// ValidStatuses maps valid document lifecycle states.
+var ValidStatuses = map[string]bool{
+	DocumentStatusDraft:       true,
+	DocumentStatusActive:      true,
+	DocumentStatusUnderReview: true,
+	DocumentStatusApproved:    true,
+	DocumentStatusRejected:    true,
+	DocumentStatusArchived:    true,
+	DocumentStatusExpired:     true,
+	DocumentStatusDeleted:     true,
+	DocumentStatusRestored:    true,
+}
+
+// ValidTransitions defines which status transitions are allowed.
+// Key = from-status, value = set of allowed to-statuses.
+var ValidTransitions = map[string]map[string]bool{
+	DocumentStatusDraft:       {DocumentStatusActive: true, DocumentStatusDeleted: true},
+	DocumentStatusActive:      {DocumentStatusUnderReview: true, DocumentStatusArchived: true, DocumentStatusDeleted: true},
+	DocumentStatusUnderReview: {DocumentStatusApproved: true, DocumentStatusRejected: true, DocumentStatusActive: true},
+	DocumentStatusApproved:    {DocumentStatusActive: true, DocumentStatusArchived: true},
+	DocumentStatusRejected:    {DocumentStatusActive: true, DocumentStatusDraft: true, DocumentStatusDeleted: true},
+	DocumentStatusArchived:    {DocumentStatusRestored: true},
+	DocumentStatusExpired:     {DocumentStatusRestored: true, DocumentStatusDeleted: true},
+	DocumentStatusDeleted:     {DocumentStatusRestored: true},
+	DocumentStatusRestored:    {DocumentStatusActive: true, DocumentStatusDraft: true},
+}
 
 // ──────────────────────────────────────────────
 // Document classification constants
@@ -65,6 +132,8 @@ const (
 	PermissionView     = "view"
 	PermissionDownload = "download"
 	PermissionEdit     = "edit"
+	PermissionShare    = "share"
+	PermissionApprove  = "approve"
 )
 
 // ValidPermissions maps valid share permission values.
@@ -72,6 +141,8 @@ var ValidPermissions = map[string]bool{
 	PermissionView:     true,
 	PermissionDownload: true,
 	PermissionEdit:     true,
+	PermissionShare:    true,
+	PermissionApprove:  true,
 }
 
 // ──────────────────────────────────────────────
@@ -105,10 +176,25 @@ type VaultDocument struct {
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
 
+	// Extended DMS metadata
+	OwnerID        *uuid.UUID `json:"ownerId,omitempty"`
+	DocumentCode   *string    `json:"documentCode,omitempty"`
+	SourceModule   *string    `json:"sourceModule,omitempty"`
+	SourceEntityID *uuid.UUID `json:"sourceEntityId,omitempty"`
+	EffectiveDate  *time.Time `json:"effectiveDate,omitempty"`
+	ExpiryDate     *time.Time `json:"expiryDate,omitempty"`
+	Confidential   bool       `json:"confidential"`
+	LegalHold      bool       `json:"legalHold"`
+	ArchivedAt     *time.Time `json:"archivedAt,omitempty"`
+	ArchivedBy     *uuid.UUID `json:"archivedBy,omitempty"`
+	DeletedAt      *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy      *uuid.UUID `json:"deletedBy,omitempty"`
+
 	// Joined fields
 	UploaderName string  `json:"uploaderName"`
 	FolderName   *string `json:"folderName"`
 	LockedByName *string `json:"lockedByName"`
+	OwnerName    *string `json:"ownerName,omitempty"`
 }
 
 // DocumentFolder represents a folder in the document vault.
@@ -154,11 +240,43 @@ type DocumentShare struct {
 	Permission       string     `json:"permission"`
 	SharedBy         uuid.UUID  `json:"sharedBy"`
 	ExpiresAt        *time.Time `json:"expiresAt"`
+	RevokedAt        *time.Time `json:"revokedAt,omitempty"`
+	RevokedBy        *uuid.UUID `json:"revokedBy,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`
 
 	// Joined
 	SharedWithName string `json:"sharedWithName"`
 	SharedByName   string `json:"sharedByName"`
+}
+
+// DocumentComment represents a comment on a document.
+type DocumentComment struct {
+	ID         uuid.UUID  `json:"id"`
+	DocumentID uuid.UUID  `json:"documentId"`
+	TenantID   uuid.UUID  `json:"tenantId"`
+	UserID     uuid.UUID  `json:"userId"`
+	Content    string     `json:"content"`
+	ParentID   *uuid.UUID `json:"parentId,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+
+	// Joined
+	UserName string `json:"userName"`
+}
+
+// DocumentLifecycleEntry represents a lifecycle status transition log entry.
+type DocumentLifecycleEntry struct {
+	ID         uuid.UUID `json:"id"`
+	DocumentID uuid.UUID `json:"documentId"`
+	TenantID   uuid.UUID `json:"tenantId"`
+	FromStatus string    `json:"fromStatus"`
+	ToStatus   string    `json:"toStatus"`
+	ChangedBy  uuid.UUID `json:"changedBy"`
+	Reason     *string   `json:"reason,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+
+	// Joined
+	ChangedByName string `json:"changedByName"`
 }
 
 // VaultStats holds aggregate statistics for the document vault.
@@ -167,6 +285,7 @@ type VaultStats struct {
 	TotalSizeBytes   int64            `json:"totalSizeBytes"`
 	TotalFolders     int64            `json:"totalFolders"`
 	ByClassification map[string]int64 `json:"byClassification"`
+	ByStatus         map[string]int64 `json:"byStatus"`
 	RecentUploads    int64            `json:"recentUploads"`
 }
 
@@ -197,6 +316,12 @@ type UpdateDocumentRequest struct {
 	Classification *string    `json:"classification"`
 	AccessLevel    *string    `json:"accessLevel"`
 	FolderID       *uuid.UUID `json:"folderId"`
+	DocumentCode   *string    `json:"documentCode"`
+	OwnerID        *uuid.UUID `json:"ownerId"`
+	EffectiveDate  *time.Time `json:"effectiveDate"`
+	ExpiryDate     *time.Time `json:"expiryDate"`
+	Confidential   *bool      `json:"confidential"`
+	RetentionUntil *time.Time `json:"retentionUntil"`
 }
 
 // ShareDocumentRequest is the payload for sharing a document.
@@ -211,3 +336,78 @@ type ShareDocumentRequest struct {
 type MoveDocumentRequest struct {
 	FolderID *uuid.UUID `json:"folderId"`
 }
+
+// TransitionStatusRequest is the payload for transitioning a document lifecycle status.
+type TransitionStatusRequest struct {
+	ToStatus string  `json:"toStatus" validate:"required"`
+	Reason   *string `json:"reason,omitempty"`
+}
+
+// AddCommentRequest is the payload for adding a comment to a document.
+type AddCommentRequest struct {
+	Content  string     `json:"content" validate:"required"`
+	ParentID *uuid.UUID `json:"parentId,omitempty"`
+}
+
+// ──────────────────────────────────────────────
+// Compliance and sharing query types
+// ──────────────────────────────────────────────
+
+// ComplianceDocument is a lightweight document view for compliance reports.
+type ComplianceDocument struct {
+	ID             uuid.UUID  `json:"id"`
+	Title          string     `json:"title"`
+	Classification string     `json:"classification"`
+	AccessLevel    string     `json:"accessLevel"`
+	Status         string     `json:"status"`
+	ExpiryDate     *time.Time `json:"expiryDate"`
+	RetentionUntil *time.Time `json:"retentionUntil"`
+	OwnerName      *string    `json:"ownerName"`
+	OrgUnitID      *uuid.UUID `json:"orgUnitId"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+// RetentionReport holds aggregate retention and compliance statistics.
+type RetentionReport struct {
+	TotalWithExpiry       int64 `json:"totalWithExpiry"`
+	ExpiredCount          int64 `json:"expiredCount"`
+	ExpiringSoon30Days    int64 `json:"expiringSoon30Days"`
+	TotalWithRetention    int64 `json:"totalWithRetention"`
+	RetentionActiveCount  int64 `json:"retentionActiveCount"`
+	RetentionExpiredCount int64 `json:"retentionExpiredCount"`
+	LegalHoldCount        int64 `json:"legalHoldCount"`
+}
+
+// SharedWithMeDocument extends VaultDocument with share metadata.
+type SharedWithMeDocument struct {
+	VaultDocument
+	SharePermission string     `json:"sharePermission"`
+	SharedByName    string     `json:"sharedBy"`
+	SharedAt        time.Time  `json:"sharedAt"`
+	ShareExpiresAt  *time.Time `json:"shareExpiresAt"`
+}
+
+// ──────────────────────────────────────────────
+// SQL column lists (DRY helpers for scan)
+// ──────────────────────────────────────────────
+
+// documentColumns is the SELECT column list used across all document queries.
+const documentColumns = `d.id, d.tenant_id, d.title, d.description, d.file_key,
+	d.content_type, d.size_bytes, d.checksum_sha256, d.classification,
+	d.retention_until, d.tags, d.folder_id, d.version,
+	d.parent_document_id, d.is_latest, d.locked_by, d.locked_at,
+	d.status, d.access_level, d.uploaded_by, d.org_unit_id, d.created_at, d.updated_at,
+	d.owner_id, d.document_code, d.source_module, d.source_entity_id,
+	d.effective_date, d.expiry_date, d.confidential, d.legal_hold,
+	d.archived_at, d.archived_by, d.deleted_at, d.deleted_by,
+	COALESCE(u.display_name, ''),
+	f.name,
+	lu.display_name,
+	ou.display_name`
+
+// documentJoins is the FROM/JOIN clause used across all document queries.
+const documentJoins = `FROM documents d
+	LEFT JOIN users u ON u.id = d.uploaded_by
+	LEFT JOIN document_folders f ON f.id = d.folder_id
+	LEFT JOIN users lu ON lu.id = d.locked_by
+	LEFT JOIN users ou ON ou.id = d.owner_id`

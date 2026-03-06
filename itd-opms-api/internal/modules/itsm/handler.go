@@ -11,27 +11,33 @@ import (
 // It composes all sub-handlers for service catalog, tickets,
 // SLA policies, problems, and support queues.
 type Handler struct {
-	catalog *CatalogHandler
-	ticket  *TicketHandler
-	sla     *SLAHandler
-	problem *ProblemHandler
-	queue   *QueueHandler
+	catalog       *CatalogHandler
+	catalogSearch *CatalogSearchHandler
+	ticket        *TicketHandler
+	sla           *SLAHandler
+	problem       *ProblemHandler
+	queue         *QueueHandler
+	request       *RequestHandler
 }
 
 // NewHandler creates a new ITSM Handler with all sub-handlers wired up.
 func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 	catalogSvc := NewCatalogService(pool, auditSvc)
+	catalogSearchSvc := NewCatalogSearchService(pool)
 	ticketSvc := NewTicketService(pool, auditSvc)
 	slaSvc := NewSLAService(pool, auditSvc)
 	problemSvc := NewProblemService(pool, auditSvc)
 	queueSvc := NewQueueService(pool, auditSvc)
+	requestSvc := NewRequestService(pool, auditSvc)
 
 	return &Handler{
-		catalog: NewCatalogHandler(catalogSvc),
-		ticket:  NewTicketHandler(ticketSvc),
-		sla:     NewSLAHandler(slaSvc),
-		problem: NewProblemHandler(problemSvc),
-		queue:   NewQueueHandler(queueSvc),
+		catalog:       NewCatalogHandler(catalogSvc),
+		catalogSearch: NewCatalogSearchHandler(catalogSearchSvc),
+		ticket:        NewTicketHandler(ticketSvc),
+		sla:           NewSLAHandler(slaSvc),
+		problem:       NewProblemHandler(problemSvc),
+		queue:         NewQueueHandler(queueSvc),
+		request:       NewRequestHandler(requestSvc),
 	}
 }
 
@@ -40,6 +46,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// Service Catalog (FR-D001 to FR-D004)
 	r.Route("/catalog", func(r chi.Router) {
 		h.catalog.Routes(r)
+	})
+
+	// Catalog search, favorites, popularity
+	r.Route("/catalog/search", func(r chi.Router) {
+		h.catalogSearch.Routes(r)
 	})
 
 	// Tickets — incidents, service requests (FR-D005 to FR-D016)
@@ -58,5 +69,10 @@ func (h *Handler) Routes(r chi.Router) {
 	// Support queues (FR-D030, FR-D031)
 	r.Route("/queues", func(r chi.Router) {
 		h.queue.Routes(r)
+	})
+
+	// Service requests — submission, approval workflow, cancellation
+	r.Route("/catalog/requests", func(r chi.Router) {
+		h.request.Routes(r)
 	})
 }
