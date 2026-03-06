@@ -173,6 +173,27 @@ export function useDeleteAsset() {
 }
 
 /**
+ * POST /cmdb/assets/{id}/transition - transition asset status.
+ */
+export function useAssetTransition(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: string }) =>
+      apiClient.post<Asset>(`/cmdb/assets/${id}/transition`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset", id] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-lifecycle", id] });
+      toast.success("Asset status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition asset status");
+    },
+  });
+}
+
+/**
  * POST /cmdb/assets/{assetId}/lifecycle - create a lifecycle event.
  */
 export function useCreateLifecycleEvent() {

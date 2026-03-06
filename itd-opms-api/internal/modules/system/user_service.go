@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -23,11 +27,27 @@ import (
 type UserService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	minio    *minio.Client
+	minioCfg config.MinIOConfig
 }
 
 // NewUserService creates a new UserService.
-func NewUserService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *UserService {
-	return &UserService{pool: pool, auditSvc: auditSvc}
+func NewUserService(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *minio.Client, minioCfg config.MinIOConfig) *UserService {
+	return &UserService{pool: pool, auditSvc: auditSvc, minio: minioClient, minioCfg: minioCfg}
+}
+
+// resolvePhotoURL replaces a raw MinIO object key with a presigned URL.
+func (s *UserService) resolvePhotoURL(ctx context.Context, photoURL *string) *string {
+	if photoURL == nil || *photoURL == "" || s.minio == nil {
+		return nil
+	}
+	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 1*time.Hour, url.Values{})
+	if err != nil {
+		slog.Warn("failed to generate presigned photo URL", "error", err, "key", *photoURL)
+		return nil
+	}
+	u := presigned.String()
+	return &u
 }
 
 // ──────────────────────────────────────────────
@@ -214,6 +234,10 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		return nil, 0, fmt.Errorf("scan users: %w", err)
 	}
 
+	for i := range users {
+		users[i].PhotoURL = s.resolvePhotoURL(ctx, users[i].PhotoURL)
+	}
+
 	return users, total, nil
 }
 
@@ -343,6 +367,8 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 	if err != nil {
 		return nil, fmt.Errorf("scan user delegations: %w", err)
 	}
+
+	user.PhotoURL = s.resolvePhotoURL(ctx, user.PhotoURL)
 
 	return &user, nil
 }
@@ -746,6 +772,11 @@ func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query
 	if results == nil {
 		results = []UserSearchResult{}
 	}
+
+	for i := range results {
+		results[i].PhotoURL = s.resolvePhotoURL(ctx, results[i].PhotoURL)
+	}
+
 	return results, nil
 }
 

@@ -181,7 +181,7 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO)
 	approvalHandler := approval.NewHandler(s.pool, auditService)
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)

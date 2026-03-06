@@ -431,12 +431,20 @@ export default function UserDetailPage() {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4 -mt-10 sm:-mt-12">
                 <div className="relative">
-                  <div
-                    className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24 sm:text-3xl"
-                    style={{ background: "linear-gradient(135deg, #1B7340 0%, #22c55e 100%)" }}
-                  >
-                    {getInitials(user.displayName)}
-                  </div>
+                  {user.photoUrl ? (
+                    <img
+                      src={user.photoUrl}
+                      alt={user.displayName}
+                      className="h-20 w-20 shrink-0 rounded-2xl object-cover shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg ring-4 ring-[var(--surface-0)] sm:h-24 sm:w-24 sm:text-3xl"
+                      style={{ background: "linear-gradient(135deg, #1B7340 0%, #22c55e 100%)" }}
+                    >
+                      {getInitials(user.displayName)}
+                    </div>
+                  )}
                   {/* Online indicator */}
                   <div className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-[3px] border-[var(--surface-0)] ${isActive ? "bg-[var(--success)]" : "bg-[var(--surface-4)]"}`} />
                 </div>

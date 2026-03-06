@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -10,7 +10,8 @@ import {
   Search,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
-import { useAssets, useAssetStats } from "@/hooks/use-cmdb";
+import { useAssets, useAssetStats, useSearchAssets } from "@/hooks/use-cmdb";
+import { useSearchUsers } from "@/hooks/use-system";
 import type { Asset } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -55,16 +56,38 @@ export default function AssetsPage() {
   const [page, setPage] = useState(1);
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  const { data, isLoading } = useAssets(
+  /* Debounced search value */
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  /* Data sources: search vs regular listing */
+  const { data: searchData, isLoading: searchLoading } = useSearchAssets(debouncedSearch, page, 20);
+  const { data: listData, isLoading: listLoading } = useAssets(
     page,
     20,
     type || undefined,
     status || undefined,
   );
+
+  const isSearching = debouncedSearch.length > 0;
+  const data = isSearching ? searchData : listData;
+  const isLoading = isSearching ? searchLoading : listLoading;
+
   const { data: stats } = useAssetStats();
+
+  /* User lookup map for owner resolution */
+  const { data: allUsers } = useSearchUsers("");
+  const userMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (allUsers ?? []).forEach((u) => map.set(u.id, u.displayName));
+    return map;
+  }, [allUsers]);
 
   const assets = data?.data ?? [];
   const meta = data?.meta;
@@ -137,7 +160,7 @@ export default function AssetsPage() {
       header: "Owner",
       render: (item) => (
         <span className="text-sm text-[var(--text-secondary)]">
-          {item.ownerId ? item.ownerId.slice(0, 8) + "..." : "Unassigned"}
+          {item.ownerId ? userMap.get(item.ownerId) ?? "Unassigned" : "Unassigned"}
         </span>
       ),
     },
@@ -222,6 +245,16 @@ export default function AssetsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              placeholder="Search assets..."
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
+            />
+          </div>
           <button
             type="button"
             onClick={() => setShowFilters((f) => !f)}
@@ -299,8 +332,8 @@ export default function AssetsPage() {
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
               />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                 placeholder="Search assets..."
                 className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-8 pr-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
               />
