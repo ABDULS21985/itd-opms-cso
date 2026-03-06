@@ -48,7 +48,7 @@ export function ProjectPicker({
       getItemLabel={(p) => p.title}
       getItemSubtitle={(p) => `${p.code} · ${p.status}`}
       onSearch={setSearchQuery}
-      minSearchLength={2}
+      minSearchLength={0}
     />
   );
 }

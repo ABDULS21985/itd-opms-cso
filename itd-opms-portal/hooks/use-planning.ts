@@ -181,9 +181,8 @@ export function useSearchProjects(query: string) {
       apiClient.get<PaginatedResponse<Project>>("/planning/projects", {
         page: 1,
         limit: 15,
-        search: query,
+        ...(query.length >= 2 ? { search: query } : {}),
       }),
-    enabled: query.length >= 2,
   });
 }
 
@@ -920,13 +919,15 @@ export function useChangeRequests(
   limit = 20,
   projectId?: string,
   status?: string,
+  priority?: string,
+  category?: string,
 ) {
   return useQuery({
-    queryKey: ["change-requests", page, limit, projectId, status],
+    queryKey: ["change-requests", page, limit, projectId, status, priority, category],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ChangeRequest>>(
         "/planning/change-requests",
-        { page, limit, project_id: projectId, status },
+        { page, limit, project_id: projectId, status, priority, category },
       ),
   });
 }

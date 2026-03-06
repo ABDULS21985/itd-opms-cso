@@ -289,18 +289,30 @@ function SkeletonItem({ index }: { index: number }) {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-12 gap-2">
-      <Inbox
-        size={28}
-        className="opacity-30"
-        style={{ color: "var(--text-muted)" }}
-      />
-      <p
-        className="text-sm"
-        style={{ color: "var(--text-muted)" }}
+    <div className="flex flex-col items-center justify-center py-10 px-4 gap-3">
+      <div
+        className="w-12 h-12 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: "rgba(34, 197, 94, 0.08)" }}
       >
-        No recent activity
-      </p>
+        <Inbox
+          size={22}
+          style={{ color: "#22C55E" }}
+        />
+      </div>
+      <div className="text-center">
+        <p
+          className="text-sm font-medium"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          All quiet
+        </p>
+        <p
+          className="text-xs mt-0.5"
+          style={{ color: "var(--text-muted)" }}
+        >
+          No recent events to show. Activity will appear here as actions occur across modules.
+        </p>
+      </div>
     </div>
   );
 }

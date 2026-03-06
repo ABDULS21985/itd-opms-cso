@@ -1,12 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   images: {
     remotePatterns: [
       {
         protocol: "http",
         hostname: "localhost",
         port: "8089",
+      },
+      {
+        protocol: "https",
+        hostname: "amsop.org",
+      },
+      {
+        protocol: "https",
+        hostname: "*.amsop.org",
       },
     ],
   },

@@ -932,3 +932,150 @@ h1, h2, h3, h4, h5, h6,
 .bento-connect-line:hover {
   opacity: 0.8;
 }
+
+/* ================================================================== */
+/* Insights Engine & Attention Queue — Animation System                */
+/* ================================================================== */
+
+/* Insight card severity stripe glow */
+@keyframes insight-stripe-pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+/* Insight card entry */
+@keyframes insight-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Anomaly spotlight ring */
+@keyframes anomaly-ring-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--anomaly-color, rgba(245, 158, 11, 0.4));
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--anomaly-color, rgba(245, 158, 11, 0.15));
+  }
+}
+
+/* Brain icon subtle glow for AI section */
+@keyframes insight-brain-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.6));
+  }
+}
+
+/* Utility classes */
+.insight-stripe-pulse {
+  animation: insight-stripe-pulse 3s ease-in-out infinite;
+}
+
+.anomaly-ring-pulse {
+  animation: anomaly-ring-pulse 2s ease-in-out infinite;
+}
+
+.insight-brain-glow {
+  animation: insight-brain-glow 3s ease-in-out infinite;
+}
+
+/* Insight card glassmorphism */
+.insight-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.insight-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .insight-card {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .insight-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Attention queue glass */
+.attention-queue-glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .attention-queue-glass {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Severity badge styles */
+.severity-badge-critical {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.severity-badge-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.severity-badge-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.severity-badge-positive {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22C55E;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* Module chip pill */
+.module-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  transition: opacity 0.2s ease;
+}
+
+.module-chip:hover {
+  opacity: 0.8;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .insight-stripe-pulse,
+  .anomaly-ring-pulse,
+  .insight-brain-glow {
+    animation: none;
+  }
+}

@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useExecutiveSummary } from "@/hooks/use-reporting";
-import { CriticalAlertsBanner } from "@/components/dashboard/critical-alerts-banner";
+import { AttentionQueue } from "@/components/dashboard/attention-queue";
+import { InsightsEngine } from "@/components/dashboard/insights-engine";
 import BentoKPICard from "@/components/dashboard/bento-kpi-card";
 import { SecondaryMetricsStrip } from "@/components/dashboard/secondary-metrics-strip";
 import { SparkLine } from "@/components/dashboard/charts/spark-line";
@@ -232,26 +233,12 @@ export default function DashboardPage() {
         ? "#F59E0B"
         : "#EF4444";
 
-  const slaBgColor =
-    (summary?.slaCompliancePct ?? 100) >= 95
-      ? "rgba(34, 197, 94, 0.1)"
-      : (summary?.slaCompliancePct ?? 100) >= 85
-        ? "rgba(245, 158, 11, 0.1)"
-        : "rgba(239, 68, 68, 0.1)";
-
   const otdColor =
     (summary?.onTimeDeliveryPct ?? 100) >= 90
       ? "#22C55E"
       : (summary?.onTimeDeliveryPct ?? 100) >= 75
         ? "#F59E0B"
         : "#EF4444";
-
-  const otdBgColor =
-    (summary?.onTimeDeliveryPct ?? 100) >= 90
-      ? "rgba(34, 197, 94, 0.1)"
-      : (summary?.onTimeDeliveryPct ?? 100) >= 75
-        ? "rgba(245, 158, 11, 0.1)"
-        : "rgba(239, 68, 68, 0.1)";
 
   return (
     <div className="space-y-6 pb-8">
@@ -269,7 +256,7 @@ export default function DashboardPage() {
             {greeting}, {user?.displayName || "User"}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Executive Command Center — IT AMD Projects and Initiatives
+            Executive Command Center — Projects and Initiatives
           </p>
         </div>
 
@@ -297,15 +284,9 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ============================================================ */}
-      {/* Critical Alerts Banner                                       */}
+      {/* What Needs Attention — Priority Queue                        */}
       {/* ============================================================ */}
-      {!summaryLoading && (
-        <CriticalAlertsBanner
-          openP1Incidents={summary?.openP1Incidents ?? 0}
-          slaBreaches24h={summary?.slaBreaches24h ?? 0}
-          criticalRisks={summary?.criticalRisks ?? 0}
-        />
-      )}
+      <AttentionQueue />
 
       {/* ============================================================ */}
       {/* BENTO GRID + ACTIVITY PULSE                                  */}
@@ -327,7 +308,61 @@ export default function DashboardPage() {
             needsAttention={(summary?.openTickets ?? 0) > 50}
             subtitle={`P1: ${summary?.openTicketsP1 ?? 0} · P2: ${summary?.openTicketsP2 ?? 0}`}
           >
-            <SparkLine data={ticketTrend} color="#EF4444" width={120} height={48} />
+            <div className="flex flex-col gap-3 h-full">
+              {/* Full-width sparkline */}
+              <SparkLine data={ticketTrend} color="#EF4444" width={200} height={56} />
+
+              {/* Priority breakdown bars */}
+              <div className="space-y-2">
+                {[
+                  { label: "P1 Critical", value: summary?.openTicketsP1 ?? 0, color: "#EF4444" },
+                  { label: "P2 High", value: summary?.openTicketsP2 ?? 0, color: "#F59E0B" },
+                  { label: "P3 Medium", value: summary?.openTicketsP3 ?? 0, color: "#3B82F6" },
+                  { label: "P4 Low", value: summary?.openTicketsP4 ?? 0, color: "#22C55E" },
+                ].map((p) => {
+                  const total = summary?.openTickets || 1;
+                  const pct = Math.round((p.value / total) * 100) || 0;
+                  return (
+                    <div key={p.label} className="flex items-center gap-2">
+                      <span className="text-[10px] font-medium w-16 shrink-0" style={{ color: "var(--text-muted)" }}>
+                        {p.label}
+                      </span>
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, backgroundColor: p.color }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold tabular-nums w-6 text-right" style={{ color: p.color }}>
+                        {p.value}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom stats row */}
+              <div className="flex items-center gap-4 pt-1 mt-auto border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+                <div>
+                  <p className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>SLA Breaches</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: (summary?.slaBreaches24h ?? 0) > 0 ? "#EF4444" : "var(--text-primary)" }}>
+                    {summary?.slaBreaches24h ?? 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Backlog &gt;30d</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                    {summary?.backlogOver30Days ?? 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>MTTR</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: (summary?.mttrMinutes ?? 0) > 120 ? "#F59E0B" : "var(--text-primary)" }}>
+                    {summary?.mttrMinutes ?? 0}m
+                  </p>
+                </div>
+              </div>
+            </div>
           </BentoKPICard>
 
           {/* SLA Compliance — compact */}
@@ -450,14 +485,19 @@ export default function DashboardPage() {
       />
 
       {/* ============================================================ */}
+      {/* AI Insights Engine                                           */}
+      {/* ============================================================ */}
+      <InsightsEngine delay={0.6} />
+
+      {/* ============================================================ */}
       {/* Interactive Analytics Grid                                   */}
       {/* ============================================================ */}
-      <AnalyticsGrid delay={0.6} />
+      <AnalyticsGrid delay={0.7} />
 
       {/* ============================================================ */}
       {/* Division Performance Drill-Down                              */}
       {/* ============================================================ */}
-      <DivisionPerformanceSection delay={0.85} />
+      <DivisionPerformanceSection delay={0.9} />
 
       {/* ============================================================ */}
       {/* Command Hub — Hex Navigation (replaces module cards)         */}

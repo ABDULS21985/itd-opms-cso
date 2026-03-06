@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,10 +12,11 @@ import {
   GitPullRequest,
   Scale,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { ProjectPicker } from "@/components/shared/pickers";
-import { useCreateChangeRequest } from "@/hooks/use-planning";
+import { useChangeRequest, useUpdateChangeRequest } from "@/hooks/use-planning";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -24,12 +25,25 @@ import { useCreateChangeRequest } from "@/hooks/use-planning";
 const STEPS = [
   { label: "Request", icon: GitPullRequest, description: "Title & project" },
   { label: "Justification", icon: Scale, description: "Reasoning & impact" },
-  { label: "Review", icon: Sparkles, description: "Confirm & submit" },
+  { label: "Review", icon: Sparkles, description: "Confirm & save" },
 ];
 
-/* ------------------------------------------------------------------ */
-/*  Slide animation variants                                           */
-/* ------------------------------------------------------------------ */
+const PRIORITIES = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+];
+
+const CATEGORIES = [
+  { value: "", label: "None" },
+  { value: "scope", label: "Scope" },
+  { value: "schedule", label: "Schedule" },
+  { value: "budget", label: "Budget" },
+  { value: "resource", label: "Resource" },
+  { value: "technical", label: "Technical" },
+  { value: "other", label: "Other" },
+];
 
 const slideVariants = {
   enter: (direction: number) => ({
@@ -47,9 +61,15 @@ const slideVariants = {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
-export default function NewChangeRequestPage() {
+export default function EditChangeRequestPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const router = useRouter();
-  const createChangeRequest = useCreateChangeRequest();
+  const { data: cr, isLoading: loading } = useChangeRequest(id);
+  const updateCR = useUpdateChangeRequest(id);
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);
@@ -66,6 +86,22 @@ export default function NewChangeRequestPage() {
   const [category, setCategory] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [initialized, setInitialized] = useState(false);
+
+  /* ---- Populate form when data loads ---- */
+  useEffect(() => {
+    if (cr && !initialized) {
+      setTitle(cr.title || "");
+      setDescription(cr.description || "");
+      setProjectId(cr.projectId || "");
+      setProjectDisplay(cr.projectTitle || "");
+      setJustification(cr.justification || "");
+      setImpactAssessment(cr.impactAssessment || "");
+      setPriority(cr.priority || "medium");
+      setCategory(cr.category || "");
+      setInitialized(true);
+    }
+  }, [cr, initialized]);
 
   /* ---- Step validation ---- */
   const validateStep = useCallback(
@@ -108,7 +144,7 @@ export default function NewChangeRequestPage() {
 
   /* ---- Submit ---- */
   function handleSubmit() {
-    createChangeRequest.mutate(
+    updateCR.mutate(
       {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -120,20 +156,70 @@ export default function NewChangeRequestPage() {
       },
       {
         onSuccess: () => {
-          router.push("/dashboard/planning/change-requests");
+          router.push(`/dashboard/planning/change-requests/${id}`);
         },
       },
     );
   }
 
   const isLastStep = step === STEPS.length - 1;
+  const stepComplete = [!!title.trim(), !!justification.trim(), false];
 
-  /* ---- Step completeness indicators ---- */
-  const stepComplete = [
-    !!title.trim(),
-    !!justification.trim(),
-    false,
-  ];
+  /* ---- Loading state ---- */
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2
+            size={24}
+            className="animate-spin text-[var(--primary)]"
+          />
+          <p className="text-sm text-[var(--neutral-gray)]">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cr) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <p className="text-sm text-[var(--neutral-gray)]">
+          Change request not found.
+        </p>
+      </div>
+    );
+  }
+
+  /* ---- Not editable guard ---- */
+  if (cr.status !== "submitted" && cr.status !== "under_review") {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 pb-12">
+        <button
+          type="button"
+          onClick={() =>
+            router.push(`/dashboard/planning/change-requests/${id}`)
+          }
+          className="flex items-center gap-1.5 text-sm font-medium text-[var(--neutral-gray)] transition-colors hover:text-[var(--text-primary)]"
+        >
+          <ArrowLeft size={16} />
+          Back to Change Request
+        </button>
+        <div className="flex flex-col items-center gap-4 py-12">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
+            <AlertTriangle size={24} className="text-amber-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            Cannot Edit
+          </h2>
+          <p className="text-sm text-[var(--neutral-gray)] text-center max-w-md">
+            This change request has status &quot;{cr.status}&quot; and can no
+            longer be edited. Only requests with status &quot;submitted&quot; or
+            &quot;under review&quot; can be modified.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-12">
@@ -145,22 +231,23 @@ export default function NewChangeRequestPage() {
       >
         <button
           type="button"
-          onClick={() => router.push("/dashboard/planning/change-requests")}
+          onClick={() =>
+            router.push(`/dashboard/planning/change-requests/${id}`)
+          }
           className="mb-4 flex items-center gap-1.5 text-sm font-medium text-[var(--neutral-gray)] transition-colors hover:text-[var(--text-primary)]"
         >
           <ArrowLeft size={16} />
-          Back to Change Requests
+          Back to Change Request
         </button>
         <h1 className="text-xl font-bold text-[var(--text-primary)]">
-          Submit Change Request
+          Edit Change Request
         </h1>
         <p className="text-sm text-[var(--neutral-gray)]">
-          Follow the steps below to request a change to project scope, schedule,
-          or budget.
+          Update the details below and save your changes.
         </p>
       </motion.div>
 
-      {/* ── Stepper ── */}
+      {/* Stepper */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -175,7 +262,10 @@ export default function NewChangeRequestPage() {
             const isClickable = i <= step || stepComplete[step];
 
             return (
-              <div key={s.label} className="flex items-center flex-1 last:flex-none">
+              <div
+                key={s.label}
+                className="flex items-center flex-1 last:flex-none"
+              >
                 <button
                   type="button"
                   onClick={() => isClickable && goTo(i)}
@@ -242,7 +332,7 @@ export default function NewChangeRequestPage() {
         </AnimatePresence>
       </motion.div>
 
-      {/* ── Step Content ── */}
+      {/* Step Content */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -266,8 +356,7 @@ export default function NewChangeRequestPage() {
                   Change Request
                 </h2>
                 <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Give the change request a title and associate it with a
-                  project.
+                  Update the title, project, priority, and category.
                 </p>
                 <div className="space-y-4">
                   <FormField
@@ -292,7 +381,10 @@ export default function NewChangeRequestPage() {
                     label="Project"
                     value={projectId || undefined}
                     displayValue={projectDisplay}
-                    onChange={(id, title) => { setProjectId(id ?? ""); setProjectDisplay(title); }}
+                    onChange={(pid, ptitle) => {
+                      setProjectId(pid ?? "");
+                      setProjectDisplay(ptitle);
+                    }}
                     description="The project this change request applies to"
                   />
                   <div className="grid grid-cols-2 gap-4">
@@ -305,10 +397,11 @@ export default function NewChangeRequestPage() {
                         onChange={(e) => setPriority(e.target.value)}
                         className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
                       >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
+                        {PRIORITIES.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
@@ -320,13 +413,11 @@ export default function NewChangeRequestPage() {
                         onChange={(e) => setCategory(e.target.value)}
                         className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
                       >
-                        <option value="">None</option>
-                        <option value="scope">Scope</option>
-                        <option value="schedule">Schedule</option>
-                        <option value="budget">Budget</option>
-                        <option value="resource">Resource</option>
-                        <option value="technical">Technical</option>
-                        <option value="other">Other</option>
+                        {CATEGORIES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -373,11 +464,11 @@ export default function NewChangeRequestPage() {
             {step === 2 && (
               <div>
                 <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Review &amp; Submit
+                  Review &amp; Save
                 </h2>
                 <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Review the details below. Click any section to go back and
-                  edit.
+                  Review the updated details below. Click any section to go back
+                  and edit.
                 </p>
 
                 <div className="space-y-4">
@@ -385,7 +476,7 @@ export default function NewChangeRequestPage() {
                   <button
                     type="button"
                     onClick={() => goTo(0)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
+                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <GitPullRequest
@@ -423,7 +514,7 @@ export default function NewChangeRequestPage() {
                   <button
                     type="button"
                     onClick={() => goTo(1)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
+                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <Scale
@@ -462,7 +553,7 @@ export default function NewChangeRequestPage() {
         </AnimatePresence>
       </motion.div>
 
-      {/* ── Navigation ── */}
+      {/* Navigation */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -471,7 +562,14 @@ export default function NewChangeRequestPage() {
       >
         <button
           type="button"
-          onClick={step === 0 ? () => router.push("/dashboard/planning/change-requests") : goPrev}
+          onClick={
+            step === 0
+              ? () =>
+                  router.push(
+                    `/dashboard/planning/change-requests/${id}`,
+                  )
+              : goPrev
+          }
           className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
         >
           <ArrowLeft size={16} />
@@ -497,15 +595,17 @@ export default function NewChangeRequestPage() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={createChangeRequest.isPending || !title.trim() || !justification.trim()}
+            disabled={
+              updateCR.isPending || !title.trim() || !justification.trim()
+            }
             className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 hover:shadow-lg hover:shadow-[var(--primary)]/25 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {createChangeRequest.isPending ? (
+            {updateCR.isPending ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <Save size={16} />
             )}
-            Submit Change Request
+            Save Changes
           </button>
         ) : (
           <button

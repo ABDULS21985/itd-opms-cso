@@ -192,8 +192,13 @@ export interface ChangeRequest {
   justification?: string;
   impactAssessment?: string;
   status: string;
+  priority: string;
+  category?: string;
   requestedBy: string;
+  requestedByName: string;
   reviewedBy?: string;
+  reviewedByName?: string;
+  projectTitle?: string;
   approvalChainId?: string;
   createdAt: string;
   updatedAt: string;
