@@ -78,6 +78,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: "#6366F1",
       bgColor: "rgba(99, 102, 241, 0.1)",
       subtitle: `${activeUnits} active · ${inactiveUnits} inactive`,
+      hint: "Total number of organisational units in the hierarchy, including departments, divisions, offices, and teams.",
     },
     {
       label: "Total Headcount",
@@ -86,6 +87,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: "#3B82F6",
       bgColor: "rgba(59, 130, 246, 0.1)",
       subtitle: totalUnits > 0 ? `~${Math.round(totalHeadcount / totalUnits)} per unit` : undefined,
+      hint: "Sum of all staff members assigned across every organisational unit. The average shown is headcount divided by total units.",
     },
     {
       label: "Max Depth",
@@ -94,6 +96,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: "#8B5CF6",
       bgColor: "rgba(139, 92, 246, 0.1)",
       subtitle: "Levels deep",
+      hint: "The deepest level in the org hierarchy. Fewer levels generally means faster decision-making and communication.",
     },
     {
       label: "Avg Span of Control",
@@ -102,6 +105,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: avgSpan > 8 ? "#EF4444" : avgSpan > 6 ? "#F59E0B" : "#10B981",
       bgColor: avgSpan > 8 ? "rgba(239, 68, 68, 0.1)" : avgSpan > 6 ? "rgba(245, 158, 11, 0.1)" : "rgba(16, 185, 129, 0.1)",
       subtitle: avgSpan > 8 ? "Above ideal (4-8)" : avgSpan >= 4 ? "Within ideal range" : "Below ideal (4-8)",
+      hint: "Average number of direct child units per parent. The ideal range is 4-8. Too high may indicate insufficient oversight; too low may signal over-layering.",
     },
     {
       label: "Vacant Leadership",
@@ -110,6 +114,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: vacantPct > 20 ? "#EF4444" : vacantPct > 10 ? "#F59E0B" : "#10B981",
       bgColor: vacantPct > 20 ? "rgba(239, 68, 68, 0.1)" : vacantPct > 10 ? "rgba(245, 158, 11, 0.1)" : "rgba(16, 185, 129, 0.1)",
       subtitle: `${stats.vacantCount} units without manager`,
+      hint: "Percentage of units that have no assigned manager. High vacancy may impact accountability and decision-making across the organisation.",
     },
     {
       label: "Active Ratio",
@@ -118,6 +123,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
       color: "#10B981",
       bgColor: "rgba(16, 185, 129, 0.1)",
       subtitle: `${activeUnits} of ${totalUnits} active`,
+      hint: "Proportion of organisational units currently marked as active. Inactive units may be archived, merged, or pending decommission.",
     },
   ];
 
@@ -134,6 +140,7 @@ export function MetricsStrip({ tree, analytics, isLoading }: MetricsStripProps) 
           isLoading={isLoading}
           index={i}
           subtitle={m.subtitle}
+          hint={m.hint}
         />
       ))}
     </div>

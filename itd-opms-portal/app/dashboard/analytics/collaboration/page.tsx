@@ -9,7 +9,9 @@ import {
   OctagonX,
   ArrowUpCircle,
   ShieldAlert,
+  Info,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   useProjects,
   useRisks,
@@ -482,67 +484,88 @@ export default function CollaborationDashboardPage() {
 
       {/* Row 1 — KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPIStatCard
-          label="Cross-Office Projects"
-          value={anyLoading ? undefined : crossOfficeProjectCount}
-          icon={GitBranch}
-          color="#8B5CF6"
-          bgColor="rgba(139,92,246,0.1)"
-          isLoading={anyLoading}
-          index={0}
-          subtitle="Shared portfolio links"
-          href="/dashboard/planning/projects"
-        />
-        <KPIStatCard
-          label="Active Dependencies"
-          value={anyLoading ? undefined : activeDependencyLinks}
-          icon={Network}
-          color="#3B82F6"
-          bgColor="rgba(59,130,246,0.1)"
-          isLoading={anyLoading}
-          index={1}
-          subtitle="Cross-office links"
-          href="/dashboard/planning/projects"
-        />
-        <KPIStatCard
-          label="Blocked Items"
-          value={anyLoading ? undefined : blockedProjects.length}
-          icon={OctagonX}
-          color="#EF4444"
-          bgColor="rgba(239,68,68,0.1)"
-          isLoading={anyLoading}
-          index={2}
-          subtitle="On-hold or red RAG"
-          href="/dashboard/planning/projects"
-        />
-        <KPIStatCard
-          label="Pending Escalations"
-          value={anyLoading ? undefined : escalatedIssues.length}
-          icon={ArrowUpCircle}
-          color="#F97316"
-          bgColor="rgba(249,115,22,0.1)"
-          isLoading={anyLoading}
-          index={3}
-          subtitle={`${escalatedIssues.filter((i) => i.escalationLevel >= 2).length} at level 2+`}
-          href="/dashboard/planning/issues"
-        />
-        <KPIStatCard
-          label="Shared Risk Count"
-          value={anyLoading ? undefined : sharedRiskCount}
-          icon={ShieldAlert}
-          color="#F59E0B"
-          bgColor="rgba(245,158,11,0.1)"
-          isLoading={anyLoading}
-          index={4}
-          subtitle="Multi-office risk exposure"
-          href="/dashboard/planning/risks"
-        />
+        <div className="relative">
+          <InfoHint text="Projects that share a portfolio with projects from other offices, indicating collaboration between teams." />
+          <KPIStatCard
+            label="Cross-Office Projects"
+            value={anyLoading ? undefined : crossOfficeProjectCount}
+            icon={GitBranch}
+            color="#8B5CF6"
+            bgColor="rgba(139,92,246,0.1)"
+            isLoading={anyLoading}
+            index={0}
+            subtitle="Shared portfolio links"
+            href="/dashboard/planning/projects"
+          />
+        </div>
+        <div className="relative">
+          <InfoHint text="Number of active cross-office dependency links based on shared portfolios and common risk categories." />
+          <KPIStatCard
+            label="Active Dependencies"
+            value={anyLoading ? undefined : activeDependencyLinks}
+            icon={Network}
+            color="#3B82F6"
+            bgColor="rgba(59,130,246,0.1)"
+            isLoading={anyLoading}
+            index={1}
+            subtitle="Cross-office links"
+            href="/dashboard/planning/projects"
+          />
+        </div>
+        <div className="relative">
+          <InfoHint text="Projects that are on-hold or have a red RAG status. These may be causing downstream delays for dependent offices." />
+          <KPIStatCard
+            label="Blocked Items"
+            value={anyLoading ? undefined : blockedProjects.length}
+            icon={OctagonX}
+            color="#EF4444"
+            bgColor="rgba(239,68,68,0.1)"
+            isLoading={anyLoading}
+            index={2}
+            subtitle="On-hold or red RAG"
+            href="/dashboard/planning/projects"
+          />
+        </div>
+        <div className="relative">
+          <InfoHint text="Issues that have been escalated beyond their initial team. Higher escalation levels indicate more severe coordination gaps." />
+          <KPIStatCard
+            label="Pending Escalations"
+            value={anyLoading ? undefined : escalatedIssues.length}
+            icon={ArrowUpCircle}
+            color="#F97316"
+            bgColor="rgba(249,115,22,0.1)"
+            isLoading={anyLoading}
+            index={3}
+            subtitle={`${escalatedIssues.filter((i) => i.escalationLevel >= 2).length} at level 2+`}
+            href="/dashboard/planning/issues"
+          />
+        </div>
+        <div className="relative">
+          <InfoHint text="Risks in categories that span multiple offices. These systemic risks require cross-office mitigation strategies." />
+          <KPIStatCard
+            label="Shared Risk Count"
+            value={anyLoading ? undefined : sharedRiskCount}
+            icon={ShieldAlert}
+            color="#F59E0B"
+            bgColor="rgba(245,158,11,0.1)"
+            isLoading={anyLoading}
+            index={4}
+            subtitle="Multi-office risk exposure"
+            href="/dashboard/planning/risks"
+          />
+        </div>
       </div>
 
       {/* Row 2 — Primary Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Office Dependency Matrix */}
         <ChartCard title="Office Dependency Matrix" subtitle="Cross-office collaboration intensity" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Heatmap showing collaboration intensity between offices. Darker cells indicate stronger dependencies through shared portfolios and risk categories. Diagonal cells show intra-office links.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-80 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : (
@@ -637,6 +660,12 @@ export default function CollaborationDashboardPage() {
 
         {/* Cross-Office Project Flow */}
         <ChartCard title="Cross-Office Project Flow" subtitle="Inter-office vs intra-office dependencies" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Proportion of inter-office vs intra-office dependency links. Higher inter-office ratio indicates more cross-team collaboration.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-80 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : (
@@ -656,6 +685,12 @@ export default function CollaborationDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Blocked Work by Office */}
         <ChartCard title="Blocked Work by Office" subtitle="On-hold / Red RAG projects per office" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Projects on-hold or with red RAG status, grouped by office. Offices with more blocked items may need additional support or escalation.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : blockedByOfficeData.data.length === 0 ? (
@@ -675,6 +710,12 @@ export default function CollaborationDashboardPage() {
 
         {/* Escalation Summary */}
         <ChartCard title="Escalation Summary" subtitle="Escalated issues by office and level" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Escalated issues grouped by office and escalation level. Higher levels indicate issues requiring more senior attention.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : escalationByOfficeData.data.length === 0 ? (
@@ -695,6 +736,12 @@ export default function CollaborationDashboardPage() {
 
       {/* Row 4 — Dependency Details Table */}
       <ChartCard title="Cross-Office Dependency Details" subtitle="Projects linked via shared portfolios" delay={0.4}>
+        <div className="flex items-center gap-1.5 mb-3">
+          <Info size={12} className="text-[var(--text-muted)]" />
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Specific project pairs linked through shared portfolios. RAG status shows health of each linked project — mismatched RAGs may indicate coordination issues.
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -792,6 +839,12 @@ export default function CollaborationDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Shared Risks by Office */}
         <ChartCard title="Shared Risks by Office" subtitle="Risks in categories spanning multiple offices" delay={0.45}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Number of risks in categories that affect multiple offices. Longer bars indicate higher cross-office risk exposure.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : sharedRisksByOffice.length === 0 ? (
@@ -838,6 +891,12 @@ export default function CollaborationDashboardPage() {
 
         {/* Critical Cross-Office Issues */}
         <ChartCard title="Critical Cross-Office Issues" subtitle="High/critical escalated issues" delay={0.5}>
+          <div className="flex items-center gap-1.5 mb-3">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              High and critical severity issues that have been escalated. These require cross-office coordination to resolve.
+            </span>
+          </div>
           {anyLoading ? (
             <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           ) : (
@@ -906,6 +965,12 @@ export default function CollaborationDashboardPage() {
 
       {/* Office Project Distribution Summary */}
       <ChartCard title="Office Project Distribution" subtitle="Project count and health per office" delay={0.55}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <Info size={12} className="text-[var(--text-muted)]" />
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Project count and RAG status per office. Offices with more red dots may need additional project management support.
+          </span>
+        </div>
         {anyLoading ? (
           <div className="h-32 rounded-lg bg-[var(--surface-2)] animate-pulse" />
         ) : (

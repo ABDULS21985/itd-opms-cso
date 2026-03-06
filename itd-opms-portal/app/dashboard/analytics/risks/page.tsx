@@ -9,7 +9,9 @@ import {
   AlertOctagon,
   Bug,
   TrendingDown,
+  Info,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import { useRisks, useIssues } from "@/hooks/use-planning";
 import { useExecutiveSummary } from "@/hooks/use-reporting";
 import {
@@ -187,31 +189,48 @@ export default function RiskIssuesPage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPIStatCard label="Open Risks" value={risksLoading ? undefined : openRisks}
-          icon={AlertTriangle} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={risksLoading} index={0}
-          href="/dashboard/planning/risks" />
-        <KPIStatCard label="Critical Risks" value={risksLoading ? undefined : criticalRisks}
-          icon={AlertOctagon} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={risksLoading} index={1}
-          href="/dashboard/planning/risks" />
-        <KPIStatCard label="High Risks" value={risksLoading ? undefined : highRisks}
-          icon={ShieldAlert} color="#F97316" bgColor="rgba(249,115,22,0.1)" isLoading={risksLoading} index={2}
-          href="/dashboard/planning/risks" />
-        <KPIStatCard label="Open Issues" value={issuesLoading ? undefined : openIssues}
-          icon={Bug} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={issuesLoading} index={3}
-          href="/dashboard/planning/issues" />
-        <KPIStatCard label="Avg Risk Score" value={risksLoading ? undefined : avgRiskScore}
-          icon={TrendingDown} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={risksLoading} index={4}
-          href="/dashboard/planning/risks" />
+        <div className="relative">
+          <KPIStatCard label="Open Risks" value={risksLoading ? undefined : openRisks}
+            icon={AlertTriangle} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={risksLoading} index={0}
+            href="/dashboard/planning/risks" />
+          <span className="absolute top-2 right-2"><InfoHint text="Risks with 'open' status that need monitoring or mitigation action." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Critical Risks" value={risksLoading ? undefined : criticalRisks}
+            icon={AlertOctagon} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={risksLoading} index={1}
+            href="/dashboard/planning/risks" />
+          <span className="absolute top-2 right-2"><InfoHint text="Risks with a score of 20 or above (likelihood x impact). Require immediate executive attention." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="High Risks" value={risksLoading ? undefined : highRisks}
+            icon={ShieldAlert} color="#F97316" bgColor="rgba(249,115,22,0.1)" isLoading={risksLoading} index={2}
+            href="/dashboard/planning/risks" />
+          <span className="absolute top-2 right-2"><InfoHint text="Risks scoring between 12 and 19. Should be actively monitored with mitigation plans in place." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Open Issues" value={issuesLoading ? undefined : openIssues}
+            icon={Bug} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={issuesLoading} index={3}
+            href="/dashboard/planning/issues" />
+          <span className="absolute top-2 right-2"><InfoHint text="Issues that have not been closed or resolved. May be blocking project progress." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Avg Risk Score" value={risksLoading ? undefined : avgRiskScore}
+            icon={TrendingDown} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={risksLoading} index={4}
+            href="/dashboard/planning/risks" />
+          <span className="absolute top-2 right-2"><InfoHint text="Average risk score across all risks. Lower values indicate better risk posture." position="bottom" size={13} /></span>
+        </div>
       </div>
 
       {/* Primary Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Risk Heat Map" subtitle="Likelihood vs Impact (5x5)" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">5x5 matrix plotting likelihood (horizontal) against impact (vertical). Darker cells in the top-right corner represent the highest-priority risks.</span></div>
           {risksLoading ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <HeatMapGrid data={heatMapData} height={300} />}
         </ChartCard>
 
         <ChartCard title="Risks by Category" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Distribution of risks across categories. Larger slices indicate concentration areas that may need targeted mitigation strategies.</span></div>
           {risksLoading ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={categoryDonut} height={300} innerRadius={55} outerRadius={90}
                 centerLabel="Total" showLabel />}
@@ -221,6 +240,7 @@ export default function RiskIssuesPage() {
       {/* Secondary Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Risk Status by Category" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Shows the mix of open, mitigated, and closed risks within each category. Fewer open risks relative to total indicates better risk management.</span></div>
           {risksLoading ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={riskStatusData.data} categories={riskStatusData.categories}
                 height={260} layout="vertical"
@@ -228,6 +248,7 @@ export default function RiskIssuesPage() {
         </ChartCard>
 
         <ChartCard title="Issues by Severity" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Breaks down issues by severity level and status. High/critical open issues should be prioritized for resolution.</span></div>
           {issuesLoading ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={issueSeverityData.data} categories={issueSeverityData.categories}
                 height={260} layout="vertical"
@@ -237,6 +258,7 @@ export default function RiskIssuesPage() {
 
       {/* Top Risks Table */}
       <ChartCard title="Top Risks" subtitle="Sorted by risk score" delay={0.4}>
+        <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Top 10 risks sorted by risk score (likelihood x impact). Score color: Red (20+) = critical, Orange (12-19) = high, Amber (6-11) = medium, Green (&lt;6) = low.</span></div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>

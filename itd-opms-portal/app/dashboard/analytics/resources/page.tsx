@@ -8,7 +8,9 @@ import {
   Activity,
   Award,
   ClipboardList,
+  Info,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import { useExecutiveSummary } from "@/hooks/use-reporting";
 import { useWorkItems, useProjects } from "@/hooks/use-planning";
 import {
@@ -169,23 +171,36 @@ export default function ResourceWorkloadPage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KPIStatCard label="Capacity Utilization" value={summaryLoading ? undefined : summary?.teamCapacityUtilizationPct ?? 0}
-          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={summaryLoading} index={0} suffix="%"
-          href="/dashboard/people/capacity" />
-        <KPIStatCard label="Overdue Training" value={summaryLoading ? undefined : summary?.overdueTrainingCerts ?? 0}
-          icon={Award} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
-          href="/dashboard/people/training" />
-        <KPIStatCard label="Expiring Certs" value={summaryLoading ? undefined : summary?.expiringCerts ?? 0}
-          icon={Award} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
-          href="/dashboard/people/training" />
-        <KPIStatCard label="Active Tasks" value={workItemsLoading ? undefined : totalAssigned}
-          icon={ClipboardList} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={workItemsLoading} index={3}
-          href="/dashboard/planning/work-items" />
+        <div className="relative">
+          <KPIStatCard label="Capacity Utilization" value={summaryLoading ? undefined : summary?.teamCapacityUtilizationPct ?? 0}
+            icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={summaryLoading} index={0} suffix="%"
+            href="/dashboard/people/capacity" />
+          <span className="absolute top-2 right-2"><InfoHint text="Percentage of total team capacity currently in use. Values above 90% may indicate over-allocation." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Overdue Training" value={summaryLoading ? undefined : summary?.overdueTrainingCerts ?? 0}
+            icon={Award} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={summaryLoading} index={1}
+            href="/dashboard/people/training" />
+          <span className="absolute top-2 right-2"><InfoHint text="Training courses and certifications that are past their due date. Affects compliance posture." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Expiring Certs" value={summaryLoading ? undefined : summary?.expiringCerts ?? 0}
+            icon={Award} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={summaryLoading} index={2}
+            href="/dashboard/people/training" />
+          <span className="absolute top-2 right-2"><InfoHint text="Certifications expiring within the next 90 days. Plan renewals to maintain compliance." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Active Tasks" value={workItemsLoading ? undefined : totalAssigned}
+            icon={ClipboardList} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={workItemsLoading} index={3}
+            href="/dashboard/planning/work-items" />
+          <span className="absolute top-2 right-2"><InfoHint text="Work items currently in progress (not completed or done). Represents current team workload." position="bottom" size={13} /></span>
+        </div>
       </div>
 
       {/* Capacity Gauge + Status Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Team Capacity Utilization" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Gauge showing current team utilization. Green zone (60%+) = healthy, Yellow (40-60%) = underutilized, Red (&lt;40%) = significantly underutilized.</span></div>
           <div className="flex items-center justify-center py-4">
             <GaugeChart
               value={summary?.teamCapacityUtilizationPct ?? 0}
@@ -197,6 +212,7 @@ export default function ResourceWorkloadPage() {
         </ChartCard>
 
         <ChartCard title="Work Item Status" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Distribution of all work items by status. A healthy pipeline has items flowing from todo through in_progress to done.</span></div>
           {workItemsLoading ? <div className="h-56 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={statusDonut} height={240} innerRadius={50} outerRadius={80}
                 centerLabel="Items" showLabel />}
@@ -206,11 +222,13 @@ export default function ResourceWorkloadPage() {
       {/* Type + Priority Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Work Items by Type" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Breakdown by work item type (task, story, epic, bug, subtask). High bug count may indicate quality issues.</span></div>
           {workItemsLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={typeData} height={220} innerRadius={40} outerRadius={70} centerLabel="Types" />}
         </ChartCard>
 
         <ChartCard title="Priority x Status" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Cross-tabulation of work item priority against status. Critical/high items still in todo/backlog need attention.</span></div>
           {workItemsLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={priorityByStatus.data} categories={priorityByStatus.categories}
                 height={220} layout="vertical" colors={Object.values(STATUS_COLORS)} />}
@@ -219,6 +237,7 @@ export default function ResourceWorkloadPage() {
 
       {/* Hours Comparison */}
       <ChartCard title="Estimated vs Actual Hours" subtitle="By project (top 10)" delay={0.4}>
+        <div className="flex items-center gap-1.5 mb-2"><Info size={12} className="text-[var(--text-muted)]" /><span className="text-[10px] text-[var(--text-muted)]">Comparison of planned vs actual effort by project. Large gaps indicate estimation issues or scope changes.</span></div>
         {workItemsLoading || projectsLoading
           ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           : (

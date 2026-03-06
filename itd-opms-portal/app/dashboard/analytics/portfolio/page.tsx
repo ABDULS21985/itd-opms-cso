@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -10,7 +10,9 @@ import {
   Target,
   Clock,
   ChevronDown,
+  Info,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   usePortfolios,
   usePortfolioAnalytics,
@@ -59,6 +61,13 @@ export default function PortfolioAnalyticsPage() {
     if ("data" in portfoliosRaw) return (portfoliosRaw as { data: Portfolio[] }).data || [];
     return [];
   }, [portfoliosRaw]);
+
+  // Auto-select the first portfolio so analytics load by default
+  useEffect(() => {
+    if (!selectedPortfolioId && portfolios.length > 0) {
+      setSelectedPortfolioId(portfolios[0].id);
+    }
+  }, [portfolios, selectedPortfolioId]);
 
   const activePortfolioId = selectedPortfolioId || undefined;
 
@@ -174,27 +183,48 @@ export default function PortfolioAnalyticsPage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPIStatCard label="Total Projects" value={isLoading ? undefined : analytics?.totalProjects ?? projects.length}
-          icon={Briefcase} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={isLoading} index={0}
-          href="/dashboard/planning/projects" />
-        <KPIStatCard label="Active Projects" value={isLoading ? undefined : analytics?.activeProjects ?? 0}
-          icon={TrendingUp} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={1}
-          subtitle={analytics ? `${analytics.completedProjects} completed` : undefined}
-          href="/dashboard/planning/projects" />
-        <KPIStatCard label="Total Budget" value={isLoading ? undefined : `${((analytics?.totalBudgetApproved || 0) / 1e6).toFixed(1)}M`}
-          icon={DollarSign} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={isLoading} index={2}
-          href="/dashboard/planning/portfolios" />
-        <KPIStatCard label="Avg Completion" value={isLoading ? undefined : analytics?.avgCompletionPct ?? 0}
-          icon={Target} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={3} suffix="%"
-          href="/dashboard/planning/projects" />
-        <KPIStatCard label="On-Time Delivery" value={isLoading ? undefined : analytics?.onTimeDeliveryPct ?? 0}
-          icon={Clock} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={isLoading} index={4} suffix="%"
-          href="/dashboard/planning/milestones" />
+        <div className="relative">
+          <KPIStatCard label="Total Projects" value={isLoading ? undefined : analytics?.totalProjects ?? projects.length}
+            icon={Briefcase} color="#1B7340" bgColor="rgba(27,115,64,0.1)" isLoading={isLoading} index={0}
+            href="/dashboard/planning/projects" />
+          <span className="absolute top-2 right-2"><InfoHint text="Total number of projects in the selected portfolio. Switch portfolios using the dropdown above." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Active Projects" value={isLoading ? undefined : analytics?.activeProjects ?? 0}
+            icon={TrendingUp} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={1}
+            subtitle={analytics ? `${analytics.completedProjects} completed` : undefined}
+            href="/dashboard/planning/projects" />
+          <span className="absolute top-2 right-2"><InfoHint text="Projects currently in progress (not completed or cancelled). Subtitle shows completed count." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Total Budget" value={isLoading ? undefined : `${((analytics?.totalBudgetApproved || 0) / 1e6).toFixed(1)}M`}
+            icon={DollarSign} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={isLoading} index={2}
+            href="/dashboard/planning/portfolios" />
+          <span className="absolute top-2 right-2"><InfoHint text="Total approved budget across all projects in this portfolio, shown in millions." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Avg Completion" value={isLoading ? undefined : analytics?.avgCompletionPct ?? 0}
+            icon={Target} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={3} suffix="%"
+            href="/dashboard/planning/projects" />
+          <span className="absolute top-2 right-2"><InfoHint text="Average completion percentage across portfolio projects. Higher values indicate projects nearing delivery." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="On-Time Delivery" value={isLoading ? undefined : analytics?.onTimeDeliveryPct ?? 0}
+            icon={Clock} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={isLoading} index={4} suffix="%"
+            href="/dashboard/planning/milestones" />
+          <span className="absolute top-2 right-2"><InfoHint text="Percentage of milestones delivered on or before their target dates within this portfolio." position="bottom" size={13} /></span>
+        </div>
       </div>
 
       {/* Primary Charts 2-col */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Portfolio Health Scorecard" subtitle="Multi-dimensional assessment" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Radar chart showing portfolio health across 6 dimensions: Schedule, Budget, Completion, Quality, Risk Management, and Scope. Larger shapes indicate better performance.
+            </span>
+          </div>
           {isLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <RadarChart data={radarData} dataKeys={[{ key: "score", label: "Score", color: "#1B7340" }]}
@@ -202,6 +232,12 @@ export default function PortfolioAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Budget: Approved vs Spent" subtitle="Top 10 projects by budget" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Side-by-side comparison of approved vs actual spend for top 10 projects. Projects where blue (Approved) significantly exceeds amber (Spent) have available budget.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (
@@ -227,6 +263,12 @@ export default function PortfolioAnalyticsPage() {
       {/* Secondary Charts 3-col */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <ChartCard title="RAG Distribution" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Red-Amber-Green health status of portfolio projects. More green = healthier portfolio.
+            </span>
+          </div>
           {isLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={ragDonut} height={220} innerRadius={45} outerRadius={75}
@@ -234,6 +276,12 @@ export default function PortfolioAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Project Completion" subtitle="Sorted by progress" delay={0.35} className="lg:col-span-2">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Top 12 projects sorted by completion percentage. Green bars indicate near-completion, red bars need attention. RAG dot shows health status.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (

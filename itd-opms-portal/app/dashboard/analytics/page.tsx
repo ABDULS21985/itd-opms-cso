@@ -13,8 +13,10 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowRight,
+  Info,
   type LucideIcon,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   useExecutiveSummary,
 } from "@/hooks/use-reporting";
@@ -225,24 +227,27 @@ export default function ExecutiveAnalyticsPage() {
 
   const kpis: Array<{
     label: string; value: number | string | undefined; icon: LucideIcon;
-    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
+    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string; hint?: string;
   }> = [
       {
         label: "Total Projects", value: anyLoading ? undefined : totalProjects,
         icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
         subtitle: `${completedProjects} completed`,
         href: "/dashboard/planning/projects",
+        hint: "Total number of projects across all portfolios, regardless of status. Click to view the project list.",
       },
       {
         label: "Completed", value: anyLoading ? undefined : completedProjects,
         icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
         subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
         href: "/dashboard/planning/projects",
+        hint: "Number of projects with 'completed' status. Percentage shows completion rate relative to total projects.",
       },
       {
         label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
         icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
         href: "/dashboard/planning/projects",
+        hint: "Average completion percentage across all active projects. Calculated from individual project progress.",
       },
       {
         label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
@@ -250,17 +255,20 @@ export default function ExecutiveAnalyticsPage() {
         subtitle: totalBudgetApproved > 0
           ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
         href: "/dashboard/planning/projects",
+        hint: "Percentage of approved budget that has been spent. Values above 100% indicate overspend.",
       },
       {
         label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
         icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
         href: "/dashboard/planning/milestones",
+        hint: "Percentage of milestones delivered on or before their target date.",
       },
       {
         label: "Active Risks", value: summary?.highRisks,
         icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
         subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
         href: "/dashboard/planning/risks",
+        hint: "Number of risks rated high or above. Critical risks require immediate attention and escalation.",
       },
     ];
 
@@ -315,19 +323,38 @@ export default function ExecutiveAnalyticsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpis.map((kpi, index) => (
-          <KPIStatCard key={kpi.label} {...kpi} isLoading={anyLoading} index={index} />
+          <div key={kpi.label} className="relative">
+            <KPIStatCard {...kpi} isLoading={anyLoading} index={index} />
+            {kpi.hint && (
+              <span className="absolute top-2 right-2">
+                <InfoHint text={kpi.hint} position="bottom" size={13} />
+              </span>
+            )}
+          </div>
         ))}
       </div>
 
       {/* Row 2 — Primary Charts 2x2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Project Lifecycle Funnel" subtitle="Project flow through stages" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Shows how projects flow through stages from Proposed to Completed. Wider bars mean more projects at that stage.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <FunnelChart data={funnelData} height={260} />}
         </ChartCard>
 
         <ChartCard title="RAG Status Distribution" subtitle="Project health indicators" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Green = on track, Amber = at risk, Red = critical issues. Ring percentage shows proportion of total projects.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (
@@ -347,6 +374,12 @@ export default function ExecutiveAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Divisional Progress Tracker" subtitle="Status by division" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Each bar represents a division. Segments show project status breakdown — larger completed segments indicate better delivery.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={divisionalData.data} categories={divisionalData.categories}
@@ -354,6 +387,12 @@ export default function ExecutiveAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Budget Overview" subtitle="Approved → Spent → Remaining" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Waterfall view: total approved budget minus total spent equals remaining. If spent exceeds approved, the portfolio is over budget.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <WaterfallChart data={budgetData} height={280}
@@ -364,6 +403,12 @@ export default function ExecutiveAnalyticsPage() {
       {/* Row 3 — Secondary Charts 3-col */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <ChartCard title="Priority Distribution" delay={0.4}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Breakdown of projects by priority level. High concentration in critical/high may indicate resource strain.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={priorityData} height={220} innerRadius={45} outerRadius={75}
@@ -371,6 +416,12 @@ export default function ExecutiveAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Milestone Progress" subtitle="Completed vs pending over time" delay={0.45}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Monthly trend of completed vs pending milestones. Rising completed line indicates healthy delivery velocity.
+            </span>
+          </div>
           {milestonesLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <TrendLineChart data={milestoneTrend} height={220}
@@ -378,6 +429,12 @@ export default function ExecutiveAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Risk Heat Map" subtitle="Likelihood vs Impact" delay={0.5}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              5x5 matrix plotting risk likelihood (horizontal) vs impact (vertical). Darker cells in top-right corner need urgent attention.
+            </span>
+          </div>
           {risksLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <HeatMapGrid data={riskHeatData} height={220} />}

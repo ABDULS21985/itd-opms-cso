@@ -12,7 +12,9 @@ import {
   ClipboardList,
   ChevronLeft,
   ChevronRight,
+  Info,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   useProjects,
   useWorkItems,
@@ -233,35 +235,65 @@ export default function ProjectPerformancePage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPIStatCard label="Active Projects" value={isLoading ? undefined : activeProjects}
-          icon={FolderKanban} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={0}
-          href="/dashboard/planning/projects" />
-        <KPIStatCard label="Avg Completion" value={isLoading ? undefined : avgCompletion}
-          icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={1} suffix="%"
-          href="/dashboard/planning/projects" />
-        <KPIStatCard label="Overdue Tasks" value={workItemsLoading ? undefined : overdueWorkItems}
-          icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={workItemsLoading} index={2}
-          href="/dashboard/planning/work-items" />
-        <KPIStatCard label="Change Requests" value={changeReqCount || 0}
-          icon={FileText} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={isLoading} index={3}
-          href="/dashboard/planning/change-requests" />
-        <KPIStatCard label="Est. Hours" value={workItemsLoading ? undefined : totalEstimated.toLocaleString()}
-          icon={Timer} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={workItemsLoading} index={4}
-          href="/dashboard/planning/work-items" />
-        <KPIStatCard label="Actual Hours" value={workItemsLoading ? undefined : totalActual.toLocaleString()}
-          icon={ClipboardList} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={workItemsLoading} index={5}
-          href="/dashboard/planning/work-items" />
+        <div className="relative">
+          <KPIStatCard label="Active Projects" value={isLoading ? undefined : activeProjects}
+            icon={FolderKanban} color="#3B82F6" bgColor="rgba(59,130,246,0.1)" isLoading={isLoading} index={0}
+            href="/dashboard/planning/projects" />
+          <span className="absolute top-2 right-2"><InfoHint text="Projects currently in progress — excludes completed and cancelled. Click to view the full list." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Avg Completion" value={isLoading ? undefined : avgCompletion}
+            icon={Activity} color="#22C55E" bgColor="rgba(34,197,94,0.1)" isLoading={isLoading} index={1} suffix="%"
+            href="/dashboard/planning/projects" />
+          <span className="absolute top-2 right-2"><InfoHint text="Average completion percentage across all projects matching the current filters." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Overdue Tasks" value={workItemsLoading ? undefined : overdueWorkItems}
+            icon={AlertCircle} color="#EF4444" bgColor="rgba(239,68,68,0.1)" isLoading={workItemsLoading} index={2}
+            href="/dashboard/planning/work-items" />
+          <span className="absolute top-2 right-2"><InfoHint text="Work items past their due date that are not yet completed. High numbers may indicate bottlenecks." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Change Requests" value={changeReqCount || 0}
+            icon={FileText} color="#F59E0B" bgColor="rgba(245,158,11,0.1)" isLoading={isLoading} index={3}
+            href="/dashboard/planning/change-requests" />
+          <span className="absolute top-2 right-2"><InfoHint text="Total change requests submitted across all projects. Includes all statuses." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Est. Hours" value={workItemsLoading ? undefined : totalEstimated.toLocaleString()}
+            icon={Timer} color="#8B5CF6" bgColor="rgba(139,92,246,0.1)" isLoading={workItemsLoading} index={4}
+            href="/dashboard/planning/work-items" />
+          <span className="absolute top-2 right-2"><InfoHint text="Total estimated hours across all work items. Compare with actual hours to measure estimation accuracy." position="bottom" size={13} /></span>
+        </div>
+        <div className="relative">
+          <KPIStatCard label="Actual Hours" value={workItemsLoading ? undefined : totalActual.toLocaleString()}
+            icon={ClipboardList} color="#06B6D4" bgColor="rgba(6,182,212,0.1)" isLoading={workItemsLoading} index={5}
+            href="/dashboard/planning/work-items" />
+          <span className="absolute top-2 right-2"><InfoHint text="Total actual hours logged across all work items. Significantly exceeding estimates indicates scope creep." position="bottom" size={13} /></span>
+        </div>
       </div>
 
       {/* Primary Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Status Distribution" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Donut shows project count by status. Larger slices indicate more projects in that status. Center shows total count.
+            </span>
+          </div>
           {isLoading ? <div className="h-56 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={statusDonut} height={240} innerRadius={50} outerRadius={80}
                 centerLabel="Total" showLabel />}
         </ChartCard>
 
         <ChartCard title="Completion Distribution" subtitle="Projects by progress range" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Histogram of projects grouped by completion range. More projects in 76-100% (green) indicates healthy delivery pipeline.
+            </span>
+          </div>
           {isLoading ? <div className="h-56 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (
               <ResponsiveContainer width="100%" height={240}>
@@ -283,6 +315,12 @@ export default function ProjectPerformancePage() {
       {/* Secondary Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <ChartCard title="Work Item Velocity" subtitle="Completed items by project" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Ratio of completed to total work items per project. Higher fill = better throughput. Click project codes to navigate.
+            </span>
+          </div>
           {workItemsLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (
               <div className="space-y-2 max-h-52 overflow-y-auto">
@@ -307,6 +345,12 @@ export default function ProjectPerformancePage() {
         </ChartCard>
 
         <ChartCard title="Budget Utilization" subtitle="Treemap — size = approved budget" delay={0.35} className="lg:col-span-2">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Treemap where each block's size represents approved budget. Larger blocks are higher-budget projects.
+            </span>
+          </div>
           {projectsLoading ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <TreemapChart data={budgetTreemap} height={220} />}
         </ChartCard>
@@ -314,6 +358,12 @@ export default function ProjectPerformancePage() {
 
       {/* Project Health Table */}
       <ChartCard title="Project Health Overview" delay={0.4}>
+        <div className="flex items-center gap-1.5 mb-3">
+          <Info size={12} className="text-[var(--text-muted)]" />
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Summary table showing key health indicators per project. RAG dot indicates overall health. Click project names to view details.
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
