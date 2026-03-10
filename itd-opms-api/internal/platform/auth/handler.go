@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -138,17 +139,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // realIP extracts the client IP from X-Forwarded-For, X-Real-IP, or RemoteAddr.
 func realIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.SplitN(xff, ",", 2)[0]
+		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
 	}
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	// RemoteAddr is "ip:port" — strip the port.
-	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
+	// RemoteAddr is "ip:port" — use net.SplitHostPort to correctly
+	// handle both IPv4 ("127.0.0.1:port") and IPv6 ("[::1]:port").
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
-	return addr
+	return host
 }
 
 // Refresh handles POST /api/v1/auth/refresh.

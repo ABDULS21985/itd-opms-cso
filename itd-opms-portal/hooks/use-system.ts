@@ -988,13 +988,13 @@ export function useUserSessions(userId: string | undefined) {
 /* ================================================================== */
 
 /**
- * POST /system/sessions/{id}/revoke - revoke a single session.
+ * DELETE /system/sessions/{id} - revoke a single session.
  */
 export function useRevokeSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient.post(`/system/sessions/${id}/revoke`),
+      apiClient.delete(`/system/sessions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["system-session-stats"] });
@@ -1008,13 +1008,13 @@ export function useRevokeSession() {
 }
 
 /**
- * POST /system/sessions/user/{userId}/revoke-all - revoke all sessions for a user.
+ * DELETE /system/sessions/user/{userId} - revoke all sessions for a user.
  */
 export function useRevokeAllUserSessions() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiClient.post(`/system/sessions/user/${userId}/revoke-all`),
+      apiClient.delete(`/system/sessions/user/${userId}`),
     onSuccess: (_data, userId) => {
       queryClient.invalidateQueries({ queryKey: ["system-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["system-session-stats"] });
