@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useId } from "react";
+import { useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,6 @@ export function FormField({
   className,
 }: FormFieldProps) {
   const id = useId();
-  const [_focused, setFocused] = useState(false);
 
   const inputClass = cn(
     "w-full rounded-xl border bg-[var(--surface-0)] text-sm transition-all duration-200",
@@ -67,8 +66,6 @@ export function FormField({
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           required={required}
           disabled={disabled}
@@ -85,8 +82,6 @@ export function FormField({
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           required={required}
           disabled={disabled}
           className={cn(inputClass, "px-3.5 py-2.5")}
@@ -108,8 +103,6 @@ export function FormField({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         required={required}
         disabled={disabled}
