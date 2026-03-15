@@ -209,6 +209,23 @@ export function useDocumentLifecycle(id: string | undefined) {
   });
 }
 
+/**
+ * GET /vault/documents/{id}/download — returns a short-lived presigned URL.
+ * Presigned URLs are typically valid for 5 minutes; staleTime matches.
+ */
+export function useDocumentDownloadUrl(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-document-download-url", id],
+    queryFn: () =>
+      apiClient.get<{ url: string; fileName: string }>(
+        `/vault/documents/${id}/download`,
+      ),
+    enabled: !!id,
+    staleTime: 4 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
 /* ================================================================== */
 /*  Documents — Mutations                                              */
 /* ================================================================== */

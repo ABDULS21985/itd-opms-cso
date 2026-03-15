@@ -87,6 +87,24 @@ export function useUpdateKBCategory(id: string | undefined) {
   });
 }
 
+/**
+ * DELETE /knowledge/categories/{id} - delete a KB category.
+ */
+export function useDeleteKBCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/knowledge/categories/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kb-categories"] });
+      toast.success("Category deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete category");
+    },
+  });
+}
+
 /* ================================================================== */
 /*  KB Articles — Queries                                                */
 /* ================================================================== */

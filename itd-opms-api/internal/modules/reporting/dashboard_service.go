@@ -869,7 +869,137 @@ func entityHrefFromType(entityType, entityID string) string {
 	return "/dashboard"
 }
 
-// GetActivityFeed returns a paginated list of recent audit events as activity feed items.
+// supportedEntityTypes lists entity types for which label lookups are supported.
+var supportedEntityTypes = map[string]bool{
+	"ticket": true, "project": true, "risk_register": true,
+	"asset": true, "policy": true, "report_definition": true,
+}
+
+// resolveEntityLabels batch-queries entity labels for all items in the list.
+// It groups items by entity_type, does one IN query per type, and returns a
+// map[entityType+":"+entityID] → label.
+func (s *DashboardService) resolveEntityLabels(ctx context.Context, tenantID uuid.UUID, items []activityEventRow) map[string]string {
+	byType := map[string][]string{}
+	for _, it := range items {
+		if supportedEntityTypes[it.entityType] {
+			byType[it.entityType] = append(byType[it.entityType], it.entityID)
+		}
+	}
+
+	labels := map[string]string{}
+	for entityType, ids := range byType {
+		if len(ids) == 0 {
+			continue
+		}
+		// $1 = tenant_id, $2..$N = entity IDs cast to uuid
+		params := make([]any, 0, 1+len(ids))
+		params = append(params, tenantID)
+		placeholders := make([]string, len(ids))
+		for i, id := range ids {
+			params = append(params, id)
+			placeholders[i] = fmt.Sprintf("$%d::uuid", i+2)
+		}
+
+		tableQuery := buildEntityLabelBatchQuery(entityType, len(ids))
+		if tableQuery == "" {
+			continue
+		}
+		rows, err := s.pool.Query(ctx, tableQuery, params...)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to resolve entity labels", "entity_type", entityType, "error", err)
+			continue
+		}
+		for rows.Next() {
+			var id, label string
+			if rows.Scan(&id, &label) == nil {
+				labels[entityType+":"+id] = label
+			}
+		}
+		rows.Close()
+	}
+
+	return labels
+}
+
+// buildEntityLabelBatchQuery constructs an IN-query to batch-fetch entity labels.
+// $1 = tenant_id, $2..$N = entity IDs (as text).
+func buildEntityLabelBatchQuery(entityType string, n int) string {
+	placeholders := make([]string, n)
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d::uuid", i+2)
+	}
+	inClause := joinPlaceholders(placeholders)
+
+	switch entityType {
+	case "ticket":
+		return fmt.Sprintf(`SELECT id::text, title FROM tickets WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "project":
+		return fmt.Sprintf(`SELECT id::text, title FROM projects WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "risk_register":
+		return fmt.Sprintf(`SELECT id::text, title FROM risk_register WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "asset":
+		return fmt.Sprintf(`SELECT id::text, name FROM assets WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "policy":
+		return fmt.Sprintf(`SELECT id::text, title FROM policies WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "report_definition":
+		return fmt.Sprintf(`SELECT id::text, name FROM report_definitions WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	default:
+		return ""
+	}
+}
+
+func extractLabelColumn(entityType string) string {
+	switch entityType {
+	case "asset", "report_definition":
+		return "name"
+	default:
+		return "title"
+	}
+}
+
+func joinPlaceholders(ss []string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += ","
+		}
+		result += s
+	}
+	return result
+}
+
+// activityEventRow is an intermediate row from the audit_events query.
+type activityEventRow struct {
+	id          string
+	actorID     string
+	actorName   string
+	action      string
+	entityType  string
+	entityID    string
+	changesJSON []byte
+	timestamp   time.Time
+}
+
+// labelFromChanges tries to extract a human-readable label from a changes JSONB blob.
+func labelFromChanges(changesJSON []byte) string {
+	if len(changesJSON) == 0 {
+		return ""
+	}
+	var ch map[string]any
+	if err := json.Unmarshal(changesJSON, &ch); err != nil {
+		return ""
+	}
+	for _, key := range []string{"name", "title", "subject", "ticket_number"} {
+		if v, ok := ch[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// GetActivityFeed returns a paginated list of recent audit events with resolved entity labels.
 func (s *DashboardService) GetActivityFeed(ctx context.Context, page, limit int) (ActivityFeedResponse, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -917,56 +1047,49 @@ func (s *DashboardService) GetActivityFeed(ctx context.Context, page, limit int)
 	}
 	defer rows.Close()
 
-	items := make([]ActivityFeedItem, 0, limit)
+	rawEvents := make([]activityEventRow, 0, limit)
 	for rows.Next() {
-		var (
-			id          string
-			actorID     string
-			actorName   string
-			action      string
-			entityType  string
-			entityID    string
-			changesJSON []byte
-			timestamp   time.Time
-		)
-		if err := rows.Scan(&id, &actorID, &actorName, &action, &entityType, &entityID, &changesJSON, &timestamp); err != nil {
+		var ev activityEventRow
+		if err := rows.Scan(
+			&ev.id, &ev.actorID, &ev.actorName,
+			&ev.action, &ev.entityType, &ev.entityID,
+			&ev.changesJSON, &ev.timestamp,
+		); err != nil {
 			return ActivityFeedResponse{}, apperrors.Internal("failed to scan activity event", err)
 		}
-
-		// Extract entity label from changes JSONB if available.
-		entityLabel := entityType
-		if len(changesJSON) > 0 {
-			var ch map[string]any
-			if json.Unmarshal(changesJSON, &ch) == nil {
-				for _, key := range []string{"name", "title", "subject"} {
-					if v, ok := ch[key]; ok {
-						if s, ok := v.(string); ok && s != "" {
-							entityLabel = s
-							break
-						}
-					}
-				}
-			}
-		}
-
-		href := entityHrefFromType(entityType, entityID)
-		items = append(items, ActivityFeedItem{
-			ID:          id,
-			Type:        activityTypeFromAction(action),
-			Actor:       ActivityActor{ID: actorID, Name: actorName},
-			Description: fmt.Sprintf("%s: %s", actorName, action),
-			Entity: ActivityEntity{
-				Type:  entityType,
-				ID:    entityID,
-				Label: entityLabel,
-				Href:  href,
-			},
-			Timestamp: timestamp,
-		})
+		rawEvents = append(rawEvents, ev)
 	}
-
 	if err := rows.Err(); err != nil {
 		return ActivityFeedResponse{}, apperrors.Internal("failed to iterate activity feed", err)
+	}
+
+	// Batch-resolve entity labels from their canonical tables.
+	entityLabels := s.resolveEntityLabels(ctx, auth.TenantID, rawEvents)
+
+	items := make([]ActivityFeedItem, 0, len(rawEvents))
+	for _, ev := range rawEvents {
+		// Prefer DB-resolved label → changes JSONB extract → entity_type fallback.
+		entityLabel := entityLabels[ev.entityType+":"+ev.entityID]
+		if entityLabel == "" {
+			entityLabel = labelFromChanges(ev.changesJSON)
+		}
+		if entityLabel == "" {
+			entityLabel = ev.entityType
+		}
+
+		items = append(items, ActivityFeedItem{
+			ID:          ev.id,
+			Type:        activityTypeFromAction(ev.action),
+			Actor:       ActivityActor{ID: ev.actorID, Name: ev.actorName},
+			Description: fmt.Sprintf("%s performed %s", ev.actorName, ev.action),
+			Entity: ActivityEntity{
+				Type:  ev.entityType,
+				ID:    ev.entityID,
+				Label: entityLabel,
+				Href:  entityHrefFromType(ev.entityType, ev.entityID),
+			},
+			Timestamp: ev.timestamp,
+		})
 	}
 
 	return ActivityFeedResponse{
@@ -1071,12 +1194,13 @@ func (s *DashboardService) GetMyTasks(ctx context.Context) (MyTasksSummary, erro
 	}
 
 	// ── Pending Approvals ──
+	// "Pending" maps to 'open' status (action_items uses: open, in_progress, completed).
 	approvalRows, err := s.pool.Query(ctx, `
 		SELECT id::text, title, source_type
 		FROM action_items
 		WHERE tenant_id = $1
 			AND owner_id = $2
-			AND status = 'pending'
+			AND status = 'open'
 		ORDER BY created_at DESC
 		LIMIT $3`,
 		auth.TenantID, auth.UserID, itemLimit,
@@ -1101,7 +1225,7 @@ func (s *DashboardService) GetMyTasks(ctx context.Context) (MyTasksSummary, erro
 
 	s.pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM action_items
-		WHERE tenant_id = $1 AND owner_id = $2 AND status = 'pending'`,
+		WHERE tenant_id = $1 AND owner_id = $2 AND status = 'open'`,
 		auth.TenantID, auth.UserID,
 	).Scan(&pendingApprovals.Count)
 	if pendingApprovals.Items == nil {

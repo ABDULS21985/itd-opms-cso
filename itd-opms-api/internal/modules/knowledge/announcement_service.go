@@ -258,14 +258,15 @@ func (s *AnnouncementService) UpdateAnnouncement(ctx context.Context, id uuid.UU
 			target_audience = COALESCE($4, target_audience),
 			target_ids = COALESCE($5, target_ids),
 			is_active = COALESCE($6, is_active),
-			expires_at = COALESCE($7, expires_at),
-			updated_at = $8
-		WHERE id = $9 AND tenant_id = $10
+			expires_at = CASE WHEN $7::boolean THEN NULL ELSE COALESCE($8, expires_at) END,
+			updated_at = $9
+		WHERE id = $10 AND tenant_id = $11
 		RETURNING ` + announcementColumns
 
 	a, err := scanAnnouncement(s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Content, req.Priority,
-		req.TargetAudience, targetIDsParam, req.IsActive, req.ExpiresAt,
+		req.TargetAudience, targetIDsParam, req.IsActive,
+		req.ClearExpiresAt, req.ExpiresAt,
 		now, id, auth.TenantID,
 	))
 	if err != nil {

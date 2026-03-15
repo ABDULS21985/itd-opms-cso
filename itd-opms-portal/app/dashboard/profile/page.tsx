@@ -88,6 +88,13 @@ export default function ProfilePage() {
     e.preventDefault();
     if (!isDirty) return;
 
+    if (!form.displayName.trim()) {
+      toast.error("Display name is required", {
+        description: "Please enter a display name before saving.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       // displayName is required — omit if empty so backend keeps existing value.
@@ -250,6 +257,11 @@ export default function ProfilePage() {
                     src={photoUrl}
                     alt="Profile"
                     className="w-full h-full object-cover"
+                    onError={() => {
+                      // Presigned URL may have expired — refresh user to get
+                      // a new 24-hour URL from /auth/me.
+                      refreshUser();
+                    }}
                   />
                 ) : (
                   <span className="text-3xl sm:text-4xl font-bold text-white/90 tracking-wide">

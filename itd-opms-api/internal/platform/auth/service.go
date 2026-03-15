@@ -797,7 +797,7 @@ func (s *AuthService) resolvePhotoURL(ctx context.Context, photoURL *string) *st
 	if photoURL == nil || *photoURL == "" || s.minio == nil {
 		return nil
 	}
-	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 1*time.Hour, url.Values{})
+	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 24*time.Hour, url.Values{})
 	if err != nil {
 		slog.Warn("failed to generate presigned photo URL", "error", err, "key", *photoURL)
 		return nil

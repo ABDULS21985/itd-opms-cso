@@ -34,6 +34,10 @@ export interface KBArticle {
   linkedTicketIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** Enriched: author display name (populated via JOIN on read). */
+  authorName?: string;
+  /** Enriched: reviewer display name (populated via JOIN on read). */
+  reviewerName?: string;
 }
 
 export interface KBArticleVersion {
@@ -121,6 +125,8 @@ export interface UpdateKBArticleRequest {
   /** Pass an empty array to keep existing tags unchanged (COALESCE behaviour). */
   tags?: string[];
   reviewerId?: string;
+  /** Set to true to explicitly clear all tags (set to empty array). */
+  clearTags?: boolean;
 }
 
 /** POST /knowledge/articles/{articleId}/feedback */
@@ -147,10 +153,8 @@ export interface UpdateAnnouncementRequest {
   targetAudience?: string;
   targetIds?: string[];
   isActive?: boolean;
-  /**
-   * ISO-8601 datetime string. Send null explicitly to clear an existing expiry.
-   * Note: the backend COALESCE pattern prevents clearing via omission — send the
-   * field explicitly when clearing is required.
-   */
-  expiresAt?: string | null;
+  /** ISO-8601 datetime string to set or update the expiry. */
+  expiresAt?: string;
+  /** Set to true to explicitly clear the expiry date (set to NULL). */
+  clearExpiresAt?: boolean;
 }

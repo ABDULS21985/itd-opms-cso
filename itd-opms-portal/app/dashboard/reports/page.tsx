@@ -18,6 +18,10 @@ import {
   FileText,
   X,
   AlertTriangle,
+  Download,
+  Pencil,
+  Check,
+  Users,
 } from "lucide-react";
 import {
   useReportDefinitions,
@@ -26,9 +30,13 @@ import {
   useDeleteReportDefinition,
   useGenerateExecutivePack,
   useCreateReportDefinition,
+  useUpdateReportDefinition,
   type CreateReportDefinitionInput,
+  type UpdateReportDefinitionInput,
 } from "@/hooks/use-reporting";
-import type { ReportDefinition, ReportRun } from "@/types";
+import { useSearchUsers } from "@/hooks/use-system";
+import { apiClient } from "@/lib/api-client";
+import type { ReportDefinition, ReportRun, UserSearchResult } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -93,6 +101,41 @@ function RunStatusBadge({ status }: { status: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Download Run Button                                                 */
+/* ------------------------------------------------------------------ */
+
+function DownloadRunButton({ documentId }: { documentId: string }) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleDownload() {
+    setLoading(true);
+    try {
+      const res = await apiClient.get<{ url: string; fileName: string }>(
+        `/vault/documents/${documentId}/download`,
+      );
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={loading}
+      title="Download report document"
+      className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50"
+    >
+      {loading ? (
+        <Loader2 size={12} className="animate-spin text-[var(--text-secondary)]" />
+      ) : (
+        <Download size={12} style={{ color: "var(--primary)" }} />
+      )}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Report Runs Expandable Section                                      */
 /* ------------------------------------------------------------------ */
 
@@ -141,8 +184,11 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
             <th className="text-left py-1.5 px-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
               Completed
             </th>
-            <th className="text-right py-1.5 pl-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+            <th className="text-left py-1.5 px-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
               Error
+            </th>
+            <th className="text-right py-1.5 pl-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+              Doc
             </th>
           </tr>
         </thead>
@@ -158,8 +204,15 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
               <td className="py-2 px-4 text-[var(--text-secondary)]">
                 {run.completedAt ? new Date(run.completedAt).toLocaleString() : "--"}
               </td>
-              <td className="py-2 pl-4 text-right text-[var(--text-secondary)] max-w-[200px] truncate">
+              <td className="py-2 px-4 text-[var(--text-secondary)] max-w-[180px] truncate">
                 {run.errorMessage || "--"}
+              </td>
+              <td className="py-2 pl-4 text-right">
+                {run.documentId ? (
+                  <DownloadRunButton documentId={run.documentId} />
+                ) : (
+                  <span className="text-[var(--text-secondary)]">--</span>
+                )}
               </td>
             </tr>
           ))}
@@ -207,6 +260,97 @@ function DeleteConfirm({
 }
 
 /* ------------------------------------------------------------------ */
+/*  User Picker (recipients)                                           */
+/* ------------------------------------------------------------------ */
+
+type RecipientUser = { id: string; displayName: string };
+
+function UserPicker({
+  selected,
+  onToggle,
+}: {
+  selected: RecipientUser[];
+  onToggle: (user: RecipientUser) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const { data: results = [], isFetching } = useSearchUsers(query);
+  const selectedIds = new Set(selected.map((u) => u.id));
+
+  return (
+    <div className="space-y-2">
+      {/* Selected chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((u) => (
+            <span
+              key={u.id}
+              className="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5"
+              style={{ backgroundColor: "rgba(59,130,246,0.1)", color: "#3B82F6" }}
+            >
+              {u.displayName}
+              <button
+                type="button"
+                onClick={() => onToggle(u)}
+                className="ml-0.5 hover:opacity-70"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search users to add…"
+          className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+        />
+
+        {/* Dropdown — only when there's input */}
+        {query.length >= 2 && (
+          <div
+            className="absolute z-10 w-full mt-1 rounded-lg border shadow-lg max-h-36 overflow-y-auto"
+            style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
+          >
+            {isFetching ? (
+              <div className="px-3 py-2 text-xs text-[var(--text-secondary)]">Searching…</div>
+            ) : (results as UserSearchResult[]).length === 0 ? (
+              <div className="px-3 py-2 text-xs text-[var(--text-secondary)]">No users found</div>
+            ) : (
+              (results as UserSearchResult[]).map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => {
+                    onToggle({ id: user.id, displayName: user.displayName });
+                    setQuery("");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-2)] transition-colors text-left"
+                >
+                  {selectedIds.has(user.id) && (
+                    <Check size={11} style={{ color: "var(--primary)" }} className="shrink-0" />
+                  )}
+                  <span className={`text-xs ${selectedIds.has(user.id) ? "font-medium" : ""}`}>
+                    {user.displayName}
+                  </span>
+                  <span className="text-xs text-[var(--text-secondary)] ml-auto truncate max-w-[120px]">
+                    {user.email}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Report Card                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -219,6 +363,7 @@ function ReportCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const triggerRun = useTriggerReportRun(report.id);
   const deleteReport = useDeleteReportDefinition();
   const style = typeStyle(report.type);
@@ -300,6 +445,14 @@ function ReportCard({
               Run
             </button>
 
+            <button
+              onClick={() => setShowEdit(true)}
+              className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
+              title="Edit report"
+            >
+              <Pencil size={14} className="text-[var(--text-secondary)]" />
+            </button>
+
             {confirmDelete ? (
               <DeleteConfirm
                 onConfirm={handleDelete}
@@ -351,6 +504,17 @@ function ReportCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit dialog */}
+      <AnimatePresence>
+        {showEdit && (
+          <EditReportDialog
+            report={report}
+            open={showEdit}
+            onClose={() => setShowEdit(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -359,11 +523,12 @@ function ReportCard({
 /*  Create Report Dialog                                                */
 /* ------------------------------------------------------------------ */
 
-const EMPTY_FORM: CreateReportDefinitionInput = {
+const EMPTY_FORM = {
   name: "",
   type: "custom",
   description: "",
   scheduleCron: "",
+  recipientUsers: [] as RecipientUser[],
 };
 
 function CreateReportDialog({
@@ -373,7 +538,7 @@ function CreateReportDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState<CreateReportDefinitionInput>(EMPTY_FORM);
+  const [form, setForm] = useState(EMPTY_FORM);
   const createReport = useCreateReportDefinition();
 
   function handleSubmit(e: React.FormEvent) {
@@ -385,6 +550,9 @@ function CreateReportDialog({
       type: form.type,
       ...(form.description?.trim() ? { description: form.description.trim() } : {}),
       ...(form.scheduleCron?.trim() ? { scheduleCron: form.scheduleCron.trim() } : {}),
+      ...(form.recipientUsers.length > 0
+        ? { recipients: form.recipientUsers.map((u) => u.id) }
+        : {}),
     };
 
     createReport.mutate(payload, {
@@ -399,6 +567,15 @@ function CreateReportDialog({
     if (createReport.isPending) return;
     setForm(EMPTY_FORM);
     onClose();
+  }
+
+  function toggleRecipient(user: RecipientUser) {
+    setForm((f) => ({
+      ...f,
+      recipientUsers: f.recipientUsers.some((u) => u.id === user.id)
+        ? f.recipientUsers.filter((u) => u.id !== user.id)
+        : [...f.recipientUsers, user],
+    }));
   }
 
   if (!open) return null;
@@ -434,7 +611,7 @@ function CreateReportDialog({
         </div>
 
         {/* Dialog Body */}
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
           {/* Name */}
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
@@ -497,6 +674,15 @@ function CreateReportDialog({
             />
           </div>
 
+          {/* Recipients */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] mb-1">
+              <Users size={12} />
+              Recipients
+            </label>
+            <UserPicker selected={form.recipientUsers} onToggle={toggleRecipient} />
+          </div>
+
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
@@ -519,6 +705,227 @@ function CreateReportDialog({
             >
               {createReport.isPending && <Loader2 size={14} className="animate-spin" />}
               Create Report
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Edit Report Dialog                                                  */
+/* ------------------------------------------------------------------ */
+
+function EditReportDialog({
+  report,
+  open,
+  onClose,
+}: {
+  report: ReportDefinition;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: report.name,
+    type: report.type,
+    description: report.description ?? "",
+    scheduleCron: report.scheduleCron ?? "",
+    isActive: report.isActive,
+    // Recipient pickers start empty. Existing recipients are preserved via
+    // COALESCE on the backend when omitted. Add users here to replace them.
+    recipientUsers: [] as RecipientUser[],
+  });
+
+  const updateReport = useUpdateReportDefinition(report.id);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+
+    const payload: UpdateReportDefinitionInput = {
+      name: form.name.trim(),
+      type: form.type,
+      description: form.description.trim() || undefined,
+      scheduleCron: form.scheduleCron.trim() || undefined,
+      isActive: form.isActive,
+      // Only include recipients if user explicitly selected new ones
+      ...(form.recipientUsers.length > 0
+        ? { recipients: form.recipientUsers.map((u) => u.id) }
+        : {}),
+    };
+
+    updateReport.mutate(payload, {
+      onSuccess: () => onClose(),
+    });
+  }
+
+  function handleClose() {
+    if (updateReport.isPending) return;
+    onClose();
+  }
+
+  function toggleRecipient(user: RecipientUser) {
+    setForm((f) => ({
+      ...f,
+      recipientUsers: f.recipientUsers.some((u) => u.id === user.id)
+        ? f.recipientUsers.filter((u) => u.id !== user.id)
+        : [...f.recipientUsers, user],
+    }));
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
+        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+        style={{ backgroundColor: "var(--surface-0)", border: "1px solid var(--border)" }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Edit Report
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate max-w-[300px]">
+              {report.name}
+            </p>
+          </div>
+          <button
+            onClick={handleClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--surface-2)]"
+          >
+            <X size={14} className="text-[var(--text-secondary)]" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Name <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+            />
+          </div>
+
+          {/* Type */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Type <span className="text-red-400">*</span>
+            </label>
+            <select
+              required
+              value={form.type}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+            >
+              {CREATE_REPORT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Description
+            </label>
+            <textarea
+              rows={2}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Optional description"
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 resize-none"
+            />
+          </div>
+
+          {/* Schedule Cron */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Schedule (cron expression)
+            </label>
+            <input
+              type="text"
+              value={form.scheduleCron}
+              onChange={(e) => setForm((f) => ({ ...f, scheduleCron: e.target.value }))}
+              placeholder="e.g. 0 0 1 * * (leave blank for manual-only)"
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 font-mono"
+            />
+          </div>
+
+          {/* Active toggle */}
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-medium text-[var(--text-secondary)]">Active</label>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isActive: !f.isActive }))}
+              className={`relative inline-flex w-9 h-5 rounded-full transition-colors focus:outline-none ${
+                form.isActive ? "" : "bg-gray-300"
+              }`}
+              style={form.isActive ? { backgroundColor: "var(--primary)" } : {}}
+            >
+              <span
+                className={`inline-block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mt-[3px] ${
+                  form.isActive ? "translate-x-4" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Recipients */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] mb-1">
+              <Users size={12} />
+              Recipients
+              {report.recipients?.length > 0 && form.recipientUsers.length === 0 && (
+                <span className="ml-1 text-xs text-[var(--text-secondary)] font-normal">
+                  ({report.recipients.length} existing — search to replace)
+                </span>
+              )}
+            </label>
+            <UserPicker selected={form.recipientUsers} onToggle={toggleRecipient} />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={updateReport.isPending}
+              className="text-sm font-medium px-4 py-2 rounded-lg border transition-colors disabled:opacity-50"
+              style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateReport.isPending || !form.name.trim()}
+              className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)", color: "#fff" }}
+            >
+              {updateReport.isPending && <Loader2 size={14} className="animate-spin" />}
+              Save Changes
             </button>
           </div>
         </form>

@@ -93,7 +93,7 @@ export default function KnowledgeHubPage() {
         ? categoriesData.length
         : undefined,
       loading: categoriesLoading,
-      href: "/dashboard/knowledge/search",
+      href: "/dashboard/knowledge/categories",
       color: "#3B82F6",
       bgColor: "rgba(59, 130, 246, 0.1)",
     },
@@ -102,7 +102,7 @@ export default function KnowledgeHubPage() {
       icon: Megaphone,
       value: announcementsData?.meta?.totalItems,
       loading: announcementsLoading,
-      href: "/dashboard/knowledge/search",
+      href: "/dashboard/knowledge/announcements",
       color: "#8B5CF6",
       bgColor: "rgba(139, 92, 246, 0.1)",
     },
@@ -254,7 +254,7 @@ export default function KnowledgeHubPage() {
               title: "Categories",
               description:
                 "Organize articles into hierarchical categories for easy navigation",
-              href: "/dashboard/knowledge/search",
+              href: "/dashboard/knowledge/categories",
               icon: FolderTree,
             },
             {
@@ -268,7 +268,7 @@ export default function KnowledgeHubPage() {
               title: "Announcements",
               description:
                 "Publish and manage announcements for teams and the organization",
-              href: "/dashboard/knowledge/search",
+              href: "/dashboard/knowledge/announcements",
               icon: Megaphone,
             },
           ].map((mod) => {
