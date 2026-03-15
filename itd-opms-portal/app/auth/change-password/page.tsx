@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Lock, Shield, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
+import { isAuthenticated } from "@/lib/auth";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -15,6 +16,14 @@ export default function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Guard: redirect unauthenticated visitors to the login page so they receive
+  // a proper redirect rather than a confusing 401 from the API call.
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/auth/login?redirect=/auth/change-password");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

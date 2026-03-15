@@ -20,6 +20,8 @@ export interface UserDetail {
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  orgUnitId?: string;
+  orgUnitName?: string;
   roles: RoleBinding[];
   delegations: Delegation[];
 }
@@ -381,35 +383,39 @@ export interface ApprovalStep {
   chainId: string;
   stepOrder: number;
   approverId: string;
-  approverName?: string;
-  decision: string;
-  comments: string;
-  decidedAt?: string;
-  delegatedFrom?: string;
-  deadline?: string;
+  approverName: string;
+  decision: "pending" | "approved" | "rejected" | "skipped";
+  comments: string | null;
+  decidedAt: string | null;
+  evidenceRefs: string[];
+  delegatedFrom: string | null;
+  reminderSentAt: string | null;
+  deadline: string | null;
   createdAt: string;
 }
 
 export interface PendingApprovalItem {
-  chainId: string;
   stepId: string;
+  chainId: string;
   entityType: string;
   entityId: string;
-  entityTitle: string;
+  stepOrder: number;
   stepName: string;
   urgency: string;
   deadline?: string;
   requestedBy: string;
   requestedAt: string;
+  chainStatus: string;
 }
 
 export interface ApprovalHistoryItem {
-  id: string;
   chainId: string;
   entityType: string;
   entityId: string;
-  entityTitle: string;
   status: string;
+  currentStep: number;
+  totalSteps: number;
+  urgency: string;
   createdBy: string;
   createdAt: string;
   completedAt?: string;

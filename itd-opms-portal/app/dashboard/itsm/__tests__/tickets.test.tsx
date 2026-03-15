@@ -215,7 +215,7 @@ describe("TicketsPage", () => {
         title: "VPN connection issues",
         type: "service_request",
         priority: "P3_medium",
-        status: "new",
+        status: "logged",
         assigneeId: null,
         createdAt: "2025-01-16T14:30:00Z",
         slaResolutionMet: null,
@@ -278,7 +278,7 @@ describe("TicketsPage", () => {
 
     expect(screen.getByText("Tickets")).toBeInTheDocument();
     expect(
-      screen.getByText("View and manage incidents, service requests, and changes"),
+      screen.getByText("Manage incidents, service requests, and changes"),
     ).toBeInTheDocument();
   });
 

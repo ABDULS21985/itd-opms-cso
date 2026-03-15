@@ -435,7 +435,8 @@ export default function WorkItemsPage() {
       label: "Assign to Me",
       icon: UserCheck,
       onExecute: async (ids) => {
-        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user?.id } });
+        if (!user?.id) return;
+        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user.id } });
         toast.success(`${ids.length} item(s) assigned`);
       },
     },

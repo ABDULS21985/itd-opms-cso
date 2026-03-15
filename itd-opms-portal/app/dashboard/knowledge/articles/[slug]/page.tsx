@@ -20,6 +20,7 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   useKBArticleBySlug,
+  useKBCategory,
   useFeedbackStats,
   useCreateFeedback,
   useRecordArticleView,
@@ -52,6 +53,7 @@ export default function ArticleDetailPage({
   const router = useRouter();
 
   const { data: article, isLoading } = useKBArticleBySlug(slug);
+  const { data: category } = useKBCategory(article?.categoryId);
   const { data: feedbackStats } = useFeedbackStats(article?.id);
   const createFeedback = useCreateFeedback(article?.id);
   const recordView = useRecordArticleView();
@@ -213,7 +215,7 @@ export default function ArticleDetailPage({
             </p>
           </div>
           <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-            {article.authorId}
+            {article.authorName || article.authorId}
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
@@ -348,7 +350,7 @@ export default function ArticleDetailPage({
               Category
             </dt>
             <dd className="text-[var(--text-primary)]">
-              {article.categoryId || "Uncategorized"}
+              {category?.name || (article.categoryId ? "Loading…" : "Uncategorized")}
             </dd>
           </div>
           <div>
@@ -356,7 +358,7 @@ export default function ArticleDetailPage({
               Reviewer
             </dt>
             <dd className="text-[var(--text-primary)]">
-              {article.reviewerId || "Not assigned"}
+              {article.reviewerName || (article.reviewerId ? article.reviewerId : "Not assigned")}
             </dd>
           </div>
           <div>

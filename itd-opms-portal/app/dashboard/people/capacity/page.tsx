@@ -374,16 +374,16 @@ function AllocationDialog({
       const body: UpdateAllocationBody = {};
       const pct = parseFloat(allocationPct);
       if (pct !== editTarget.allocationPct) body.allocationPct = pct;
-      if (periodStart !== editTarget.periodStart.split("T")[0]) body.periodStart = periodStart;
-      if (periodEnd !== editTarget.periodEnd.split("T")[0]) body.periodEnd = periodEnd;
+      if (periodStart !== editTarget.periodStart.split("T")[0]) body.periodStart = new Date(periodStart).toISOString();
+      if (periodEnd !== editTarget.periodEnd.split("T")[0]) body.periodEnd = new Date(periodEnd).toISOString();
       updateMutation.mutate(body, { onSuccess: onClose });
     } else {
       const body: CreateAllocationBody = {
         userId: user!.id,
         projectId: project!.id,
         allocationPct: parseFloat(allocationPct),
-        periodStart,
-        periodEnd,
+        periodStart: new Date(periodStart).toISOString(),
+        periodEnd: new Date(periodEnd).toISOString(),
       };
       createMutation.mutate(body, { onSuccess: onClose });
     }

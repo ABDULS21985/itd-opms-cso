@@ -36,8 +36,8 @@ const CI_TYPE_OPTIONS = [
 const STATUS_OPTIONS = [
   { value: "", label: "All Statuses" },
   { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
   { value: "planned", label: "Planned" },
-  { value: "maintenance", label: "Maintenance" },
   { value: "decommissioned", label: "Decommissioned" },
 ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GitBranch,
@@ -13,6 +13,8 @@ import {
   Loader2,
   ArrowRight,
   Eye,
+  Search,
+  User,
 } from "lucide-react";
 import {
   useWorkflowDefinitions,
@@ -23,12 +25,17 @@ import {
 import type {
   WorkflowDefinition,
   WorkflowStepDef,
+  CreateWorkflowDefinitionBody,
+  UpdateWorkflowDefinitionBody,
 } from "@/hooks/use-approvals";
+import { useSearchUsers } from "@/hooks/use-system";
+import type { UserSearchResult } from "@/types";
 import { DataTable } from "@/components/shared/data-table";
 import type { Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
+import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
 
 /* ------------------------------------------------------------------ */
 /*  Entity type options                                                 */
@@ -51,6 +58,149 @@ const STEP_MODES: { value: string; label: string }[] = [
   { value: "parallel", label: "Parallel (all, any order)" },
   { value: "any_of", label: "Any Of (quorum)" },
 ];
+
+/* ------------------------------------------------------------------ */
+/*  User Picker Input                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A searchable user-picker that stores UUIDs in `value` and renders
+ * selected users as removable chips with display names.
+ */
+function UserPickerInput({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Resolve current approver IDs → display names for chips.
+  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+
+  const { data: searchResults, isFetching } = useSearchUsers(query);
+  const results: UserSearchResult[] = Array.isArray(searchResults) ? searchResults : [];
+
+  // Persist resolved names so chips show names even after dropdown closes.
+  useEffect(() => {
+    results.forEach((u) => {
+      setResolvedNames((prev) => ({ ...prev, [u.id]: u.displayName }));
+    });
+  }, [results]);
+
+  // Close dropdown on outside click.
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function selectUser(user: UserSearchResult) {
+    if (!value.includes(user.id)) {
+      onChange([...value, user.id]);
+      setResolvedNames((prev) => ({ ...prev, [user.id]: user.displayName }));
+    }
+    setQuery("");
+    setOpen(false);
+  }
+
+  function removeUser(id: string) {
+    onChange(value.filter((v) => v !== id));
+  }
+
+  const filtered = results.filter((u) => !value.includes(u.id));
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Selected chips */}
+      {value.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {value.map((id) => (
+            <span
+              key={id}
+              className="inline-flex items-center gap-1 rounded-full bg-[var(--primary)]/10 px-2.5 py-1 text-xs font-medium text-[var(--primary)]"
+            >
+              <User className="h-3 w-3 shrink-0" />
+              {resolvedNames[id] ?? id.slice(0, 8) + "…"}
+              <button
+                type="button"
+                onClick={() => removeUser(id)}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-[var(--primary)]/20 transition-colors"
+                aria-label={`Remove ${resolvedNames[id] ?? id}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--neutral-gray)]" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search users by name or email…"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] py-2 pl-8 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+        />
+        {isFetching && (
+          <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-[var(--neutral-gray)]" />
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {open && query.length >= 1 && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] shadow-lg overflow-hidden">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2.5 text-sm text-[var(--neutral-gray)]">
+              {isFetching ? "Searching…" : "No users found"}
+            </p>
+          ) : (
+            <ul className="max-h-48 overflow-y-auto py-1">
+              {filtered.map((user) => (
+                <li key={user.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // prevent blur before click
+                      selectUser(user);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-[var(--surface-1)] transition-colors"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[10px] font-semibold text-[var(--primary)]">
+                      {user.displayName.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-[var(--text-primary)]">
+                        {user.displayName}
+                      </p>
+                      <p className="truncate text-xs text-[var(--neutral-gray)]">
+                        {user.email}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Step Builder Component                                              */
@@ -209,21 +359,11 @@ function StepBuilder({
             {/* Approver IDs */}
             <div className="col-span-2">
               <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
-                Approver IDs (comma-separated)
+                Approvers
               </label>
-              <input
-                type="text"
-                value={step.approverIds.join(", ")}
-                onChange={(e) =>
-                  updateStep(index, {
-                    approverIds: e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
-                placeholder="uuid1, uuid2, uuid3"
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+              <UserPickerInput
+                value={step.approverIds}
+                onChange={(ids) => updateStep(index, { approverIds: ids })}
               />
             </div>
 
@@ -332,12 +472,7 @@ function WorkflowModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: {
-    name: string;
-    description: string | null;
-    entityType: string;
-    steps: WorkflowStepDef[];
-  }) => void;
+  onSubmit: (data: CreateWorkflowDefinitionBody) => void;
   loading: boolean;
   initial?: WorkflowDefinition | null;
 }) {
@@ -538,6 +673,11 @@ function WorkflowModal({
 /* ------------------------------------------------------------------ */
 
 export default function WorkflowsPage() {
+  useBreadcrumbs([
+    { label: "System", href: "/dashboard/system" },
+    { label: "Workflows", href: "/dashboard/system/workflows" },
+  ]);
+
   const { data: workflows, isLoading } = useWorkflowDefinitions();
   const createMutation = useCreateWorkflowDefinition();
   const deleteMutation = useDeleteWorkflowDefinition();
@@ -556,45 +696,26 @@ export default function WorkflowsPage() {
   const workflowToDelete = workflowList.find((w) => w.id === deleteTarget);
 
   const handleCreate = useCallback(
-    (data: {
-      name: string;
-      description: string | null;
-      entityType: string;
-      steps: WorkflowStepDef[];
-    }) => {
-      createMutation.mutate(
-        {
-          name: data.name,
-          description: data.description,
-          entityType: data.entityType,
-          steps: data.steps,
-        },
-        {
-          onSuccess: () => setShowCreate(false),
-        },
-      );
+    (data: CreateWorkflowDefinitionBody) => {
+      createMutation.mutate(data, {
+        onSuccess: () => setShowCreate(false),
+      });
     },
     [createMutation],
   );
 
   const handleUpdate = useCallback(
-    (data: {
-      name: string;
-      description: string | null;
-      entityType: string;
-      steps: WorkflowStepDef[];
-    }) => {
-      updateMutation.mutate(
-        {
-          name: data.name,
-          description: data.description,
-          entityType: data.entityType,
-          steps: data.steps,
-        },
-        {
-          onSuccess: () => setEditTarget(null),
-        },
-      );
+    (data: CreateWorkflowDefinitionBody) => {
+      // Cast to update body — all fields sent explicitly from the edit form.
+      const body: UpdateWorkflowDefinitionBody = {
+        name: data.name,
+        description: data.description,
+        entityType: data.entityType,
+        steps: data.steps,
+      };
+      updateMutation.mutate(body, {
+        onSuccess: () => setEditTarget(null),
+      });
     },
     [updateMutation],
   );

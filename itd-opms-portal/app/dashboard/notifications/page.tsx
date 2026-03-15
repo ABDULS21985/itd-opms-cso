@@ -13,15 +13,16 @@ import type { NotificationPreferences } from "@/types";
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
+// Values are backend event-type prefixes; the orchestrator uses prefix matching
+// so "itsm.sla" disables both "itsm.sla.warning" and "itsm.sla.breached".
 const NOTIFICATION_TYPES = [
-  { value: "project_updates", label: "Project Updates" },
-  { value: "task_assignments", label: "Task Assignments" },
-  { value: "sla_breaches", label: "SLA Breaches" },
-  { value: "approval_requests", label: "Approval Requests" },
-  { value: "system_alerts", label: "System Alerts" },
-  { value: "asset_updates", label: "Asset Updates" },
-  { value: "service_requests", label: "Service Requests" },
-  { value: "audit_events", label: "Audit Events" },
+  { value: "itsm.ticket", label: "Ticket Notifications" },
+  { value: "itsm.sla", label: "SLA Alerts" },
+  { value: "itsm.incident", label: "Major Incident Alerts" },
+  { value: "governance.approval", label: "Approval Requests" },
+  { value: "governance.action", label: "Action Item Reminders" },
+  { value: "cmdb", label: "Asset & License Alerts" },
+  { value: "grc", label: "Audit & Compliance Alerts" },
 ];
 
 const DIGEST_OPTIONS = [
@@ -51,7 +52,7 @@ const CHANNEL_CONFIG = [
     icon: MessageSquare,
   },
   {
-    key: "inApp",
+    key: "in_app",
     label: "In-App",
     description: "Show notifications in the portal",
     icon: Monitor,
@@ -67,8 +68,9 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
 /*  Default state                                                      */
 /* ------------------------------------------------------------------ */
 
+// Channel keys must match backend (snake_case: "email", "teams", "in_app").
 const DEFAULT_PREFERENCES: NotificationPreferences = {
-  channelPreferences: { email: true, teams: false, inApp: true },
+  channelPreferences: { email: true, teams: false, in_app: true },
   digestFrequency: "immediate",
   quietHoursStart: undefined,
   quietHoursEnd: undefined,

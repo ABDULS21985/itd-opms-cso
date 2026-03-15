@@ -56,6 +56,7 @@ const LEVEL_LABELS: Record<string, string> = {
   low: "Low",
 };
 
+// Must match backend CalculatePriority() in types.go
 const PRIORITY_MATRIX: Record<string, Record<string, string>> = {
   critical: {
     critical: "P1_critical",
@@ -66,12 +67,12 @@ const PRIORITY_MATRIX: Record<string, Record<string, string>> = {
   high: {
     critical: "P1_critical",
     high: "P2_high",
-    medium: "P2_high",
+    medium: "P3_medium",
     low: "P3_medium",
   },
   medium: {
     critical: "P2_high",
-    high: "P2_high",
+    high: "P3_medium",
     medium: "P3_medium",
     low: "P3_medium",
   },

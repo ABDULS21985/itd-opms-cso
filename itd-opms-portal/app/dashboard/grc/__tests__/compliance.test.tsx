@@ -81,7 +81,7 @@ vi.mock("@/components/shared/data-table", () => {
         React.createElement(
           "tbody",
           null,
-          data.map((item: Record<string, unknown>, i: number) =>
+          (data as Record<string, unknown>[]).map((item, i: number) =>
             React.createElement(
               "tr",
               { key: (item.id as string) ?? i },
@@ -118,7 +118,7 @@ const mockControls = [
     id: "ctrl-1",
     controlId: "ISO-A.5.1",
     controlName: "Information Security Policy Set",
-    framework: "ISO27001",
+    framework: "ISO_27001",
     implementationStatus: "implemented",
     ownerId: "user-abc-12345678",
     lastAssessedAt: "2026-01-20T00:00:00Z",
@@ -131,7 +131,7 @@ const mockControls = [
     controlId: "COBIT-APO01",
     controlName: "Manage the IT Management Framework",
     framework: "COBIT",
-    implementationStatus: "partially_implemented",
+    implementationStatus: "partial",
     ownerId: "user-def-87654321",
     lastAssessedAt: "2026-02-10T00:00:00Z",
     tenantId: "tenant-1",

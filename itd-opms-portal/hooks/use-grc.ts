@@ -13,6 +13,20 @@ import type {
   ComplianceControl,
   ComplianceStats,
   PaginatedResponse,
+  // Request DTOs — use these instead of Partial<DomainType> for mutations
+  CreateRiskRequest,
+  UpdateRiskRequest,
+  CreateRiskAssessmentRequest,
+  CreateGRCAuditRequest,
+  UpdateGRCAuditRequest,
+  CreateAuditFindingRequest,
+  UpdateAuditFindingRequest,
+  CreateEvidenceCollectionRequest,
+  UpdateEvidenceCollectionRequest,
+  CreateAccessReviewCampaignRequest,
+  RecordAccessReviewDecisionRequest,
+  CreateComplianceControlRequest,
+  UpdateComplianceControlRequest,
 } from "@/types";
 
 /* ================================================================== */
@@ -95,7 +109,7 @@ export function useRiskAssessments(riskId: string | undefined) {
 export function useCreateRisk() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<GRCRisk>) =>
+    mutationFn: (body: CreateRiskRequest) =>
       apiClient.post<GRCRisk>("/grc/risks", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-risks"] });
@@ -114,7 +128,7 @@ export function useCreateRisk() {
 export function useUpdateRisk(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<GRCRisk>) =>
+    mutationFn: (body: UpdateRiskRequest) =>
       apiClient.put<GRCRisk>(`/grc/risks/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-risks"] });
@@ -152,7 +166,7 @@ export function useDeleteRisk() {
 export function useCreateRiskAssessment(riskId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<RiskAssessment>) =>
+    mutationFn: (body: CreateRiskAssessmentRequest) =>
       apiClient.post<RiskAssessment>(`/grc/risks/${riskId}/assess`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -247,7 +261,7 @@ export function useAuditReadiness(auditId: string | undefined) {
 export function useCreateGRCAudit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<GRCAudit>) =>
+    mutationFn: (body: CreateGRCAuditRequest) =>
       apiClient.post<GRCAudit>("/grc/audits", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-audits"] });
@@ -265,7 +279,7 @@ export function useCreateGRCAudit() {
 export function useUpdateGRCAudit(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<GRCAudit>) =>
+    mutationFn: (body: UpdateGRCAuditRequest) =>
       apiClient.put<GRCAudit>(`/grc/audits/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-audits"] });
@@ -346,7 +360,7 @@ export function useAuditFinding(
 export function useCreateAuditFinding(auditId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<AuditFinding>) =>
+    mutationFn: (body: CreateAuditFindingRequest) =>
       apiClient.post<AuditFinding>(
         `/grc/audits/${auditId}/findings`,
         body,
@@ -373,7 +387,7 @@ export function useUpdateAuditFinding(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<AuditFinding>) =>
+    mutationFn: (body: UpdateAuditFindingRequest) =>
       apiClient.put<AuditFinding>(
         `/grc/audits/${auditId}/findings/${findingId}`,
         body,
@@ -466,7 +480,7 @@ export function useEvidenceCollection(
 export function useCreateEvidenceCollection(auditId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<EvidenceCollection>) =>
+    mutationFn: (body: CreateEvidenceCollectionRequest) =>
       apiClient.post<EvidenceCollection>(
         `/grc/audits/${auditId}/evidence`,
         body,
@@ -492,7 +506,7 @@ export function useUpdateEvidenceCollection(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<EvidenceCollection>) =>
+    mutationFn: (body: UpdateEvidenceCollectionRequest) =>
       apiClient.put<EvidenceCollection>(
         `/grc/audits/${auditId}/evidence/${id}`,
         body,
@@ -597,7 +611,7 @@ export function useAccessReviewEntries(
 export function useCreateAccessReviewCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<AccessReviewCampaign>) =>
+    mutationFn: (body: CreateAccessReviewCampaignRequest) =>
       apiClient.post<AccessReviewCampaign>("/grc/access-reviews", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-access-reviews"] });
@@ -620,7 +634,7 @@ export function useRecordAccessReviewDecision(
     mutationFn: ({
       entryId,
       ...body
-    }: { entryId: string; decision: string; justification?: string }) =>
+    }: { entryId: string } & RecordAccessReviewDecisionRequest) =>
       apiClient.post(
         `/grc/access-reviews/${campaignId}/entries/${entryId}/decide`,
         body,
@@ -697,7 +711,7 @@ export function useComplianceStats() {
 export function useCreateComplianceControl() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ComplianceControl>) =>
+    mutationFn: (body: CreateComplianceControlRequest) =>
       apiClient.post<ComplianceControl>("/grc/compliance", body),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -718,7 +732,7 @@ export function useCreateComplianceControl() {
 export function useUpdateComplianceControl(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ComplianceControl>) =>
+    mutationFn: (body: UpdateComplianceControlRequest) =>
       apiClient.put<ComplianceControl>(`/grc/compliance/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({

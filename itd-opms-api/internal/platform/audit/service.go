@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -285,18 +286,41 @@ type IntegrityResult struct {
 	FirstInvalid string `json:"firstInvalid,omitempty"`
 }
 
-// VerifyIntegrity verifies the checksum chain for all audit events belonging
-// to the given tenant. Each event's stored checksum is re-computed from the
-// event data and compared against the stored value.
-func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) (*IntegrityResult, error) {
-	query := `
+// VerifyIntegrity verifies the checksum chain for audit events belonging to
+// the given tenant. An optional date range narrows the scope; when nil the
+// entire tenant history is verified.
+func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID, dateFrom, dateTo *time.Time) (*IntegrityResult, error) {
+	var (
+		conditions []string
+		args       []any
+		argIdx     int
+	)
+
+	nextArg := func() string {
+		argIdx++
+		return fmt.Sprintf("$%d", argIdx)
+	}
+
+	conditions = append(conditions, "tenant_id = "+nextArg())
+	args = append(args, tenantID)
+
+	if dateFrom != nil {
+		conditions = append(conditions, "timestamp >= "+nextArg())
+		args = append(args, *dateFrom)
+	}
+	if dateTo != nil {
+		conditions = append(conditions, "timestamp <= "+nextArg())
+		args = append(args, *dateTo)
+	}
+
+	query := fmt.Sprintf(`
 		SELECT event_id, tenant_id, actor_id, action, entity_type,
 			   entity_id, changes, checksum, timestamp
 		FROM audit_events
-		WHERE tenant_id = $1
-		ORDER BY timestamp ASC`
+		WHERE %s
+		ORDER BY timestamp ASC`, strings.Join(conditions, " AND "))
 
-	rows, err := s.pool.Query(ctx, query, tenantID)
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query audit events for integrity: %w", err)
 	}
@@ -324,6 +348,8 @@ func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) 
 
 		result.TotalEvents++
 
+		// Use Unix microseconds to match the DB trigger which computes:
+		// ((EXTRACT(EPOCH FROM timestamp) * 1000000)::bigint)::text
 		expected := helpers.ComputeAuditChecksum(
 			tid.String(),
 			actorID.String(),
@@ -331,7 +357,7 @@ func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) 
 			entityType,
 			entityID.String(),
 			changes,
-			createdAt.UTC().Format(time.RFC3339Nano),
+			strconv.FormatInt(createdAt.UTC().UnixMicro(), 10),
 		)
 
 		if expected == checksum {

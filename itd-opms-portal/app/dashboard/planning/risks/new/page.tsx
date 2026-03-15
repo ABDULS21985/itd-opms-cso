@@ -149,7 +149,7 @@ export default function NewRiskPage() {
         mitigationPlan: mitigationPlan.trim() || undefined,
         contingencyPlan: contingencyPlan.trim() || undefined,
         ownerId: ownerId.trim() || undefined,
-        reviewDate: reviewDate || undefined,
+        reviewDate: reviewDate ? `${reviewDate}T00:00:00Z` : undefined,
       },
       {
         onSuccess: () => {

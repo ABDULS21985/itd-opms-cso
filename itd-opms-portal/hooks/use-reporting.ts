@@ -9,10 +9,34 @@ import type {
   ReportRun,
   GlobalSearchResults,
   SavedSearch,
+  SearchEntityType,
   PaginatedResponse,
   ProjectDivisionAssignment,
   DivisionAssignmentLog,
 } from "@/types";
+
+/* ================================================================== */
+/*  Shared request input types — mirror backend DTOs exactly           */
+/* ================================================================== */
+
+export interface CreateReportDefinitionInput {
+  name: string;
+  type: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+}
+
+export interface UpdateReportDefinitionInput {
+  name?: string;
+  type?: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+  isActive?: boolean;
+}
 
 /* ================================================================== */
 /*  Activity Feed — Types & Queries                                      */
@@ -77,7 +101,7 @@ export interface MyTasksSummary {
 }
 
 /**
- * GET /reporting/dashboards/my-tasks - current user's assigned items summary.
+ * GET /reporting/dashboards/my-tasks - current user's assigned items with detail arrays.
  */
 export function useMyTasks() {
   return useQuery({
@@ -449,11 +473,13 @@ export function useReportDefinition(id: string | undefined) {
 
 /**
  * POST /reporting/reports - create a report definition.
+ * Payload maps to backend CreateReportDefinitionRequest: name (required), type (required),
+ * description, scheduleCron, recipients (UUID strings), template.
  */
 export function useCreateReportDefinition() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: CreateReportDefinitionInput) =>
       apiClient.post<ReportDefinition>("/reporting/reports", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
@@ -466,12 +492,13 @@ export function useCreateReportDefinition() {
 }
 
 /**
- * PUT /reporting/reports/{id} - update a report definition.
+ * PUT /reporting/reports/{id} - update a report definition (partial update via COALESCE).
+ * Payload maps to backend UpdateReportDefinitionRequest: all fields optional.
  */
 export function useUpdateReportDefinition(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: UpdateReportDefinitionInput) =>
       apiClient.put<ReportDefinition>(`/reporting/reports/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
@@ -576,7 +603,7 @@ export function useReportRuns(
 /**
  * GET /reporting/search?q=...&types=... - global search across entities.
  */
-export function useGlobalSearch(query: string, entityTypes?: string[]) {
+export function useGlobalSearch(query: string, entityTypes?: SearchEntityType[]) {
   return useQuery({
     queryKey: ["global-search", query, entityTypes],
     queryFn: () =>
@@ -585,6 +612,21 @@ export function useGlobalSearch(query: string, entityTypes?: string[]) {
         types: entityTypes?.join(","),
       }),
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * POST /reporting/search/saved (isSaved=false) - silently record a search into
+ * recent-search history. Called automatically on every settled search; no toast.
+ */
+export function useRecordRecentSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { query: string; entityTypes?: SearchEntityType[] }) =>
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recent-searches"] });
+    },
   });
 }
 
@@ -621,7 +663,7 @@ export function useSaveSearch() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { query: string; entityTypes?: string[] }) =>
-      apiClient.post<SavedSearch>("/reporting/search/saved", body),
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
       queryClient.invalidateQueries({ queryKey: ["recent-searches"] });

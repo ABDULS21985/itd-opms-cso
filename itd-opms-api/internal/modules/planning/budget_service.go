@@ -670,7 +670,7 @@ func (s *BudgetService) ListBudgetSnapshots(ctx context.Context, projectID uuid.
 		SELECT
 			bs.id, bs.tenant_id, bs.project_id, bs.snapshot_date,
 			bs.approved_budget, bs.actual_spend, bs.committed_spend, bs.forecast_total,
-			bs.completion_pct, bs.notes, bs.created_by,
+			COALESCE(bs.completion_pct, 0), bs.notes, bs.created_by,
 			COALESCE(u.display_name, '') AS creator_name,
 			bs.created_at
 		FROM budget_snapshots bs

@@ -55,9 +55,15 @@ export interface AttestationCampaign {
   targetUserIds?: string[];
   dueDate: string;
   status: string;
-  completionRate: number;
+  completionRate: number | null;
   createdBy: string;
   createdAt: string;
+}
+
+export interface LaunchCampaignRequest {
+  targetScope: string;
+  targetUserIds?: string[];
+  dueDate: string;
 }
 
 export interface AttestationStatus {
@@ -100,6 +106,11 @@ export interface RACIEntry {
   consultedIds?: string[];
   informedIds?: string[];
   notes?: string;
+  // Resolved display names (populated server-side via user lookup)
+  responsibleNames?: string[];
+  accountableName?: string;
+  consultedNames?: string[];
+  informedNames?: string[];
 }
 
 export interface Meeting {
@@ -161,7 +172,7 @@ export interface OKR {
   period: string;
   ownerId: string;
   status: string;
-  progressPct: number;
+  progressPct: number | null;
   scoringMethod: string;
   createdAt: string;
   keyResults?: KeyResult[];
@@ -172,9 +183,9 @@ export interface KeyResult {
   id: string;
   okrId: string;
   title: string;
-  targetValue?: number;
-  currentValue: number;
-  unit?: string;
+  targetValue?: number | null;
+  currentValue: number | null;
+  unit?: string | null;
   status: string;
   updatedAt: string;
 }

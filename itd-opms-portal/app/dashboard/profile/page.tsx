@@ -88,15 +88,25 @@ export default function ProfilePage() {
     e.preventDefault();
     if (!isDirty) return;
 
+    if (!form.displayName.trim()) {
+      toast.error("Display name is required", {
+        description: "Please enter a display name before saving.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // displayName is required — omit if empty so backend keeps existing value.
+      // Optional fields (phone, jobTitle, etc.) send null when cleared so the
+      // backend stores NULL and removes the previous value.
       await apiClient.patch("/auth/profile", {
-        displayName: form.displayName || undefined,
-        jobTitle: form.jobTitle || undefined,
-        department: form.department || undefined,
-        office: form.office || undefined,
-        unit: form.unit || undefined,
-        phone: form.phone || undefined,
+        displayName: form.displayName.trim() || undefined,
+        jobTitle: form.jobTitle.trim() || null,
+        department: form.department.trim() || null,
+        office: form.office.trim() || null,
+        unit: form.unit.trim() || null,
+        phone: form.phone.trim() || null,
       });
       await refreshUser();
       setIsDirty(false);
@@ -247,6 +257,11 @@ export default function ProfilePage() {
                     src={photoUrl}
                     alt="Profile"
                     className="w-full h-full object-cover"
+                    onError={() => {
+                      // Presigned URL may have expired — refresh user to get
+                      // a new 24-hour URL from /auth/me.
+                      refreshUser();
+                    }}
                   />
                 ) : (
                   <span className="text-3xl sm:text-4xl font-bold text-white/90 tracking-wide">

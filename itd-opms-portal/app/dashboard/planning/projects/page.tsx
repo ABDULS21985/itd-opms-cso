@@ -13,9 +13,12 @@ import {
   Loader2,
   Building2,
   Upload,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { BulkUploadModal } from "@/components/planning/bulk-upload-modal";
+import { DataTable, type Column } from "@/components/shared/data-table";
 import { useProjects, usePortfolios } from "@/hooks/use-planning";
 import type { Project } from "@/types";
 
@@ -59,6 +62,133 @@ const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
+type ViewMode = "tiles" | "grid";
+
+/* ------------------------------------------------------------------ */
+/*  Table columns for grid view                                        */
+/* ------------------------------------------------------------------ */
+
+const PROJECT_COLUMNS: Column<Project>[] = [
+  {
+    key: "code",
+    header: "Code",
+    sortable: true,
+    className: "min-w-[90px]",
+    render: (p) => (
+      <span className="text-xs font-mono text-[var(--neutral-gray)]">
+        {p.code}
+      </span>
+    ),
+  },
+  {
+    key: "title",
+    header: "Project",
+    sortable: true,
+    className: "min-w-[220px]",
+    render: (p) => (
+      <div className="flex items-center gap-2.5">
+        <span
+          className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+          style={{
+            backgroundColor:
+              RAG_COLORS[p.ragStatus?.toLowerCase()] ?? RAG_COLORS.grey,
+          }}
+          title={`RAG: ${p.ragStatus}`}
+        />
+        <span className="text-sm font-medium text-[var(--text-primary)] line-clamp-1">
+          {p.title}
+        </span>
+      </div>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    sortable: true,
+    render: (p) => <StatusBadge status={p.status} />,
+  },
+  {
+    key: "priority",
+    header: "Priority",
+    sortable: true,
+    render: (p) => {
+      const c = PRIORITY_COLORS[p.priority] ?? {
+        bg: "var(--surface-2)",
+        text: "var(--neutral-gray)",
+      };
+      return (
+        <span
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
+          style={{ backgroundColor: c.bg, color: c.text }}
+        >
+          {p.priority}
+        </span>
+      );
+    },
+  },
+  {
+    key: "completionPct",
+    header: "Progress",
+    sortable: true,
+    align: "center",
+    className: "min-w-[120px]",
+    render: (p) => {
+      const pct = p.completionPct ?? 0;
+      const rag =
+        RAG_COLORS[p.ragStatus?.toLowerCase()] ?? RAG_COLORS.grey;
+      return (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, backgroundColor: rag }}
+            />
+          </div>
+          <span className="text-xs font-medium tabular-nums text-[var(--text-primary)] w-9 text-right">
+            {pct}%
+          </span>
+        </div>
+      );
+    },
+  },
+  {
+    key: "divisionName",
+    header: "Division",
+    sortable: true,
+    render: (p) =>
+      p.divisionName ? (
+        <div className="flex items-center gap-1.5">
+          <Building2 size={12} className="text-[var(--primary)]" />
+          <span className="text-xs font-medium text-[var(--primary)]">
+            {p.divisionName}
+          </span>
+        </div>
+      ) : (
+        <span className="text-xs text-[var(--neutral-gray)]">—</span>
+      ),
+  },
+  {
+    key: "plannedStart",
+    header: "Timeline",
+    render: (p) => (
+      <div className="flex items-center gap-1.5 text-xs text-[var(--neutral-gray)]">
+        <Calendar size={12} />
+        <span>
+          {p.plannedStart
+            ? new Date(p.plannedStart).toLocaleDateString()
+            : "TBD"}
+        </span>
+        <span>–</span>
+        <span>
+          {p.plannedEnd
+            ? new Date(p.plannedEnd).toLocaleDateString()
+            : "TBD"}
+        </span>
+      </div>
+    ),
+  },
+];
+
 export default function ProjectsPage() {
   const router = useRouter();
   const [page, setPage] = useState(1);
@@ -67,6 +197,7 @@ export default function ProjectsPage() {
   const [ragStatus, setRagStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("tiles");
 
   const { data, isLoading } = useProjects(
     page,
@@ -106,6 +237,34 @@ export default function ProjectsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center rounded-xl border border-[var(--border)] p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("tiles")}
+              className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${
+                viewMode === "tiles"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Tile view"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Grid view"
+            >
+              <List size={16} />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setShowFilters((f) => !f)}
@@ -247,8 +406,8 @@ export default function ProjectsPage() {
         </motion.div>
       )}
 
-      {/* Project Grid */}
-      {!isLoading && projects.length > 0 && (
+      {/* Project Tiles */}
+      {!isLoading && projects.length > 0 && viewMode === "tiles" && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -378,8 +537,39 @@ export default function ProjectsPage() {
         </motion.div>
       )}
 
-      {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
+      {/* Project Grid (Table) */}
+      {!isLoading && projects.length > 0 && viewMode === "grid" && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <DataTable<Project>
+            columns={PROJECT_COLUMNS}
+            data={projects}
+            keyExtractor={(p) => p.id}
+            onRowClick={(p) =>
+              router.push(`/dashboard/planning/projects/${p.id}`)
+            }
+            emptyTitle="No projects found"
+            emptyDescription="Get started by creating your first project."
+            pagination={
+              meta && meta.totalPages > 1
+                ? {
+                    currentPage: page,
+                    totalPages: meta.totalPages,
+                    totalItems: meta.totalItems,
+                    pageSize: 20,
+                    onPageChange: setPage,
+                  }
+                : undefined
+            }
+          />
+        </motion.div>
+      )}
+
+      {/* Pagination (tiles view only) */}
+      {viewMode === "tiles" && meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <p className="text-[var(--neutral-gray)]">
             {meta.totalItems} result{meta.totalItems !== 1 ? "s" : ""}

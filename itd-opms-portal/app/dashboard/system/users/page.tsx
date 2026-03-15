@@ -19,7 +19,7 @@ import {
   ChevronDown,
   Activity,
 } from "lucide-react";
-import { DataTable, type Column } from "@/components/shared/data-table";
+import { DataTable, type Column, type SortState } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -212,6 +212,7 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortState, setSortState] = useState<SortState>({ key: "", direction: null });
 
   // Deactivate dialog
   const [deactivateTarget, setDeactivateTarget] = useState<UserDetail | null>(null);
@@ -242,6 +243,8 @@ export default function UsersPage() {
     role: roleFilter || undefined,
     status: statusFilter || undefined,
     department: departmentFilter || undefined,
+    sortBy: sortState.key || undefined,
+    sortOrder: sortState.direction ?? undefined,
   });
   const { data: rolesData } = useRoles();
   const deactivateMutation = useDeactivateUser();
@@ -332,6 +335,12 @@ export default function UsersPage() {
     setStatusFilter("");
     setDepartmentFilter("");
     setSearchInput("");
+    setPage(1);
+  }
+
+  /* ---- Sort handler ---- */
+  function handleSort(next: SortState) {
+    setSortState(next);
     setPage(1);
   }
 
@@ -750,6 +759,8 @@ export default function UsersPage() {
             data={users}
             keyExtractor={(item) => item.id}
             loading={isLoading}
+            sort={sortState.key ? sortState : undefined}
+            onSort={handleSort}
             emptyTitle="No users found"
             emptyDescription={
               activeFilterCount > 0 || debouncedSearch

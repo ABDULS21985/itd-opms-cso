@@ -122,13 +122,19 @@ func (h *FeedbackHandler) DeleteFeedback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	articleID, err := uuid.Parse(chi.URLParam(r, "articleId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid article ID")
+		return
+	}
+
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid feedback ID")
 		return
 	}
 
-	if err := h.svc.DeleteFeedback(r.Context(), id); err != nil {
+	if err := h.svc.DeleteFeedback(r.Context(), articleID, id); err != nil {
 		writeAppError(w, r, err)
 		return
 	}

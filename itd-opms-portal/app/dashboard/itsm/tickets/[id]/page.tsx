@@ -106,24 +106,26 @@ const STATUS_TRANSITIONS: Record<
   string,
   { value: string; label: string; icon?: React.ElementType; variant?: string }[]
 > = {
-  new: [
+  logged: [
+    { value: "classified", label: "Classify", icon: ArrowRightCircle },
     { value: "assigned", label: "Assign", icon: UserPlus },
-    { value: "in_progress", label: "Start Work", icon: Zap, variant: "primary" },
+    { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
+  ],
+  classified: [
+    { value: "assigned", label: "Assign", icon: UserPlus, variant: "primary" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
   assigned: [
     { value: "in_progress", label: "Start Work", icon: Zap, variant: "primary" },
-    { value: "pending_user", label: "Pending User", icon: Clock },
-    { value: "pending_vendor", label: "Pending Vendor", icon: Clock },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
   in_progress: [
-    { value: "pending_user", label: "Pending User", icon: Clock },
+    { value: "pending_customer", label: "Pending Customer", icon: Clock },
     { value: "pending_vendor", label: "Pending Vendor", icon: Clock },
     { value: "resolved", label: "Resolve", icon: CheckCircle, variant: "success" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
-  pending_user: [
+  pending_customer: [
     { value: "in_progress", label: "Resume Work", icon: Zap, variant: "primary" },
     { value: "resolved", label: "Resolve", icon: CheckCircle, variant: "success" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
@@ -143,7 +145,8 @@ const STATUS_TRANSITIONS: Record<
 
 /** Ordered pipeline stages */
 const STATUS_PIPELINE = [
-  { key: "new", label: "New", icon: CircleDot },
+  { key: "logged", label: "Logged", icon: CircleDot },
+  { key: "classified", label: "Classified", icon: ArrowRightCircle },
   { key: "assigned", label: "Assigned", icon: UserPlus },
   { key: "in_progress", label: "In Progress", icon: Zap },
   { key: "resolved", label: "Resolved", icon: CheckCircle },
@@ -156,13 +159,14 @@ const TERMINAL_STATUSES = ["cancelled"];
 /*  Circular SLA Gauge Component                                       */
 /* ------------------------------------------------------------------ */
 
-function SLAGauge({
+export function SLAGauge({
   label,
   target,
   met,
   metAt,
   isPaused,
   createdAt,
+  slaPausedDurationMinutes = 0,
 }: {
   label: string;
   target?: string;
@@ -170,6 +174,7 @@ function SLAGauge({
   metAt?: string;
   isPaused: boolean;
   createdAt: string;
+  slaPausedDurationMinutes?: number;
 }) {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
@@ -323,12 +328,14 @@ function SLAGauge({
     );
   }
 
-  // Active countdown
+  // Active countdown — extend the deadline by however long the SLA was paused.
   const targetTime = new Date(target).getTime();
+  const pausedMs = slaPausedDurationMinutes * 60 * 1000;
+  const effectiveTarget = targetTime + pausedMs;
   const now = Date.now();
   const created = new Date(createdAt).getTime();
-  const totalDuration = targetTime - created;
-  const remaining = targetTime - now;
+  const totalDuration = effectiveTarget - created;
+  const remaining = effectiveTarget - now;
   const pct = totalDuration > 0 ? Math.min(((now - created) / totalDuration) * 100, 100) : 0;
   const dashOffset = circumference - (pct / 100) * circumference;
 
@@ -901,7 +908,7 @@ export default function TicketDetailPage({
   ];
 
   const isPendingStatus =
-    ticket.status === "pending_user" || ticket.status === "pending_vendor";
+    ticket.status === "pending_customer" || ticket.status === "pending_vendor";
 
   return (
     <div className="mx-auto max-w-7xl space-y-0">
@@ -1192,6 +1199,7 @@ export default function TicketDetailPage({
                 metAt={ticket.firstResponseAt}
                 isPaused={!!ticket.slaPausedAt}
                 createdAt={ticket.createdAt}
+                slaPausedDurationMinutes={ticket.slaPausedDurationMinutes}
               />
               <SLAGauge
                 label="Resolution"
@@ -1200,6 +1208,7 @@ export default function TicketDetailPage({
                 metAt={ticket.resolvedAt}
                 isPaused={!!ticket.slaPausedAt}
                 createdAt={ticket.createdAt}
+                slaPausedDurationMinutes={ticket.slaPausedDurationMinutes}
               />
             </div>
           </motion.div>

@@ -130,11 +130,20 @@ export default function RACIMatrixDetailPage() {
   function startEdit(entry: RACIEntry) {
     setForm({
       activity: entry.activity,
-      responsible: entry.responsibleIds.map((id) => ({ id, label: id })),
+      responsible: entry.responsibleIds.map((id, i) => ({
+        id,
+        label: entry.responsibleNames?.[i] ?? id,
+      })),
       accountableId: entry.accountableId,
-      accountableDisplay: entry.accountableId,
-      consulted: (entry.consultedIds ?? []).map((id) => ({ id, label: id })),
-      informed: (entry.informedIds ?? []).map((id) => ({ id, label: id })),
+      accountableDisplay: entry.accountableName ?? entry.accountableId,
+      consulted: (entry.consultedIds ?? []).map((id, i) => ({
+        id,
+        label: entry.consultedNames?.[i] ?? id,
+      })),
+      informed: (entry.informedIds ?? []).map((id, i) => ({
+        id,
+        label: entry.informedNames?.[i] ?? id,
+      })),
       notes: entry.notes ?? "",
     });
     setEditingId(entry.id);
@@ -312,37 +321,37 @@ export default function RACIMatrixDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {entry.responsibleIds.map((id) => (
+                        {entry.responsibleIds.map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#3B82F6" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.responsibleNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
-                        className="inline-block rounded bg-red-50 px-1.5 py-0.5 text-xs font-mono"
+                        className="inline-block rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium"
                         style={{ color: "#EF4444" }}
                         title={entry.accountableId}
                       >
-                        {truncate(entry.accountableId, 8)}
+                        {entry.accountableName ?? truncate(entry.accountableId, 8)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {(entry.consultedIds ?? []).map((id) => (
+                        {(entry.consultedIds ?? []).map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#F59E0B" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.consultedNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                         {(!entry.consultedIds ||
@@ -355,14 +364,14 @@ export default function RACIMatrixDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {(entry.informedIds ?? []).map((id) => (
+                        {(entry.informedIds ?? []).map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#6B7280" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.informedNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                         {(!entry.informedIds ||

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,11 +22,12 @@ import {
 import {
   useGlobalSearch,
   useRecentSearches,
+  useRecordRecentSearch,
   useSavedSearches,
   useSaveSearch,
   useDeleteSavedSearch,
 } from "@/hooks/use-reporting";
-import type { SavedSearch } from "@/types";
+import type { SavedSearch, SearchEntityType } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -63,7 +64,11 @@ function useDebounce<T>(value: T, delay: number): T {
 /*  Result Card Components                                              */
 /* ------------------------------------------------------------------ */
 
-function TicketResult({ item }: { item: { id: string; title: string; status: string } }) {
+function TicketResult({
+  item,
+}: {
+  item: { id: string; ticketNumber: string; title: string; status: string; priority: string };
+}) {
   return (
     <a
       href={`/dashboard/itsm/tickets/${item.id}`}
@@ -78,7 +83,7 @@ function TicketResult({ item }: { item: { id: string; title: string; status: str
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</p>
-        <p className="text-xs text-[var(--text-secondary)]">Ticket</p>
+        <p className="text-xs text-[var(--text-secondary)]">Ticket · {item.ticketNumber}</p>
       </div>
       <span
         className="text-xs font-medium rounded-full px-2 py-0.5 capitalize shrink-0"
@@ -189,7 +194,7 @@ function PolicyResult({ item }: { item: { id: string; title: string; status: str
 function UserResult({
   item,
 }: {
-  item: { id: string; displayName: string; email: string; department?: string; jobTitle?: string };
+  item: { id: string; displayName: string; email: string; department?: string | null; jobTitle?: string | null };
 }) {
   return (
     <div
@@ -217,7 +222,7 @@ function UserResult({
 function MeetingResult({
   item,
 }: {
-  item: { id: string; title: string; status: string; scheduledAt?: string };
+  item: { id: string; title: string; status: string; scheduledAt: string };
 }) {
   return (
     <a
@@ -409,21 +414,50 @@ export default function SearchPage() {
 
   // Sync URL query parameter
   useEffect(() => {
-    if (debouncedQuery && debouncedQuery !== urlQuery) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("q", debouncedQuery);
-      router.replace(`/dashboard/search?${params.toString()}`);
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedQuery) {
+      if (debouncedQuery !== urlQuery) {
+        params.set("q", debouncedQuery);
+        router.replace(`/dashboard/search?${params.toString()}`);
+      }
+    } else if (urlQuery) {
+      params.delete("q");
+      const qs = params.toString();
+      router.replace(qs ? `/dashboard/search?${qs}` : "/dashboard/search");
     }
   }, [debouncedQuery, urlQuery, searchParams, router]);
 
-  // Determine entity types to search based on active tab
-  const entityTypes = useMemo(() => {
+  // Determine entity types to search based on active tab.
+  // Return type is SearchEntityType[] | undefined — TypeScript will error here
+  // if any non-"all" tab key falls outside the backend-defined SearchEntityType union.
+  const entityTypes = useMemo((): SearchEntityType[] | undefined => {
     if (activeTab === "all") return undefined;
     return [activeTab];
   }, [activeTab]);
 
   const { data: results, isLoading, isFetching } = useGlobalSearch(debouncedQuery, entityTypes);
   const saveSearch = useSaveSearch();
+  const recordRecent = useRecordRecentSearch();
+
+  // Track the last query recorded to avoid duplicate recent-search entries
+  // on background refetches or React strict-mode double-invocations.
+  const lastRecordedRef = useRef<string>("");
+
+  // Automatically record every settled search (≥2 chars) into recent history.
+  useEffect(() => {
+    if (
+      results !== undefined &&
+      debouncedQuery.length >= 2 &&
+      debouncedQuery !== lastRecordedRef.current
+    ) {
+      lastRecordedRef.current = debouncedQuery;
+      recordRecent.mutate({ query: debouncedQuery, entityTypes: entityTypes });
+    }
+    // recordRecent.mutate is stable per TanStack Query.
+    // entityTypes is intentionally excluded: switching tabs on the same query
+    // should not create a second recent-search entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, debouncedQuery]);
 
   const handleSelectQuery = useCallback((q: string) => {
     setInputValue(q);

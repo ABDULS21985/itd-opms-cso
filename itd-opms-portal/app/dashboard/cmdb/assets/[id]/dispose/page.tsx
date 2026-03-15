@@ -25,8 +25,6 @@ const DISPOSAL_METHODS = [
   { value: "donation", label: "Donation" },
   { value: "resale", label: "Resale" },
   { value: "destruction", label: "Physical Destruction" },
-  { value: "return_to_vendor", label: "Return to Vendor" },
-  { value: "e_waste", label: "E-Waste Disposal" },
 ];
 
 /* ------------------------------------------------------------------ */

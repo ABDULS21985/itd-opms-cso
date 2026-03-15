@@ -45,9 +45,14 @@ const ruleColumns = `
 	max_executions_per_hour, cooldown_minutes, execution_count,
 	last_executed_at, created_by, org_unit_id, created_at, updated_at`
 
-const executionColumns = `
-	id, rule_id, tenant_id, trigger_event, entity_type, entity_id,
-	actions_taken, status, error_message, duration_ms, executed_at`
+// executionCols is the canonical column list for execution queries with rule name JOIN.
+// Table aliases: ae = automation_executions, ar = automation_rules.
+const executionCols = `ae.id, ae.rule_id, ar.name, ae.tenant_id, ae.trigger_event,
+	ae.entity_type, ae.entity_id, ae.actions_taken, ae.status,
+	ae.error_message, ae.duration_ms, ae.executed_at`
+
+const executionJoin = `FROM automation_executions ae
+	JOIN automation_rules ar ON ar.id = ae.rule_id`
 
 func scanRule(row pgx.Row) (AutomationRule, error) {
 	var r AutomationRule
@@ -86,7 +91,7 @@ func scanRules(rows pgx.Rows) ([]AutomationRule, error) {
 func scanExecution(row pgx.Row) (AutomationExecution, error) {
 	var e AutomationExecution
 	err := row.Scan(
-		&e.ID, &e.RuleID, &e.TenantID, &e.TriggerEvent, &e.EntityType, &e.EntityID,
+		&e.ID, &e.RuleID, &e.RuleName, &e.TenantID, &e.TriggerEvent, &e.EntityType, &e.EntityID,
 		&e.ActionsTaken, &e.Status, &e.ErrorMessage, &e.DurationMs, &e.ExecutedAt,
 	)
 	return e, err
@@ -97,7 +102,7 @@ func scanExecutions(rows pgx.Rows) ([]AutomationExecution, error) {
 	for rows.Next() {
 		var e AutomationExecution
 		if err := rows.Scan(
-			&e.ID, &e.RuleID, &e.TenantID, &e.TriggerEvent, &e.EntityType, &e.EntityID,
+			&e.ID, &e.RuleID, &e.RuleName, &e.TenantID, &e.TriggerEvent, &e.EntityType, &e.EntityID,
 			&e.ActionsTaken, &e.Status, &e.ErrorMessage, &e.DurationMs, &e.ExecutedAt,
 		); err != nil {
 			return nil, err
@@ -117,8 +122,8 @@ func scanExecutions(rows pgx.Rows) ([]AutomationExecution, error) {
 // ListRules
 // ──────────────────────────────────────────────
 
-// ListRules returns a paginated, filterable list of automation rules.
-func (s *Service) ListRules(ctx context.Context, isActive *bool, triggerType string, limit, offset int) ([]AutomationRule, int64, error) {
+// ListRules returns a paginated, filterable, searchable list of automation rules.
+func (s *Service) ListRules(ctx context.Context, isActive *bool, triggerType, search string, limit, offset int) ([]AutomationRule, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -153,6 +158,14 @@ func (s *Service) ListRules(ctx context.Context, isActive *bool, triggerType str
 			args = append(args, orgParam)
 			argIdx++
 		}
+	}
+
+	// Full-text search across name and description.
+	if search = strings.TrimSpace(search); search != "" {
+		n1 := nextArg()
+		n2 := nextArg()
+		whereClauses = append(whereClauses, fmt.Sprintf("(name ILIKE %s OR description ILIKE %s)", n1, n2))
+		args = append(args, "%"+search+"%", "%"+search+"%")
 	}
 
 	where := strings.Join(whereClauses, " AND ")
@@ -283,8 +296,15 @@ func (s *Service) CreateRule(ctx context.Context, req CreateAutomationRuleReques
 		)
 		RETURNING ` + ruleColumns
 
+	// Store NULL for empty description so the field stays nullable in the DB.
+	var desc *string
+	if strings.TrimSpace(req.Description) != "" {
+		d := req.Description
+		desc = &d
+	}
+
 	rule, err := scanRule(s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, req.Name, req.Description, req.TriggerType,
+		id, auth.TenantID, req.Name, desc, req.TriggerType,
 		triggerConfig, conditionConfig, actions,
 		maxExec, cooldown,
 		auth.UserID, orgUnitID, now, now,
@@ -344,7 +364,12 @@ func (s *Service) UpdateRule(ctx context.Context, id uuid.UUID, req UpdateAutoma
 	}
 	if req.Description != nil {
 		setClauses = append(setClauses, "description = "+nextArg())
-		args = append(args, *req.Description)
+		// Store NULL for empty string so the column stays properly nullable.
+		var descVal *string
+		if strings.TrimSpace(*req.Description) != "" {
+			descVal = req.Description
+		}
+		args = append(args, descVal)
 	}
 	if req.TriggerType != nil {
 		if !ValidTriggerTypes[*req.TriggerType] {
@@ -713,14 +738,15 @@ func (s *Service) ListExecutions(ctx context.Context, ruleID uuid.UUID, status s
 	argIdx := 0
 	nextArg := func() string { argIdx++; return fmt.Sprintf("$%d", argIdx) }
 
-	whereClauses = append(whereClauses, "tenant_id = "+nextArg())
+	// Use table aliases to avoid ambiguity with the JOIN.
+	whereClauses = append(whereClauses, "ae.tenant_id = "+nextArg())
 	args = append(args, auth.TenantID)
 
-	whereClauses = append(whereClauses, "rule_id = "+nextArg())
+	whereClauses = append(whereClauses, "ae.rule_id = "+nextArg())
 	args = append(args, ruleID)
 
 	if status != "" {
-		whereClauses = append(whereClauses, "status = "+nextArg())
+		whereClauses = append(whereClauses, "ae.status = "+nextArg())
 		args = append(args, status)
 	}
 
@@ -728,15 +754,15 @@ func (s *Service) ListExecutions(ctx context.Context, ruleID uuid.UUID, status s
 
 	// Count.
 	var total int64
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM automation_executions WHERE %s", where)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) %s WHERE %s", executionJoin, where)
 	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count automation executions", err)
 	}
 
-	// Fetch.
+	// Fetch — includes ar.name via executionJoin.
 	query := fmt.Sprintf(
-		"SELECT %s FROM automation_executions WHERE %s ORDER BY executed_at DESC LIMIT %s OFFSET %s",
-		executionColumns, where, nextArg(), nextArg(),
+		"SELECT %s %s WHERE %s ORDER BY ae.executed_at DESC LIMIT %s OFFSET %s",
+		executionCols, executionJoin, where, nextArg(), nextArg(),
 	)
 	args = append(args, limit, offset)
 
@@ -789,21 +815,18 @@ func (s *Service) ListAllExecutions(ctx context.Context, status string, limit, o
 	}
 
 	where := strings.Join(whereClauses, " AND ")
-	joinClause := "FROM automation_executions ae JOIN automation_rules ar ON ar.id = ae.rule_id"
 
 	// Count.
 	var total int64
-	countQuery := fmt.Sprintf("SELECT COUNT(*) %s WHERE %s", joinClause, where)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) %s WHERE %s", executionJoin, where)
 	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count automation executions", err)
 	}
 
-	// Fetch — select execution columns with ae. prefix.
-	execCols := `ae.id, ae.rule_id, ae.tenant_id, ae.trigger_event, ae.entity_type, ae.entity_id,
-		ae.actions_taken, ae.status, ae.error_message, ae.duration_ms, ae.executed_at`
+	// Fetch — use shared executionCols which includes ar.name.
 	query := fmt.Sprintf(
 		"SELECT %s %s WHERE %s ORDER BY ae.executed_at DESC LIMIT %s OFFSET %s",
-		execCols, joinClause, where, nextArg(), nextArg(),
+		executionCols, executionJoin, where, nextArg(), nextArg(),
 	)
 	args = append(args, limit, offset)
 

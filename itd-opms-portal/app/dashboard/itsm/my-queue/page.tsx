@@ -42,13 +42,14 @@ const PRIORITY_ORDER: Record<string, number> = {
 };
 
 const QUICK_TRANSITIONS: Record<string, { value: string; label: string }[]> = {
-  new: [{ value: "in_progress", label: "Start Work" }],
+  logged: [{ value: "assigned", label: "Assign" }],
+  classified: [{ value: "assigned", label: "Assign" }],
   assigned: [{ value: "in_progress", label: "Start Work" }],
   in_progress: [
-    { value: "pending_user", label: "Pending User" },
+    { value: "pending_customer", label: "Pending Customer" },
     { value: "resolved", label: "Resolve" },
   ],
-  pending_user: [{ value: "in_progress", label: "Resume" }],
+  pending_customer: [{ value: "in_progress", label: "Resume" }],
   pending_vendor: [{ value: "in_progress", label: "Resume" }],
 };
 

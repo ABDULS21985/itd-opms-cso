@@ -136,9 +136,15 @@ export default function NewPolicyPage() {
         scopeType,
         content: content.trim(),
         tags: tagsArray,
-        effectiveDate: effectiveDate || undefined,
-        reviewDate: reviewDate || undefined,
-        expiryDate: expiryDate || undefined,
+        effectiveDate: effectiveDate
+          ? new Date(effectiveDate + "T00:00:00Z").toISOString()
+          : undefined,
+        reviewDate: reviewDate
+          ? new Date(reviewDate + "T00:00:00Z").toISOString()
+          : undefined,
+        expiryDate: expiryDate
+          ? new Date(expiryDate + "T00:00:00Z").toISOString()
+          : undefined,
         ownerId: ownerId.trim() || undefined,
       },
       {

@@ -72,7 +72,10 @@ const OFFICES = [
 const STATUS_COLORS: Record<string, string> = {
   proposed: "#9CA3AF", active: "#3B82F6", "in-development": "#8B5CF6",
   implementation: "#06B6D4", completed: "#22C55E", cancelled: "#EF4444",
-  "on-hold": "#F97316", "kick-off": "#14B8A6", "project-mode": "#6366F1",
+  // Backend constant uses on_hold (underscore); "on-hold" kept for legacy data
+  "on-hold": "#F97316", on_hold: "#F97316",
+  approved: "#10B981",
+  "kick-off": "#14B8A6", "project-mode": "#6366F1",
   "requirement-management": "#EC4899", "solution-architecture": "#A855F7",
 };
 
@@ -162,7 +165,9 @@ function computeOfficeMetrics(
     // Risks associated with this office's projects
     const officeProjectIds = new Set(officeProjects.map((p) => p.id));
     const officeRisks = risks.filter((r) => r.projectId && officeProjectIds.has(r.projectId));
-    const openRisks = officeRisks.filter((r) => r.status === "open").length;
+    // Backend risk statuses: identified, assessed, mitigating, accepted, closed.
+    // "Open" means any non-terminal status (not closed or accepted).
+    const openRisks = officeRisks.filter((r) => !["closed", "accepted"].includes(r.status)).length;
 
     // Status breakdown for stacked bars
     const statusBreakdown: Record<string, number> = {};

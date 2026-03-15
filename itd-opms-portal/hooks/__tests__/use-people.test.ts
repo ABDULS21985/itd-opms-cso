@@ -525,7 +525,7 @@ describe("useCompleteChecklistTask", () => {
       wrapper: createWrapper(),
     });
 
-    result.current.mutate("task-1");
+    result.current.mutate({ id: "task-1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

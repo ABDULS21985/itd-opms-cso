@@ -595,15 +595,19 @@ func TestMilestoneHandler_CreateMilestone_MissingTargetDate(t *testing.T) {
 	}
 }
 
-func TestMilestoneHandler_ListMilestones_MissingProjectID(t *testing.T) {
+func TestMilestoneHandler_ListMilestones_NoProjectID_ReturnsTenantWide(t *testing.T) {
+	// Omitting project_id is now valid — the endpoint returns all tenant milestones
+	// for use by analytics dashboards.
 	h := newTestMilestoneHandler()
 	req := requestWithAuth(http.MethodGet, "/", "")
 	w := httptest.NewRecorder()
 
 	h.ListMilestones(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for missing project_id, got %d", w.Code)
+	// The handler will attempt the DB query; without a real DB it may return 500
+	// in test context, but it must NOT return 400 anymore.
+	if w.Code == http.StatusBadRequest {
+		t.Errorf("expected non-400 when project_id is omitted (tenant-wide listing), got 400")
 	}
 }
 

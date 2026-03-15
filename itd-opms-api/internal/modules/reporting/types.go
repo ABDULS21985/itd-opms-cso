@@ -179,3 +179,113 @@ type CreateSavedSearchRequest struct {
 	EntityTypes []string `json:"entityTypes"`
 	IsSaved     bool     `json:"isSaved"`
 }
+
+// ──────────────────────────────────────────────
+// Activity Feed types
+// ──────────────────────────────────────────────
+
+// ActivityActor identifies the user who performed an action.
+type ActivityActor struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Avatar *string `json:"avatar,omitempty"`
+}
+
+// ActivityEntity identifies the entity that was acted upon.
+type ActivityEntity struct {
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+
+// ActivityFeedItem represents a single recent-activity event.
+type ActivityFeedItem struct {
+	ID          string         `json:"id"`
+	Type        string         `json:"type"`
+	Actor       ActivityActor  `json:"actor"`
+	Description string         `json:"description"`
+	Entity      ActivityEntity `json:"entity"`
+	Timestamp   time.Time      `json:"timestamp"`
+}
+
+// ActivityFeedResponse wraps a paginated list of activity feed items.
+type ActivityFeedResponse struct {
+	Data  []ActivityFeedItem `json:"data"`
+	Total int                `json:"total"`
+	Page  int                `json:"page"`
+	Limit int                `json:"limit"`
+}
+
+// ──────────────────────────────────────────────
+// My-Tasks types
+// ──────────────────────────────────────────────
+
+// MyTicketItem represents a ticket in the my-tasks summary.
+type MyTicketItem struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Href     string `json:"href"`
+	Priority string `json:"priority"`
+}
+
+// MyDeadlineItem represents a deadline-sensitive task in the my-tasks summary.
+type MyDeadlineItem struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Href    string `json:"href"`
+	DueDate string `json:"dueDate"`
+}
+
+// MyApprovalItem represents a pending-approval action item.
+type MyApprovalItem struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Href  string `json:"href"`
+	Type  string `json:"type"`
+}
+
+// MyOpenTickets holds count + items for open tickets assigned to the user.
+type MyOpenTickets struct {
+	Count int            `json:"count"`
+	Items []MyTicketItem `json:"items"`
+}
+
+// MyTasksDue holds count + items for tasks due this week.
+type MyTasksDue struct {
+	Count int              `json:"count"`
+	Items []MyDeadlineItem `json:"items"`
+}
+
+// MyPendingApprovals holds count + items for pending approvals.
+type MyPendingApprovals struct {
+	Count int              `json:"count"`
+	Items []MyApprovalItem `json:"items"`
+}
+
+// MyOverdueItems holds count + items for overdue action items.
+type MyOverdueItems struct {
+	Count int              `json:"count"`
+	Items []MyDeadlineItem `json:"items"`
+}
+
+// MyTasksSummary is the full response for /dashboards/my-tasks.
+type MyTasksSummary struct {
+	OpenTickets      MyOpenTickets      `json:"openTickets"`
+	TasksDueThisWeek MyTasksDue         `json:"tasksDueThisWeek"`
+	PendingApprovals MyPendingApprovals `json:"pendingApprovals"`
+	OverdueItems     MyOverdueItems     `json:"overdueItems"`
+}
+
+// ──────────────────────────────────────────────
+// Upcoming Events types
+// ──────────────────────────────────────────────
+
+// UpcomingEvent represents a single upcoming event or deadline.
+type UpcomingEvent struct {
+	ID    string  `json:"id"`
+	Title string  `json:"title"`
+	Type  string  `json:"type"`
+	Date  string  `json:"date"`
+	Href  *string `json:"href,omitempty"`
+}

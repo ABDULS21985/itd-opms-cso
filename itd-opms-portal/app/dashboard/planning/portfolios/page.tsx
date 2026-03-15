@@ -12,7 +12,10 @@ import {
   Calendar,
   Briefcase,
   Loader2,
+  LayoutGrid,
+  List,
 } from "lucide-react";
+import { DataTable, type Column } from "@/components/shared/data-table";
 import { usePortfolios } from "@/hooks/use-planning";
 import type { Portfolio } from "@/types";
 
@@ -31,6 +34,84 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   archived: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280" },
 };
 
+type ViewMode = "tiles" | "grid";
+
+/* ------------------------------------------------------------------ */
+/*  Table columns for grid view                                        */
+/* ------------------------------------------------------------------ */
+
+const PORTFOLIO_COLUMNS: Column<Portfolio>[] = [
+  {
+    key: "name",
+    header: "Portfolio",
+    sortable: true,
+    className: "min-w-[220px]",
+    render: (p) => (
+      <div className="flex items-center gap-2.5">
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
+          style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
+        >
+          <FolderOpen size={16} style={{ color: "#1B7340" }} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+            {p.name}
+          </p>
+          {p.description && (
+            <p className="text-xs text-[var(--neutral-gray)] truncate max-w-[260px]">
+              {p.description}
+            </p>
+          )}
+        </div>
+      </div>
+    ),
+  },
+  {
+    key: "fiscalYear",
+    header: "Fiscal Year",
+    sortable: true,
+    render: (p) => (
+      <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+        <Calendar size={12} />
+        <span>FY {p.fiscalYear}</span>
+      </div>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    sortable: true,
+    render: (p) => {
+      const c = STATUS_COLORS[p.status] ?? {
+        bg: "var(--surface-2)",
+        text: "var(--neutral-gray)",
+      };
+      return (
+        <span
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
+          style={{ backgroundColor: c.bg, color: c.text }}
+        >
+          {p.status}
+        </span>
+      );
+    },
+  },
+  {
+    key: "ownerId",
+    header: "Owner",
+    render: (p) =>
+      p.ownerId ? (
+        <div className="flex items-center gap-1.5 text-xs text-[var(--neutral-gray)]">
+          <Briefcase size={12} />
+          <span>{p.ownerId.slice(0, 8)}...</span>
+        </div>
+      ) : (
+        <span className="text-xs text-[var(--neutral-gray)]">—</span>
+      ),
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -40,6 +121,7 @@ export default function PortfoliosPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("tiles");
 
   const { data, isLoading } = usePortfolios(
     page,
@@ -74,6 +156,34 @@ export default function PortfoliosPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center rounded-xl border border-[var(--border)] p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("tiles")}
+              className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${
+                viewMode === "tiles"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Tile view"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--neutral-gray)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Grid view"
+            >
+              <List size={16} />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setShowFilters((f) => !f)}
@@ -166,8 +276,8 @@ export default function PortfoliosPage() {
         </motion.div>
       )}
 
-      {/* Portfolio Grid */}
-      {!isLoading && portfolios.length > 0 && (
+      {/* Portfolio Tiles */}
+      {!isLoading && portfolios.length > 0 && viewMode === "tiles" && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -247,8 +357,39 @@ export default function PortfoliosPage() {
         </motion.div>
       )}
 
-      {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
+      {/* Portfolio Grid (Table) */}
+      {!isLoading && portfolios.length > 0 && viewMode === "grid" && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <DataTable<Portfolio>
+            columns={PORTFOLIO_COLUMNS}
+            data={portfolios}
+            keyExtractor={(p) => p.id}
+            onRowClick={(p) =>
+              router.push(`/dashboard/planning/portfolios/${p.id}`)
+            }
+            emptyTitle="No portfolios found"
+            emptyDescription="Get started by creating your first portfolio."
+            pagination={
+              meta && meta.totalPages > 1
+                ? {
+                    currentPage: page,
+                    totalPages: meta.totalPages,
+                    totalItems: meta.totalItems,
+                    pageSize: 20,
+                    onPageChange: setPage,
+                  }
+                : undefined
+            }
+          />
+        </motion.div>
+      )}
+
+      {/* Pagination (tiles view only) */}
+      {viewMode === "tiles" && meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <p className="text-[var(--neutral-gray)]">
             {meta.totalItems} result{meta.totalItems !== 1 ? "s" : ""}

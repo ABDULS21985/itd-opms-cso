@@ -241,7 +241,10 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 	newVersion := existing.Version + 1
 
 	var stepsJSON []byte
-	if req.Steps != nil {
+	// Only marshal steps when the caller explicitly provides at least one step.
+	// An empty slice (steps: []) is treated as "not provided" to prevent
+	// accidentally wiping the existing step configuration on partial updates.
+	if len(req.Steps) > 0 {
 		stepsJSON, err = json.Marshal(req.Steps)
 		if err != nil {
 			return nil, apperrors.Internal("failed to marshal workflow steps", err)
@@ -251,7 +254,7 @@ func (s *Service) UpdateWorkflowDefinition(ctx context.Context, tenantID, id, up
 	query := `
 		UPDATE workflow_definitions SET
 			name = COALESCE($1, name),
-			description = COALESCE($2, description),
+			description = $2,
 			entity_type = COALESCE($3, entity_type),
 			steps = COALESCE($4, steps),
 			is_active = COALESCE($5, is_active),
@@ -515,6 +518,34 @@ func (s *Service) createStepsForOrder(ctx context.Context, chainID uuid.UUID, st
 
 	if steps == nil {
 		steps = []ApprovalStep{}
+	}
+
+	// Enrich with approver display names via a single bulk query.
+	if len(steps) > 0 {
+		approverIDs := make([]uuid.UUID, len(steps))
+		for i := range steps {
+			approverIDs[i] = steps[i].ApproverID
+		}
+		nameRows, nErr := s.pool.Query(ctx,
+			`SELECT id, COALESCE(display_name, email, id::text) AS name FROM users WHERE id = ANY($1)`,
+			approverIDs,
+		)
+		if nErr == nil {
+			nameMap := make(map[uuid.UUID]string, len(approverIDs))
+			for nameRows.Next() {
+				var uid uuid.UUID
+				var name string
+				if scanErr := nameRows.Scan(&uid, &name); scanErr == nil {
+					nameMap[uid] = name
+				}
+			}
+			nameRows.Close()
+			for i := range steps {
+				if n, ok := nameMap[steps[i].ApproverID]; ok {
+					steps[i].ApproverName = n
+				}
+			}
+		}
 	}
 
 	return steps, nil
@@ -942,14 +973,15 @@ func (s *Service) DelegateStep(ctx context.Context, tenantID, userID uuid.UUID, 
 	}
 
 	// Create a delegation log record.
+	// Schema (migration 024): id, tenant_id, delegated_by, delegated_to, step_id, reason, created_at (default).
 	delegationID := uuid.New()
 	delegationQuery := `
 		INSERT INTO approval_delegations (
-			id, tenant_id, from_user_id, to_user_id, step_id, chain_id, reason, delegated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			id, tenant_id, delegated_by, delegated_to, step_id, reason
+		) VALUES ($1, $2, $3, $4, $5, $6)`
 
 	_, err = s.pool.Exec(ctx, delegationQuery,
-		delegationID, tenantID, userID, req.ToUserID, newStepID, sChainID, req.Reason, now,
+		delegationID, tenantID, userID, req.ToUserID, newStepID, req.Reason,
 	)
 	if err != nil {
 		return apperrors.Internal("failed to create delegation log", err)

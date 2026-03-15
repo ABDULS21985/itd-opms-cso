@@ -61,7 +61,7 @@ export function DrawerAccessLogTab({ entries, isLoading }: DrawerAccessLogTabPro
               </p>
               <p className="text-xs text-[var(--text-tertiary)]">
                 {formatDateTime(entry.createdAt)}
-                {entry.ipAddress && ` &middot; ${entry.ipAddress}`}
+                {entry.ipAddress && <> &middot; {entry.ipAddress}</>}
               </p>
             </div>
           </div>

@@ -443,7 +443,7 @@ export default function ProjectDetailPage({
     return (
       <div className="flex flex-wrap items-center gap-2">
         {(s === "draft" || s === "pending_approval") && (
-          <button type="button" disabled={isActing} onClick={() => approveProject.mutate(id)} className={`${btnBase} bg-green-600 text-white hover:bg-green-700 shadow-sm`}>
+          <button type="button" disabled={isActing} onClick={() => approveProject.mutate({ id, status: "approved" })} className={`${btnBase} bg-green-600 text-white hover:bg-green-700 shadow-sm`}>
             {approveProject.isPending ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
             Approve
           </button>

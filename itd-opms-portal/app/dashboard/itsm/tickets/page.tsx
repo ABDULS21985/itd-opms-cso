@@ -34,10 +34,11 @@ import type { Ticket } from "@/types";
 
 const TICKET_STATUSES = [
   { value: "", label: "All Statuses" },
-  { value: "new", label: "New" },
+  { value: "logged", label: "Logged" },
+  { value: "classified", label: "Classified" },
   { value: "assigned", label: "Assigned" },
   { value: "in_progress", label: "In Progress" },
-  { value: "pending_user", label: "Pending User" },
+  { value: "pending_customer", label: "Pending Customer" },
   { value: "pending_vendor", label: "Pending Vendor" },
   { value: "resolved", label: "Resolved" },
   { value: "closed", label: "Closed" },

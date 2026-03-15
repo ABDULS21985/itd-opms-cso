@@ -208,8 +208,9 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 			duration_minutes = COALESCE($7, duration_minutes),
 			recurrence_rule = COALESCE($8, recurrence_rule),
 			template_agenda = COALESCE($9, template_agenda),
-			attendee_ids = COALESCE($10, attendee_ids)
-		WHERE id = $11 AND tenant_id = $12
+			attendee_ids = COALESCE($10, attendee_ids),
+			status = COALESCE($11, status)
+		WHERE id = $12 AND tenant_id = $13
 		RETURNING id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at`
@@ -218,7 +219,7 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 	err := s.pool.QueryRow(ctx, query,
 		req.Title, req.MeetingType, req.Agenda, req.Minutes, req.Location,
 		req.ScheduledAt, req.DurationMinutes, req.RecurrenceRule, req.TemplateAgenda,
-		req.AttendeeIDs,
+		req.AttendeeIDs, req.Status,
 		meetingID, tenantID,
 	).Scan(
 		&m.ID, &m.TenantID, &m.Title, &m.MeetingType, &m.Agenda, &m.Minutes, &m.Location,
@@ -504,21 +505,31 @@ func (s *MeetingService) GetActionItem(ctx context.Context, tenantID, actionID u
 	return &a, nil
 }
 
-// ListActionItems returns a paginated list of action items, optionally filtered by status and owner.
-func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID string, limit, offset int) ([]ActionItem, int64, error) {
+// ListActionItems returns a paginated list of action items, optionally filtered by status, owner,
+// sourceType, sourceId, and priority.
+func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID, sourceType, sourceID, priority string, limit, offset int) ([]ActionItem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 
-	var statusParam, ownerParam *string
+	var statusParam, ownerParam, sourceTypeParam, sourceIDParam, priorityParam *string
 	if status != "" {
 		statusParam = &status
 	}
 	if ownerID != "" {
 		ownerParam = &ownerID
 	}
+	if sourceType != "" {
+		sourceTypeParam = &sourceType
+	}
+	if sourceID != "" {
+		sourceIDParam = &sourceID
+	}
+	if priority != "" {
+		priorityParam = &priority
+	}
 
-	// Build base args: $1=tenantID, $2=status, $3=ownerID.
-	args := []interface{}{tenantID, statusParam, ownerParam}
-	nextIdx := 4
+	// Build base args: $1=tenantID, $2=status, $3=ownerID, $4=sourceType, $5=sourceID, $6=priority.
+	args := []interface{}{tenantID, statusParam, ownerParam, sourceTypeParam, sourceIDParam, priorityParam}
+	nextIdx := 7
 
 	// Add org scope filter.
 	orgClause := ""
@@ -534,7 +545,10 @@ func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)%s`, orgClause)
+			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($4::text IS NULL OR source_type = $4)
+			AND ($5::text IS NULL OR source_id::text = $5)
+			AND ($6::text IS NULL OR priority = $6)%s`, orgClause)
 
 	var total int64
 	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
@@ -548,7 +562,10 @@ func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)%s
+			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($4::text IS NULL OR source_type = $4)
+			AND ($5::text IS NULL OR source_id::text = $5)
+			AND ($6::text IS NULL OR priority = $6)%s
 		ORDER BY due_date ASC
 		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 

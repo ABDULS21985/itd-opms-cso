@@ -625,9 +625,8 @@ function LeaveRequestModal({
       {
         userId: user?.id ?? "",
         leaveType: form.leaveType,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        status: "pending",
+        startDate: new Date(form.startDate).toISOString(),
+        endDate: new Date(form.endDate).toISOString(),
         notes: form.notes || undefined,
       },
       {

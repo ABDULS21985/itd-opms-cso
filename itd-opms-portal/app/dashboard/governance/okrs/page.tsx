@@ -118,10 +118,10 @@ function OKRTreeNode({
           </div>
           <div className="flex items-center gap-3 mt-1">
             <div className="w-24">
-              <ProgressBar value={okr.progressPct} />
+              <ProgressBar value={okr.progressPct ?? 0} />
             </div>
             <span className="text-xs tabular-nums text-[var(--text-secondary)]">
-              {okr.progressPct}%
+              {okr.progressPct ?? 0}%
             </span>
             <StatusBadge status={okr.status} />
           </div>
@@ -229,9 +229,9 @@ export default function OKRListPage() {
       header: "Progress",
       render: (item) => (
         <div className="flex items-center gap-2 min-w-[120px]">
-          <ProgressBar value={item.progressPct} className="flex-1" />
+          <ProgressBar value={item.progressPct ?? 0} className="flex-1" />
           <span className="text-xs tabular-nums text-[var(--text-secondary)] w-8 text-right">
-            {item.progressPct}%
+            {item.progressPct ?? 0}%
           </span>
         </div>
       ),

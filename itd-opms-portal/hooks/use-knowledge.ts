@@ -8,6 +8,13 @@ import type {
   FeedbackStats,
   Announcement,
   PaginatedResponse,
+  CreateKBCategoryRequest,
+  UpdateKBCategoryRequest,
+  CreateKBArticleRequest,
+  UpdateKBArticleRequest,
+  CreateFeedbackRequest,
+  CreateAnnouncementRequest,
+  UpdateAnnouncementRequest,
 } from "@/types";
 
 /* ================================================================== */
@@ -49,7 +56,7 @@ export function useKBCategory(id: string | undefined) {
 export function useCreateKBCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<KBCategory>) =>
+    mutationFn: (body: CreateKBCategoryRequest) =>
       apiClient.post<KBCategory>("/knowledge/categories", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kb-categories"] });
@@ -67,7 +74,7 @@ export function useCreateKBCategory() {
 export function useUpdateKBCategory(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<KBCategory>) =>
+    mutationFn: (body: UpdateKBCategoryRequest) =>
       apiClient.put<KBCategory>(`/knowledge/categories/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kb-categories"] });
@@ -76,6 +83,24 @@ export function useUpdateKBCategory(id: string | undefined) {
     },
     onError: () => {
       toast.error("Failed to update category");
+    },
+  });
+}
+
+/**
+ * DELETE /knowledge/categories/{id} - delete a KB category.
+ */
+export function useDeleteKBCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/knowledge/categories/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kb-categories"] });
+      toast.success("Category deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete category");
     },
   });
 }
@@ -160,7 +185,7 @@ export function useSearchKBArticles(
 export function useCreateKBArticle() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<KBArticle>) =>
+    mutationFn: (body: CreateKBArticleRequest) =>
       apiClient.post<KBArticle>("/knowledge/articles", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kb-articles"] });
@@ -178,7 +203,7 @@ export function useCreateKBArticle() {
 export function useUpdateKBArticle(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<KBArticle>) =>
+    mutationFn: (body: UpdateKBArticleRequest) =>
       apiClient.put<KBArticle>(`/knowledge/articles/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kb-articles"] });
@@ -202,6 +227,8 @@ export function useDeleteKBArticle() {
       apiClient.delete(`/knowledge/articles/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kb-articles"] });
+      queryClient.invalidateQueries({ queryKey: ["kb-article"] });
+      queryClient.invalidateQueries({ queryKey: ["kb-article-slug"] });
       toast.success("Article deleted successfully");
     },
     onError: () => {
@@ -307,7 +334,7 @@ export function useFeedbackStats(articleId: string | undefined) {
 export function useCreateFeedback(articleId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { isHelpful: boolean; comment?: string }) =>
+    mutationFn: (body: CreateFeedbackRequest) =>
       apiClient.post<KBArticleFeedback>(
         `/knowledge/articles/${articleId}/feedback`,
         body,
@@ -402,7 +429,7 @@ export function useAnnouncement(id: string | undefined) {
 export function useCreateAnnouncement() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Announcement>) =>
+    mutationFn: (body: CreateAnnouncementRequest) =>
       apiClient.post<Announcement>("/knowledge/announcements", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["announcements"] });
@@ -420,7 +447,7 @@ export function useCreateAnnouncement() {
 export function useUpdateAnnouncement(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Announcement>) =>
+    mutationFn: (body: UpdateAnnouncementRequest) =>
       apiClient.put<Announcement>(`/knowledge/announcements/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["announcements"] });

@@ -57,7 +57,7 @@ import {
   useRevokeSession,
   useSearchUsers,
 } from "@/hooks/use-system";
-import type { RoleDetail, RoleBinding, Delegation, ActiveSession } from "@/types";
+import type { RoleDetail, RoleBinding, Delegation, ActiveSession, AuditEventDetail } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -167,14 +167,7 @@ export default function UserDetailPage() {
   const { data: rolesData } = useRoles();
   const allRoles: RoleDetail[] = rolesData ?? [];
   const { data: timelineData } = useAuditTimeline("user", id);
-  const timeline = (timelineData ?? []) as Array<{
-    id: string;
-    action: string;
-    actorEmail?: string;
-    actorDisplayName?: string;
-    changes?: Record<string, unknown>;
-    createdAt: string;
-  }>;
+  const timeline: AuditEventDetail[] = (timelineData ?? []) as AuditEventDetail[];
   const { data: userSessions } = useUserSessions(id);
   const sessions: ActiveSession[] = userSessions ?? [];
 
@@ -273,7 +266,7 @@ export default function UserDetailPage() {
         roleId: roleForm.roleId,
         scopeType: roleForm.scopeType || "global",
         scopeId: roleForm.scopeId || undefined,
-        expiresAt: roleForm.expiresAt || undefined,
+        expiresAt: roleForm.expiresAt ? `${roleForm.expiresAt}T00:00:00Z` : undefined,
       },
       {
         onSuccess: () => {
@@ -293,13 +286,13 @@ export default function UserDetailPage() {
   }
 
   function handleCreateDelegation() {
-    if (!delegationForm.delegateeId || !delegationForm.roleId) return;
+    if (!delegationForm.delegateeId || !delegationForm.roleId || !delegationForm.reason) return;
     createDelegation.mutate(
       {
         delegateId: delegationForm.delegateeId,
         roleId: delegationForm.roleId,
-        startsAt: delegationForm.startDate,
-        endsAt: delegationForm.endDate,
+        startsAt: delegationForm.startDate ? `${delegationForm.startDate}T00:00:00Z` : "",
+        endsAt: delegationForm.endDate ? `${delegationForm.endDate}T00:00:00Z` : "",
         reason: delegationForm.reason || "",
       },
       {
@@ -811,7 +804,7 @@ export default function UserDetailPage() {
               </FormField>
             </div>
 
-            <FormField label="Reason" hint="optional">
+            <FormField label="Reason" required>
               <textarea
                 value={delegationForm.reason}
                 onChange={(e) => setDelegationForm((f) => ({ ...f, reason: e.target.value }))}
@@ -830,6 +823,7 @@ export default function UserDetailPage() {
               !delegationForm.roleId ||
               !delegationForm.startDate ||
               !delegationForm.endDate ||
+              !delegationForm.reason ||
               createDelegation.isPending
             }
             loading={createDelegation.isPending}
@@ -1241,13 +1235,7 @@ function DelegationsTab({
 function ActivityTab({
   timeline,
 }: {
-  timeline: Array<{
-    id: string;
-    action: string;
-    actorEmail?: string;
-    changes?: Record<string, unknown>;
-    createdAt: string;
-  }>;
+  timeline: AuditEventDetail[];
 }) {
   const actionColors: Record<string, { bg: string; dot: string; icon: string }> = {
     created: { bg: "var(--success)", dot: "var(--success)", icon: "var(--success)" },
@@ -1287,6 +1275,7 @@ function ActivityTab({
             {timeline.map((event, idx) => {
               const changesStr = event.changes ? Object.keys(event.changes).join(", ") : null;
               const colors = getActionColor(event.action);
+              const changesObj = event.changes as Record<string, unknown> | undefined;
 
               return (
                 <motion.div
@@ -1315,12 +1304,12 @@ function ActivityTab({
                         <p className="text-sm font-medium capitalize text-[var(--text-primary)]">
                           {event.action.replace(/_/g, " ")}
                         </p>
-                        {event.actorEmail && (
-                          <p className="mt-0.5 text-xs text-[var(--text-muted)]">by {event.actorEmail}</p>
+                        {event.actorName && (
+                          <p className="mt-0.5 text-xs text-[var(--text-muted)]">by {event.actorName}</p>
                         )}
                         {changesStr && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
-                            {Object.keys(event.changes!).map((field) => (
+                            {Object.keys(changesObj ?? {}).map((field) => (
                               <span
                                 key={field}
                                 className="rounded-md bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]"

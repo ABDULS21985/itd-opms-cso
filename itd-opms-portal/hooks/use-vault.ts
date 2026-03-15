@@ -209,6 +209,23 @@ export function useDocumentLifecycle(id: string | undefined) {
   });
 }
 
+/**
+ * GET /vault/documents/{id}/download — returns a short-lived presigned URL.
+ * Presigned URLs are typically valid for 5 minutes; staleTime matches.
+ */
+export function useDocumentDownloadUrl(id: string | undefined) {
+  return useQuery({
+    queryKey: ["vault-document-download-url", id],
+    queryFn: () =>
+      apiClient.get<{ url: string; fileName: string }>(
+        `/vault/documents/${id}/download`,
+      ),
+    enabled: !!id,
+    staleTime: 4 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
 /* ================================================================== */
 /*  Documents — Mutations                                              */
 /* ================================================================== */
@@ -515,5 +532,101 @@ export function useVaultStats() {
   return useQuery({
     queryKey: ["vault-stats"],
     queryFn: () => apiClient.get<VaultStats>("/vault/stats"),
+  });
+}
+
+export function useRecentDocuments(limit = 10) {
+  return useQuery({
+    queryKey: ["vault-recent", limit],
+    queryFn: () =>
+      apiClient.get<VaultDocument[]>("/vault/recent", { limit }),
+  });
+}
+
+export function useVaultSearch(query: string, limit = 20) {
+  return useQuery({
+    queryKey: ["vault-search", query, limit],
+    queryFn: () =>
+      apiClient.get<VaultDocument[]>("/vault/search", { q: query, limit }),
+    enabled: query.length >= 2,
+  });
+}
+
+/* ================================================================== */
+/*  Shared With Me — Queries                                           */
+/* ================================================================== */
+
+export interface SharedWithMeDocument extends VaultDocument {
+  sharePermission: string;
+  sharedBy: string;
+  sharedAt: string;
+  shareExpiresAt: string | null;
+}
+
+export function useSharedWithMe(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["vault-shared-with-me", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<SharedWithMeDocument>>(
+        "/vault/documents/shared-with-me",
+        { page, limit },
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Compliance Admin — Queries                                         */
+/* ================================================================== */
+
+export interface ComplianceDocument {
+  id: string;
+  title: string;
+  classification: string;
+  accessLevel: string;
+  status: string;
+  expiryDate: string | null;
+  retentionUntil: string | null;
+  ownerName: string | null;
+  orgUnitId: string | null;
+  createdAt: string;
+}
+
+export interface RetentionReport {
+  totalWithExpiry: number;
+  expiredCount: number;
+  expiringSoon30Days: number;
+  totalWithRetention: number;
+  retentionActiveCount: number;
+  retentionExpiredCount: number;
+  legalHoldCount: number;
+}
+
+export function useExpiringSoonDocuments(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["vault-compliance-expiring", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ComplianceDocument>>(
+        "/vault/compliance/expiring-soon",
+        { page, limit },
+      ),
+  });
+}
+
+export function useExpiredDocuments(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["vault-compliance-expired", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ComplianceDocument>>(
+        "/vault/compliance/expired",
+        { page, limit },
+      ),
+  });
+}
+
+export function useRetentionReport() {
+  return useQuery({
+    queryKey: ["vault-compliance-retention"],
+    queryFn: () =>
+      apiClient.get<RetentionReport>("/vault/compliance/retention-report"),
   });
 }

@@ -10,7 +10,7 @@ export interface AutomationRule {
   id: string;
   tenantId: string;
   name: string;
-  description: string;
+  description: string | null;
   isActive: boolean;
   triggerType: "event" | "schedule" | "condition";
   triggerConfig: Record<string, unknown>;
@@ -33,6 +33,7 @@ export interface ActionConfig {
 export interface AutomationExecution {
   id: string;
   ruleId: string;
+  ruleName: string;
   tenantId: string;
   triggerEvent: Record<string, unknown>;
   entityType: string;
@@ -110,6 +111,7 @@ export function useAutomationRules(
   filters?: {
     isActive?: boolean;
     triggerType?: string;
+    search?: string;
   },
 ) {
   return useQuery({
@@ -122,6 +124,7 @@ export function useAutomationRules(
           limit: pageSize,
           isActive: filters?.isActive !== undefined ? String(filters.isActive) : undefined,
           triggerType: filters?.triggerType,
+          search: filters?.search || undefined,
         },
       ),
   });

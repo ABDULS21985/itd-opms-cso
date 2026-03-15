@@ -285,16 +285,25 @@ export function useDeleteProject() {
 }
 
 /**
- * POST /planning/projects/{id}/approve - approve a project.
+ * POST /planning/projects/{id}/approve - approve a project (status transition).
+ * Backend requires { status, ragStatus? } in the request body.
  */
 export function useApproveProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post(`/planning/projects/${id}/approve`),
-    onSuccess: (_data, id) => {
+    mutationFn: ({
+      id,
+      status,
+      ragStatus,
+    }: {
+      id: string;
+      status: string;
+      ragStatus?: string;
+    }) =>
+      apiClient.post(`/planning/projects/${id}/approve`, { status, ragStatus }),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["project", variables.id] });
       toast.success("Project approved");
     },
     onError: () => {
@@ -1352,7 +1361,7 @@ export function useDownloadProjectDocument(
 export function useBulkUpdateWorkItems() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { ids: string[]; fields: Record<string, unknown> }) =>
+    mutationFn: (body: { ids: string[]; fields: Record<string, string> }) =>
       apiClient.post("/planning/work-items/bulk/update", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["work-items"] });

@@ -140,6 +140,14 @@ func (h *Handler) GetPreferences(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, prefs, nil)
 }
 
+// validDigestFrequencies is the set of accepted digest_frequency values.
+// Must stay in sync with the DB CHECK constraint in user_notification_preferences.
+var validDigestFrequencies = map[string]bool{
+	"immediate": true,
+	"daily":     true,
+	"weekly":    true,
+}
+
 // UpdatePreferences handles PUT /notifications/preferences.
 // Creates or updates notification preferences for the authenticated user.
 func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +160,15 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	var req UpdatePreferencesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.DigestFrequency == "" {
+		req.DigestFrequency = "immediate"
+	}
+	if !validDigestFrequencies[req.DigestFrequency] {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST",
+			"digestFrequency must be one of: immediate, daily, weekly")
 		return
 	}
 

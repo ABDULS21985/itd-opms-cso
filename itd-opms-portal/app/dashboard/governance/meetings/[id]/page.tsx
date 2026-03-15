@@ -41,14 +41,11 @@ export default function MeetingDetailPage() {
   const { data: decisions, isLoading: decisionsLoading } =
     useMeetingDecisions(meetingId);
   const createDecision = useCreateDecision(meetingId);
-  const { data: actionsData } = useActionItems(1, 50, undefined, undefined);
+  const { data: actionsData } = useActionItems(1, 50, undefined, undefined, "meeting", meetingId);
   const createAction = useCreateActionItem();
   const completeAction = useCompleteAction();
 
-  /* Filter actions that belong to this meeting */
-  const relatedActions = (actionsData?.data ?? []).filter(
-    (a) => a.sourceType === "meeting" && a.sourceId === meetingId,
-  );
+  const relatedActions = actionsData?.data ?? [];
 
   /* Minutes editing */
   const [editingMinutes, setEditingMinutes] = useState(false);
@@ -57,7 +54,6 @@ export default function MeetingDetailPage() {
   /* Decision form */
   const [showDecisionForm, setShowDecisionForm] = useState(false);
   const [decisionForm, setDecisionForm] = useState({
-    decisionNumber: "",
     title: "",
     description: "",
     rationale: "",
@@ -96,13 +92,12 @@ export default function MeetingDetailPage() {
 
   function handleCreateDecision(e: React.FormEvent) {
     e.preventDefault();
-    if (!decisionForm.title.trim() || !decisionForm.decisionNumber.trim()) {
-      toast.error("Decision number and title are required");
+    if (!decisionForm.title.trim()) {
+      toast.error("Title is required");
       return;
     }
     createDecision.mutate(
       {
-        decisionNumber: decisionForm.decisionNumber.trim(),
         title: decisionForm.title.trim(),
         description: decisionForm.description.trim(),
         rationale: decisionForm.rationale.trim() || undefined,
@@ -110,7 +105,6 @@ export default function MeetingDetailPage() {
       {
         onSuccess: () => {
           setDecisionForm({
-            decisionNumber: "",
             title: "",
             description: "",
             rationale: "",
@@ -437,49 +431,26 @@ export default function MeetingDetailPage() {
               borderColor: "var(--border)",
             }}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
-                  Decision Number *
-                </label>
-                <input
-                  type="text"
-                  value={decisionForm.decisionNumber}
-                  onChange={(e) =>
-                    setDecisionForm({
-                      ...decisionForm,
-                      decisionNumber: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., DEC-001"
-                  className="w-full rounded-lg border px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
-                  Title *
-                </label>
-                <input
-                  type="text"
-                  value={decisionForm.title}
-                  onChange={(e) =>
-                    setDecisionForm({
-                      ...decisionForm,
-                      title: e.target.value,
-                    })
-                  }
-                  placeholder="Decision title"
-                  className="w-full rounded-lg border px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
+                Title *
+              </label>
+              <input
+                type="text"
+                value={decisionForm.title}
+                onChange={(e) =>
+                  setDecisionForm({
+                    ...decisionForm,
+                    title: e.target.value,
+                  })
+                }
+                placeholder="Decision title"
+                className="w-full rounded-lg border px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
+                style={{
+                  backgroundColor: "var(--surface-0)",
+                  borderColor: "var(--border)",
+                }}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
@@ -611,7 +582,7 @@ export default function MeetingDetailPage() {
                   {action.status !== "completed" && (
                     <button
                       type="button"
-                      onClick={() => completeAction.mutate(action.id)}
+                      onClick={() => completeAction.mutate({ id: action.id })}
                       disabled={completeAction.isPending}
                       className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--success-light)]"
                       style={{ color: "var(--success)" }}

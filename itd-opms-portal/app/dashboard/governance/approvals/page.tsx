@@ -11,17 +11,20 @@ import {
   Loader2,
   X,
   Filter,
+  History,
 } from "lucide-react";
 import {
   useMyPendingApprovals,
   useMyPendingApprovalCount,
   useApproveStep,
   useRejectStep,
+  useApprovalHistory,
 } from "@/hooks/use-approvals";
-import type { PendingApprovalItem } from "@/hooks/use-approvals";
+import type { PendingApprovalItem, ApprovalHistoryItem } from "@/hooks/use-approvals";
 import { DataTable } from "@/components/shared/data-table";
 import type { Column } from "@/components/shared/data-table";
 import { PermissionGate } from "@/components/shared/permission-gate";
+import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /*  Reject Comment Modal                                                */
@@ -228,10 +231,136 @@ function UrgencyBadge({ urgency }: { urgency: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  History Tab Content                                               */
+/* ------------------------------------------------------------------ */
+
+const HISTORY_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  approved: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" },
+  rejected: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
+  cancelled: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280" },
+  pending: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
+  in_progress: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
+};
+
+function HistoryTab() {
+  const [page, setPage] = useState(1);
+  const [entityTypeFilter, setEntityTypeFilter] = useState("");
+  const { data: historyData, isLoading } = useApprovalHistory(
+    { entityType: entityTypeFilter || undefined },
+    page,
+    20,
+  );
+
+  const items: ApprovalHistoryItem[] = (historyData as any)?.data ?? [];
+  const meta = (historyData as any)?.meta;
+
+  const historyColumns: Column<ApprovalHistoryItem>[] = [
+    {
+      key: "entityType",
+      header: "Entity Type",
+      render: (item) => (
+        <span className="text-sm font-medium text-[var(--text-primary)] capitalize">
+          {item.entityType.replace(/_/g, " ")}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (item) => {
+        const color = HISTORY_STATUS_COLORS[item.status] ?? HISTORY_STATUS_COLORS.pending;
+        return (
+          <span
+            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
+            style={{ backgroundColor: color.bg, color: color.text }}
+          >
+            {item.status.replace(/_/g, " ")}
+          </span>
+        );
+      },
+    },
+    {
+      key: "urgency",
+      header: "Urgency",
+      render: (item) => (
+        <span className="text-sm text-[var(--text-secondary)] capitalize">{item.urgency}</span>
+      ),
+    },
+    {
+      key: "progress",
+      header: "Progress",
+      render: (item) => (
+        <span className="text-sm text-[var(--text-secondary)]">
+          Step {item.currentStep} / {item.totalSteps}
+        </span>
+      ),
+    },
+    {
+      key: "createdAt",
+      header: "Started",
+      render: (item) => (
+        <span className="text-sm text-[var(--text-secondary)]">
+          {new Date(item.createdAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      key: "completedAt",
+      header: "Completed",
+      render: (item) => (
+        <span className="text-sm text-[var(--text-secondary)]">
+          {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : "--"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Filter className="h-4 w-4 text-[var(--neutral-gray)]" />
+        <span className="text-sm font-medium text-[var(--text-secondary)]">Entity Type:</span>
+        <select
+          value={entityTypeFilter}
+          onChange={(e) => { setEntityTypeFilter(e.target.value); setPage(1); }}
+          className="rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
+        >
+          <option value="">All</option>
+          {["project", "portfolio", "policy", "risk", "change_request", "procurement", "budget", "document", "workitem"].map((et) => (
+            <option key={et} value={et}>{et.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+      </div>
+
+      <DataTable
+        columns={historyColumns}
+        data={items}
+        keyExtractor={(item) => item.chainId}
+        loading={isLoading}
+        emptyTitle="No approval history"
+        emptyDescription="Completed approval chains will appear here."
+        pagination={
+          meta
+            ? {
+                currentPage: meta.page,
+                totalPages: meta.totalPages,
+                totalItems: meta.totalItems,
+                pageSize: meta.pageSize,
+                onPageChange: setPage,
+              }
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
 export default function ApprovalsPage() {
+  const [activeTab, setActiveTab] = useState<"pending" | "history">("pending");
   const [page, setPage] = useState(1);
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState("");
@@ -424,6 +553,43 @@ export default function ApprovalsPage() {
               </p>
             </div>
           </div>
+          {/* Tab switcher */}
+          <div className="flex items-center gap-1 rounded-lg bg-[var(--surface-0)] border border-[var(--border)] p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("pending")}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+                activeTab === "pending"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--surface-1)]",
+              )}
+            >
+              <Clock className="h-4 w-4" />
+              Pending
+              {pendingCount > 0 && (
+                <span className={cn(
+                  "rounded-full px-1.5 py-0.5 text-xs font-bold",
+                  activeTab === "pending" ? "bg-white/20 text-white" : "bg-[var(--primary)] text-white",
+                )}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+                activeTab === "history"
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--surface-1)]",
+              )}
+            >
+              <History className="h-4 w-4" />
+              History
+            </button>
+          </div>
         </motion.div>
 
         {/* Summary Cards */}
@@ -451,6 +617,19 @@ export default function ApprovalsPage() {
           />
         </div>
 
+        {/* History Tab */}
+        {activeTab === "history" && (
+          <motion.div
+            key="history"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <HistoryTab />
+          </motion.div>
+        )}
+
+        {activeTab === "pending" && <>
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -543,6 +722,7 @@ export default function ApprovalsPage() {
             />
           )}
         </AnimatePresence>
+        </>}
       </div>
     </PermissionGate>
   );
