@@ -790,6 +790,34 @@ func (s *UserService) CountActiveUsers(ctx context.Context, tenantID uuid.UUID) 
 	return count, err
 }
 
+// GetUserStats returns a summary of user counts for the tenant.
+func (s *UserService) GetUserStats(ctx context.Context, tenantID uuid.UUID) (UserStats, error) {
+	var stats UserStats
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+		  COUNT(*)                                                               AS total_users,
+		  COUNT(*) FILTER (WHERE is_active = true)                              AS active_users,
+		  COUNT(*) FILTER (WHERE is_active = false)                             AS inactive_users,
+		  COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()))      AS new_this_month
+		FROM users
+		WHERE tenant_id = $1`,
+		tenantID,
+	).Scan(&stats.TotalUsers, &stats.ActiveUsers, &stats.InactiveUsers, &stats.NewThisMonth)
+	if err != nil {
+		return stats, fmt.Errorf("get user stats: %w", err)
+	}
+
+	// Count online users via active_sessions (not revoked, not expired).
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT user_id)
+		FROM active_sessions
+		WHERE tenant_id = $1 AND is_revoked = false AND expires_at > NOW()`,
+		tenantID,
+	).Scan(&stats.OnlineNow)
+
+	return stats, nil
+}
+
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────

@@ -386,7 +386,7 @@ func (h *UserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, results, nil)
 }
 
-// GetUserStats handles GET /system/users/stats — active user count.
+// GetUserStats handles GET /system/users/stats — user statistics.
 func (h *UserHandler) GetUserStats(w http.ResponseWriter, r *http.Request) {
 	auth := types.GetAuthContext(r.Context())
 	if auth == nil {
@@ -394,11 +394,11 @@ func (h *UserHandler) GetUserStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := h.svc.CountActiveUsers(r.Context(), auth.TenantID)
+	stats, err := h.svc.GetUserStats(r.Context(), auth.TenantID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
 	}
 
-	types.OK(w, map[string]int64{"activeUsers": count}, nil)
+	types.OK(w, stats, nil)
 }

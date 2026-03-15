@@ -548,6 +548,37 @@ const DEFAULT_FORM_DATA: RuleFormData = {
   cooldownMinutes: 0,
 };
 
+// Validates a standard 5-part cron expression (no seconds, no named months/weekdays).
+function isValidCron(expr: string): boolean {
+  const trimmed = expr.trim();
+  if (!trimmed) return false;
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) return false;
+  const ranges = [
+    [0, 59],  // minute
+    [0, 23],  // hour
+    [1, 31],  // day of month
+    [1, 12],  // month
+    [0, 7],   // day of week (0 and 7 both = Sunday)
+  ];
+  return parts.every((part, i) => {
+    const [min, max] = ranges[i];
+    if (part === "*") return true;
+    if (/^\*\/\d+$/.test(part)) {
+      const step = parseInt(part.slice(2), 10);
+      return step >= 1 && step <= max;
+    }
+    return part.split(",").every((seg) => {
+      if (seg.includes("-")) {
+        const [a, b] = seg.split("-").map(Number);
+        return !isNaN(a) && !isNaN(b) && a >= min && b <= max && a <= b;
+      }
+      const n = parseInt(seg, 10);
+      return !isNaN(n) && n >= min && n <= max;
+    });
+  });
+}
+
 function RuleFormPanel({
   open,
   onClose,
@@ -558,6 +589,7 @@ function RuleFormPanel({
   editingRule: AutomationRule | null;
 }) {
   const [form, setForm] = useState<RuleFormData>(DEFAULT_FORM_DATA);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const createMutation = useCreateAutomationRule();
   const updateMutation = useUpdateAutomationRule(editingRule?.id);
 
@@ -630,6 +662,19 @@ function RuleFormPanel({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (form.triggerType === "schedule") {
+      if (!form.cronExpression.trim()) {
+        errors.cronExpression = "Cron expression is required for schedule triggers.";
+      } else if (!isValidCron(form.cronExpression)) {
+        errors.cronExpression = "Invalid cron expression. Use 5-part format: minute hour day month weekday (e.g. */15 * * * *).";
+      }
+    }
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
     const payload = buildPayload();
 
     if (editingRule) {
@@ -797,10 +842,20 @@ function RuleFormPanel({
                     <input
                       type="text"
                       value={form.cronExpression}
-                      onChange={(e) => setForm((f) => ({ ...f, cronExpression: e.target.value }))}
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, cronExpression: e.target.value }));
+                        if (formErrors.cronExpression) setFormErrors((prev) => ({ ...prev, cronExpression: "" }));
+                      }}
                       placeholder="*/15 * * * *"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                      className={`w-full rounded-xl border bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--neutral-gray)] focus:outline-none focus:ring-2 ${
+                        formErrors.cronExpression
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                          : "border-[var(--border)] focus:border-[var(--primary)] focus:ring-[var(--primary)]/20"
+                      }`}
                     />
+                    {formErrors.cronExpression && (
+                      <p className="mt-1 text-xs text-red-500">{formErrors.cronExpression}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {CRON_PRESETS.map((preset) => (
@@ -952,6 +1007,9 @@ function RuleFormPanel({
 /*  Test Rule Modal                                                    */
 /* ------------------------------------------------------------------ */
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function TestRuleModal({
   open,
   onClose,
@@ -963,11 +1021,24 @@ function TestRuleModal({
 }) {
   const [entityType, setEntityType] = useState("ticket");
   const [entityId, setEntityId] = useState("");
+  const [entityIdError, setEntityIdError] = useState("");
   const testMutation = useTestAutomationRule(ruleId);
 
+  function resetMutationResult() {
+    testMutation.reset();
+  }
+
   function handleTest() {
-    if (!entityId.trim()) return;
-    testMutation.mutate({ entityType, entityId });
+    const trimmed = entityId.trim();
+    if (!trimmed) return;
+    if (!UUID_REGEX.test(trimmed)) {
+      setEntityIdError(
+        "Must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000)",
+      );
+      return;
+    }
+    setEntityIdError("");
+    testMutation.mutate({ entityType, entityId: trimmed });
   }
 
   if (!open) return null;
@@ -1008,7 +1079,10 @@ function TestRuleModal({
             </label>
             <select
               value={entityType}
-              onChange={(e) => setEntityType(e.target.value)}
+              onChange={(e) => {
+                setEntityType(e.target.value);
+                resetMutationResult();
+              }}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
             >
               {ENTITY_TYPE_OPTIONS.map((opt) => (
@@ -1025,10 +1099,21 @@ function TestRuleModal({
             <input
               type="text"
               value={entityId}
-              onChange={(e) => setEntityId(e.target.value)}
+              onChange={(e) => {
+                setEntityId(e.target.value);
+                if (entityIdError) setEntityIdError("");
+                if (testMutation.data) resetMutationResult();
+              }}
               placeholder="Enter the UUID of the entity to test against..."
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+              className={`w-full rounded-xl border bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--neutral-gray)] focus:outline-none focus:ring-2 transition-colors ${
+                entityIdError
+                  ? "border-[var(--error)] focus:border-[var(--error)] focus:ring-[var(--error)]/20"
+                  : "border-[var(--border)] focus:border-[var(--primary)] focus:ring-[var(--primary)]/20"
+              }`}
             />
+            {entityIdError && (
+              <p className="mt-1 text-xs text-[var(--error)]">{entityIdError}</p>
+            )}
           </div>
 
           {testMutation.data && (
@@ -1145,6 +1230,7 @@ export default function AutomationPage() {
   const { data: rulesData, isLoading: rulesLoading } = useAutomationRules(page, 20, {
     isActive: statusFilter === "active" ? true : statusFilter === "inactive" ? false : undefined,
     triggerType: triggerTypeFilter || undefined,
+    search: debouncedSearch || undefined,
   });
   const { data: execData, isLoading: execLoading } = useAutomationExecutions(execPage, 20, {
     status: execStatusFilter || undefined,
@@ -1179,16 +1265,8 @@ export default function AutomationPage() {
     return "meta" in execData ? execData.meta : undefined;
   }, [execData]);
 
-  // Client-side search on top of server filters.
-  const filteredRules = useMemo(() => {
-    if (!debouncedSearch) return allRules;
-    const q = debouncedSearch.toLowerCase();
-    return allRules.filter(
-      (r: AutomationRule) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.description && r.description.toLowerCase().includes(q)),
-    );
-  }, [allRules, debouncedSearch]);
+  // Server-side search is used via debouncedSearch passed to useAutomationRules.
+  const filteredRules = allRules;
 
   const stats = statsData as { totalRules: number; activeRules: number; executionsToday: number; failuresToday: number } | undefined;
 
@@ -1381,10 +1459,10 @@ export default function AutomationPage() {
     {
       key: "ruleId",
       header: "Rule",
-      className: "min-w-[120px]",
+      className: "min-w-[160px]",
       render: (item) => (
-        <span className="text-sm text-[var(--text-primary)] font-mono text-xs truncate block max-w-[120px]">
-          {item.ruleId.slice(0, 8)}...
+        <span className="text-sm text-[var(--text-primary)] truncate block max-w-[160px]">
+          {item.ruleName || item.ruleId.slice(0, 8) + "…"}
         </span>
       ),
     },

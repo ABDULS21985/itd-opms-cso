@@ -82,30 +82,86 @@ export interface SLAComplianceRate {
   rate: number;
 }
 
+/**
+ * The canonical set of entity types the global search backend supports.
+ * This must stay in sync with the `allTypes` map in search_service.go.
+ */
+export type SearchEntityType =
+  | "tickets"
+  | "articles"
+  | "assets"
+  | "projects"
+  | "policies"
+  | "users"
+  | "meetings"
+  | "decisions";
+
 export interface SavedSearch {
   id: string;
   tenantId: string;
   userId: string;
   query: string;
-  entityTypes: string[];
+  entityTypes: SearchEntityType[];
   isSaved: boolean;
   lastUsedAt: string;
   createdAt: string;
 }
 
 export interface GlobalSearchResults {
-  tickets?: { results: Array<{ id: string; title: string; status: string }>; count: number };
-  articles?: { results: Array<{ id: string; title: string; slug: string }>; count: number };
-  assets?: { results: Array<{ id: string; name: string; assetTag: string }>; count: number };
-  projects?: { results: Array<{ id: string; name: string; status: string }>; count: number };
-  policies?: { results: Array<{ id: string; title: string; status: string }>; count: number };
-  users?: {
-    results: Array<{ id: string; displayName: string; email: string; department?: string; jobTitle?: string }>;
+  tickets?: {
+    results: Array<{
+      id: string;
+      ticketNumber: string;
+      title: string;
+      status: string;
+      priority: string;
+    }>;
     count: number;
   };
-  meetings?: { results: Array<{ id: string; title: string; status: string; scheduledAt: string }>; count: number };
+  articles?: {
+    results: Array<{ id: string; title: string; slug: string; status: string }>;
+    count: number;
+  };
+  assets?: {
+    results: Array<{
+      id: string;
+      name: string;
+      assetTag: string;
+      assetType: string;
+      status: string;
+    }>;
+    count: number;
+  };
+  projects?: {
+    results: Array<{ id: string; name: string; status: string; priority: string }>;
+    count: number;
+  };
+  policies?: {
+    results: Array<{ id: string; title: string; status: string }>;
+    count: number;
+  };
+  users?: {
+    results: Array<{
+      id: string;
+      displayName: string;
+      email: string;
+      department?: string | null;
+      jobTitle?: string | null;
+    }>;
+    count: number;
+  };
+  meetings?: {
+    results: Array<{ id: string; title: string; status: string; scheduledAt: string }>;
+    count: number;
+  };
   decisions?: {
-    results: Array<{ id: string; meetingId: string; decisionNumber: string; title: string; status: string }>;
+    results: Array<{
+      id: string;
+      meetingId: string;
+      decisionNumber: string;
+      title: string;
+      status: string;
+    }>;
     count: number;
   };
 }

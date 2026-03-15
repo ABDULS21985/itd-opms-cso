@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bug,
@@ -13,6 +14,7 @@ import {
   Loader2,
   Save,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
@@ -279,6 +281,16 @@ function ProblemRow({
         <span className="text-xs text-[var(--neutral-gray)] w-20 shrink-0 text-right">
           {problem.ownerId ? problem.ownerId.slice(0, 8) + "..." : "Unassigned"}
         </span>
+
+        {/* View detail link */}
+        <Link
+          href={`/dashboard/itsm/problems/${problem.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--primary)] shrink-0"
+          title="View full detail"
+        >
+          <ExternalLink size={13} />
+        </Link>
       </button>
 
       {/* Expanded detail */}

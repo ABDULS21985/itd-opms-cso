@@ -61,8 +61,8 @@ describe("exportToCSV", () => {
 
   it("generates correct CSV content with headers and rows", () => {
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 
@@ -82,8 +82,8 @@ describe("exportToCSV", () => {
     ];
 
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 
@@ -97,8 +97,8 @@ describe("exportToCSV", () => {
     ];
 
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 
@@ -118,8 +118,8 @@ describe("exportToCSV", () => {
     ];
 
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 
@@ -171,8 +171,8 @@ describe("exportToExcel", () => {
 
   it("uses custom sheet name when provided", () => {
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 
@@ -183,8 +183,8 @@ describe("exportToExcel", () => {
 
   it("defaults sheet name to Sheet1", () => {
     let capturedBlob: Blob | null = null;
-    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob) => {
-      capturedBlob = blob;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob: Blob | MediaSource) => {
+      capturedBlob = blob as Blob;
       return "blob:mock-url";
     });
 

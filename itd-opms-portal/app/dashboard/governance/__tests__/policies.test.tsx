@@ -79,7 +79,7 @@ vi.mock("@/components/shared/data-table", () => {
         React.createElement(
           "tbody",
           null,
-          data.map((item: Record<string, unknown>, i: number) =>
+          (data as Record<string, unknown>[]).map((item, i: number) =>
             React.createElement(
               "tr",
               { key: (item.id as string) ?? i },

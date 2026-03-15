@@ -97,8 +97,9 @@ func (h *Handler) ListRules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	triggerType := r.URL.Query().Get("triggerType")
+	search := r.URL.Query().Get("search")
 
-	rules, total, err := h.svc.ListRules(r.Context(), isActive, triggerType, p.Limit, p.Offset())
+	rules, total, err := h.svc.ListRules(r.Context(), isActive, triggerType, search, p.Limit, p.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return

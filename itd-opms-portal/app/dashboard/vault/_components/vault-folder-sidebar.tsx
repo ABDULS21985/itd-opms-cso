@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Folder, FolderPlus } from "lucide-react";
+import { Folder, FolderPlus, Share2, ShieldAlert } from "lucide-react";
 import { useFolders, useVaultStats, type DocumentFolder } from "@/hooks/use-vault";
 import { buildFolderTree, formatFileSize } from "./vault-constants";
 import { FolderTreeItem } from "./folder-tree-item";
@@ -20,6 +22,7 @@ export function VaultFolderSidebar({
 }: VaultFolderSidebarProps) {
   const { data: foldersData, isLoading } = useFolders();
   const { data: statsData } = useVaultStats();
+  const pathname = usePathname();
 
   const folders = useMemo<DocumentFolder[]>(() => {
     if (!foldersData) return [];
@@ -52,14 +55,46 @@ export function VaultFolderSidebar({
           </button>
         </div>
 
+        {/* Quick Views */}
+        <div className="border-b px-2 py-2 space-y-0.5" style={{ borderColor: "var(--border)" }}>
+          <Link
+            href="/dashboard/vault/shared-with-me"
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
+            style={{
+              backgroundColor: pathname === "/dashboard/vault/shared-with-me" ? "var(--surface-2)" : "transparent",
+              color: pathname === "/dashboard/vault/shared-with-me" ? "var(--primary)" : "var(--text-secondary)",
+            }}
+          >
+            <Share2 size={14} />
+            <span className="flex-1">Shared With Me</span>
+          </Link>
+          <Link
+            href="/dashboard/vault/compliance"
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
+            style={{
+              backgroundColor: pathname === "/dashboard/vault/compliance" ? "var(--surface-2)" : "transparent",
+              color: pathname === "/dashboard/vault/compliance" ? "var(--primary)" : "var(--text-secondary)",
+            }}
+          >
+            <ShieldAlert size={14} />
+            <span className="flex-1">Compliance</span>
+          </Link>
+        </div>
+
         {/* Tree */}
         <div className="flex-1 overflow-y-auto p-2">
           <button
             onClick={() => onSelectFolder(null)}
             className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
             style={{
-              backgroundColor: selectedFolderId === null ? "var(--surface-2)" : "transparent",
-              color: selectedFolderId === null ? "var(--primary)" : "var(--text-primary)",
+              backgroundColor:
+                pathname === "/dashboard/vault" && selectedFolderId === null
+                  ? "var(--surface-2)"
+                  : "transparent",
+              color:
+                pathname === "/dashboard/vault" && selectedFolderId === null
+                  ? "var(--primary)"
+                  : "var(--text-primary)",
             }}
           >
             <span className="w-4" />

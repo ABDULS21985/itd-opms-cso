@@ -14,8 +14,6 @@ export function DrawerSharesTab({ documentId, onAddShare }: DrawerSharesTabProps
   const revokeMutation = useRevokeShare(documentId);
 
   const list: DocumentShare[] = Array.isArray(shares) ? shares : [];
-  const activeShares = list.filter((s) => !s.revokedAt);
-  const revokedShares = list.filter((s) => !!s.revokedAt);
 
   if (isLoading) {
     return (
@@ -38,13 +36,13 @@ export function DrawerSharesTab({ documentId, onAddShare }: DrawerSharesTabProps
         Share Document
       </button>
 
-      {activeShares.length === 0 && revokedShares.length === 0 && (
+      {list.length === 0 && (
         <p className="text-sm text-[var(--text-tertiary)] text-center py-8">
           Not shared with anyone.
         </p>
       )}
 
-      {activeShares.map((share) => (
+      {list.map((share) => (
         <ShareRow
           key={share.id}
           share={share}
@@ -52,17 +50,6 @@ export function DrawerSharesTab({ documentId, onAddShare }: DrawerSharesTabProps
           isRevoking={revokeMutation.isPending}
         />
       ))}
-
-      {revokedShares.length > 0 && (
-        <>
-          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] pt-2">
-            Revoked
-          </p>
-          {revokedShares.map((share) => (
-            <ShareRow key={share.id} share={share} revoked />
-          ))}
-        </>
-      )}
     </div>
   );
 }
@@ -71,16 +58,14 @@ function ShareRow({
   share,
   onRevoke,
   isRevoking,
-  revoked,
 }: {
   share: DocumentShare;
   onRevoke?: () => void;
   isRevoking?: boolean;
-  revoked?: boolean;
 }) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-lg border p-3 ${revoked ? "opacity-50" : ""}`}
+      className="flex items-center gap-3 rounded-lg border p-3"
       style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-0)" }}
     >
       <div
@@ -103,7 +88,7 @@ function ShareRow({
           </p>
         )}
       </div>
-      {!revoked && onRevoke && (
+      {onRevoke && (
         <button
           onClick={onRevoke}
           disabled={isRevoking}

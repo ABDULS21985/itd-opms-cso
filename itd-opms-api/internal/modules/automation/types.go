@@ -114,7 +114,7 @@ type AutomationRule struct {
 	ID                   uuid.UUID       `json:"id"`
 	TenantID             uuid.UUID       `json:"tenantId"`
 	Name                 string          `json:"name"`
-	Description          string          `json:"description"`
+	Description          *string         `json:"description"`
 	IsActive             bool            `json:"isActive"`
 	TriggerType          string          `json:"triggerType"`
 	TriggerConfig        json.RawMessage `json:"triggerConfig"`
@@ -138,6 +138,7 @@ type AutomationRule struct {
 type AutomationExecution struct {
 	ID           uuid.UUID       `json:"id"`
 	RuleID       uuid.UUID       `json:"ruleId"`
+	RuleName     string          `json:"ruleName"`
 	TenantID     uuid.UUID       `json:"tenantId"`
 	TriggerEvent json.RawMessage `json:"triggerEvent"`
 	EntityType   string          `json:"entityType"`

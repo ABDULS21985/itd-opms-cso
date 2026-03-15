@@ -9,6 +9,7 @@ import type {
   ReportRun,
   GlobalSearchResults,
   SavedSearch,
+  SearchEntityType,
   PaginatedResponse,
   ProjectDivisionAssignment,
   DivisionAssignmentLog,
@@ -602,7 +603,7 @@ export function useReportRuns(
 /**
  * GET /reporting/search?q=...&types=... - global search across entities.
  */
-export function useGlobalSearch(query: string, entityTypes?: string[]) {
+export function useGlobalSearch(query: string, entityTypes?: SearchEntityType[]) {
   return useQuery({
     queryKey: ["global-search", query, entityTypes],
     queryFn: () =>
@@ -611,6 +612,21 @@ export function useGlobalSearch(query: string, entityTypes?: string[]) {
         types: entityTypes?.join(","),
       }),
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * POST /reporting/search/saved (isSaved=false) - silently record a search into
+ * recent-search history. Called automatically on every settled search; no toast.
+ */
+export function useRecordRecentSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { query: string; entityTypes?: SearchEntityType[] }) =>
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recent-searches"] });
+    },
   });
 }
 
@@ -647,7 +663,7 @@ export function useSaveSearch() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { query: string; entityTypes?: string[] }) =>
-      apiClient.post<SavedSearch>("/reporting/search/saved", body),
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
       queryClient.invalidateQueries({ queryKey: ["recent-searches"] });

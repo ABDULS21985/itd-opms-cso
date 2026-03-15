@@ -128,7 +128,7 @@ func (h *AuditHandler) verifyIntegrity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.VerifyIntegrity(r.Context(), auth.TenantID)
+	result, err := h.service.VerifyIntegrity(r.Context(), auth.TenantID, nil, nil)
 	if err != nil {
 		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to verify audit integrity")
 		return

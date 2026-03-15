@@ -484,6 +484,7 @@ func (s *AuditExplorerService) ExportEvents(ctx context.Context, tenantID uuid.U
 }
 
 // VerifyIntegrity delegates checksum chain verification to the underlying audit service.
+// dateFrom and dateTo narrow the scope; pass nil to verify the full tenant history.
 func (s *AuditExplorerService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID, dateFrom, dateTo *time.Time) (*audit.IntegrityResult, error) {
-	return s.auditSvc.VerifyIntegrity(ctx, tenantID)
+	return s.auditSvc.VerifyIntegrity(ctx, tenantID, dateFrom, dateTo)
 }

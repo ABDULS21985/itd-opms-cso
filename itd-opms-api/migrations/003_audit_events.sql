@@ -37,6 +37,10 @@ CREATE INDEX idx_audit_correlation ON audit_events(correlation_id) WHERE correla
 CREATE OR REPLACE FUNCTION fn_audit_checksum()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Use Unix microseconds for the timestamp so the format is unambiguous
+    -- and matches Go's time.Time.UnixMicro() output exactly.
+    -- PostgreSQL `::text` cast is locale/DateStyle-dependent and does NOT
+    -- match Go's time.RFC3339Nano string, causing all integrity checks to fail.
     NEW.checksum = encode(
         sha256(
             convert_to(
@@ -46,7 +50,7 @@ BEGIN
                 COALESCE(NEW.entity_type, '') || '|' ||
                 COALESCE(NEW.entity_id::text, '') || '|' ||
                 COALESCE(NEW.changes::text, '') || '|' ||
-                COALESCE(NEW.timestamp::text, ''),
+                ((EXTRACT(EPOCH FROM NEW.timestamp) * 1000000)::bigint)::text,
                 'UTF8'
             )
         ),

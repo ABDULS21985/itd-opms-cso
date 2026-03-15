@@ -131,15 +131,15 @@ type ApprovalStep struct {
 }
 
 // ApprovalDelegation records a delegation event.
+// DB schema (migration 024): id, tenant_id, delegated_by, delegated_to, step_id, reason, created_at.
 type ApprovalDelegation struct {
-	ID            uuid.UUID `json:"id"`
-	TenantID      uuid.UUID `json:"tenantId"`
-	FromUserID    uuid.UUID `json:"fromUserId"`
-	ToUserID      uuid.UUID `json:"toUserId"`
-	StepID        uuid.UUID `json:"stepId"`
-	ChainID       uuid.UUID `json:"chainId"`
-	Reason        *string   `json:"reason"`
-	DelegatedAt   time.Time `json:"delegatedAt"`
+	ID          uuid.UUID `json:"id"`
+	TenantID    uuid.UUID `json:"tenantId"`
+	DelegatedBy uuid.UUID `json:"delegatedBy"`
+	DelegatedTo uuid.UUID `json:"delegatedTo"`
+	StepID      uuid.UUID `json:"stepId"`
+	Reason      *string   `json:"reason"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // ──────────────────────────────────────────────

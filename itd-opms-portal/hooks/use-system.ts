@@ -48,13 +48,13 @@ export function useUsers(
     queryFn: () =>
       apiClient.get<PaginatedResponse<UserDetail>>("/system/users", {
         page,
-        pageSize,
+        limit: pageSize,
         search: filters?.search,
         role: filters?.role,
         status: filters?.status,
         department: filters?.department,
-        sortBy: filters?.sortBy,
-        sortOrder: filters?.sortOrder,
+        sort: filters?.sortBy,
+        order: filters?.sortOrder,
       }),
   });
 }
@@ -78,7 +78,7 @@ export function useSearchUsers(query: string) {
     queryKey: ["system-users-search", query],
     queryFn: () =>
       apiClient.get<UserSearchResult[]>("/system/users/search", { q: query }),
-    enabled: true,
+    enabled: query.length >= 2,
   });
 }
 
@@ -516,7 +516,7 @@ export function useOrgUnits(page = 1, pageSize = 20) {
     queryFn: () =>
       apiClient.get<PaginatedResponse<OrgUnitDetail>>("/system/org-units", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
@@ -680,7 +680,7 @@ export function useDirectorySyncStatus(page = 1, pageSize = 10) {
     queryFn: () =>
       apiClient.get<DirectorySyncStatus>("/system/health/directory-sync", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
@@ -874,18 +874,27 @@ export function useAuditStats(dateFrom?: string, dateTo?: string) {
 
 /**
  * POST /system/audit-logs/verify - verify audit log integrity.
+ * Backend returns: { valid: boolean; totalEvents: number; verified: number; firstInvalid?: string }
  */
 export function useVerifyIntegrity() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body?: { dateFrom?: string; dateTo?: string }) =>
-      apiClient.post<{ status: string; verified: number; failed: number }>(
+      apiClient.post<{
+        valid: boolean;
+        totalEvents: number;
+        verified: number;
+        firstInvalid?: string;
+      }>(
         "/system/audit-logs/verify",
-        body,
+        {
+          // Append time components so the backend can parse as time.Time (RFC3339)
+          dateFrom: body?.dateFrom ? `${body.dateFrom}T00:00:00Z` : undefined,
+          dateTo: body?.dateTo ? `${body.dateTo}T23:59:59Z` : undefined,
+        },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-audit-stats"] });
-      toast.success("Integrity verification completed");
     },
     onError: () => {
       toast.error("Failed to verify audit integrity");
@@ -895,6 +904,7 @@ export function useVerifyIntegrity() {
 
 /**
  * GET /system/audit-logs/export - export filtered audit logs as CSV or JSON.
+ * The backend returns []AuditEventDetail; the download is generated client-side.
  */
 export function useExportAuditLogs() {
   return useMutation({
@@ -909,7 +919,7 @@ export function useExportAuditLogs() {
       search?: string;
     }) => {
       const { format, ...filters } = params;
-      const res = await apiClient.get<{ url: string }>(
+      const events = await apiClient.get<AuditEventDetail[]>(
         "/system/audit-logs/export",
         {
           format,
@@ -922,16 +932,44 @@ export function useExportAuditLogs() {
           search: filters.search,
         },
       );
-      // Trigger browser download
-      if (res?.url) {
-        const a = document.createElement("a");
-        a.href = res.url;
-        a.download = `audit-logs.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+
+      const rows = Array.isArray(events) ? events : [];
+      let content: string;
+      let mimeType: string;
+
+      if (format === "csv") {
+        const csvHeaders = [
+          "id", "timestamp", "actorId", "actorName", "actorRole",
+          "action", "entityType", "entityId", "ipAddress",
+          "correlationId", "checksum",
+        ];
+        const csvRows = rows.map((e) =>
+          [
+            e.id, e.createdAt, e.actorId, e.actorName, e.actorRole,
+            e.action, e.entityType, e.entityId, e.ipAddress,
+            e.correlationId, e.checksum,
+          ]
+            .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+            .join(","),
+        );
+        content = [csvHeaders.join(","), ...csvRows].join("\n");
+        mimeType = "text/csv;charset=utf-8;";
+      } else {
+        content = JSON.stringify(rows, null, 2);
+        mimeType = "application/json";
       }
-      return res;
+
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      return rows;
     },
     onSuccess: () => {
       toast.success("Audit logs exported");
@@ -955,7 +993,7 @@ export function useSessions(page = 1, pageSize = 20) {
     queryFn: () =>
       apiClient.get<PaginatedResponse<ActiveSession>>("/system/sessions", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
