@@ -16,6 +16,8 @@ import {
   Calendar,
   Trash2,
   FileText,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   useReportDefinitions,
@@ -23,6 +25,8 @@ import {
   useTriggerReportRun,
   useDeleteReportDefinition,
   useGenerateExecutivePack,
+  useCreateReportDefinition,
+  type CreateReportDefinitionInput,
 } from "@/hooks/use-reporting";
 import type { ReportDefinition, ReportRun } from "@/types";
 
@@ -39,6 +43,9 @@ const REPORT_TYPES = [
   { value: "grc_report", label: "GRC Report" },
   { value: "custom", label: "Custom" },
 ];
+
+// Excludes the "All Types" sentinel for the create form
+const CREATE_REPORT_TYPES = REPORT_TYPES.filter((t) => t.value !== "");
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   executive_pack: { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" },
@@ -92,10 +99,14 @@ function RunStatusBadge({ status }: { status: string }) {
 function ReportRunsList({ definitionId }: { definitionId: string }) {
   const { data: runsData, isLoading } = useReportRuns(definitionId, 1, 5);
 
-  const runs = useMemo(() => {
+  const runs = useMemo<ReportRun[]>(() => {
     if (!runsData) return [];
+    // apiClient returns PaginatedResponse shape when backend sends meta
+    if ("data" in runsData && Array.isArray((runsData as { data: unknown }).data)) {
+      return (runsData as { data: ReportRun[] }).data;
+    }
     if (Array.isArray(runsData)) return runsData as ReportRun[];
-    return (runsData as { data?: ReportRun[] }).data || [];
+    return [];
   }, [runsData]);
 
   if (isLoading) {
@@ -159,6 +170,43 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Delete Confirmation Inline                                          */
+/* ------------------------------------------------------------------ */
+
+function DeleteConfirm({
+  onConfirm,
+  onCancel,
+  isPending,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
+        <AlertTriangle size={11} className="text-red-400" />
+        Delete?
+      </span>
+      <button
+        onClick={onConfirm}
+        disabled={isPending}
+        className="text-xs font-medium px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+      >
+        {isPending ? <Loader2 size={11} className="animate-spin" /> : "Yes"}
+      </button>
+      <button
+        onClick={onCancel}
+        className="text-xs font-medium px-2 py-1 rounded border"
+        style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Report Card                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -170,9 +218,17 @@ function ReportCard({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const triggerRun = useTriggerReportRun(report.id);
   const deleteReport = useDeleteReportDefinition();
   const style = typeStyle(report.type);
+
+  function handleDelete() {
+    deleteReport.mutate(report.id, {
+      onSuccess: () => setConfirmDelete(false),
+      onError: () => setConfirmDelete(false),
+    });
+  }
 
   return (
     <motion.div
@@ -243,14 +299,23 @@ function ReportCard({
               )}
               Run
             </button>
-            <button
-              onClick={() => deleteReport.mutate(report.id)}
-              disabled={deleteReport.isPending}
-              className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
-              title="Delete report"
-            >
-              <Trash2 size={14} className="text-[var(--text-secondary)]" />
-            </button>
+
+            {confirmDelete ? (
+              <DeleteConfirm
+                onConfirm={handleDelete}
+                onCancel={() => setConfirmDelete(false)}
+                isPending={deleteReport.isPending}
+              />
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
+                title="Delete report"
+              >
+                <Trash2 size={14} className="text-[var(--text-secondary)]" />
+              </button>
+            )}
+
             <button
               onClick={() => setExpanded((e) => !e)}
               className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
@@ -291,12 +356,185 @@ function ReportCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Create Report Dialog                                                */
+/* ------------------------------------------------------------------ */
+
+const EMPTY_FORM: CreateReportDefinitionInput = {
+  name: "",
+  type: "custom",
+  description: "",
+  scheduleCron: "",
+};
+
+function CreateReportDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState<CreateReportDefinitionInput>(EMPTY_FORM);
+  const createReport = useCreateReportDefinition();
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.type) return;
+
+    const payload: CreateReportDefinitionInput = {
+      name: form.name.trim(),
+      type: form.type,
+      ...(form.description?.trim() ? { description: form.description.trim() } : {}),
+      ...(form.scheduleCron?.trim() ? { scheduleCron: form.scheduleCron.trim() } : {}),
+    };
+
+    createReport.mutate(payload, {
+      onSuccess: () => {
+        setForm(EMPTY_FORM);
+        onClose();
+      },
+    });
+  }
+
+  function handleClose() {
+    if (createReport.isPending) return;
+    setForm(EMPTY_FORM);
+    onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
+        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+        style={{ backgroundColor: "var(--surface-0)", border: "1px solid var(--border)" }}
+      >
+        {/* Dialog Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+            Create Report Definition
+          </h2>
+          <button
+            onClick={handleClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--surface-2)]"
+          >
+            <X size={14} className="text-[var(--text-secondary)]" />
+          </button>
+        </div>
+
+        {/* Dialog Body */}
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Name <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Monthly SLA Report"
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+            />
+          </div>
+
+          {/* Type */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Type <span className="text-red-400">*</span>
+            </label>
+            <select
+              required
+              value={form.type}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+            >
+              {CREATE_REPORT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Description
+            </label>
+            <textarea
+              rows={2}
+              value={form.description ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Optional description"
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 resize-none"
+            />
+          </div>
+
+          {/* Schedule Cron */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Schedule (cron expression)
+            </label>
+            <input
+              type="text"
+              value={form.scheduleCron ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, scheduleCron: e.target.value }))}
+              placeholder="e.g. 0 0 1 * * (leave blank for manual-only)"
+              className="w-full text-sm rounded-lg border px-3 py-2 bg-[var(--surface-0)] border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 font-mono"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={createReport.isPending}
+              className="text-sm font-medium px-4 py-2 rounded-lg border transition-colors disabled:opacity-50"
+              style={{
+                borderColor: "var(--border)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createReport.isPending || !form.name.trim() || !form.type}
+              className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)", color: "#fff" }}
+            >
+              {createReport.isPending && <Loader2 size={14} className="animate-spin" />}
+              Create Report
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
 export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState("");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const limit = 20;
   const generateExecutivePack = useGenerateExecutivePack();
 
@@ -306,16 +544,23 @@ export default function ReportsPage() {
     typeFilter || undefined,
   );
 
-  const reports = useMemo(() => {
+  const reports = useMemo<ReportDefinition[]>(() => {
     if (!reportsData) return [];
+    // apiClient returns { data: [...], meta: {...} } for paginated responses
+    if ("data" in reportsData && Array.isArray((reportsData as { data: unknown }).data)) {
+      return (reportsData as { data: ReportDefinition[] }).data;
+    }
     if (Array.isArray(reportsData)) return reportsData as ReportDefinition[];
-    return (reportsData as { data?: ReportDefinition[] }).data || [];
+    return [];
   }, [reportsData]);
 
   const totalPages = useMemo(() => {
-    if (!reportsData || Array.isArray(reportsData)) return 1;
-    const meta = (reportsData as { meta?: { totalPages?: number } }).meta;
-    return meta?.totalPages || 1;
+    if (!reportsData) return 1;
+    if ("meta" in reportsData) {
+      const meta = (reportsData as { meta?: { totalPages?: number } }).meta;
+      return meta?.totalPages ?? 1;
+    }
+    return 1;
   }, [reportsData]);
 
   return (
@@ -353,6 +598,7 @@ export default function ReportsPage() {
       >
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowCreateDialog(true)}
             className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
             style={{ backgroundColor: "var(--primary)", color: "#fff" }}
           >
@@ -464,6 +710,16 @@ export default function ReportsPage() {
           </button>
         </motion.div>
       )}
+
+      {/* Create Report Dialog */}
+      <AnimatePresence>
+        {showCreateDialog && (
+          <CreateReportDialog
+            open={showCreateDialog}
+            onClose={() => setShowCreateDialog(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

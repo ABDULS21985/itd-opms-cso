@@ -232,18 +232,17 @@ func (s *Service) GetUnreadCount(ctx context.Context, userID uuid.UUID) (int64, 
 	return count, err
 }
 
-// MarkAsRead marks a single notification as read.
+// MarkAsRead marks a single notification as read. The operation is idempotent:
+// if the notification is already read or does not belong to the user, no error
+// is returned (avoids spurious 500s from repeated clicks or race conditions).
 func (s *Service) MarkAsRead(ctx context.Context, userID, notificationID uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(ctx,
 		`UPDATE notifications SET is_read = true, read_at = NOW()
 		 WHERE id = $1 AND user_id = $2 AND is_read = false`,
 		notificationID, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("mark as read: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("notification not found or already read")
 	}
 	return nil
 }

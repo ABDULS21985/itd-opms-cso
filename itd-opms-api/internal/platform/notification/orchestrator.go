@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -336,13 +337,25 @@ func (o *Orchestrator) resolveRecipients(ctx context.Context, event DomainEvent,
 }
 
 // isTypeDisabled checks if a notification type is in the user's disabled list.
+// Supports both exact matching ("itsm.sla.breached") and prefix matching
+// ("itsm.sla" disables "itsm.sla.warning" and "itsm.sla.breached").
 func isTypeDisabled(disabled []string, eventType string) bool {
 	for _, d := range disabled {
-		if d == eventType {
+		if d == eventType || strings.HasPrefix(eventType, d+".") {
 			return true
 		}
 	}
 	return false
+}
+
+// parseHHMM parses a time string in either "HH:MM" or "HH:MM:SS" format.
+// PostgreSQL TIME columns return "HH:MM:SS" when scanned as a string, but
+// the frontend sends "HH:MM". Both formats are handled here.
+func parseHHMM(s string) (time.Time, error) {
+	if t, err := time.Parse("15:04:05", s); err == nil {
+		return t, nil
+	}
+	return time.Parse("15:04", s)
 }
 
 // isInQuietHours checks if the current time falls within quiet hours.
@@ -351,11 +364,11 @@ func isInQuietHours(start, end *string) bool {
 		return false
 	}
 	now := time.Now()
-	startTime, err := time.Parse("15:04", *start)
+	startTime, err := parseHHMM(*start)
 	if err != nil {
 		return false
 	}
-	endTime, err := time.Parse("15:04", *end)
+	endTime, err := parseHHMM(*end)
 	if err != nil {
 		return false
 	}

@@ -60,6 +60,12 @@ export interface AttestationCampaign {
   createdAt: string;
 }
 
+export interface LaunchCampaignRequest {
+  targetScope: string;
+  targetUserIds?: string[];
+  dueDate: string;
+}
+
 export interface AttestationStatus {
   totalUsers: number;
   attestedCount: number;
@@ -100,6 +106,11 @@ export interface RACIEntry {
   consultedIds?: string[];
   informedIds?: string[];
   notes?: string;
+  // Resolved display names (populated server-side via user lookup)
+  responsibleNames?: string[];
+  accountableName?: string;
+  consultedNames?: string[];
+  informedNames?: string[];
 }
 
 export interface Meeting {

@@ -14,6 +14,7 @@ import {
   setToken,
   removeToken,
   setRefreshToken,
+  getRefreshToken,
   isAuthenticated,
   clearSession,
   setAuthenticatedFlag,
@@ -162,12 +163,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear user state
     setUser(null);
 
-    // Call backend logout endpoint (fire-and-forget)
+    // Call backend logout endpoint (fire-and-forget).
+    // Include the refresh token so the server can revoke it immediately.
     const apiBase =
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
+    const refreshToken = getRefreshToken();
     fetch(`${apiBase}/auth/logout`, {
       method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
     }).catch(() => {
       // Ignore errors — we're logging out anyway
     });

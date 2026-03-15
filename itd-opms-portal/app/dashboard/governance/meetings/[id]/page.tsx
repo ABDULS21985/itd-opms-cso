@@ -41,14 +41,11 @@ export default function MeetingDetailPage() {
   const { data: decisions, isLoading: decisionsLoading } =
     useMeetingDecisions(meetingId);
   const createDecision = useCreateDecision(meetingId);
-  const { data: actionsData } = useActionItems(1, 50, undefined, undefined);
+  const { data: actionsData } = useActionItems(1, 50, undefined, undefined, "meeting", meetingId);
   const createAction = useCreateActionItem();
   const completeAction = useCompleteAction();
 
-  /* Filter actions that belong to this meeting */
-  const relatedActions = (actionsData?.data ?? []).filter(
-    (a) => a.sourceType === "meeting" && a.sourceId === meetingId,
-  );
+  const relatedActions = actionsData?.data ?? [];
 
   /* Minutes editing */
   const [editingMinutes, setEditingMinutes] = useState(false);

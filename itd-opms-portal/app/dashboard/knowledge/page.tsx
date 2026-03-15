@@ -115,14 +115,9 @@ export default function KnowledgeHubPage() {
       icon: FileText,
     },
     {
-      label: "Create Category",
+      label: "Search Knowledge Base",
       href: "/dashboard/knowledge/search",
-      icon: FolderTree,
-    },
-    {
-      label: "New Announcement",
-      href: "/dashboard/knowledge/search",
-      icon: Megaphone,
+      icon: Search,
     },
   ];
 

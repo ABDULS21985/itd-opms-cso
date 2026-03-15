@@ -7,6 +7,7 @@ import type {
   VersionDiff,
   AttestationStatus,
   AttestationCampaign,
+  LaunchCampaignRequest,
   RACIMatrix,
   RACIEntry,
   RACICoverageReport,
@@ -225,7 +226,7 @@ export function useRetirePolicy() {
 export function useLaunchCampaign(policyId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<AttestationCampaign>) =>
+    mutationFn: (body: LaunchCampaignRequest) =>
       apiClient.post<AttestationCampaign>(
         `/governance/policies/${policyId}/attestation-campaigns`,
         body,
@@ -535,13 +536,16 @@ export function useActionItems(
   limit = 20,
   status?: string,
   ownerId?: string,
+  sourceType?: string,
+  sourceId?: string,
+  priority?: string,
 ) {
   return useQuery({
-    queryKey: ["action-items", page, limit, status, ownerId],
+    queryKey: ["action-items", page, limit, status, ownerId, sourceType, sourceId, priority],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ActionItem>>(
         "/governance/meetings/actions",
-        { page, limit, status, ownerId },
+        { page, limit, status, ownerId, sourceType, sourceId, priority },
       ),
   });
 }

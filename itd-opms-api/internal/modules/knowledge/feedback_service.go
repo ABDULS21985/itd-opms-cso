@@ -166,19 +166,24 @@ func (s *FeedbackService) GetFeedbackStats(ctx context.Context, articleID uuid.U
 	return stats, nil
 }
 
-// DeleteFeedback deletes a feedback entry by ID.
-func (s *FeedbackService) DeleteFeedback(ctx context.Context, id uuid.UUID) error {
+// DeleteFeedback deletes a feedback entry by ID, verifying it belongs to the given article.
+func (s *FeedbackService) DeleteFeedback(ctx context.Context, articleID uuid.UUID, id uuid.UUID) error {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return apperrors.Unauthorized("authentication required")
 	}
 
-	// Get the feedback first to update article counts.
-	var articleID uuid.UUID
+	// Get the feedback first to verify ownership and collect counts to decrement.
+	var storedArticleID uuid.UUID
 	var isHelpful bool
 	getQuery := `SELECT article_id, is_helpful FROM kb_article_feedback WHERE id = $1`
-	err := s.pool.QueryRow(ctx, getQuery, id).Scan(&articleID, &isHelpful)
+	err := s.pool.QueryRow(ctx, getQuery, id).Scan(&storedArticleID, &isHelpful)
 	if err != nil {
+		return apperrors.NotFound("KBArticleFeedback", id.String())
+	}
+
+	// Ensure the feedback belongs to the article specified in the URL path.
+	if storedArticleID != articleID {
 		return apperrors.NotFound("KBArticleFeedback", id.String())
 	}
 
@@ -197,12 +202,12 @@ func (s *FeedbackService) DeleteFeedback(ctx context.Context, id uuid.UUID) erro
 	if isHelpful {
 		_, err = s.pool.Exec(ctx,
 			`UPDATE kb_articles SET helpful_count = GREATEST(helpful_count - 1, 0) WHERE id = $1`,
-			articleID,
+			storedArticleID,
 		)
 	} else {
 		_, err = s.pool.Exec(ctx,
 			`UPDATE kb_articles SET not_helpful_count = GREATEST(not_helpful_count - 1, 0) WHERE id = $1`,
-			articleID,
+			storedArticleID,
 		)
 	}
 	if err != nil {

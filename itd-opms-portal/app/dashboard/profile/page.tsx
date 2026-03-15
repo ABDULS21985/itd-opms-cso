@@ -90,13 +90,16 @@ export default function ProfilePage() {
 
     setIsLoading(true);
     try {
+      // displayName is required — omit if empty so backend keeps existing value.
+      // Optional fields (phone, jobTitle, etc.) send null when cleared so the
+      // backend stores NULL and removes the previous value.
       await apiClient.patch("/auth/profile", {
-        displayName: form.displayName || undefined,
-        jobTitle: form.jobTitle || undefined,
-        department: form.department || undefined,
-        office: form.office || undefined,
-        unit: form.unit || undefined,
-        phone: form.phone || undefined,
+        displayName: form.displayName.trim() || undefined,
+        jobTitle: form.jobTitle.trim() || null,
+        department: form.department.trim() || null,
+        office: form.office.trim() || null,
+        unit: form.unit.trim() || null,
+        phone: form.phone.trim() || null,
       });
       await refreshUser();
       setIsDirty(false);

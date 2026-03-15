@@ -61,6 +61,7 @@ export interface Ticket {
   relatedTicketIds: string[];
   linkedProblemId?: string;
   linkedAssetIds: string[];
+  orgUnitId?: string;
   resolutionNotes?: string;
   resolvedAt?: string;
   closedAt?: string;

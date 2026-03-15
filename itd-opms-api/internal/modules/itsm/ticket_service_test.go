@@ -265,7 +265,7 @@ func TestGetCSATStats_Unauthorized(t *testing.T) {
 
 func TestBulkUpdateTickets_Unauthorized(t *testing.T) {
 	svc := NewTicketService(nil, nil)
-	_, err := svc.BulkUpdateTickets(context.Background(), []uuid.UUID{uuid.New()}, map[string]string{"status": "closed"})
+	_, _, err := svc.BulkUpdateTickets(context.Background(), []uuid.UUID{uuid.New()}, map[string]string{"status": "closed"})
 	if err == nil {
 		t.Fatal("expected error for unauthenticated context")
 	}
@@ -292,7 +292,7 @@ func TestListTicketsForExport_Unauthorized(t *testing.T) {
 func TestBulkUpdateTickets_EmptyIDs(t *testing.T) {
 	svc := NewTicketService(nil, nil)
 	ctx := authenticatedCtx()
-	_, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{}, map[string]string{"status": "closed"})
+	_, _, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{}, map[string]string{"status": "closed"})
 	if err == nil {
 		t.Fatal("expected error for empty IDs")
 	}
@@ -304,7 +304,7 @@ func TestBulkUpdateTickets_EmptyIDs(t *testing.T) {
 func TestBulkUpdateTickets_EmptyFields(t *testing.T) {
 	svc := NewTicketService(nil, nil)
 	ctx := authenticatedCtx()
-	_, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{})
+	_, _, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{})
 	if err == nil {
 		t.Fatal("expected error for empty fields")
 	}
@@ -316,7 +316,7 @@ func TestBulkUpdateTickets_EmptyFields(t *testing.T) {
 func TestBulkUpdateTickets_DisallowedField(t *testing.T) {
 	svc := NewTicketService(nil, nil)
 	ctx := authenticatedCtx()
-	_, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{"title": "new title"})
+	_, _, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{"title": "new title"})
 	if err == nil {
 		t.Fatal("expected error for disallowed field")
 	}
@@ -329,7 +329,7 @@ func TestBulkUpdateTickets_DisallowedField(t *testing.T) {
 func TestBulkUpdateTickets_MultipleDisallowedFields(t *testing.T) {
 	svc := NewTicketService(nil, nil)
 	ctx := authenticatedCtx()
-	_, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{
+	_, _, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{
 		"status":      "closed",
 		"description": "hacked",
 	})
@@ -1053,7 +1053,7 @@ func TestAllServiceMethods_RequireAuth(t *testing.T) {
 			return err
 		}},
 		{"BulkUpdateTickets", func() error {
-			_, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{"status": "x"})
+			_, _, err := svc.BulkUpdateTickets(ctx, []uuid.UUID{uuid.New()}, map[string]string{"status": "x"})
 			return err
 		}},
 		{"ListTicketsForExport", func() error {
@@ -1073,4 +1073,122 @@ func TestAllServiceMethods_RequireAuth(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ──────────────────────────────────────────────
+// partitionByValidTransition
+// ──────────────────────────────────────────────
+
+func TestPartitionByValidTransition(t *testing.T) {
+	id1 := uuid.New()
+	id2 := uuid.New()
+	id3 := uuid.New()
+
+	t.Run("all valid", func(t *testing.T) {
+		current := map[uuid.UUID]string{
+			id1: TicketStatusLogged,
+			id2: TicketStatusLogged,
+		}
+		valid, failed := partitionByValidTransition(current, TicketStatusClassified, []uuid.UUID{id1, id2})
+		if len(valid) != 2 {
+			t.Errorf("expected 2 valid, got %d", len(valid))
+		}
+		if failed != 0 {
+			t.Errorf("expected 0 failed, got %d", failed)
+		}
+	})
+
+	t.Run("all invalid", func(t *testing.T) {
+		current := map[uuid.UUID]string{
+			id1: TicketStatusClosed,
+			id2: TicketStatusCancelled,
+		}
+		valid, failed := partitionByValidTransition(current, TicketStatusInProgress, []uuid.UUID{id1, id2})
+		if len(valid) != 0 {
+			t.Errorf("expected 0 valid, got %d", len(valid))
+		}
+		if failed != 2 {
+			t.Errorf("expected 2 failed, got %d", failed)
+		}
+	})
+
+	t.Run("mixed valid and invalid", func(t *testing.T) {
+		current := map[uuid.UUID]string{
+			id1: TicketStatusAssigned,   // valid: can go to in_progress
+			id2: TicketStatusClosed,     // invalid: terminal state
+			id3: TicketStatusInProgress, // invalid: in_progress → in_progress not allowed
+		}
+		valid, failed := partitionByValidTransition(current, TicketStatusInProgress, []uuid.UUID{id1, id2, id3})
+		if len(valid) != 1 {
+			t.Errorf("expected 1 valid, got %d", len(valid))
+		}
+		if valid[0] != id1 {
+			t.Errorf("expected id1 in valid list")
+		}
+		if failed != 2 {
+			t.Errorf("expected 2 failed, got %d", failed)
+		}
+	})
+
+	t.Run("id not in current statuses treated as invalid", func(t *testing.T) {
+		current := map[uuid.UUID]string{} // empty — no statuses known
+		valid, failed := partitionByValidTransition(current, TicketStatusAssigned, []uuid.UUID{id1})
+		if len(valid) != 0 {
+			t.Errorf("expected 0 valid, got %d", len(valid))
+		}
+		if failed != 1 {
+			t.Errorf("expected 1 failed, got %d", failed)
+		}
+	})
+
+	t.Run("all valid transitions from each state", func(t *testing.T) {
+		cases := []struct {
+			from string
+			to   string
+		}{
+			{TicketStatusLogged, TicketStatusClassified},
+			{TicketStatusLogged, TicketStatusAssigned},
+			{TicketStatusLogged, TicketStatusCancelled},
+			{TicketStatusClassified, TicketStatusAssigned},
+			{TicketStatusClassified, TicketStatusCancelled},
+			{TicketStatusAssigned, TicketStatusInProgress},
+			{TicketStatusAssigned, TicketStatusCancelled},
+			{TicketStatusInProgress, TicketStatusPendingCustomer},
+			{TicketStatusInProgress, TicketStatusPendingVendor},
+			{TicketStatusInProgress, TicketStatusResolved},
+			{TicketStatusInProgress, TicketStatusCancelled},
+			{TicketStatusPendingCustomer, TicketStatusInProgress},
+			{TicketStatusPendingCustomer, TicketStatusResolved},
+			{TicketStatusPendingCustomer, TicketStatusCancelled},
+			{TicketStatusPendingVendor, TicketStatusInProgress},
+			{TicketStatusPendingVendor, TicketStatusResolved},
+			{TicketStatusPendingVendor, TicketStatusCancelled},
+			{TicketStatusResolved, TicketStatusClosed},
+			{TicketStatusResolved, TicketStatusInProgress},
+		}
+		for _, c := range cases {
+			id := uuid.New()
+			current := map[uuid.UUID]string{id: c.from}
+			valid, failed := partitionByValidTransition(current, c.to, []uuid.UUID{id})
+			if len(valid) != 1 || failed != 0 {
+				t.Errorf("expected %s→%s to be valid, got valid=%d failed=%d", c.from, c.to, len(valid), failed)
+			}
+		}
+	})
+
+	t.Run("terminal states reject all transitions", func(t *testing.T) {
+		for _, terminal := range []string{TicketStatusClosed, TicketStatusCancelled} {
+			for _, target := range []string{
+				TicketStatusLogged, TicketStatusClassified, TicketStatusAssigned,
+				TicketStatusInProgress, TicketStatusResolved,
+			} {
+				id := uuid.New()
+				current := map[uuid.UUID]string{id: terminal}
+				valid, failed := partitionByValidTransition(current, target, []uuid.UUID{id})
+				if len(valid) != 0 || failed != 1 {
+					t.Errorf("expected %s→%s to be invalid, got valid=%d failed=%d", terminal, target, len(valid), failed)
+				}
+			}
+		}
+	})
 }

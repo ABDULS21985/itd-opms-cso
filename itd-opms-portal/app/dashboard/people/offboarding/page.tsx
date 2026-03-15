@@ -365,7 +365,7 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                 <button
                   type="button"
                   disabled={isCompleted || !canEdit || completeMutation.isPending}
-                  onClick={() => completeMutation.mutate(task.id)}
+                  onClick={() => completeMutation.mutate({ id: task.id })}
                   className="mt-0.5 shrink-0 transition-transform hover:scale-110"
                   title={isCompleted ? "Completed" : "Mark as complete"}
                 >

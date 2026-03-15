@@ -1350,31 +1350,86 @@ func ticketColumnForField(field string) string {
 	}
 }
 
+// partitionByValidTransition splits ids into those that can legally transition to newStatus
+// (based on their current status in currentStatuses) and a count of those that cannot.
+// IDs not present in currentStatuses are treated as invalid.
+func partitionByValidTransition(currentStatuses map[uuid.UUID]string, newStatus string, ids []uuid.UUID) (valid []uuid.UUID, failedCount int64) {
+	for _, id := range ids {
+		current, ok := currentStatuses[id]
+		if !ok || !IsValidTicketTransition(current, newStatus) {
+			failedCount++
+			continue
+		}
+		valid = append(valid, id)
+	}
+	return valid, failedCount
+}
+
 // BulkUpdateTickets updates multiple tickets matching the given IDs with the provided field values.
 // Only allowed fields (status, priority, assigneeId) are accepted.
-func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, fields map[string]string) (int64, error) {
+// When updating status, each ticket's current status is validated against the state machine;
+// tickets with invalid transitions are skipped and counted in the returned failed count.
+func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, fields map[string]string) (updated int64, failed int64, err error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
-		return 0, apperrors.Unauthorized("authentication required")
+		return 0, 0, apperrors.Unauthorized("authentication required")
 	}
 
 	if len(ids) == 0 {
-		return 0, apperrors.BadRequest("ids must not be empty")
+		return 0, 0, apperrors.BadRequest("ids must not be empty")
 	}
 
 	if len(fields) == 0 {
-		return 0, apperrors.BadRequest("fields must not be empty")
+		return 0, 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	// Validate all field names upfront before touching the database.
+	for field := range fields {
+		if ticketColumnForField(field) == "" {
+			return 0, 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+		}
+	}
+
+	// If the caller is changing status, validate transitions per-ticket.
+	targetIDs := ids
+	if newStatus, ok := fields["status"]; ok {
+		rows, qErr := s.pool.Query(ctx,
+			`SELECT id, status FROM tickets WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+			auth.TenantID, ids,
+		)
+		if qErr != nil {
+			return 0, 0, apperrors.Internal("failed to fetch current ticket statuses", qErr)
+		}
+		currentStatuses := make(map[uuid.UUID]string, len(ids))
+		for rows.Next() {
+			var tid uuid.UUID
+			var status string
+			if scanErr := rows.Scan(&tid, &status); scanErr != nil {
+				rows.Close()
+				return 0, 0, apperrors.Internal("failed to scan ticket status", scanErr)
+			}
+			currentStatuses[tid] = status
+		}
+		rows.Close()
+		if rowErr := rows.Err(); rowErr != nil {
+			return 0, 0, apperrors.Internal("failed to read ticket statuses", rowErr)
+		}
+
+		targetIDs, failed = partitionByValidTransition(currentStatuses, newStatus, ids)
+		if len(targetIDs) == 0 {
+			return 0, failed, nil
+		}
 	}
 
 	// Build dynamic SET clause.
 	setClauses := []string{}
-	args := []any{auth.TenantID, ids}
+	args := []any{auth.TenantID, targetIDs}
 	argIdx := 3
 
 	for field, value := range fields {
 		col := ticketColumnForField(field)
 		if col == "" {
-			return 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+			return 0, 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
 		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, argIdx))
 		args = append(args, value)
@@ -1391,12 +1446,12 @@ func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, 
 		joinStrings(setClauses, ", "),
 	)
 
-	tag, err := s.pool.Exec(ctx, query, args...)
-	if err != nil {
-		return 0, apperrors.Internal("failed to bulk update tickets", err)
+	tag, execErr := s.pool.Exec(ctx, query, args...)
+	if execErr != nil {
+		return 0, failed, apperrors.Internal("failed to bulk update tickets", execErr)
 	}
 
-	return tag.RowsAffected(), nil
+	return tag.RowsAffected(), failed, nil
 }
 
 // ListTicketsForExport returns up to maxRows tickets matching the given filters, for CSV export.

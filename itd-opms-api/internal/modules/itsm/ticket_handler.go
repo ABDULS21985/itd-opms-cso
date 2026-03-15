@@ -682,13 +682,13 @@ func (h *TicketHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 
-	updated, err := h.svc.BulkUpdateTickets(r.Context(), ids, req.Fields)
+	updated, failed, err := h.svc.BulkUpdateTickets(r.Context(), ids, req.Fields)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
 	}
 
-	types.OK(w, map[string]int64{"updated": updated, "failed": 0}, nil)
+	types.OK(w, map[string]int64{"updated": updated, "failed": failed}, nil)
 }
 
 // ──────────────────────────────────────────────

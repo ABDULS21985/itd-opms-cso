@@ -278,7 +278,7 @@ describe("TicketsPage", () => {
 
     expect(screen.getByText("Tickets")).toBeInTheDocument();
     expect(
-      screen.getByText("View and manage incidents, service requests, and changes"),
+      screen.getByText("Manage incidents, service requests, and changes"),
     ).toBeInTheDocument();
   });
 

@@ -141,7 +141,7 @@ function CreateMilestoneForm({
         projectId: formProjectId.trim(),
         title: title.trim(),
         description: description.trim() || undefined,
-        targetDate,
+        targetDate: `${targetDate}T00:00:00Z`,
         completionCriteria: completionCriteria.trim() || undefined,
       },
       {

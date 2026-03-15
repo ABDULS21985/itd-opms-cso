@@ -359,9 +359,9 @@ func (h *AssetHandler) CreateLifecycleEvent(w http.ResponseWriter, r *http.Reque
 	}
 
 	var body struct {
-		EventType     string           `json:"eventType"`
-		Details       json.RawMessage  `json:"details"`
-		EvidenceDocID *uuid.UUID       `json:"evidenceDocId"`
+		EventType          string          `json:"eventType"`
+		Details            json.RawMessage `json:"details"`
+		EvidenceDocumentID *uuid.UUID      `json:"evidenceDocumentId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
@@ -373,7 +373,7 @@ func (h *AssetHandler) CreateLifecycleEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	event, err := h.svc.CreateLifecycleEvent(r.Context(), assetID, body.EventType, body.Details, body.EvidenceDocID)
+	event, err := h.svc.CreateLifecycleEvent(r.Context(), assetID, body.EventType, body.Details, body.EvidenceDocumentID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

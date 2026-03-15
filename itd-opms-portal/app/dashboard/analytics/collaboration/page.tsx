@@ -252,7 +252,7 @@ export default function CollaborationDashboardPage() {
 
   // ---- KPI: Blocked items ----
   const blockedProjects = useMemo(
-    () => projects.filter((p) => (p.status || "").toLowerCase() === "on-hold" || (p.ragStatus || "").toLowerCase() === "red"),
+    () => projects.filter((p) => ["on_hold", "on-hold"].includes((p.status || "").toLowerCase()) || (p.ragStatus || "").toLowerCase() === "red"),
     [projects],
   );
 

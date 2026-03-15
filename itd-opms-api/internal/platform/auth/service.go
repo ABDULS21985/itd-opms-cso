@@ -658,16 +658,29 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	return nil
 }
 
-// UpdateProfile updates the user's own profile fields using COALESCE (partial update).
+// UpdateProfile updates the user's own profile fields.
+//
+// Semantics:
+//   - display_name: uses COALESCE so omitting it (nil) keeps the existing value.
+//     It cannot be cleared because it is required.
+//   - Optional nullable fields (job_title, department, office, unit, phone):
+//     assigned directly. A nil pointer stores NULL (clears the field); a non-nil
+//     pointer stores the provided string. The frontend sends null for fields the
+//     user explicitly cleared and omits nothing else.
 func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, req UpdateProfileRequest) (*UserProfile, error) {
+	// Validate display name if provided — it must not be blank.
+	if req.DisplayName != nil && strings.TrimSpace(*req.DisplayName) == "" {
+		return nil, apperrors.BadRequest("Display name cannot be empty")
+	}
+
 	_, err := s.pool.Exec(ctx,
 		`UPDATE users SET
 			display_name = COALESCE($2, display_name),
-			job_title    = COALESCE($3, job_title),
-			department   = COALESCE($4, department),
-			office       = COALESCE($5, office),
-			unit         = COALESCE($6, unit),
-			phone        = COALESCE($7, phone),
+			job_title    = $3,
+			department   = $4,
+			office       = $5,
+			unit         = $6,
+			phone        = $7,
 			updated_at   = NOW()
 		 WHERE id = $1`,
 		userID,
@@ -759,6 +772,23 @@ func (s *AuthService) DeleteProfilePhoto(ctx context.Context, userID, tenantID u
 
 	slog.Info("profile photo deleted", "user_id", userID)
 	return nil
+}
+
+// RevokeSessionByTokenHash marks the active_sessions record whose token_hash
+// matches hash(rawToken) as revoked. Both dev-JWT and OIDC sessions are stored
+// with hash(access_token) so this covers both authentication modes.
+// Errors are logged but not surfaced — logout must always succeed for the user.
+func (s *AuthService) RevokeSessionByTokenHash(ctx context.Context, rawToken string) {
+	tokenHash := helpers.SHA256Checksum([]byte(rawToken))
+	_, err := s.pool.Exec(ctx,
+		`UPDATE active_sessions
+		 SET is_revoked = true, revoked_at = NOW()
+		 WHERE token_hash = $1 AND NOT is_revoked`,
+		tokenHash,
+	)
+	if err != nil {
+		slog.Warn("failed to revoke active session by token hash", "error", err.Error())
+	}
 }
 
 // resolvePhotoURL replaces a raw MinIO object key with a presigned URL

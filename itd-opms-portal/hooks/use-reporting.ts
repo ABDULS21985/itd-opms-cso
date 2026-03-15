@@ -15,6 +15,29 @@ import type {
 } from "@/types";
 
 /* ================================================================== */
+/*  Shared request input types — mirror backend DTOs exactly           */
+/* ================================================================== */
+
+export interface CreateReportDefinitionInput {
+  name: string;
+  type: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+}
+
+export interface UpdateReportDefinitionInput {
+  name?: string;
+  type?: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+  isActive?: boolean;
+}
+
+/* ================================================================== */
 /*  Activity Feed — Types & Queries                                      */
 /* ================================================================== */
 
@@ -77,7 +100,7 @@ export interface MyTasksSummary {
 }
 
 /**
- * GET /reporting/dashboards/my-tasks - current user's assigned items summary.
+ * GET /reporting/dashboards/my-tasks - current user's assigned items with detail arrays.
  */
 export function useMyTasks() {
   return useQuery({
@@ -449,11 +472,13 @@ export function useReportDefinition(id: string | undefined) {
 
 /**
  * POST /reporting/reports - create a report definition.
+ * Payload maps to backend CreateReportDefinitionRequest: name (required), type (required),
+ * description, scheduleCron, recipients (UUID strings), template.
  */
 export function useCreateReportDefinition() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: CreateReportDefinitionInput) =>
       apiClient.post<ReportDefinition>("/reporting/reports", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
@@ -466,12 +491,13 @@ export function useCreateReportDefinition() {
 }
 
 /**
- * PUT /reporting/reports/{id} - update a report definition.
+ * PUT /reporting/reports/{id} - update a report definition (partial update via COALESCE).
+ * Payload maps to backend UpdateReportDefinitionRequest: all fields optional.
  */
 export function useUpdateReportDefinition(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: UpdateReportDefinitionInput) =>
       apiClient.put<ReportDefinition>(`/reporting/reports/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });

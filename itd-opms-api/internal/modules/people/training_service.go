@@ -48,17 +48,26 @@ func (s *TrainingService) CreateTrainingRecord(ctx context.Context, req CreateTr
 	now := time.Now().UTC()
 
 	status := TrainingStatusPlanned
-	// Status is not in CreateTrainingRecordRequest per types.go, so use default.
+	if req.Status != nil && *req.Status != "" {
+		status = *req.Status
+	}
+
+	var completedAt *time.Time
+	if req.CompletedAt != nil {
+		completedAt = req.CompletedAt
+	} else if status == TrainingStatusCompleted {
+		completedAt = &now
+	}
 
 	query := `
 		INSERT INTO training_records (
 			id, tenant_id, user_id, title, provider,
-			type, status, expiry_date, cost,
+			type, status, completed_at, expiry_date, cost,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9,
-			$10, $11
+			$6, $7, $8, $9, $10,
+			$11, $12
 		)
 		RETURNING id, tenant_id, user_id, title, provider,
 			type, status, completed_at, expiry_date,
@@ -67,7 +76,7 @@ func (s *TrainingService) CreateTrainingRecord(ctx context.Context, req CreateTr
 	var tr TrainingRecord
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.UserID, req.Title, req.Provider,
-		req.Type, status, req.ExpiryDate, req.Cost,
+		req.Type, status, completedAt, req.ExpiryDate, req.Cost,
 		now, now,
 	).Scan(
 		&tr.ID, &tr.TenantID, &tr.UserID, &tr.Title, &tr.Provider,

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { server } from "@/test/mocks/server";
 import {
   createWrapper,
@@ -10,6 +11,8 @@ import {
   mockDelete,
   paginatedMeta,
 } from "./hook-test-utils";
+
+const API = "http://localhost:8089/api/v1";
 import {
   useCatalogCategories,
   useCatalogCategory,
@@ -746,15 +749,23 @@ describe("useDeleteProblem", () => {
 });
 
 describe("useLinkIncidentToProblem", () => {
-  it("calls POST /itsm/problems/{id}/incidents", async () => {
-    server.use(mockPost("/itsm/problems/pr-1/link-incident"));
+  it("sends incidentId (not ticketId) in request body", async () => {
+    let capturedBody: unknown;
+    server.use(
+      http.post(`${API}/itsm/problems/pr-1/link-incident`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ status: "success", data: {} });
+      }),
+    );
 
     const { result } = renderHook(() => useLinkIncidentToProblem(), {
       wrapper: createWrapper(),
     });
 
-    result.current.mutate({ problemId: "pr-1", ticketId: "tk-1" } as any);
+    result.current.mutate({ problemId: "pr-1", ticketId: "tk-1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(capturedBody).toEqual({ incidentId: "tk-1" });
   });
 });
 
@@ -769,6 +780,26 @@ describe("useKnownErrors", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(errors);
+  });
+
+  it("sends problemId as camelCase query param", async () => {
+    let capturedUrl: string | undefined;
+    server.use(
+      http.get(`${API}/itsm/problems/known-errors`, ({ request }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({ status: "success", data: [] });
+      }),
+    );
+
+    const { result } = renderHook(() => useKnownErrors("pr-1"), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = new URL(capturedUrl!);
+    expect(url.searchParams.get("problemId")).toBe("pr-1");
+    expect(url.searchParams.has("problem_id")).toBe(false);
   });
 });
 
@@ -874,8 +905,16 @@ describe("useCSATStats", () => {
 });
 
 describe("useCreateCSATSurvey", () => {
-  it("calls POST /itsm/tickets/{id}/csat", async () => {
-    server.use(mockPost("/itsm/tickets/tk-1/csat", { id: "csat-1" }));
+  it("POSTs to flat /itsm/tickets/csat with ticketId in body", async () => {
+    let capturedUrl: string | undefined;
+    let capturedBody: unknown;
+    server.use(
+      http.post(`${API}/itsm/tickets/csat`, async ({ request }) => {
+        capturedUrl = request.url;
+        capturedBody = await request.json();
+        return HttpResponse.json({ status: "success", data: { id: "csat-1" } });
+      }),
+    );
 
     const { result } = renderHook(() => useCreateCSATSurvey("tk-1"), {
       wrapper: createWrapper(),
@@ -883,18 +922,50 @@ describe("useCreateCSATSurvey", () => {
 
     result.current.mutate({ score: 5, comment: "Great" } as any);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // Must NOT use /tickets/tk-1/csat path
+    expect(capturedUrl).not.toContain("/tickets/tk-1/csat");
+    expect(capturedUrl).toContain("/tickets/csat");
+    // ticketId must be in the body
+    expect((capturedBody as any).ticketId).toBe("tk-1");
+    expect((capturedBody as any).score).toBe(5);
   });
 });
 
 describe("useBulkUpdateTickets", () => {
-  it("calls PATCH /itsm/tickets/bulk", async () => {
-    server.use(mockPost("/itsm/tickets/bulk/update", { updated: 3 }));
+  it("POSTs to /itsm/tickets/bulk/update with { ids, fields } shape", async () => {
+    let capturedBody: unknown;
+    server.use(
+      http.post(`${API}/itsm/tickets/bulk/update`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ status: "success", data: { updated: 2, failed: 0 } });
+      }),
+    );
 
     const { result } = renderHook(() => useBulkUpdateTickets(), {
       wrapper: createWrapper(),
     });
 
-    result.current.mutate({ ids: ["tk-1", "tk-2"], priority: "high" } as any);
+    result.current.mutate({
+      ids: ["tk-1", "tk-2"],
+      fields: { priority: "P2_high" },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(capturedBody).toEqual({
+      ids: ["tk-1", "tk-2"],
+      fields: { priority: "P2_high" },
+    });
+  });
+
+  it("invalidates tickets and ticket-stats queries on success", async () => {
+    server.use(mockPost("/itsm/tickets/bulk/update", { updated: 1, failed: 0 }));
+
+    const { result } = renderHook(() => useBulkUpdateTickets(), {
+      wrapper: createWrapper(),
+    });
+
+    result.current.mutate({ ids: ["tk-1"], fields: { status: "resolved" } });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

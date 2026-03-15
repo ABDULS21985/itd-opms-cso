@@ -556,8 +556,12 @@ export function useCreateChecklist() {
 export function useUpdateChecklistStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiClient.put(`/people/checklists/${id}/status`, { status }),
+    mutationFn: ({ id, status }: { id: string; status: string }) => {
+      const payload: Record<string, unknown> = { status };
+      if (status === "in_progress") payload.startedAt = new Date().toISOString();
+      if (status === "completed") payload.completedAt = new Date().toISOString();
+      return apiClient.put(`/people/checklists/${id}/status`, payload);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });
       queryClient.invalidateQueries({
@@ -663,8 +667,8 @@ export function useUpdateChecklistTask() {
 export function useCompleteChecklistTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.put(`/people/checklists/tasks/item/${id}/complete`, {}),
+    mutationFn: ({ id, evidenceDocId, notes }: { id: string; evidenceDocId?: string; notes?: string }) =>
+      apiClient.put(`/people/checklists/tasks/item/${id}/complete`, { evidenceDocId, notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["checklist-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });

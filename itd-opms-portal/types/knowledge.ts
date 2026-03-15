@@ -75,3 +75,82 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
+
+/* ====================================================================== */
+/*  Knowledge Management Request / Mutation Types                           */
+/*                                                                          */
+/*  These mirror the backend DTO structs and are used by hooks to enforce   */
+/*  correct payload shapes at compile time.                                 */
+/* ====================================================================== */
+
+/** POST /knowledge/categories */
+export interface CreateKBCategoryRequest {
+  name: string;
+  description?: string;
+  parentId?: string;
+  icon?: string;
+  sortOrder?: number;
+}
+
+/** PUT /knowledge/categories/{id} */
+export interface UpdateKBCategoryRequest {
+  name?: string;
+  description?: string;
+  parentId?: string;
+  icon?: string;
+  sortOrder?: number;
+}
+
+/** POST /knowledge/articles */
+export interface CreateKBArticleRequest {
+  title: string;
+  slug: string;
+  content: string;
+  type: string;
+  categoryId?: string;
+  tags?: string[];
+}
+
+/** PUT /knowledge/articles/{id} */
+export interface UpdateKBArticleRequest {
+  categoryId?: string;
+  title?: string;
+  slug?: string;
+  content?: string;
+  type?: string;
+  /** Pass an empty array to keep existing tags unchanged (COALESCE behaviour). */
+  tags?: string[];
+  reviewerId?: string;
+}
+
+/** POST /knowledge/articles/{articleId}/feedback */
+export interface CreateFeedbackRequest {
+  isHelpful: boolean;
+  comment?: string;
+}
+
+/** POST /knowledge/announcements */
+export interface CreateAnnouncementRequest {
+  title: string;
+  content: string;
+  priority: string;
+  targetAudience: string;
+  targetIds?: string[];
+  expiresAt?: string;
+}
+
+/** PUT /knowledge/announcements/{id} */
+export interface UpdateAnnouncementRequest {
+  title?: string;
+  content?: string;
+  priority?: string;
+  targetAudience?: string;
+  targetIds?: string[];
+  isActive?: boolean;
+  /**
+   * ISO-8601 datetime string. Send null explicitly to clear an existing expiry.
+   * Note: the backend COALESCE pattern prevents clearing via omission — send the
+   * field explicitly when clearing is required.
+   */
+  expiresAt?: string | null;
+}

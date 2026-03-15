@@ -54,6 +54,8 @@ function resolveVariant(status: string): BadgeVariant {
       "accepted",
       "hired",
       "procured",
+      // GRC: risk statuses
+      "mitigating",
     ].includes(s)
   ) {
     return "success";
@@ -73,6 +75,16 @@ function resolveVariant(status: string): BadgeVariant {
       "assigned",
       "maintenance",
       "shortlisted",
+      // GRC: audit statuses
+      "preparing",
+      "findings_review",
+      // GRC: finding statuses
+      "remediation_planned",
+      "in_remediation",
+      // GRC: evidence statuses
+      "collecting",
+      // GRC: compliance statuses
+      "partial",
     ].includes(s)
   ) {
     return "warning";
@@ -91,6 +103,8 @@ function resolveVariant(status: string): BadgeVariant {
       "disposed",
       "critical",
       "overdue",
+      // GRC: risk statuses
+      "escalated",
     ].includes(s)
   ) {
     return "error";
@@ -106,6 +120,13 @@ function resolveVariant(status: string): BadgeVariant {
       "invited",
       "interview",
       "scheduled",
+      // GRC: risk statuses
+      "identified",
+      "assessed",
+      // GRC: audit / access-review statuses
+      "planned",
+      // GRC: compliance statuses
+      "not_started",
     ].includes(s)
   ) {
     return "info";

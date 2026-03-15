@@ -30,22 +30,29 @@ func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revo
 	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService}
 }
 
-// Routes mounts the auth routes on the given chi router.
-// Public routes (login, refresh) should be wrapped with the PublicRoute
-// middleware at the call site. The /me endpoint requires authentication.
+// Routes is intentionally unused — all auth routes are registered directly in
+// server.go so that public and protected sub-groups can be separated with the
+// correct middleware.  This method is kept only as a documentation reference.
 //
-// Example usage:
+// Actual route layout (registered in server.go):
 //
-//	r.Route("/api/v1/auth", func(r chi.Router) {
-//	    handler := auth.NewAuthHandler(authService)
-//	    handler.Routes(r)
-//	})
-func (h *AuthHandler) Routes(r chi.Router) {
-	r.Post("/login", h.Login)
-	r.Post("/refresh", h.Refresh)
-	r.Post("/logout", h.Logout)
-	r.Get("/me", h.Me)
-}
+//	Public (no auth):
+//	  POST /auth/login
+//	  POST /auth/refresh
+//	  POST /auth/forgot-password
+//	  POST /auth/reset-password
+//	  GET  /auth/oidc/config
+//	  POST /auth/oidc/callback
+//	  POST /auth/oidc/refresh
+//
+//	Protected (AuthDualMode middleware):
+//	  GET    /auth/me
+//	  POST   /auth/logout
+//	  POST   /auth/change-password
+//	  PATCH  /auth/profile
+//	  POST   /auth/profile/photo
+//	  DELETE /auth/profile/photo
+func (h *AuthHandler) Routes(_ chi.Router) {}
 
 // loginRequest is the JSON body for POST /api/v1/auth/login.
 type loginRequest struct {
@@ -181,40 +188,47 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout handles POST /api/v1/auth/logout.
-// Accepts JSON {refreshToken} and revokes both the refresh token (DB) and the
-// access token (Redis revocation list) so it cannot be reused before expiry.
+//
+// refreshToken in the body is optional:
+//   - Dev-mode (HS256 JWT): the frontend sends refreshToken so it can be
+//     revoked immediately in the database.
+//   - OIDC mode (Entra ID): the frontend has no platform refresh token to
+//     send; the handler still succeeds and cleans up via the steps below.
+//
+// Regardless of mode, the handler:
+//  1. Revokes the access token in Redis so it can't be reused before expiry.
+//  2. Marks the current active_sessions record as revoked (session tracker).
+//  3. Revokes the refresh token from the DB only when one is provided.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Decode body leniently — an empty or absent body is valid in OIDC mode.
 	var req logoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		types.ErrorMessage(w, http.StatusBadRequest,
-			"BAD_REQUEST", "Invalid request body",
-		)
-		return
-	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	if req.RefreshToken == "" {
-		types.ErrorMessage(w, http.StatusBadRequest,
-			"BAD_REQUEST", "Refresh token is required",
-		)
-		return
-	}
+	tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 
-	// Revoke the access token (JWT) so it can't be reused before expiry.
-	if h.revocationService != nil {
-		tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if tokenString != "" {
-			if claims, err := ValidateToken(tokenString, h.service.jwtCfg.Secret); err == nil && claims.ID != "" {
-				ttl := time.Until(claims.ExpiresAt.Time)
-				if ttl > 0 {
-					_ = h.revocationService.RevokeToken(r.Context(), claims.ID, ttl)
-				}
+	// 1. Revoke the access token in Redis (dev JWT path only — OIDC tokens
+	//    are RS256 and will fail ValidateToken, which is intentional).
+	if tokenString != "" && h.revocationService != nil {
+		if claims, err := ValidateToken(tokenString, h.service.jwtCfg.Secret); err == nil && claims.ID != "" {
+			ttl := time.Until(claims.ExpiresAt.Time)
+			if ttl > 0 {
+				_ = h.revocationService.RevokeToken(r.Context(), claims.ID, ttl)
 			}
 		}
 	}
 
-	if err := h.service.Logout(r.Context(), req.RefreshToken); err != nil {
-		writeAppError(w, r, err)
-		return
+	// 2. Revoke the active_sessions record for this specific session.
+	//    Both dev-mode and OIDC sessions are tracked by hash(access_token).
+	if tokenString != "" {
+		h.service.RevokeSessionByTokenHash(r.Context(), tokenString)
+	}
+
+	// 3. Revoke the platform refresh token (dev mode only — no-op if absent).
+	if req.RefreshToken != "" {
+		if err := h.service.Logout(r.Context(), req.RefreshToken); err != nil {
+			writeAppError(w, r, err)
+			return
+		}
 	}
 
 	types.OK(w, map[string]string{"message": "Logged out successfully"}, nil)

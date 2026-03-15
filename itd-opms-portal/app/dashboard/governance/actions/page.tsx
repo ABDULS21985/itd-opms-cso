@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   ListChecks,
@@ -181,6 +181,9 @@ export default function ActionTrackerPage() {
     20,
     statusFilter || undefined,
     showMyActions ? user?.id : undefined,
+    undefined,
+    undefined,
+    priorityFilter || undefined,
   );
 
   const actions = actionsData?.data ?? [];
@@ -192,13 +195,8 @@ export default function ActionTrackerPage() {
 
   const completeMutation = useCompleteAction();
 
-  /* ---- Filtered actions (client-side priority filter) ---- */
-  const filteredActions = useMemo(() => {
-    if (!priorityFilter) return actions;
-    return actions.filter(
-      (a: ActionItem) => a.priority === priorityFilter,
-    );
-  }, [actions, priorityFilter]);
+  /* Priority filter is now applied server-side via useActionItems. */
+  const filteredActions = actions;
 
   /* ---- Chart data for overdue by priority ---- */
   const chartData = useMemo(() => {
@@ -475,7 +473,7 @@ export default function ActionTrackerPage() {
           value={priorityFilter}
           onChange={(e) => {
             setPriorityFilter(e.target.value);
-            setPage(1);
+            setPage(1); // reset page since priority is now a server-side filter
           }}
           className="rounded-xl border px-3.5 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
           style={selectStyle}
@@ -525,7 +523,7 @@ export default function ActionTrackerPage() {
                 : "Action items from meetings and governance decisions will appear here."
             }
             pagination={
-              actionMeta && !priorityFilter
+              actionMeta
                 ? {
                     currentPage: actionMeta.page,
                     totalPages: actionMeta.totalPages,

@@ -267,9 +267,12 @@ func (h *MeetingHandler) ListActions(w http.ResponseWriter, r *http.Request) {
 
 	status := r.URL.Query().Get("status")
 	ownerID := r.URL.Query().Get("ownerId")
+	sourceType := r.URL.Query().Get("sourceType")
+	sourceID := r.URL.Query().Get("sourceId")
+	priority := r.URL.Query().Get("priority")
 	params := types.ParsePagination(r)
 
-	items, total, err := h.svc.ListActionItems(r.Context(), authCtx.TenantID, status, ownerID, params.Limit, params.Offset())
+	items, total, err := h.svc.ListActionItems(r.Context(), authCtx.TenantID, status, ownerID, sourceType, sourceID, priority, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return

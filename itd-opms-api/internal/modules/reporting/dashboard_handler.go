@@ -33,6 +33,9 @@ func (h *DashboardHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("reporting.view")).Get("/tenant/{tenantId}", h.GetTenantExecutiveSummary)
 	r.With(middleware.RequirePermission("reporting.manage")).Post("/executive/refresh", h.RefreshExecutiveSummary)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/my", h.GetMyDashboard)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/my-tasks", h.GetMyTasks)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/activity-feed", h.GetActivityFeed)
+	r.With(middleware.RequirePermission("reporting.view")).Get("/upcoming", h.GetUpcomingEvents)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/tickets-by-priority", h.GetTicketsByPriority)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/tickets-by-status", h.GetTicketsByStatus)
 	r.With(middleware.RequirePermission("reporting.view")).Get("/charts/projects-by-status", h.GetProjectsByStatus)
@@ -355,4 +358,75 @@ func (h *DashboardHandler) GetProjectsByOffice(w http.ResponseWriter, r *http.Re
 	}
 
 	types.OK(w, points, nil)
+}
+
+// GetActivityFeed handles GET /activity-feed — recent cross-module activity events.
+func (h *DashboardHandler) GetActivityFeed(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	params := types.ParsePagination(r)
+	feed, err := h.svc.GetActivityFeed(r.Context(), params.Page, params.Limit)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, feed, nil)
+}
+
+// GetMyTasks handles GET /my-tasks — current user's assigned tasks with item details.
+func (h *DashboardHandler) GetMyTasks(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	summary, err := h.svc.GetMyTasks(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, summary, nil)
+}
+
+// GetUpcomingEvents handles GET /upcoming — upcoming meetings and milestones.
+func (h *DashboardHandler) GetUpcomingEvents(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	limit := 5
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := parseInt(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	events, err := h.svc.GetUpcomingEvents(r.Context(), limit)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, events, nil)
+}
+
+// parseInt parses a string to int, returning an error if invalid.
+func parseInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, apperrors.BadRequest("invalid integer")
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

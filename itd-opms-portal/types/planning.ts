@@ -67,7 +67,9 @@ export interface DivisionAssignmentLog {
   entityId: string;
   action: string;
   fromDivisionId?: string;
+  fromDivisionName?: string;
   toDivisionId?: string;
+  toDivisionName?: string;
   performedBy: string;
   performerName?: string;
   notes?: string;
@@ -478,96 +480,8 @@ export interface AllocationEntry {
   updatedAt: string;
 }
 
-/* =============================================================================
-   Budget & Cost Tracking Types
-   ============================================================================= */
-
-export interface CostCategory {
-  id: string;
-  tenantId: string;
-  name: string;
-  description?: string;
-  code?: string;
-  parentId?: string;
-  isActive: boolean;
-  createdAt: string;
-}
-
-export interface CostEntry {
-  id: string;
-  tenantId: string;
-  projectId: string;
-  categoryId?: string;
-  categoryName?: string;
-  description: string;
-  amount: number;
-  entryType: "actual" | "committed" | "forecast";
-  entryDate: string;
-  vendorName?: string;
-  invoiceRef?: string;
-  documentId?: string;
-  createdBy: string;
-  creatorName?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BudgetSummary {
-  projectId: string;
-  approvedBudget: number;
-  actualSpend: number;
-  committedSpend: number;
-  forecastTotal: number;
-  remainingBudget: number;
-  variancePct: number;
-  burnRate: number;
-  monthsRemaining: number;
-  estimatedAtCompletion: number;
-  costPerformanceIndex: number;
-  byCategory: CategorySpend[];
-}
-
-export interface CategorySpend {
-  categoryId: string;
-  categoryName: string;
-  actual: number;
-  committed: number;
-  forecast: number;
-}
-
-export interface BurnRatePoint {
-  period: string;
-  actual: number;
-  committed: number;
-  forecast: number;
-  cumulativeActual: number;
-  budgetLine: number;
-}
-
-export interface BudgetSnapshot {
-  id: string;
-  tenantId: string;
-  projectId: string;
-  snapshotDate: string;
-  approvedBudget: number;
-  actualSpend: number;
-  committedSpend: number;
-  forecastTotal: number;
-  completionPct?: number;
-  notes?: string;
-  createdBy: string;
-  createdAt: string;
-}
-
-export interface PortfolioBudgetItem {
-  projectId: string;
-  projectTitle: string;
-  status: string;
-  approvedBudget: number;
-  actualSpend: number;
-  remainingBudget: number;
-  variancePct: number;
-}
+// Budget & cost tracking types live in hooks/use-budget.ts (canonical source).
+// Import CostCategory, CostEntry, BudgetSummary, BudgetSnapshot, PortfolioBudgetItem etc. from there.
 
 /* =============================================================================
    Bulk Project Import Types

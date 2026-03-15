@@ -140,6 +140,9 @@ export function useMarkAllAsRead() {
         1,
         20,
       ]);
+      const previousCount = queryClient.getQueryData([
+        "notifications-unread-count",
+      ]);
 
       // Optimistic: mark all as read
       queryClient.setQueriesData(
@@ -159,13 +162,19 @@ export function useMarkAllAsRead() {
 
       queryClient.setQueryData(["notifications-unread-count"], 0);
 
-      return { previousNotifications };
+      return { previousNotifications, previousCount };
     },
     onError: (_err, _vars, context) => {
       if (context?.previousNotifications) {
         queryClient.setQueryData(
           ["notifications", 1, 20],
           context.previousNotifications,
+        );
+      }
+      if (context?.previousCount !== undefined) {
+        queryClient.setQueryData(
+          ["notifications-unread-count"],
+          context.previousCount,
         );
       }
     },

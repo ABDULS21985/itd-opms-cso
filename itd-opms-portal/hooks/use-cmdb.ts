@@ -864,7 +864,7 @@ export function useMarkAlertSent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient.put(`/cmdb/renewal-alerts/${id}/sent`, { sent: true }),
+      apiClient.put(`/cmdb/renewal-alerts/${id}/sent`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["renewal-alerts"] });
       toast.success("Alert marked as sent");

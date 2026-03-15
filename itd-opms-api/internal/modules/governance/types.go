@@ -175,6 +175,11 @@ type RACIEntry struct {
 	ConsultedIDs   []uuid.UUID `json:"consultedIds"`
 	InformedIDs    []uuid.UUID `json:"informedIds"`
 	Notes          *string     `json:"notes"`
+	// Resolved display names (populated server-side via user lookup)
+	ResponsibleNames []string `json:"responsibleNames"`
+	AccountableName  string   `json:"accountableName"`
+	ConsultedNames   []string `json:"consultedNames"`
+	InformedNames    []string `json:"informedNames"`
 }
 
 // Meeting represents a governance meeting.

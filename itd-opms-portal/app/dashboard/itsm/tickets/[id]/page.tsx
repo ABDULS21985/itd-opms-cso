@@ -159,13 +159,14 @@ const TERMINAL_STATUSES = ["cancelled"];
 /*  Circular SLA Gauge Component                                       */
 /* ------------------------------------------------------------------ */
 
-function SLAGauge({
+export function SLAGauge({
   label,
   target,
   met,
   metAt,
   isPaused,
   createdAt,
+  slaPausedDurationMinutes = 0,
 }: {
   label: string;
   target?: string;
@@ -173,6 +174,7 @@ function SLAGauge({
   metAt?: string;
   isPaused: boolean;
   createdAt: string;
+  slaPausedDurationMinutes?: number;
 }) {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
@@ -326,12 +328,14 @@ function SLAGauge({
     );
   }
 
-  // Active countdown
+  // Active countdown — extend the deadline by however long the SLA was paused.
   const targetTime = new Date(target).getTime();
+  const pausedMs = slaPausedDurationMinutes * 60 * 1000;
+  const effectiveTarget = targetTime + pausedMs;
   const now = Date.now();
   const created = new Date(createdAt).getTime();
-  const totalDuration = targetTime - created;
-  const remaining = targetTime - now;
+  const totalDuration = effectiveTarget - created;
+  const remaining = effectiveTarget - now;
   const pct = totalDuration > 0 ? Math.min(((now - created) / totalDuration) * 100, 100) : 0;
   const dashOffset = circumference - (pct / 100) * circumference;
 
@@ -1195,6 +1199,7 @@ export default function TicketDetailPage({
                 metAt={ticket.firstResponseAt}
                 isPaused={!!ticket.slaPausedAt}
                 createdAt={ticket.createdAt}
+                slaPausedDurationMinutes={ticket.slaPausedDurationMinutes}
               />
               <SLAGauge
                 label="Resolution"
@@ -1203,6 +1208,7 @@ export default function TicketDetailPage({
                 metAt={ticket.resolvedAt}
                 isPaused={!!ticket.slaPausedAt}
                 createdAt={ticket.createdAt}
+                slaPausedDurationMinutes={ticket.slaPausedDurationMinutes}
               />
             </div>
           </motion.div>
