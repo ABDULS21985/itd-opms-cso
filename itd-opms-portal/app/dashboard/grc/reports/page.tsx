@@ -114,7 +114,7 @@ export default function GRCReportsPage() {
         )
       : 0;
   const openFindings = audits.reduce(
-    (_, a) => a.status !== "completed" && a.status !== "cancelled" ? _ + 1 : _,
+    (sum, a) => (a.status !== "completed" ? sum + 1 : sum),
     0,
   );
   // Compliance rate

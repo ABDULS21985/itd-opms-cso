@@ -106,24 +106,26 @@ const STATUS_TRANSITIONS: Record<
   string,
   { value: string; label: string; icon?: React.ElementType; variant?: string }[]
 > = {
-  new: [
+  logged: [
+    { value: "classified", label: "Classify", icon: ArrowRightCircle },
     { value: "assigned", label: "Assign", icon: UserPlus },
-    { value: "in_progress", label: "Start Work", icon: Zap, variant: "primary" },
+    { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
+  ],
+  classified: [
+    { value: "assigned", label: "Assign", icon: UserPlus, variant: "primary" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
   assigned: [
     { value: "in_progress", label: "Start Work", icon: Zap, variant: "primary" },
-    { value: "pending_user", label: "Pending User", icon: Clock },
-    { value: "pending_vendor", label: "Pending Vendor", icon: Clock },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
   in_progress: [
-    { value: "pending_user", label: "Pending User", icon: Clock },
+    { value: "pending_customer", label: "Pending Customer", icon: Clock },
     { value: "pending_vendor", label: "Pending Vendor", icon: Clock },
     { value: "resolved", label: "Resolve", icon: CheckCircle, variant: "success" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
   ],
-  pending_user: [
+  pending_customer: [
     { value: "in_progress", label: "Resume Work", icon: Zap, variant: "primary" },
     { value: "resolved", label: "Resolve", icon: CheckCircle, variant: "success" },
     { value: "cancelled", label: "Cancel", icon: XCircle, variant: "danger" },
@@ -143,7 +145,8 @@ const STATUS_TRANSITIONS: Record<
 
 /** Ordered pipeline stages */
 const STATUS_PIPELINE = [
-  { key: "new", label: "New", icon: CircleDot },
+  { key: "logged", label: "Logged", icon: CircleDot },
+  { key: "classified", label: "Classified", icon: ArrowRightCircle },
   { key: "assigned", label: "Assigned", icon: UserPlus },
   { key: "in_progress", label: "In Progress", icon: Zap },
   { key: "resolved", label: "Resolved", icon: CheckCircle },
@@ -901,7 +904,7 @@ export default function TicketDetailPage({
   ];
 
   const isPendingStatus =
-    ticket.status === "pending_user" || ticket.status === "pending_vendor";
+    ticket.status === "pending_customer" || ticket.status === "pending_vendor";
 
   return (
     <div className="mx-auto max-w-7xl space-y-0">

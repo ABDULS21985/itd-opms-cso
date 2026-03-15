@@ -21,11 +21,10 @@ import type { GRCAudit } from "@/types";
 const STATUSES = [
   { value: "", label: "All Statuses" },
   { value: "planned", label: "Planned" },
+  { value: "preparing", label: "Preparing" },
   { value: "in_progress", label: "In Progress" },
-  { value: "fieldwork", label: "Fieldwork" },
-  { value: "reporting", label: "Reporting" },
+  { value: "findings_review", label: "Findings Review" },
   { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
 ];
 
 const AUDIT_TYPES = [
@@ -33,7 +32,6 @@ const AUDIT_TYPES = [
   { value: "internal", label: "Internal" },
   { value: "external", label: "External" },
   { value: "regulatory", label: "Regulatory" },
-  { value: "certification", label: "Certification" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -64,8 +62,6 @@ function getTypeBadgeColor(type: string): { bg: string; text: string } {
       return { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" };
     case "regulatory":
       return { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" };
-    case "certification":
-      return { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" };
     default:
       return { bg: "var(--surface-2)", text: "var(--text-secondary)" };
   }

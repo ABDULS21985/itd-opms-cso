@@ -207,7 +207,7 @@ export default function MeetingsAndActionsPage() {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              completeMutation.mutate(item.id);
+              completeMutation.mutate({ id: item.id });
             }}
             disabled={completeMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--success-light)]"

@@ -599,12 +599,16 @@ export function useUpdateActionItem(id: string | undefined) {
 
 /**
  * POST /governance/meetings/actions/{id}/complete - mark action item complete.
+ * Accepts an optional evidence string; sends empty object when omitted so the
+ * backend JSON decoder does not receive an empty body.
  */
 export function useCompleteAction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post(`/governance/meetings/actions/${id}/complete`),
+    mutationFn: ({ id, evidence = "" }: { id: string; evidence?: string }) =>
+      apiClient.post(`/governance/meetings/actions/${id}/complete`, {
+        evidence,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["action-items"] });
       queryClient.invalidateQueries({ queryKey: ["action-items-overdue"] });

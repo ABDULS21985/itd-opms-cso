@@ -38,10 +38,10 @@ export function useAssets(
       apiClient.get<PaginatedResponse<Asset>>("/cmdb/assets", {
         page,
         limit,
-        type,
+        assetType: type,
         status,
         location,
-        owner_id: ownerId,
+        ownerId,
       }),
   });
 }
@@ -239,7 +239,8 @@ export function useAssetDisposal(id: string | undefined) {
 }
 
 /**
- * POST /cmdb/assets/{assetId}/dispose - create a disposal request.
+ * POST /cmdb/assets/disposals - create a disposal request.
+ * assetId must be included in the request body as the backend reads it from there.
  */
 export function useCreateDisposal() {
   const queryClient = useQueryClient();
@@ -248,7 +249,10 @@ export function useCreateDisposal() {
       assetId,
       ...body
     }: Partial<AssetDisposal> & { assetId: string }) =>
-      apiClient.post<AssetDisposal>(`/cmdb/assets/${assetId}/dispose`, body),
+      apiClient.post<AssetDisposal>(`/cmdb/assets/disposals`, {
+        assetId,
+        ...body,
+      }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({
@@ -292,7 +296,7 @@ export function useUpdateDisposalStatus() {
 /* ================================================================== */
 
 /**
- * GET /cmdb/ci - paginated list of configuration items.
+ * GET /cmdb/items - paginated list of configuration items.
  */
 export function useCMDBItems(
   page = 1,
@@ -303,34 +307,34 @@ export function useCMDBItems(
   return useQuery({
     queryKey: ["cmdb-items", page, limit, ciType, status],
     queryFn: () =>
-      apiClient.get<PaginatedResponse<CMDBItem>>("/cmdb/ci", {
+      apiClient.get<PaginatedResponse<CMDBItem>>("/cmdb/items", {
         page,
         limit,
-        ci_type: ciType,
+        ciType,
         status,
       }),
   });
 }
 
 /**
- * GET /cmdb/ci/{id} - single configuration item detail.
+ * GET /cmdb/items/{id} - single configuration item detail.
  */
 export function useCMDBItem(id: string | undefined) {
   return useQuery({
     queryKey: ["cmdb-item", id],
-    queryFn: () => apiClient.get<CMDBItem>(`/cmdb/ci/${id}`),
+    queryFn: () => apiClient.get<CMDBItem>(`/cmdb/items/${id}`),
     enabled: !!id,
   });
 }
 
 /**
- * GET /cmdb/ci/search - search configuration items.
+ * GET /cmdb/items/search - search configuration items.
  */
 export function useSearchCMDBItems(q: string, page = 1, limit = 20) {
   return useQuery({
     queryKey: ["cmdb-items-search", q, page, limit],
     queryFn: () =>
-      apiClient.get<PaginatedResponse<CMDBItem>>("/cmdb/ci/search", {
+      apiClient.get<PaginatedResponse<CMDBItem>>("/cmdb/items/search", {
         q,
         page,
         limit,
@@ -340,13 +344,13 @@ export function useSearchCMDBItems(q: string, page = 1, limit = 20) {
 }
 
 /**
- * GET /cmdb/ci/{id}/relationships - relationships for a CI.
+ * GET /cmdb/items/{id}/relationships - relationships for a CI.
  */
 export function useCMDBRelationships(ciId: string | undefined) {
   return useQuery({
     queryKey: ["cmdb-relationships", ciId],
     queryFn: () =>
-      apiClient.get<CMDBRelationship[]>(`/cmdb/ci/${ciId}/relationships`),
+      apiClient.get<CMDBRelationship[]>(`/cmdb/items/${ciId}/relationships`),
     enabled: !!ciId,
   });
 }
@@ -356,13 +360,13 @@ export function useCMDBRelationships(ciId: string | undefined) {
 /* ================================================================== */
 
 /**
- * POST /cmdb/ci - create a configuration item.
+ * POST /cmdb/items - create a configuration item.
  */
 export function useCreateCMDBItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<CMDBItem>) =>
-      apiClient.post<CMDBItem>("/cmdb/ci", body),
+      apiClient.post<CMDBItem>("/cmdb/items", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Configuration item created successfully");
@@ -374,13 +378,13 @@ export function useCreateCMDBItem() {
 }
 
 /**
- * PUT /cmdb/ci/{id} - update a configuration item.
+ * PUT /cmdb/items/{id} - update a configuration item.
  */
 export function useUpdateCMDBItem(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<CMDBItem>) =>
-      apiClient.put<CMDBItem>(`/cmdb/ci/${id}`, body),
+      apiClient.put<CMDBItem>(`/cmdb/items/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       queryClient.invalidateQueries({ queryKey: ["cmdb-item", id] });
@@ -393,12 +397,12 @@ export function useUpdateCMDBItem(id: string | undefined) {
 }
 
 /**
- * DELETE /cmdb/ci/{id} - delete a configuration item.
+ * DELETE /cmdb/items/{id} - delete a configuration item.
  */
 export function useDeleteCMDBItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/cmdb/ci/${id}`),
+    mutationFn: (id: string) => apiClient.delete(`/cmdb/items/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Configuration item deleted successfully");
@@ -414,7 +418,8 @@ export function useDeleteCMDBItem() {
 /* ================================================================== */
 
 /**
- * POST /cmdb/ci/{ciId}/relationships - create a relationship.
+ * POST /cmdb/relationships - create a relationship.
+ * ciId is used only for cache invalidation; sourceCiId/targetCiId go in the body.
  */
 export function useCreateRelationship() {
   const queryClient = useQueryClient();
@@ -424,7 +429,7 @@ export function useCreateRelationship() {
       ...body
     }: Partial<CMDBRelationship> & { ciId: string }) =>
       apiClient.post<CMDBRelationship>(
-        `/cmdb/ci/${ciId}/relationships`,
+        `/cmdb/relationships`,
         body,
       ),
     onSuccess: (_data, variables) => {
@@ -441,19 +446,20 @@ export function useCreateRelationship() {
 }
 
 /**
- * DELETE /cmdb/ci/{ciId}/relationships/{relationshipId} - delete a relationship.
+ * DELETE /cmdb/relationships/{relationshipId} - delete a relationship.
+ * ciId is used only for cache invalidation.
  */
 export function useDeleteRelationship() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      ciId,
+      ciId: _ciId,
       relationshipId,
     }: {
       ciId: string;
       relationshipId: string;
     }) =>
-      apiClient.delete(`/cmdb/ci/${ciId}/relationships/${relationshipId}`),
+      apiClient.delete(`/cmdb/relationships/${relationshipId}`),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["cmdb-relationships", variables.ciId],
@@ -534,8 +540,8 @@ export function useLicenses(
       apiClient.get<PaginatedResponse<License>>("/cmdb/licenses", {
         page,
         limit,
-        license_type: licenseType,
-        compliance_status: complianceStatus,
+        licenseType,
+        complianceStatus,
       }),
   });
 }
@@ -552,13 +558,13 @@ export function useLicense(id: string | undefined) {
 }
 
 /**
- * GET /cmdb/licenses/compliance - license compliance statistics.
+ * GET /cmdb/licenses/compliance-stats - license compliance statistics.
  */
 export function useLicenseComplianceStats() {
   return useQuery({
     queryKey: ["license-compliance-stats"],
     queryFn: () =>
-      apiClient.get<LicenseComplianceStats>("/cmdb/licenses/compliance"),
+      apiClient.get<LicenseComplianceStats>("/cmdb/licenses/compliance-stats"),
   });
 }
 
@@ -677,20 +683,21 @@ export function useCreateLicenseAssignment() {
 }
 
 /**
- * DELETE /cmdb/licenses/{licenseId}/assignments/{assignmentId} - remove a license assignment.
+ * DELETE /cmdb/licenses/assignments/{assignmentId} - remove a license assignment.
+ * licenseId is used only for cache invalidation; it is not part of the URL.
  */
 export function useDeleteLicenseAssignment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      licenseId,
+      licenseId: _licenseId,
       assignmentId,
     }: {
       licenseId: string;
       assignmentId: string;
     }) =>
       apiClient.delete(
-        `/cmdb/licenses/${licenseId}/assignments/${assignmentId}`,
+        `/cmdb/licenses/assignments/${assignmentId}`,
       ),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -729,7 +736,7 @@ export function useWarranties(
       apiClient.get<PaginatedResponse<Warranty>>("/cmdb/warranties", {
         page,
         limit,
-        renewal_status: renewalStatus,
+        renewalStatus,
       }),
   });
 }

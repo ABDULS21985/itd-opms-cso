@@ -216,7 +216,7 @@ export default function ActionTrackerPage() {
   /* ---- Complete action handler ---- */
   function handleComplete() {
     if (!confirmCompleteId) return;
-    completeMutation.mutate(confirmCompleteId, {
+    completeMutation.mutate({ id: confirmCompleteId }, {
       onSuccess: () => {
         toast.success("Action item marked as completed");
         setConfirmCompleteId(null);

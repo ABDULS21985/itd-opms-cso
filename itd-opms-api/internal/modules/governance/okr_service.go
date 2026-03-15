@@ -235,17 +235,18 @@ func (s *OKRService) UpdateOKR(ctx context.Context, tenantID, okrID uuid.UUID, r
 	query := `
 		UPDATE okrs SET
 			objective = COALESCE($1, objective),
-			status = COALESCE($2, status),
-			progress_pct = COALESCE($3, progress_pct),
-			scoring_method = COALESCE($4, scoring_method)
-		WHERE id = $5 AND tenant_id = $6
+			period = COALESCE($2, period),
+			status = COALESCE($3, status),
+			progress_pct = COALESCE($4, progress_pct),
+			scoring_method = COALESCE($5, scoring_method)
+		WHERE id = $6 AND tenant_id = $7
 		RETURNING id, tenant_id, parent_id, level, scope_id,
 			objective, period, owner_id, status,
 			progress_pct, scoring_method, created_at`
 
 	var o OKR
 	err := s.pool.QueryRow(ctx, query,
-		req.Objective, req.Status, req.ProgressPct, req.ScoringMethod,
+		req.Objective, req.Period, req.Status, req.ProgressPct, req.ScoringMethod,
 		okrID, tenantID,
 	).Scan(
 		&o.ID, &o.TenantID, &o.ParentID, &o.Level, &o.ScopeID,

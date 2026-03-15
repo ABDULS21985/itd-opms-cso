@@ -54,7 +54,11 @@ const analyticsPages = [
 
 const STATUS_COLORS: Record<string, string> = {
   proposed: "#9CA3AF", active: "#3B82F6", completed: "#22C55E",
-  cancelled: "#EF4444", "on-hold": "#F97316", "in-development": "#8B5CF6",
+  cancelled: "#EF4444",
+  // Backend constant uses on_hold (underscore); "on-hold" kept for legacy data
+  "on-hold": "#F97316", on_hold: "#F97316",
+  approved: "#10B981",
+  "in-development": "#8B5CF6",
   implementation: "#06B6D4",
 };
 

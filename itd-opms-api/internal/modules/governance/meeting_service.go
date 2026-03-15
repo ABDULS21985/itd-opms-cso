@@ -208,8 +208,9 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 			duration_minutes = COALESCE($7, duration_minutes),
 			recurrence_rule = COALESCE($8, recurrence_rule),
 			template_agenda = COALESCE($9, template_agenda),
-			attendee_ids = COALESCE($10, attendee_ids)
-		WHERE id = $11 AND tenant_id = $12
+			attendee_ids = COALESCE($10, attendee_ids),
+			status = COALESCE($11, status)
+		WHERE id = $12 AND tenant_id = $13
 		RETURNING id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at`
@@ -218,7 +219,7 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 	err := s.pool.QueryRow(ctx, query,
 		req.Title, req.MeetingType, req.Agenda, req.Minutes, req.Location,
 		req.ScheduledAt, req.DurationMinutes, req.RecurrenceRule, req.TemplateAgenda,
-		req.AttendeeIDs,
+		req.AttendeeIDs, req.Status,
 		meetingID, tenantID,
 	).Scan(
 		&m.ID, &m.TenantID, &m.Title, &m.MeetingType, &m.Agenda, &m.Minutes, &m.Location,

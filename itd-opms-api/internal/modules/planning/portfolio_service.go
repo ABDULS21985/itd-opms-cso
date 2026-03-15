@@ -1271,11 +1271,14 @@ func (s *ProjectService) GetDivisionAssignmentHistory(ctx context.Context, entit
 
 	query := `
 		SELECT dal.id, dal.entity_type, dal.entity_id, dal.action,
-			dal.from_division_id, dal.to_division_id, dal.performed_by,
-			COALESCE(u.display_name, '') AS performer_name,
+			dal.from_division_id, COALESCE(fd.name, '') AS from_division_name,
+			dal.to_division_id,   COALESCE(td.name, '') AS to_division_name,
+			dal.performed_by, COALESCE(u.display_name, '') AS performer_name,
 			dal.notes, dal.created_at
 		FROM division_assignment_log dal
-		LEFT JOIN users u ON u.id = dal.performed_by
+		LEFT JOIN users        u  ON u.id  = dal.performed_by
+		LEFT JOIN org_units    fd ON fd.id = dal.from_division_id
+		LEFT JOIN org_units    td ON td.id = dal.to_division_id
 		WHERE dal.entity_type = $1 AND dal.entity_id = $2
 		ORDER BY dal.created_at DESC`
 
@@ -1290,8 +1293,9 @@ func (s *ProjectService) GetDivisionAssignmentHistory(ctx context.Context, entit
 		var l DivisionAssignmentLog
 		if err := rows.Scan(
 			&l.ID, &l.EntityType, &l.EntityID, &l.Action,
-			&l.FromDivisionID, &l.ToDivisionID, &l.PerformedBy,
-			&l.PerformerName,
+			&l.FromDivisionID, &l.FromDivisionName,
+			&l.ToDivisionID, &l.ToDivisionName,
+			&l.PerformedBy, &l.PerformerName,
 			&l.Notes, &l.CreatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan assignment log", err)

@@ -502,7 +502,7 @@ export default function GRCAuditDetailPage({
                         <span>Collector: {collection.collectorId.slice(0, 8)}...</span>
                       )}
                     </div>
-                    {collection.status !== "approved" && (
+                    {(collection.status === "submitted" || collection.status === "review") && (
                       <button
                         type="button"
                         onClick={() =>

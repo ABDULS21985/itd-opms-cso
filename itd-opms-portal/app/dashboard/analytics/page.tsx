@@ -43,7 +43,10 @@ const RAG_COLORS = { green: "#22C55E", amber: "#F59E0B", red: "#EF4444" };
 const STATUS_COLORS: Record<string, string> = {
   proposed: "#9CA3AF", active: "#3B82F6", "in-development": "#8B5CF6",
   implementation: "#06B6D4", completed: "#22C55E", cancelled: "#EF4444",
-  "on-hold": "#F97316", "kick-off": "#14B8A6", "project-mode": "#6366F1",
+  // Backend constant uses on_hold (underscore); "on-hold" kept for legacy data
+  "on-hold": "#F97316", on_hold: "#F97316",
+  approved: "#10B981",
+  "kick-off": "#14B8A6", "project-mode": "#6366F1",
   "requirement-management": "#EC4899", "solution-architecture": "#A855F7",
 };
 
@@ -101,8 +104,7 @@ function computeDivisionalData(projects: Project[]) {
   const divisionMap: Record<string, Record<string, number>> = {};
   const allStatuses = new Set<string>();
   for (const p of projects) {
-    const md = p.metadata as Record<string, string> | undefined;
-    const division = md?.division || md?.owning_division || "Unassigned";
+    const division = p.divisionName || "Unassigned";
     const status = p.status || "unknown";
     allStatuses.add(status);
     if (!divisionMap[division]) divisionMap[division] = {};

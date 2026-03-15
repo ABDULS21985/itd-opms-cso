@@ -63,6 +63,8 @@ function resolveVariant(status: string): BadgeVariant {
   if (
     [
       "pending",
+      "pending_customer",
+      "pending_vendor",
       "review",
       "under_review",
       "in_progress",

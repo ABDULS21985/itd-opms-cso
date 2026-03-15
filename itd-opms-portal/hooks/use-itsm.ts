@@ -987,7 +987,7 @@ export function useLinkIncidentToProblem() {
       ticketId: string;
     }) =>
       apiClient.post(`/itsm/problems/${problemId}/link-incident`, {
-        ticketId,
+        incidentId: ticketId,
       }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
@@ -1017,7 +1017,7 @@ export function useKnownErrors(problemId?: string) {
     queryKey: ["known-errors", problemId],
     queryFn: () =>
       apiClient.get<KnownError[]>("/itsm/problems/known-errors", {
-        problem_id: problemId,
+        problemId,
       }),
   });
 }
@@ -1148,15 +1148,16 @@ export function useCSATStats() {
 }
 
 /**
- * POST /itsm/tickets/{ticketId}/csat - submit a CSAT survey.
+ * POST /itsm/tickets/csat - submit a CSAT survey.
+ * ticketId is passed in the request body (not the URL path).
  */
 export function useCreateCSATSurvey(ticketId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<CSATSurvey>) =>
       apiClient.post<CSATSurvey>(
-        `/itsm/tickets/${ticketId}/csat`,
-        body,
+        `/itsm/tickets/csat`,
+        { ...body, ticketId },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["csat-stats"] });

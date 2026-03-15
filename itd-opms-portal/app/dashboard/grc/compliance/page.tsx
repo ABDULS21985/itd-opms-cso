@@ -21,20 +21,21 @@ import type { ComplianceControl, ComplianceStats } from "@/types";
 
 const FRAMEWORKS = [
   { value: "", label: "All Frameworks" },
-  { value: "ISO27001", label: "ISO 27001" },
+  { value: "ISO_27001", label: "ISO 27001" },
   { value: "COBIT", label: "COBIT" },
-  { value: "CBN_ITSP", label: "CBN IT Standards" },
-  { value: "NIST", label: "NIST CSF" },
-  { value: "PCIDSS", label: "PCI DSS" },
+  { value: "CBN_IT_GUIDELINES", label: "CBN IT Standards" },
+  { value: "NIST_CSF", label: "NIST CSF" },
+  { value: "PCI_DSS", label: "PCI DSS" },
+  { value: "SOC2", label: "SOC 2" },
+  { value: "NDPR", label: "NDPR" },
 ];
 
 const IMPL_STATUSES = [
   { value: "", label: "All Statuses" },
+  { value: "not_started", label: "Not Started" },
+  { value: "partial", label: "Partially Implemented" },
   { value: "implemented", label: "Implemented" },
-  { value: "partially_implemented", label: "Partially Implemented" },
-  { value: "planned", label: "Planned" },
-  { value: "not_applicable", label: "Not Applicable" },
-  { value: "not_implemented", label: "Not Implemented" },
+  { value: "verified", label: "Verified" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -59,15 +60,13 @@ function getComplianceColor(pct: number): string {
 
 function getImplStatusColor(status: string): { bg: string; text: string } {
   switch (status) {
+    case "verified":
+      return { bg: "rgba(16, 185, 129, 0.15)", text: "#059669" };
     case "implemented":
       return { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" };
-    case "partially_implemented":
+    case "partial":
       return { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" };
-    case "planned":
-      return { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" };
-    case "not_applicable":
-      return { bg: "var(--surface-2)", text: "var(--text-secondary)" };
-    case "not_implemented":
+    case "not_started":
       return { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" };
     default:
       return { bg: "var(--surface-2)", text: "var(--text-secondary)" };

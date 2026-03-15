@@ -55,7 +55,7 @@ export interface AttestationCampaign {
   targetUserIds?: string[];
   dueDate: string;
   status: string;
-  completionRate: number;
+  completionRate: number | null;
   createdBy: string;
   createdAt: string;
 }
@@ -161,7 +161,7 @@ export interface OKR {
   period: string;
   ownerId: string;
   status: string;
-  progressPct: number;
+  progressPct: number | null;
   scoringMethod: string;
   createdAt: string;
   keyResults?: KeyResult[];
@@ -172,9 +172,9 @@ export interface KeyResult {
   id: string;
   okrId: string;
   title: string;
-  targetValue?: number;
-  currentValue: number;
-  unit?: string;
+  targetValue?: number | null;
+  currentValue: number | null;
+  unit?: string | null;
   status: string;
   updatedAt: string;
 }

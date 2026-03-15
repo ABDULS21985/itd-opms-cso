@@ -27,10 +27,10 @@ import type { AccessReviewCampaign, AccessReviewEntry } from "@/types";
 
 const STATUSES = [
   { value: "", label: "All Statuses" },
-  { value: "draft", label: "Draft" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "planned", label: "Planned" },
+  { value: "active", label: "Active" },
+  { value: "review", label: "Under Review" },
   { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
 ];
 
 /* ------------------------------------------------------------------ */

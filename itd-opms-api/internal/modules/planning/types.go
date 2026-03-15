@@ -209,16 +209,18 @@ type ProjectDivisionAssignment struct {
 
 // DivisionAssignmentLog represents a history entry for division assignments.
 type DivisionAssignmentLog struct {
-	ID             uuid.UUID  `json:"id"`
-	EntityType     string     `json:"entityType"`
-	EntityID       uuid.UUID  `json:"entityId"`
-	Action         string     `json:"action"`
-	FromDivisionID *uuid.UUID `json:"fromDivisionId"`
-	ToDivisionID   *uuid.UUID `json:"toDivisionId"`
-	PerformedBy    uuid.UUID  `json:"performedBy"`
-	PerformerName  string     `json:"performerName,omitempty"`
-	Notes          *string    `json:"notes"`
-	CreatedAt      time.Time  `json:"createdAt"`
+	ID               uuid.UUID  `json:"id"`
+	EntityType       string     `json:"entityType"`
+	EntityID         uuid.UUID  `json:"entityId"`
+	Action           string     `json:"action"`
+	FromDivisionID   *uuid.UUID `json:"fromDivisionId"`
+	FromDivisionName string     `json:"fromDivisionName,omitempty"`
+	ToDivisionID     *uuid.UUID `json:"toDivisionId"`
+	ToDivisionName   string     `json:"toDivisionName,omitempty"`
+	PerformedBy      uuid.UUID  `json:"performedBy"`
+	PerformerName    string     `json:"performerName,omitempty"`
+	Notes            *string    `json:"notes"`
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 // ProjectDependency represents a dependency link between two projects.

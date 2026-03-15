@@ -38,10 +38,12 @@ function getStatusColor(status: string): { bg: string; text: string } {
       return { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" };
     case "submitted":
       return { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" };
-    case "in_review":
+    case "review":
       return { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" };
-    case "rejected":
-      return { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" };
+    case "collecting":
+      return { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" };
+    case "pending":
+      return { bg: "var(--surface-2)", text: "var(--text-secondary)" };
     default:
       return { bg: "var(--surface-2)", text: "var(--text-secondary)" };
   }
@@ -126,7 +128,7 @@ function EvidenceCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2">
-        {collection.status === "submitted" || collection.status === "in_review" ? (
+        {collection.status === "submitted" || collection.status === "review" ? (
           <button
             type="button"
             onClick={onApprove}
@@ -205,7 +207,7 @@ export default function EvidenceCollectionPage({
           transition={{ duration: 0.4, delay: 0.05 }}
           className="grid grid-cols-2 sm:grid-cols-4 gap-3"
         >
-          {["draft", "submitted", "in_review", "approved"].map((s) => {
+          {["pending", "submitted", "review", "approved"].map((s) => {
             const count = evidenceList.filter(
               (e) => e.status === s,
             ).length;

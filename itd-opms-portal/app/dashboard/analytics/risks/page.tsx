@@ -100,7 +100,7 @@ export default function RiskIssuesPage() {
     const allStatuses = new Set<string>();
     for (const r of risks) {
       const cat = (r.category || "other").toLowerCase();
-      const status = r.status || "open";
+      const status = r.status || "identified";
       allStatuses.add(status);
       if (!statusMap[cat]) statusMap[cat] = {};
       statusMap[cat][status] = (statusMap[cat][status] || 0) + 1;
@@ -134,7 +134,9 @@ export default function RiskIssuesPage() {
     return { data, categories: statusList };
   }, [issues]);
 
-  const openRisks = risks.filter((r) => r.status === "open").length;
+  // Backend risk statuses: identified, assessed, mitigating, accepted, closed.
+  // "Open" means any non-terminal status (not closed or accepted).
+  const openRisks = risks.filter((r) => !["closed", "accepted"].includes(r.status)).length;
   const criticalRisks = risks.filter((r) => r.riskScore >= 20).length;
   const highRisks = risks.filter((r) => r.riskScore >= 12 && r.riskScore < 20).length;
   const openIssues = issues.filter((i) => i.status !== "closed" && i.status !== "resolved").length;
@@ -174,7 +176,13 @@ export default function RiskIssuesPage() {
         filters={[
           {
             key: "status", label: "Risk Status", value: statusFilter, onChange: setStatusFilter,
-            options: [{ label: "Open", value: "open" }, { label: "Mitigated", value: "mitigated" }, { label: "Closed", value: "closed" }],
+            options: [
+              { label: "Identified", value: "identified" },
+              { label: "Assessed", value: "assessed" },
+              { label: "Mitigating", value: "mitigating" },
+              { label: "Accepted", value: "accepted" },
+              { label: "Closed", value: "closed" },
+            ],
           },
           {
             key: "category", label: "Category", value: categoryFilter, onChange: setCategoryFilter,

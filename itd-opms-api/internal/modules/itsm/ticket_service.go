@@ -412,15 +412,16 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 			subcategory = COALESCE($2, subcategory),
 			title = COALESCE($3, title),
 			description = COALESCE($4, description),
-			tags = COALESCE($5, tags),
-			custom_fields = COALESCE($6, custom_fields),
-			updated_at = $7
-		WHERE id = $8 AND tenant_id = $9
+			priority = COALESCE($5, priority),
+			tags = COALESCE($6, tags),
+			custom_fields = COALESCE($7, custom_fields),
+			updated_at = $8
+		WHERE id = $9 AND tenant_id = $10
 		RETURNING ` + ticketColumns
 
 	ticket, err := scanTicket(s.pool.QueryRow(ctx, updateQuery,
 		req.Category, req.Subcategory, req.Title,
-		req.Description, req.Tags, req.CustomFields,
+		req.Description, req.Priority, req.Tags, req.CustomFields,
 		now, id, auth.TenantID,
 	))
 	if err != nil {

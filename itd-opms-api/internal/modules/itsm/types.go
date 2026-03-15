@@ -460,6 +460,7 @@ type UpdateTicketRequest struct {
 	Subcategory *string         `json:"subcategory"`
 	Title       *string         `json:"title"`
 	Description *string         `json:"description"`
+	Priority    *string         `json:"priority"`
 	Tags        []string        `json:"tags"`
 	CustomFields json.RawMessage `json:"customFields"`
 }

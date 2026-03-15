@@ -28,10 +28,9 @@ const LICENSE_TYPES = [
   { value: "", label: "All Types" },
   { value: "perpetual", label: "Perpetual" },
   { value: "subscription", label: "Subscription" },
-  { value: "open_source", label: "Open Source" },
-  { value: "oem", label: "OEM" },
-  { value: "volume", label: "Volume" },
-  { value: "enterprise", label: "Enterprise" },
+  { value: "per_user", label: "Per User" },
+  { value: "per_device", label: "Per Device" },
+  { value: "site", label: "Site" },
 ];
 
 const COMPLIANCE_STATUSES = [

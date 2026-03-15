@@ -67,6 +67,7 @@ export interface ExecutiveSummary {
   teamCapacityUtilizationPct: number;
   overdueTrainingCerts: number;
   expiringCerts: number;
+  // Live metrics computed outside the materialized view
   openP1Incidents: number;
   slaBreaches24h: number;
   refreshedAt: string;

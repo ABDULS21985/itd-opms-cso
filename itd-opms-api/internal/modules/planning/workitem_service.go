@@ -732,8 +732,9 @@ func (s *WorkItemService) GetMilestone(ctx context.Context, id uuid.UUID) (Miles
 	return m, nil
 }
 
-// ListMilestones returns all milestones for a project.
-func (s *WorkItemService) ListMilestones(ctx context.Context, projectID uuid.UUID) ([]Milestone, error) {
+// ListMilestones returns milestones for a project, or all tenant milestones
+// when projectID is nil (used by analytics dashboards for cross-project views).
+func (s *WorkItemService) ListMilestones(ctx context.Context, projectID *uuid.UUID) ([]Milestone, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Unauthorized("authentication required")
@@ -744,10 +745,11 @@ func (s *WorkItemService) ListMilestones(ctx context.Context, projectID uuid.UUI
 			target_date, actual_date, status, evidence_refs, completion_criteria,
 			created_at, updated_at
 		FROM milestones
-		WHERE project_id = $1 AND tenant_id = $2
+		WHERE tenant_id = $1
+			AND ($2::uuid IS NULL OR project_id = $2)
 		ORDER BY target_date ASC`
 
-	rows, err := s.pool.Query(ctx, query, projectID, auth.TenantID)
+	rows, err := s.pool.Query(ctx, query, auth.TenantID, projectID)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list milestones", err)
 	}
