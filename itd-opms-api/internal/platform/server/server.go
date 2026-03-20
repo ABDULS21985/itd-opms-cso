@@ -30,6 +30,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/people"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/ssa"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/vault"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/vendor"
@@ -186,6 +187,7 @@ func (s *Server) Setup() {
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
 	vendorHandler := vendor.NewHandler(s.pool, auditService)
+	ssaHandler := ssa.NewHandler(s.pool, auditService)
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
@@ -320,6 +322,7 @@ func (s *Server) Setup() {
 			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
 			r.Route("/vendors", func(r chi.Router) { vendorHandler.Routes(r) })
 			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
+			r.Route("/ssa", func(r chi.Router) { ssaHandler.Routes(r) })
 			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })

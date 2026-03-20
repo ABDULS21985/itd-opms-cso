@@ -556,6 +556,7 @@ type UpdateEscalationRuleRequest struct {
 type CreateProblemRequest struct {
 	Title       string     `json:"title" validate:"required"`
 	Description *string    `json:"description"`
+	Status      string     `json:"status"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
 }
 

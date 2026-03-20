@@ -1058,6 +1058,24 @@ export function useUpdateKnownError(id: string | undefined) {
   });
 }
 
+/**
+ * DELETE /itsm/problems/known-errors/{id} - delete a known error.
+ */
+export function useDeleteKnownError() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/problems/known-errors/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["known-errors"] });
+      toast.success("Known error deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete known error");
+    },
+  });
+}
+
 /* ================================================================== */
 /*  Support Queues — Queries                                            */
 /* ================================================================== */

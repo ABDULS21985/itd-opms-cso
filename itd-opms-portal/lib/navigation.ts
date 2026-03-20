@@ -53,6 +53,7 @@ import {
   Zap,
   SlidersHorizontal,
   Handshake,
+  Server,
   type LucideIcon,
 } from "lucide-react";
 
@@ -372,6 +373,41 @@ export const navGroups: NavGroup[] = [
         label: "Contracts",
         icon: Handshake,
         permission: "vendor.view",
+      },
+    ],
+  },
+  {
+    label: "Server Allocation",
+    items: [
+      {
+        href: "/dashboard/ssa",
+        label: "My Requests",
+        icon: Server,
+        permission: "ssa.view",
+      },
+      {
+        href: "/dashboard/ssa/new",
+        label: "New Request",
+        icon: FileText,
+        permission: "ssa.manage",
+      },
+      {
+        href: "/dashboard/ssa/approvals",
+        label: "Approvals",
+        icon: CheckSquare,
+        permission: "ssa.manage",
+      },
+      {
+        href: "/dashboard/ssa/delegations",
+        label: "Delegations",
+        icon: Users,
+        permission: "ssa.manage",
+      },
+      {
+        href: "/dashboard/ssa/admin",
+        label: "Admin Dashboard",
+        icon: BarChart3,
+        permission: "ssa.manage",
       },
     ],
   },
