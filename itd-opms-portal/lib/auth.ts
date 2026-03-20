@@ -76,8 +76,7 @@ export interface OIDCConfig {
   logoutUrl?: string;
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
+import { API_BASE_URL } from "@/lib/api-client";
 
 /**
  * Fetch OIDC configuration from the backend.

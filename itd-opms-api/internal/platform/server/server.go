@@ -105,6 +105,7 @@ func (s *Server) Setup() {
 
 	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:5173"}))
+	r.Use(middleware.MaxBodySize(10 << 20)) // 10 MB global request body limit
 	r.Use(metrics.MetricsMiddleware)
 
 	if s.redis != nil {

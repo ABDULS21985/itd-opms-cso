@@ -17,8 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
+import { API_BASE_URL } from "@/lib/api-client";
 
 function ResetPasswordForm() {
   const router = useRouter();

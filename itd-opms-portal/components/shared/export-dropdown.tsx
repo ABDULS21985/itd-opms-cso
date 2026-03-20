@@ -9,6 +9,7 @@ import {
   FileText,
   Database,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api-client";
 import {
   exportToCSV,
   exportToExcel,
@@ -35,15 +36,13 @@ async function downloadServerExport(
     const queryString = params
       ? "?" + new URLSearchParams(params).toString()
       : "";
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
     const token =
       typeof window !== "undefined" ? localStorage.getItem("opms-token") : null;
 
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const response = await fetch(`${baseUrl}${url}${queryString}`, {
+    const response = await fetch(`${API_BASE_URL}${url}${queryString}`, {
       headers,
       credentials: "include",
     });

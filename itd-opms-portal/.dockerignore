@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.md
+node_modules/
+.next/
+coverage/
+.vscode/
+.idea/
+.DS_Store
+test/

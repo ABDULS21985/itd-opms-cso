@@ -9,7 +9,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, API_BASE_URL } from "@/lib/api-client";
 import {
   setToken,
   removeToken,
@@ -165,10 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Call backend logout endpoint (fire-and-forget).
     // Include the refresh token so the server can revoke it immediately.
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
     const refreshToken = getRefreshToken();
-    fetch(`${apiBase}/auth/logout`, {
+    fetch(`${API_BASE_URL}/auth/logout`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
