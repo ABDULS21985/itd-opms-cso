@@ -13,6 +13,8 @@ import type {
   QCMDAnalysis,
   SANProvisioning,
   DCOServer,
+  BulkOperationSummary,
+  ExportedRequest,
 } from "@/types/ssa";
 import type { PaginatedResponse } from "@/types/core";
 
@@ -324,18 +326,18 @@ export function useCancelSSARequest(id: string | undefined) {
 }
 
 /**
- * POST /ssa/requests/{id}/revise - revise a rejected SSA request.
+ * POST /ssa/requests/{id}/revise - transition a rejected request back to DRAFT.
+ * Backend does not accept a body; field updates should use PUT /requests/{id} after revising.
  */
 export function useReviseSSARequest(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<SSARequest>) =>
-      apiClient.post<SSARequest>(`/ssa/requests/${id}/revise`, body),
+    mutationFn: () =>
+      apiClient.post<SSARequest>(`/ssa/requests/${id}/revise`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ssa-requests"] });
       queryClient.invalidateQueries({ queryKey: ["ssa-request", id] });
       queryClient.invalidateQueries({ queryKey: ["ssa-stats"] });
-      toast.success("Request revised successfully");
     },
     onError: () => {
       toast.error("Failed to revise request");
@@ -438,7 +440,7 @@ export function useSubmitEndorsement(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { decision: string; remarks?: string }) =>
-      apiClient.post<SSAApproval>(`/ssa/requests/${id}/endorse`, body),
+      apiClient.post<SSARequest>(`/ssa/requests/${id}/endorse`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ssa-requests"] });
       queryClient.invalidateQueries({ queryKey: ["ssa-request", id] });
@@ -461,7 +463,7 @@ export function useSubmitASDAssessment(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<ASDAssessment>) =>
-      apiClient.post<ASDAssessment>(
+      apiClient.post<SSARequest>(
         `/ssa/requests/${id}/asd-assessment`,
         body,
       ),
@@ -485,7 +487,7 @@ export function useSubmitQCMDAnalysis(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<QCMDAnalysis>) =>
-      apiClient.post<QCMDAnalysis>(
+      apiClient.post<SSARequest>(
         `/ssa/requests/${id}/qcmd-analysis`,
         body,
       ),
@@ -509,7 +511,7 @@ export function useSubmitApproval(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { decision: string; remarks?: string }) =>
-      apiClient.post<SSAApproval>(`/ssa/requests/${id}/approve`, body),
+      apiClient.post<SSARequest>(`/ssa/requests/${id}/approve`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ssa-requests"] });
       queryClient.invalidateQueries({ queryKey: ["ssa-request", id] });
@@ -532,7 +534,7 @@ export function useSubmitSANProvisioning(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<SANProvisioning>) =>
-      apiClient.post<SANProvisioning>(
+      apiClient.post<SSARequest>(
         `/ssa/requests/${id}/san-provisioning`,
         body,
       ),
@@ -556,7 +558,7 @@ export function useSubmitDCOServer(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<DCOServer>) =>
-      apiClient.post<DCOServer>(
+      apiClient.post<SSARequest>(
         `/ssa/requests/${id}/dco-server`,
         body,
       ),
@@ -609,6 +611,87 @@ export function useDeleteDelegation() {
     },
     onError: () => {
       toast.error("Failed to delete delegation");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Bulk Operations — Mutations                                         */
+/* ================================================================== */
+
+/**
+ * POST /ssa/bulk/approve/{stage} - bulk approve requests at a given stage.
+ */
+export function useBulkApprove() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      stage,
+      requestIds,
+      remarks,
+    }: {
+      stage: string;
+      requestIds: string[];
+      remarks?: string;
+    }) =>
+      apiClient.post<BulkOperationSummary>(
+        `/ssa/bulk/approve/${stage}`,
+        { requestIds, remarks },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["ssa-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["ssa-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["ssa-approval-queue"] });
+      toast.success(
+        `Bulk approve: ${data.succeeded}/${data.totalRequested} succeeded`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to perform bulk approval");
+    },
+  });
+}
+
+/**
+ * POST /ssa/bulk/status - bulk update status of requests.
+ */
+export function useBulkStatusUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      requestIds: string[];
+      fromStatus: string;
+      toStatus: string;
+      reason?: string;
+    }) =>
+      apiClient.post<BulkOperationSummary>("/ssa/bulk/status", body),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["ssa-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["ssa-stats"] });
+      toast.success(
+        `Bulk status update: ${data.succeeded}/${data.totalRequested} succeeded`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to perform bulk status update");
+    },
+  });
+}
+
+/**
+ * POST /ssa/bulk/export - export requests with full detail.
+ */
+export function useBulkExport() {
+  return useMutation({
+    mutationFn: (filter: {
+      status?: string;
+      division?: string;
+      fromDate?: string;
+      toDate?: string;
+    }) =>
+      apiClient.post<ExportedRequest[]>("/ssa/bulk/export", filter),
+    onError: () => {
+      toast.error("Failed to export requests");
     },
   });
 }

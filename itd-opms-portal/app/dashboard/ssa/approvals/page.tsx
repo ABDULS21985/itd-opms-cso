@@ -46,11 +46,11 @@ type QueueTab = (typeof QUEUE_TABS)[number]["key"];
 
 const APPROVAL_STAGES = [
   { value: "", label: "All Stages" },
-  { value: "APPR_DC_PENDING", label: "Head Data Centre" },
-  { value: "APPR_SSO_PENDING", label: "Head SSO" },
-  { value: "APPR_IMD_PENDING", label: "Head IMD" },
-  { value: "APPR_ASD_PENDING", label: "Head ASD" },
-  { value: "APPR_SCAO_PENDING", label: "Head SCAO" },
+  { value: "APPR_DC", label: "Head Data Centre" },
+  { value: "APPR_SSO", label: "Head SSO" },
+  { value: "APPR_IMD", label: "Head IMD" },
+  { value: "APPR_ASD", label: "Head ASD" },
+  { value: "APPR_SCAO", label: "Head SCAO" },
 ];
 
 const colorMap: Record<string, string> = {

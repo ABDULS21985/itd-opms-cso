@@ -22,6 +22,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "@/lib/api-client";
 import {
   useSSARequest,
   useSSAAuditLog,
@@ -1855,7 +1856,29 @@ function ReviseForm({
   const [specialReq, setSpecialReq] = useState(
     request.specialRequirements || "",
   );
-  const mutation = useReviseSSARequest(id);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const reviseMutation = useReviseSSARequest(id);
+
+  const handleRevise = async () => {
+    setIsSubmitting(true);
+    try {
+      // Step 1: Transition REJECTED → DRAFT
+      await reviseMutation.mutateAsync();
+
+      // Step 2: Update the request fields via PUT (now that it's in DRAFT)
+      await apiClient.put(`/ssa/requests/${id}`, {
+        justification,
+        spaceGb: parseInt(spaceGb, 10),
+        specialRequirements: specialReq || undefined,
+      });
+
+      toast.success("Request revised and updated successfully");
+    } catch {
+      toast.error("Failed to revise request");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div style={{ ...cardStyle, borderColor: "rgba(245,158,11,0.3)" }}>
@@ -1915,16 +1938,10 @@ function ReviseForm({
         <button
           type="button"
           style={btnPrimary}
-          disabled={mutation.isPending || !justification}
-          onClick={() =>
-            mutation.mutate({
-              justification,
-              spaceGb: parseInt(spaceGb, 10),
-              specialRequirements: specialReq || undefined,
-            })
-          }
+          disabled={isSubmitting || !justification}
+          onClick={handleRevise}
         >
-          {mutation.isPending && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
+          {isSubmitting && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
           <RefreshCw size={14} />
           Revise & Resubmit
         </button>

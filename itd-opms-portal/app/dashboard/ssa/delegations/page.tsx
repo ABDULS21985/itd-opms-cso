@@ -24,16 +24,16 @@ import type { SSADelegation } from "@/types/ssa";
 /* ------------------------------------------------------------------ */
 
 const DELEGATION_STAGES = [
-  { value: "HOO_ENDORSED", label: "HOO Endorsement" },
-  { value: "ASD_ASSESSED", label: "ASD Assessment" },
-  { value: "QCMD_ANALYSED", label: "QCMD Analysis" },
-  { value: "APPR_DC_PENDING", label: "Head Data Centre" },
-  { value: "APPR_SSO_PENDING", label: "Head SSO" },
-  { value: "APPR_IMD_PENDING", label: "Head IMD" },
-  { value: "APPR_ASD_PENDING", label: "Head ASD" },
-  { value: "APPR_SCAO_PENDING", label: "Head SCAO" },
-  { value: "FULLY_APPROVED", label: "SAN Provisioning" },
-  { value: "SAN_PROVISIONED", label: "DCO Server Creation" },
+  { value: "HOO_ENDORSEMENT", label: "HOO Endorsement" },
+  { value: "ASD_ASSESSMENT", label: "ASD Assessment" },
+  { value: "QCMD_ANALYSIS", label: "QCMD Analysis" },
+  { value: "APPR_DC", label: "Head Data Centre" },
+  { value: "APPR_SSO", label: "Head SSO" },
+  { value: "APPR_IMD", label: "Head IMD" },
+  { value: "APPR_ASD", label: "Head ASD" },
+  { value: "APPR_SCAO", label: "Head SCAO" },
+  { value: "SAN_PROVISIONING", label: "SAN Provisioning" },
+  { value: "DCO_SERVER", label: "DCO Server Creation" },
 ];
 
 /* ------------------------------------------------------------------ */

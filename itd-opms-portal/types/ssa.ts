@@ -208,6 +208,17 @@ export const SSA_STATUS_LABELS: Record<string, string> = {
   DCO_CREATED: "Server Created",
   REJECTED: "Rejected",
   CANCELLED: "Cancelled",
+  // Approval stage labels (used by ApprovalsTab and rejected-stage display)
+  HOO_ENDORSEMENT: "HOO Endorsement",
+  ASD_ASSESSMENT: "ASD Assessment",
+  QCMD_ANALYSIS: "QCMD Analysis",
+  APPR_DC: "Head Data Centre",
+  APPR_SSO: "Head SSO",
+  APPR_IMD: "Head IMD",
+  APPR_ASD: "Head ASD",
+  APPR_SCAO: "Head SCAO",
+  SAN_PROVISIONING: "SAN Provisioning",
+  DCO_SERVER: "DCO Server",
 };
 
 export const SSA_STATUS_COLORS: Record<string, string> = {
@@ -277,6 +288,40 @@ export const ASSESSMENT_OUTCOMES = [
   { value: "FEASIBLE", label: "Feasible" },
   { value: "CONDITIONALLY_FEASIBLE", label: "Conditionally Feasible" },
   { value: "NOT_FEASIBLE", label: "Not Feasible" },
+];
+
+// ──────────────────────────────────────────────
+// Bulk operation types
+// ──────────────────────────────────────────────
+
+export interface BulkOperationResult {
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface BulkOperationSummary {
+  totalRequested: number;
+  succeeded: number;
+  failed: number;
+  results: BulkOperationResult[];
+}
+
+export interface ExportedRequest extends SSARequest {
+  serviceImpacts: ServiceImpact[];
+  approvals: SSAApproval[];
+  asdAssessment?: ASDAssessment;
+  qcmdAnalysis?: QCMDAnalysis;
+  sanProvisioning?: SANProvisioning;
+  dcoServer?: DCOServer;
+}
+
+export const APPROVAL_STAGES = [
+  { value: "APPR_DC", label: "Head Data Centre" },
+  { value: "APPR_SSO", label: "Head SSO" },
+  { value: "APPR_IMD", label: "Head IMD" },
+  { value: "APPR_ASD", label: "Head ASD" },
+  { value: "APPR_SCAO", label: "Head SCAO" },
 ];
 
 // Workflow stages in order for timeline display
