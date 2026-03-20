@@ -257,7 +257,13 @@ func (h *RequestHandler) CancelRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request, err := h.svc.CancelRequest(r.Context(), id)
+	// Decode optional cancel reason from body.
+	var dto CancelRequestDTO
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&dto) // ignore error — body is optional
+	}
+
+	request, err := h.svc.CancelRequest(r.Context(), id, dto.Reason)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

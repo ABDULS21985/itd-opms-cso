@@ -661,7 +661,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, id uuid.UUID) (SSARe
 // ──────────────────────────────────────────────
 
 // CancelRequest cancels a DRAFT or SUBMITTED request.
-func (s *RequestService) CancelRequest(ctx context.Context, id uuid.UUID) (SSARequest, error) {
+func (s *RequestService) CancelRequest(ctx context.Context, id uuid.UUID, reason *string) (SSARequest, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return SSARequest{}, apperrors.Unauthorized("authentication required")
@@ -698,10 +698,14 @@ func (s *RequestService) CancelRequest(ctx context.Context, id uuid.UUID) (SSARe
 	}
 
 	// Audit log.
-	changes, _ := json.Marshal(map[string]any{
+	auditChanges := map[string]any{
 		"from_status": existing.Status,
 		"to_status":   StatusCancelled,
-	})
+	}
+	if reason != nil && *reason != "" {
+		auditChanges["reason"] = *reason
+	}
+	changes, _ := json.Marshal(auditChanges)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   auth.TenantID,
 		ActorID:    auth.UserID,

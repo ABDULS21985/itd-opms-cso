@@ -428,6 +428,11 @@ type DCOServerDTO struct {
 	Zone       string `json:"zone" validate:"required"`
 }
 
+// CancelRequestDTO is the optional input for cancelling a request.
+type CancelRequestDTO struct {
+	Reason *string `json:"reason"`
+}
+
 // CreateDelegationDTO is the input for creating a delegation.
 type CreateDelegationDTO struct {
 	DelegateID    uuid.UUID `json:"delegateId" validate:"required"`

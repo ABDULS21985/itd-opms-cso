@@ -91,8 +91,12 @@ func (s *DelegationService) CreateDelegation(ctx context.Context, dto CreateDele
 		return Delegation{}, apperrors.BadRequest("effective_to must be after effective_from")
 	}
 
-	if dto.EffectiveFrom.Before(time.Now().UTC()) {
-		return Delegation{}, apperrors.BadRequest("effective_from must be in the future")
+	// Compare dates only (truncate to midnight) so that selecting "today"
+	// is not rejected when the frontend sends T00:00:00Z and it's already
+	// past midnight UTC.
+	todayUTC := time.Now().UTC().Truncate(24 * time.Hour)
+	if dto.EffectiveFrom.Truncate(24 * time.Hour).Before(todayUTC) {
+		return Delegation{}, apperrors.BadRequest("effective_from must not be in the past")
 	}
 
 	id := uuid.New()
