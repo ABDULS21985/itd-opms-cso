@@ -209,11 +209,12 @@ func TestValidEntityTypes(t *testing.T) {
 
 func TestAutomationRuleJSONRoundTrip(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
+	desc := "Assigns new tickets to the support queue"
 	original := AutomationRule{
 		ID:                   uuid.New(),
 		TenantID:             uuid.New(),
 		Name:                 "Auto-assign tickets",
-		Description:          "Assigns new tickets to the support queue",
+		Description:          &desc,
 		IsActive:             true,
 		TriggerType:          TriggerTypeEvent,
 		TriggerConfig:        json.RawMessage(`{"event_type":"ticket.created"}`),

@@ -103,12 +103,8 @@ func scanRoleBinding(row pgx.Row) (RoleBinding, error) {
 func scanRoleBindings(rows pgx.Rows) ([]RoleBinding, error) {
 	var bindings []RoleBinding
 	for rows.Next() {
-		var rb RoleBinding
-		if err := rows.Scan(
-			&rb.ID, &rb.UserID, &rb.RoleID, &rb.RoleName,
-			&rb.TenantID, &rb.ScopeType, &rb.ScopeID,
-			&rb.GrantedBy, &rb.GrantedAt, &rb.ExpiresAt, &rb.IsActive,
-		); err != nil {
+		rb, err := scanRoleBinding(rows)
+		if err != nil {
 			return nil, err
 		}
 		bindings = append(bindings, rb)
