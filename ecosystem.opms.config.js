@@ -45,7 +45,7 @@ module.exports = {
       name: 'opms-portal',
       cwd: './itd-opms-portal',
       script: 'node_modules/.bin/next',
-      args: 'dev --port 3000',
+      args: 'dev --port 3004',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -55,7 +55,7 @@ module.exports = {
       listen_timeout: 10000,
       env: {
         NODE_ENV: 'development',
-        PORT: 3000,
+        PORT: 3004,
         HOSTNAME: '0.0.0.0',
         NEXT_PUBLIC_API_URL: 'http://localhost:8089/api/v1',
       },

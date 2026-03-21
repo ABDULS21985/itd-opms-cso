@@ -95,7 +95,7 @@ func (s *Server) Setup() {
 	r.Use(middleware.TrustedRealIP)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:3004", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Correlation-ID", "X-Tenant-ID"},
 		ExposedHeaders:   []string{"X-Correlation-ID"},
@@ -104,7 +104,7 @@ func (s *Server) Setup() {
 	}))
 
 	r.Use(middleware.SecurityHeaders)
-	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:5173"}))
+	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:3004", "http://localhost:5173"}))
 	r.Use(middleware.MaxBodySize(10 << 20)) // 10 MB global request body limit
 	r.Use(metrics.MetricsMiddleware)
 
