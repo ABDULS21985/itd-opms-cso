@@ -118,6 +118,39 @@ var statusToApprovalStage = map[string]string{
 	StatusApprSCAOPending: StageApprSCAO,
 }
 
+// ──────────────────────────────────────────────
+// Stage-specific permission constants
+// ──────────────────────────────────────────────
+
+const (
+	PermSSAView      = "ssa.view"
+	PermSSAManage    = "ssa.manage"
+	PermSSAEndorse   = "ssa.endorse"
+	PermSSAAssess    = "ssa.assess"
+	PermSSAAnalyse   = "ssa.analyse"
+	PermSSAApproveDC   = "ssa.approve.dc"
+	PermSSAApproveSSO  = "ssa.approve.sso"
+	PermSSAApproveIMD  = "ssa.approve.imd"
+	PermSSAApproveASD  = "ssa.approve.asd"
+	PermSSAApproveSCAO = "ssa.approve.scao"
+	PermSSAProvision   = "ssa.provision"
+	PermSSADCO         = "ssa.dco"
+)
+
+// stageToPermission maps each approval stage to the permission required to act.
+var stageToPermission = map[string]string{
+	StageHOOEndorsement:  PermSSAEndorse,
+	StageASDAssessment:   PermSSAAssess,
+	StageQCMDAnalysis:    PermSSAAnalyse,
+	StageApprDC:          PermSSAApproveDC,
+	StageApprSSO:         PermSSAApproveSSO,
+	StageApprIMD:         PermSSAApproveIMD,
+	StageApprASD:         PermSSAApproveASD,
+	StageApprSCAO:        PermSSAApproveSCAO,
+	StageSANProvisioning: PermSSAProvision,
+	StageDCOServer:       PermSSADCO,
+}
+
 // SLA targets in business hours per stage.
 var slaHoursByStage = map[string]int{
 	StageHOOEndorsement:  8,

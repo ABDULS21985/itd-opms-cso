@@ -23,25 +23,32 @@ func NewWorkflowHandler(wfSvc *WorkflowService, reqSvc *RequestService) *Workflo
 }
 
 // RequestRoutes mounts workflow action routes under /requests/{id}.
+// Each workflow action requires its stage-specific permission (fine-grained
+// check is enforced again in the service layer together with self-approval
+// and separation-of-duties guards).
 func (h *WorkflowHandler) RequestRoutes(r chi.Router) {
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/endorse", h.SubmitEndorsement)
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/asd-assessment", h.SubmitASDAssessment)
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/qcmd-analysis", h.SubmitQCMDAnalysis)
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/approve", h.SubmitApproval)
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/san-provisioning", h.SubmitSANProvisioning)
-	r.With(middleware.RequirePermission("ssa.manage")).Post("/{id}/dco-server", h.SubmitDCOServer)
-	r.With(middleware.RequirePermission("ssa.view")).Get("/{id}/approvals", h.ListApprovals)
-	r.With(middleware.RequirePermission("ssa.view")).Get("/{id}/audit-log", h.ListAuditLog)
+	r.With(middleware.RequirePermission(PermSSAEndorse)).Post("/{id}/endorse", h.SubmitEndorsement)
+	r.With(middleware.RequirePermission(PermSSAAssess)).Post("/{id}/asd-assessment", h.SubmitASDAssessment)
+	r.With(middleware.RequirePermission(PermSSAAnalyse)).Post("/{id}/qcmd-analysis", h.SubmitQCMDAnalysis)
+	// Multi-tier approval: route requires generic ssa.manage; stage-specific
+	// permission (ssa.approve.dc, ssa.approve.sso, …) is enforced in the service
+	// because the stage is only known at runtime from the request status.
+	r.With(middleware.RequirePermission(PermSSAManage)).Post("/{id}/approve", h.SubmitApproval)
+	r.With(middleware.RequirePermission(PermSSAProvision)).Post("/{id}/san-provisioning", h.SubmitSANProvisioning)
+	r.With(middleware.RequirePermission(PermSSADCO)).Post("/{id}/dco-server", h.SubmitDCOServer)
+	r.With(middleware.RequirePermission(PermSSAView)).Get("/{id}/approvals", h.ListApprovals)
+	r.With(middleware.RequirePermission(PermSSAView)).Get("/{id}/audit-log", h.ListAuditLog)
 }
 
 // QueueRoutes mounts queue endpoints under /queue.
+// Each queue is visible only to officers who can act on that stage.
 func (h *WorkflowHandler) QueueRoutes(r chi.Router) {
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/endorsements", h.ListEndorsementQueue)
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/asd-assessments", h.ListASDQueue)
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/qcmd-analyses", h.ListQCMDQueue)
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/approvals", h.ListApprovalQueue)
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/san-provisioning", h.ListSANQueue)
-	r.With(middleware.RequirePermission("ssa.manage")).Get("/dco-servers", h.ListDCOQueue)
+	r.With(middleware.RequirePermission(PermSSAEndorse)).Get("/endorsements", h.ListEndorsementQueue)
+	r.With(middleware.RequirePermission(PermSSAAssess)).Get("/asd-assessments", h.ListASDQueue)
+	r.With(middleware.RequirePermission(PermSSAAnalyse)).Get("/qcmd-analyses", h.ListQCMDQueue)
+	r.With(middleware.RequirePermission(PermSSAManage)).Get("/approvals", h.ListApprovalQueue)
+	r.With(middleware.RequirePermission(PermSSAProvision)).Get("/san-provisioning", h.ListSANQueue)
+	r.With(middleware.RequirePermission(PermSSADCO)).Get("/dco-servers", h.ListDCOQueue)
 }
 
 // SubmitEndorsement handles POST /requests/{id}/endorse

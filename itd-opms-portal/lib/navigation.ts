@@ -404,6 +404,12 @@ export const navGroups: NavGroup[] = [
         permission: "ssa.manage",
       },
       {
+        href: "/dashboard/ssa/bulk",
+        label: "Bulk Operations",
+        icon: ListTodo,
+        permission: "ssa.manage",
+      },
+      {
         href: "/dashboard/ssa/admin",
         label: "Admin Dashboard",
         icon: BarChart3,

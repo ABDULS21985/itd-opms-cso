@@ -295,6 +295,56 @@ func (s *WorkflowService) checkDelegation(ctx context.Context, tenantID, userID 
 }
 
 // ──────────────────────────────────────────────
+// Workflow authorisation guards
+// ──────────────────────────────────────────────
+
+// requireStagePermission verifies the acting user has the permission required
+// for the given workflow stage.  Global‑admin ("*") passes automatically
+// because HasPermission checks for the wildcard.
+func requireStagePermission(auth *types.AuthContext, stage string) error {
+	perm, ok := stageToPermission[stage]
+	if !ok {
+		return apperrors.Internal("no permission configured for stage", fmt.Errorf("stage=%s", stage))
+	}
+	if !auth.HasPermission(perm) {
+		return apperrors.Forbidden(fmt.Sprintf("you do not have permission (%s) to act at stage %s", perm, stage))
+	}
+	return nil
+}
+
+// preventSelfApproval ensures the acting user is NOT the requestor.
+// A requestor must never endorse, assess, approve, provision, or complete
+// their own request.
+func preventSelfApproval(auth *types.AuthContext, req SSARequest) error {
+	if auth.UserID == req.RequestorID {
+		return apperrors.Forbidden("you cannot act on your own request — a different officer must perform this action")
+	}
+	return nil
+}
+
+// enforceSeparationOfDuties prevents the same person from acting at
+// multiple stages of the same request (except delegation scenarios where
+// the delegator is the one with authority).
+func (s *WorkflowService) enforceSeparationOfDuties(ctx context.Context, requestID, actorID uuid.UUID, currentStage string) error {
+	query := `
+		SELECT stage FROM ssa_approvals
+		WHERE request_id = $1
+		  AND approver_id = $2
+		  AND stage != $3
+		LIMIT 1`
+
+	var prevStage string
+	err := s.pool.QueryRow(ctx, query, requestID, actorID, currentStage).Scan(&prevStage)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil // no prior action — good
+		}
+		return apperrors.Internal("failed to check separation of duties", err)
+	}
+	return apperrors.Forbidden(fmt.Sprintf("separation of duties violation — you already acted at stage %s on this request", prevStage))
+}
+
+// ──────────────────────────────────────────────
 // Core workflow methods
 // ──────────────────────────────────────────────
 
@@ -318,6 +368,14 @@ func (s *WorkflowService) SubmitEndorsement(ctx context.Context, requestID uuid.
 
 	if req.Status != StatusSubmitted {
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request must be in %s status for endorsement, currently %s", StatusSubmitted, req.Status))
+	}
+
+	// Authorisation guards.
+	if err := requireStagePermission(auth, StageHOOEndorsement); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
 	}
 
 	now := time.Now().UTC()
@@ -427,6 +485,17 @@ func (s *WorkflowService) SubmitASDAssessment(ctx context.Context, requestID uui
 
 	if req.Status != StatusHOOEndorsed {
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request must be in %s status for ASD assessment, currently %s", StatusHOOEndorsed, req.Status))
+	}
+
+	// Authorisation guards.
+	if err := requireStagePermission(auth, StageASDAssessment); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
+	}
+	if err := s.enforceSeparationOfDuties(ctx, requestID, auth.UserID, StageASDAssessment); err != nil {
+		return SSARequest{}, err
 	}
 
 	now := time.Now().UTC()
@@ -563,6 +632,17 @@ func (s *WorkflowService) SubmitQCMDAnalysis(ctx context.Context, requestID uuid
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request must be in %s status for QCMD analysis, currently %s", StatusASDAssessed, req.Status))
 	}
 
+	// Authorisation guards.
+	if err := requireStagePermission(auth, StageQCMDAnalysis); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
+	}
+	if err := s.enforceSeparationOfDuties(ctx, requestID, auth.UserID, StageQCMDAnalysis); err != nil {
+		return SSARequest{}, err
+	}
+
 	now := time.Now().UTC()
 	analysisID := uuid.New()
 
@@ -686,6 +766,17 @@ func (s *WorkflowService) SubmitApproval(ctx context.Context, requestID uuid.UUI
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request status %s is not in an approval-pending state", req.Status))
 	}
 
+	// Authorisation guards.
+	if err := requireStagePermission(auth, stage); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
+	}
+	if err := s.enforceSeparationOfDuties(ctx, requestID, auth.UserID, stage); err != nil {
+		return SSARequest{}, err
+	}
+
 	// Check delegation for this stage.
 	delegatedFromID, err := s.checkDelegation(ctx, auth.TenantID, auth.UserID, stage)
 	if err != nil {
@@ -805,6 +896,17 @@ func (s *WorkflowService) SubmitSANProvisioning(ctx context.Context, requestID u
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request must be in %s status for SAN provisioning, currently %s", StatusFullyApproved, req.Status))
 	}
 
+	// Authorisation guards.
+	if err := requireStagePermission(auth, StageSANProvisioning); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
+	}
+	if err := s.enforceSeparationOfDuties(ctx, requestID, auth.UserID, StageSANProvisioning); err != nil {
+		return SSARequest{}, err
+	}
+
 	now := time.Now().UTC()
 	provisioningID := uuid.New()
 
@@ -888,6 +990,17 @@ func (s *WorkflowService) SubmitDCOServer(ctx context.Context, requestID uuid.UU
 
 	if req.Status != StatusSANProvisioned {
 		return SSARequest{}, apperrors.BadRequest(fmt.Sprintf("request must be in %s status for DCO server creation, currently %s", StatusSANProvisioned, req.Status))
+	}
+
+	// Authorisation guards.
+	if err := requireStagePermission(auth, StageDCOServer); err != nil {
+		return SSARequest{}, err
+	}
+	if err := preventSelfApproval(auth, req); err != nil {
+		return SSARequest{}, err
+	}
+	if err := s.enforceSeparationOfDuties(ctx, requestID, auth.UserID, StageDCOServer); err != nil {
+		return SSARequest{}, err
 	}
 
 	now := time.Now().UTC()
