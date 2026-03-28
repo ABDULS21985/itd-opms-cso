@@ -198,9 +198,14 @@ func (h *RosterHandler) ListLeaveRecords(w http.ResponseWriter, r *http.Request)
 		status = &v
 	}
 
+	var leaveType *string
+	if v := r.URL.Query().Get("leave_type"); v != "" {
+		leaveType = &v
+	}
+
 	params := types.ParsePagination(r)
 
-	records, total, err := h.svc.ListLeaveRecords(r.Context(), userID, status, params.Page, params.Limit)
+	records, total, err := h.svc.ListLeaveRecords(r.Context(), userID, status, leaveType, params.Page, params.Limit)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

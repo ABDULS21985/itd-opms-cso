@@ -250,7 +250,7 @@ function StatCard({
             <div className="h-7 w-12 animate-pulse rounded bg-[var(--surface-2)]" />
           ) : (
             <p className="text-2xl font-bold tabular-nums" style={{ color }}>
-              {value ?? "--"}
+              {value ?? 0}
             </p>
           )}
           <p className="text-xs font-medium text-[var(--text-secondary)] truncate">
@@ -1334,6 +1334,7 @@ function LeaveTrackerTab() {
     20,
     undefined,
     statusFilter || undefined,
+    typeFilter || undefined,
   );
   const updateStatus = useUpdateLeaveRecordStatus();
 

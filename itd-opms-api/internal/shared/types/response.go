@@ -16,10 +16,10 @@ type Response struct {
 
 // Meta holds pagination and other response metadata.
 type Meta struct {
-	Page       int   `json:"page,omitempty"`
-	Limit      int   `json:"limit,omitempty"`
-	Total      int64 `json:"total,omitempty"`
-	TotalPages int   `json:"totalPages,omitempty"`
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
+	Total      int64 `json:"total"`
+	TotalPages int   `json:"totalPages"`
 }
 
 // ErrorDetail provides structured error information.
