@@ -46,6 +46,7 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
 import { useSearchUsers } from "@/hooks/use-system";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useTicket,
   useTicketComments,
@@ -683,6 +684,12 @@ export default function TicketDetailPage({
   const { id } = use(params);
   const router = useRouter();
 
+  const { user: currentUser } = useAuth();
+  const canManage =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.permissions?.includes("itsm.manage") ||
+    false;
+
   const { data: ticket, isLoading } = useTicket(id);
   const { data: commentsData } = useTicketComments(id);
   const { data: historyData } = useTicketStatusHistory(id);
@@ -1016,7 +1023,8 @@ export default function TicketDetailPage({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons — only shown when user has itsm.manage permission */}
+          {canManage && (
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {transitions.map((t) => {
               const TIcon = t.icon;
@@ -1073,6 +1081,7 @@ export default function TicketDetailPage({
                 </button>
               )}
           </div>
+          )}
         </div>
 
         {/* Status Pipeline */}
