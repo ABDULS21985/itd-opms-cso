@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@/test/test-utils";
-import { render } from "@/test/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@/test/test-utils";
 
 // =============================================================================
 // Mock: framer-motion
@@ -12,8 +11,22 @@ vi.mock("framer-motion", () => {
     {
       get:
         (_target: unknown, prop: string) =>
-        ({ children, ...rest }: Record<string, unknown>) =>
-          React.createElement(prop, rest, children),
+        ({ children, ...rest }: Record<string, unknown>) => {
+          const {
+            initial,
+            animate,
+            exit,
+            transition,
+            layout,
+            layoutId,
+            whileHover,
+            whileTap,
+            whileFocus,
+            variants,
+            ...safeRest
+          } = rest;
+          return React.createElement(prop, safeRest, children);
+        },
     },
   );
   return {
@@ -24,12 +37,49 @@ vi.mock("framer-motion", () => {
 });
 
 // =============================================================================
-// Mock: @/hooks/use-people
+// Mock: app dependencies
 // =============================================================================
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    user: { id: "user-1", displayName: "Roster Admin" },
+    isLoading: false,
+    isLoggedIn: true,
+  }),
+}));
+
 const mockUseRosters = vi.fn();
+const mockUseLeaveRecords = vi.fn();
+const mockUseCreateRoster = vi.fn();
+const mockUseCreateLeaveRecord = vi.fn();
+const mockUseUpdateLeaveRecordStatus = vi.fn();
 
 vi.mock("@/hooks/use-people", () => ({
   useRosters: (...args: unknown[]) => mockUseRosters(...args),
+  useLeaveRecords: (...args: unknown[]) => mockUseLeaveRecords(...args),
+  useCreateRoster: (...args: unknown[]) => mockUseCreateRoster(...args),
+  useCreateLeaveRecord: (...args: unknown[]) => mockUseCreateLeaveRecord(...args),
+  useUpdateLeaveRecordStatus: (...args: unknown[]) =>
+    mockUseUpdateLeaveRecordStatus(...args),
+}));
+
+const mockUseUsers = vi.fn();
+const mockUseUserStats = vi.fn();
+
+vi.mock("@/hooks/use-system", () => ({
+  useUsers: (...args: unknown[]) => mockUseUsers(...args),
+  useUserStats: (...args: unknown[]) => mockUseUserStats(...args),
+}));
+
+vi.mock("@/components/shared/data-table", () => ({
+  DataTable: () => <div data-testid="data-table" />,
+}));
+
+vi.mock("@/components/shared/confirm-dialog", () => ({
+  ConfirmDialog: () => null,
+}));
+
+vi.mock("@/components/shared/form-field", () => ({
+  FormField: () => <div data-testid="form-field" />,
 }));
 
 // =============================================================================
@@ -38,7 +88,7 @@ vi.mock("@/hooks/use-people", () => ({
 import RosterPage from "../roster/page";
 
 // =============================================================================
-// Test data
+// Shared setup
 // =============================================================================
 const mockRosters = [
   {
@@ -57,7 +107,7 @@ const mockRosters = [
         endTime: "16:00",
       },
       {
-        day: "Monday",
+        day: "Tuesday",
         shift: "Night",
         staff: "Jane Smith",
         startTime: "16:00",
@@ -82,12 +132,42 @@ const mockRosters = [
   },
 ];
 
-const mockMeta = {
-  page: 1,
-  pageSize: 20,
-  totalItems: 2,
-  totalPages: 1,
-};
+function setSharedMocks() {
+  mockUseUserStats.mockReturnValue({
+    data: {
+      totalUsers: 120,
+      activeUsers: 111,
+      inactiveUsers: 9,
+      onlineNow: 34,
+      newThisMonth: 6,
+    },
+    isLoading: false,
+  });
+
+  mockUseLeaveRecords.mockReturnValue({
+    data: {
+      data: [],
+      meta: {
+        page: 1,
+        pageSize: 1,
+        totalItems: 4,
+        totalPages: 1,
+      },
+    },
+    isLoading: false,
+  });
+
+  mockUseCreateRoster.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  mockUseCreateLeaveRecord.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  mockUseUpdateLeaveRecordStatus.mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  });
+  mockUseUsers.mockReturnValue({
+    data: { data: [], meta: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } },
+    isLoading: false,
+  });
+}
 
 // =============================================================================
 // Tests
@@ -95,95 +175,43 @@ const mockMeta = {
 describe("RosterPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSharedMocks();
   });
 
-  it("renders the page header with title and description", { timeout: 15000 }, () => {
+  it("lands on the upgraded roster workspace by default", () => {
     mockUseRosters.mockReturnValue({
-      data: { data: mockRosters, meta: mockMeta },
+      data: {
+        data: mockRosters,
+        meta: { page: 1, pageSize: 20, totalItems: 2, totalPages: 1 },
+      },
       isLoading: false,
     });
 
     render(<RosterPage />);
 
     expect(screen.getByText("Team Rosters")).toBeInTheDocument();
-    expect(
-      screen.getByText("Manage shift schedules, team rosters, and staffing"),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Coverage command/)).toBeInTheDocument();
+    expect(screen.getByText("Shift roster execution")).toBeInTheDocument();
+    expect(screen.getByText("Network Operations Week 10")).toBeInTheDocument();
+    expect(screen.getByText("Helpdesk Coverage March")).toBeInTheDocument();
+    expect(screen.getAllByText("Create Roster").length).toBeGreaterThan(0);
   });
 
-  it("renders loading state while data is being fetched", () => {
+  it("renders the stronger empty state when no rosters exist", () => {
     mockUseRosters.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-    });
-
-    render(<RosterPage />);
-
-    // The page shows a Loader2 spinner when loading
-    // We can check for the animate-spin class or just check it's not showing rosters
-    expect(screen.queryByText("Network Operations Week 10")).not.toBeInTheDocument();
-    expect(screen.queryByText("No rosters found")).not.toBeInTheDocument();
-  });
-
-  it("renders empty state when there are no rosters", () => {
-    mockUseRosters.mockReturnValue({
-      data: { data: [], meta: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } },
+      data: {
+        data: [],
+        meta: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
+      },
       isLoading: false,
     });
 
     render(<RosterPage />);
 
+    expect(screen.getByText("Team Rosters")).toBeInTheDocument();
     expect(screen.getByText("No rosters found")).toBeInTheDocument();
     expect(
       screen.getByText("Create a roster to start managing team schedules."),
     ).toBeInTheDocument();
-  });
-
-  it("renders roster cards when data is available", () => {
-    mockUseRosters.mockReturnValue({
-      data: { data: mockRosters, meta: mockMeta },
-      isLoading: false,
-    });
-
-    render(<RosterPage />);
-
-    expect(screen.getByText("Network Operations Week 10")).toBeInTheDocument();
-    expect(screen.getByText("Helpdesk Coverage March")).toBeInTheDocument();
-  });
-
-  it("shows the status badges on roster cards", () => {
-    mockUseRosters.mockReturnValue({
-      data: { data: mockRosters, meta: mockMeta },
-      isLoading: false,
-    });
-
-    render(<RosterPage />);
-
-    expect(screen.getByText("published")).toBeInTheDocument();
-    expect(screen.getByText("draft")).toBeInTheDocument();
-  });
-
-  it("shows shift count on roster cards", () => {
-    mockUseRosters.mockReturnValue({
-      data: { data: mockRosters, meta: mockMeta },
-      isLoading: false,
-    });
-
-    render(<RosterPage />);
-
-    expect(screen.getByText("2 shifts")).toBeInTheDocument();
-    expect(screen.getByText("0 shifts")).toBeInTheDocument();
-  });
-
-  it("shows the 'Create Roster' and 'Filters' buttons", () => {
-    mockUseRosters.mockReturnValue({
-      data: { data: mockRosters, meta: mockMeta },
-      isLoading: false,
-    });
-
-    render(<RosterPage />);
-
-    expect(screen.getByText("Create Roster")).toBeInTheDocument();
-    expect(screen.getByText("Filters")).toBeInTheDocument();
   });
 });

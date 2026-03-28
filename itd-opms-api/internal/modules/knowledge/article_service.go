@@ -620,13 +620,13 @@ func (s *ArticleService) PublishArticle(ctx context.Context, id uuid.UUID) (KBAr
 	// Save version snapshot.
 	versionQuery := `
 		INSERT INTO kb_article_versions (
-			id, article_id, version, content, changed_by, created_at
+			id, tenant_id, article_id, version, content, changed_by, created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6
+			$1, $2, $3, $4, $5, $6, $7
 		)`
 
 	_, err = s.pool.Exec(ctx, versionQuery,
-		versionID, article.ID, article.Version, article.Content, auth.UserID, now,
+		versionID, auth.TenantID, article.ID, article.Version, article.Content, auth.UserID, now,
 	)
 	if err != nil {
 		return KBArticle{}, apperrors.Internal("failed to save article version", err)

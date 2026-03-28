@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
   Users,
   Search,
   Filter,
@@ -58,6 +59,42 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+const TAB_COPY: Record<
+  TabId,
+  {
+    eyebrow: string;
+    title: string;
+    description: string;
+    accent: string;
+    focus: string;
+  }
+> = {
+  directory: {
+    eyebrow: "People Operations Workspace",
+    title: "People Directory",
+    description:
+      "Browse the workforce, inspect employee context, and move between directory intelligence and staffing decisions without leaving the page.",
+    accent: "#1B7340",
+    focus: "Directory intelligence",
+  },
+  leave: {
+    eyebrow: "People Operations Workspace",
+    title: "Leave Tracker",
+    description:
+      "Review pending leave demand, approve requests faster, and keep staffing impact visible before the schedule drifts.",
+    accent: "#D97706",
+    focus: "Absence control",
+  },
+  rosters: {
+    eyebrow: "People Operations Workspace",
+    title: "Team Rosters",
+    description:
+      "Run shift coverage, monitor published schedules, and keep roster execution anchored to real staffing pressure across the team.",
+    accent: "#2563EB",
+    focus: "Coverage command",
+  },
+};
 
 const DEPARTMENTS = [
   { value: "", label: "All Departments" },
@@ -226,6 +263,7 @@ function StatCard({
   color,
   bgColor,
   loading,
+  helper,
 }: {
   label: string;
   value: number | string | undefined;
@@ -233,32 +271,77 @@ function StatCard({
   color: string;
   bgColor: string;
   loading?: boolean;
+  helper?: string;
 }) {
   return (
     <div
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4 shadow-sm"
+      className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5 shadow-sm"
+      style={{
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${color}18, transparent 34%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-4">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
           style={{ backgroundColor: bgColor }}
         >
           <Icon size={20} style={{ color }} />
         </div>
         <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            {label}
+          </p>
           {loading ? (
-            <div className="h-7 w-12 animate-pulse rounded bg-[var(--surface-2)]" />
+            <div className="mt-3 h-8 w-16 animate-pulse rounded bg-[var(--surface-2)]" />
           ) : (
-            <p className="text-2xl font-bold tabular-nums" style={{ color }}>
+            <p className="mt-3 text-3xl font-bold tabular-nums" style={{ color }}>
               {value ?? 0}
             </p>
           )}
-          <p className="text-xs font-medium text-[var(--text-secondary)] truncate">
-            {label}
-          </p>
+          {helper && (
+            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+              {helper}
+            </p>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function WorkspaceJumpButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ElementType;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-200 ${active ? "text-white shadow-lg" : "text-[var(--text-primary)] hover:-translate-y-0.5 hover:shadow-md"}`}
+      style={{
+        borderColor: active ? "transparent" : "rgba(255,255,255,0.62)",
+        backgroundColor: active ? "var(--primary)" : "rgba(255, 255, 255, 0.72)",
+        backdropFilter: "blur(18px)",
+      }}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
+  );
+}
+
+function LoadingValue({ width = "w-14" }: { width?: string }) {
+  return (
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
   );
 }
 
@@ -834,23 +917,33 @@ function RosterCard({
   onToggle: () => void;
 }) {
   const statusStyle = STATUS_STYLES[roster.status] ?? STATUS_STYLES.draft;
+  const shiftCount = roster.shifts?.length ?? 0;
+  const periodDays =
+    Math.ceil(
+      (new Date(roster.periodEnd).getTime() -
+        new Date(roster.periodStart).getTime()) /
+        (1000 * 60 * 60 * 24),
+    ) + 1;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+      className="overflow-hidden rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)]"
+      style={{
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${statusStyle.text}16, transparent 32%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
     >
       <button
         type="button"
         onClick={onToggle}
-        className="w-full p-4 text-left transition-colors hover:bg-[var(--surface-1)]"
+        className="w-full p-5 text-left transition-colors hover:bg-[var(--surface-1)]"
       >
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold capitalize"
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]"
                 style={{
                   backgroundColor: statusStyle.bg,
                   color: statusStyle.text,
@@ -866,23 +959,47 @@ function RosterCard({
                 {roster.status}
               </span>
               {roster.teamId && (
-                <span className="text-xs text-[var(--text-secondary)]">
-                  Team: {roster.teamId.slice(0, 8)}...
+                <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                  Team {roster.teamId.slice(0, 8)}...
                 </span>
               )}
             </div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
+            <p className="text-lg font-semibold text-[var(--text-primary)]">
               {roster.name}
             </p>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5 tabular-nums">
+            <p className="mt-2 text-sm text-[var(--text-secondary)] tabular-nums">
               {new Date(roster.periodStart).toLocaleDateString()} -{" "}
               {new Date(roster.periodEnd).toLocaleDateString()}
             </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-[rgba(37,99,235,0.06)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Shifts
+                </p>
+                <p className="mt-2 text-lg font-bold text-[var(--text-primary)] tabular-nums">
+                  {shiftCount}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-[rgba(27,115,64,0.06)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Window
+                </p>
+                <p className="mt-2 text-lg font-bold text-[var(--text-primary)] tabular-nums">
+                  {periodDays} days
+                </p>
+              </div>
+              <div className="rounded-2xl bg-[rgba(245,158,11,0.06)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Updated
+                </p>
+                <p className="mt-2 text-lg font-bold text-[var(--text-primary)]">
+                  {new Date(roster.updatedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3 ml-4">
-            <span className="text-xs text-[var(--text-secondary)] tabular-nums">
-              {roster.shifts?.length ?? 0} shifts
-            </span>
+          <div className="ml-4 flex items-center gap-3">
             {expanded ? (
               <ChevronUp size={16} className="text-[var(--text-secondary)]" />
             ) : (
@@ -898,11 +1015,20 @@ function RosterCard({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="border-t border-[var(--border)] bg-[var(--surface-1)] p-4"
+            className="border-t border-[var(--border)] bg-[var(--surface-1)] p-5"
           >
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)] mb-3">
-              Shift Schedule
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+                Shift Schedule
+              </h3>
+              <span className="text-xs text-[var(--text-secondary)]">
+                {shiftCount} shift{shiftCount !== 1 ? "s" : ""} defined
+              </span>
+            </div>
+            <p className="mb-4 text-sm leading-6 text-[var(--text-secondary)]">
+              Review the actual coverage block below before publishing or
+              refreshing assignments.
+            </p>
             <ShiftTable shifts={roster.shifts ?? []} />
           </motion.div>
         )}
@@ -1595,7 +1721,6 @@ function LeaveTrackerTab() {
 function ShiftRostersTab() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data, isLoading } = useRosters(
@@ -1611,71 +1736,74 @@ function ShiftRostersTab() {
   return (
     <>
       {/* Controls */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Coverage board
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+            Shift roster execution
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+            Published and draft schedules live together here so coverage gaps
+            are visible before they become operational surprises.
+          </p>
+        </div>
         <button
           type="button"
-          onClick={() => setShowFilters((f) => !f)}
-          className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
-        >
-          <Filter size={16} />
-          Filters
-        </button>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           <Plus size={16} />
           Create Roster
         </button>
       </div>
 
-      {/* Filters */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="flex flex-wrap gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
-          >
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
-                Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-              >
-                {ROSTER_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="flex flex-wrap gap-2">
+        {ROSTER_STATUSES.map((statusOption) => {
+          const isActive = statusOption.value === statusFilter;
+          return (
+            <button
+              key={statusOption.label}
+              type="button"
+              onClick={() => {
+                setStatusFilter(statusOption.value);
+                setPage(1);
+              }}
+              className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+              style={{
+                borderColor: isActive ? "var(--primary)" : "var(--border)",
+                backgroundColor: isActive
+                  ? "rgba(27, 115, 64, 0.12)"
+                  : "var(--surface-0)",
+                color: isActive ? "var(--primary)" : "var(--text-secondary)",
+              }}
+            >
+              {statusOption.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Roster Cards */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
+        <div className="grid gap-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-56 animate-pulse rounded-[30px] bg-[var(--surface-1)]"
+            />
+          ))}
         </div>
       ) : rosters.length === 0 ? (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-12 text-center">
+        <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-12 text-center">
           <CalendarDays
             size={24}
             className="mx-auto text-[var(--text-secondary)] mb-2"
           />
-          <p className="text-sm font-medium text-[var(--text-primary)]">
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
             No rosters found
           </p>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
+          <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
             Create a roster to start managing team schedules.
           </p>
         </div>
@@ -1696,8 +1824,8 @@ function ShiftRostersTab() {
 
       {/* Pagination */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-[var(--text-secondary)]">
+        <div className="flex flex-col gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[var(--text-secondary)]">
             Page {meta.page} of {meta.totalPages} ({meta.totalItems} total)
           </p>
           <div className="flex gap-2">
@@ -1729,7 +1857,7 @@ function ShiftRostersTab() {
 /* ================================================================== */
 
 export default function PeopleDirectoryPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("directory");
+  const [activeTab, setActiveTab] = useState<TabId>("rosters");
   const { data: userStats, isLoading: statsLoading } = useUserStats();
   const { data: pendingLeave, isLoading: leaveLoading } = useLeaveRecords(
     1,
@@ -1743,30 +1871,125 @@ export default function PeopleDirectoryPage() {
     undefined,
     "published",
   );
+  const activeTabCopy = TAB_COPY[activeTab];
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* Header */}
+    <div className="space-y-8 pb-8">
+      {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        className="relative overflow-hidden rounded-[32px] border p-6 lg:p-8"
+        style={{
+          backgroundColor: "var(--surface-0)",
+          borderColor: "rgba(27, 115, 64, 0.14)",
+          backgroundImage:
+            "radial-gradient(circle at 12% 18%, rgba(27,115,64,0.16), transparent 32%), radial-gradient(circle at 88% 16%, rgba(37,99,235,0.14), transparent 28%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+          boxShadow: "0 28px 90px -58px rgba(27, 115, 64, 0.28)",
+        }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
-          >
-            <Users size={20} style={{ color: "#1B7340" }} />
+        <div className="grid gap-6 xl:grid-cols-[1.14fr_0.86fr]">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
+                <Users size={14} />
+                {activeTabCopy.eyebrow}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)]/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] backdrop-blur-sm">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: activeTabCopy.accent }}
+                />
+                {activeTabCopy.focus}
+              </span>
+            </div>
+
+            <div className="max-w-3xl">
+              <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+                {activeTabCopy.title}
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--text-secondary)] lg:text-lg">
+                {activeTabCopy.description}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <WorkspaceJumpButton
+                icon={CalendarDays}
+                label="Shift Rosters"
+                active={activeTab === "rosters"}
+                onClick={() => setActiveTab("rosters")}
+              />
+              <WorkspaceJumpButton
+                icon={CalendarOff}
+                label="Leave Tracker"
+                active={activeTab === "leave"}
+                onClick={() => setActiveTab("leave")}
+              />
+              <WorkspaceJumpButton
+                icon={Users}
+                label="Directory"
+                active={activeTab === "directory"}
+                onClick={() => setActiveTab("directory")}
+              />
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              People Directory
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Employee directory, leave tracking, and shift roster management
-            </p>
+
+          <div
+            className="rounded-[28px] border p-5"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.74)",
+              borderColor: "rgba(255, 255, 255, 0.7)",
+              backdropFilter: "blur(18px)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Operational pulse
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                  Workforce signals
+                </h2>
+              </div>
+              <Activity size={20} className="text-[var(--primary)]" />
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Online now
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {statsLoading ? <LoadingValue width="w-14" /> : userStats?.onlineNow ?? 0}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  New this month
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {statsLoading ? <LoadingValue width="w-14" /> : userStats?.newThisMonth ?? 0}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Pending leave
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {leaveLoading ? <LoadingValue width="w-14" /> : pendingLeave?.meta?.totalItems ?? 0}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Published rosters
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {rostersLoading ? <LoadingValue width="w-14" /> : rostersData?.meta?.totalItems ?? 0}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -1785,6 +2008,7 @@ export default function PeopleDirectoryPage() {
           color="#1B7340"
           bgColor="rgba(27, 115, 64, 0.1)"
           loading={statsLoading}
+          helper="Total workforce records in the directory."
         />
         <StatCard
           label="Active"
@@ -1793,6 +2017,7 @@ export default function PeopleDirectoryPage() {
           color="#10B981"
           bgColor="rgba(16, 185, 129, 0.1)"
           loading={statsLoading}
+          helper="Enabled staff currently available for assignment."
         />
         <StatCard
           label="Pending Leave"
@@ -1801,14 +2026,16 @@ export default function PeopleDirectoryPage() {
           color="#F59E0B"
           bgColor="rgba(245, 158, 11, 0.1)"
           loading={leaveLoading}
+          helper="Requests waiting on review or staffing action."
         />
         <StatCard
-          label="Active Rosters"
+          label="Published Rosters"
           value={rostersData?.meta?.totalItems}
           icon={CalendarDays}
-          color="#8B5CF6"
-          bgColor="rgba(139, 92, 246, 0.1)"
+          color="#2563EB"
+          bgColor="rgba(37, 99, 235, 0.1)"
           loading={rostersLoading}
+          helper="Live schedules currently visible to the team."
         />
       </motion.div>
 
@@ -1817,28 +2044,52 @@ export default function PeopleDirectoryPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="flex border-b border-[var(--border)]"
+        className="grid gap-3 md:grid-cols-3"
       >
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const tabCopy = TAB_COPY[tab.id];
           return (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors relative ${
-                isActive
-                  ? "text-[var(--primary)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
+              className="relative overflow-hidden rounded-[28px] border p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              style={{
+                borderColor: isActive ? tabCopy.accent : "var(--border)",
+                backgroundColor: isActive ? `${tabCopy.accent}10` : "var(--surface-0)",
+              }}
             >
-              <Icon size={16} />
-              {tab.label}
+              <div className="flex items-start gap-4">
+                <div
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl"
+                  style={{
+                    backgroundColor: isActive ? `${tabCopy.accent}18` : "var(--surface-1)",
+                    color: isActive ? tabCopy.accent : "var(--text-secondary)",
+                  }}
+                >
+                  <Icon size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p
+                    className="text-sm font-semibold"
+                    style={{
+                      color: isActive ? tabCopy.accent : "var(--text-primary)",
+                    }}
+                  >
+                    {tab.label}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                    {tabCopy.description}
+                  </p>
+                </div>
+              </div>
               {isActive && (
                 <motion.div
                   layoutId="active-tab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full"
+                  className="absolute inset-x-0 top-0 h-1 rounded-t-[28px]"
+                  style={{ backgroundColor: tabCopy.accent }}
                 />
               )}
             </button>
@@ -1853,6 +2104,7 @@ export default function PeopleDirectoryPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
         className="space-y-4"
+        id="people-workspace"
       >
         {activeTab === "directory" && <DirectoryTab />}
         {activeTab === "leave" && <LeaveTrackerTab />}

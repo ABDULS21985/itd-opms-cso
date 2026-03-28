@@ -1,26 +1,20 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  ListChecks,
+  Activity,
   AlertCircle,
-  Clock,
-  CheckCircle2,
-  TrendingUp,
+  AlertTriangle,
   CalendarClock,
-  Loader2,
+  CheckCircle2,
+  Clock3,
+  ListChecks,
+  Sparkles,
+  Target,
+  TrendingUp,
   User,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
 import { toast } from "sonner";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useBreadcrumbs } from "@/providers/breadcrumb-provider";
@@ -37,17 +31,13 @@ import {
 import { formatDate } from "@/lib/utils";
 import type { ActionItem, OwnerOverdueCount } from "@/types";
 
-/* ================================================================== */
-/*  Constants                                                          */
-/* ================================================================== */
-
 const STATUS_OPTIONS = [
   { value: "", label: "All Statuses" },
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In Progress" },
   { value: "overdue", label: "Overdue" },
   { value: "completed", label: "Completed" },
-];
+] as const;
 
 const PRIORITY_OPTIONS = [
   { value: "", label: "All Priorities" },
@@ -55,38 +45,14 @@ const PRIORITY_OPTIONS = [
   { value: "high", label: "High" },
   { value: "medium", label: "Medium" },
   { value: "low", label: "Low" },
-];
+] as const;
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
   critical: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
   high: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
   medium: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
-  low: { bg: "rgba(107, 114, 128, 0.1)", text: "var(--neutral-gray)" },
+  low: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280" },
 };
-
-const PRIORITY_CHART_COLORS: Record<string, string> = {
-  critical: "#EF4444",
-  high: "#F59E0B",
-  medium: "#3B82F6",
-  low: "#6B7280",
-};
-
-/** Shared Recharts tooltip style */
-const tooltipStyle = {
-  backgroundColor: "var(--surface-0)",
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  fontSize: 12,
-};
-
-const selectStyle = {
-  backgroundColor: "var(--surface-0)",
-  borderColor: "var(--border)",
-};
-
-/* ================================================================== */
-/*  Helpers                                                            */
-/* ================================================================== */
 
 function daysOverdue(dueDate: string): number {
   const due = new Date(dueDate);
@@ -101,56 +67,97 @@ function isOverdue(item: ActionItem): boolean {
   return item.status !== "completed" && new Date(item.dueDate) < new Date();
 }
 
-/* ================================================================== */
-/*  Summary Card                                                       */
-/* ================================================================== */
+function formatSourceType(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-function SummaryCard({
-  icon,
-  label,
-  value,
-  color,
-  bgColor,
-  delay,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  color: string;
-  bgColor: string;
-  delay: number;
-}) {
+function LoadingValue({ width = "w-14" }: { width?: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay }}
-      className="rounded-xl border p-5"
-      style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
-    >
-      <div className="flex items-center gap-4">
-        <div
-          className="flex h-11 w-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: bgColor }}
-        >
-          <span style={{ color }}>{icon}</span>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            {label}
-          </p>
-          <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums mt-0.5">
-            {value}
-          </p>
-        </div>
-      </div>
-    </motion.div>
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
   );
 }
 
-/* ================================================================== */
-/*  Page Component                                                     */
-/* ================================================================== */
+function MetricCard({
+  label,
+  value,
+  helper,
+  color,
+  loading,
+}: {
+  label: string;
+  value: string | number;
+  helper: string;
+  color: string;
+  loading?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-[28px] border p-5"
+      style={{
+        borderColor: `${color}1f`,
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${color}14, transparent 30%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-bold tabular-nums" style={{ color }}>
+        {loading ? <LoadingValue /> : value}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+        {helper}
+      </p>
+    </div>
+  );
+}
+
+function getActionPulse(
+  totalOverdue: number,
+  dueThisWeek: number,
+  myOverdue: number,
+) {
+  if (totalOverdue === 0 && dueThisWeek === 0) {
+    return {
+      label: "Under control",
+      badgeClass:
+        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      description:
+        "No overdue pressure is visible and nothing urgent is clustering this week, so the tracker is operating in a healthy range.",
+    };
+  }
+
+  if (totalOverdue >= 6 || myOverdue >= 3) {
+    return {
+      label: "Needs intervention",
+      badgeClass:
+        "border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
+      description:
+        "Overdue work is piling up quickly enough that governance owners need direct follow-through rather than passive monitoring.",
+    };
+  }
+
+  if (totalOverdue > 0 || dueThisWeek >= 4) {
+    return {
+      label: "Watch closely",
+      badgeClass:
+        "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      description:
+        "The action program is moving, but enough deadlines are clustering that owner pressure should stay visible.",
+    };
+  }
+
+  return {
+    label: "Steady rhythm",
+    badgeClass:
+      "border border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    description:
+      "The tracker has active work in motion without meaningful overdue drag, which suggests a stable execution cadence.",
+  };
+}
 
 export default function ActionTrackerPage() {
   useBreadcrumbs([
@@ -160,23 +167,16 @@ export default function ActionTrackerPage() {
 
   const { user } = useAuth();
 
-  /* ---- State ---- */
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [showMyActions, setShowMyActions] = useState(false);
-  const [confirmCompleteId, setConfirmCompleteId] = useState<string | null>(null);
+  const [confirmCompleteId, setConfirmCompleteId] = useState<string | null>(
+    null,
+  );
 
-  /* ---- Data hooks ---- */
-  const {
-    data: stats,
-    isLoading: statsLoading,
-  } = useOverdueActionStats();
-
-  const {
-    data: actionsData,
-    isLoading: actionsLoading,
-  } = useActionItems(
+  const { data: stats, isLoading: statsLoading } = useOverdueActionStats();
+  const { data: actionsData, isLoading: actionsLoading } = useActionItems(
     page,
     20,
     statusFilter || undefined,
@@ -185,96 +185,119 @@ export default function ActionTrackerPage() {
     undefined,
     priorityFilter || undefined,
   );
+  const { data: myOverdueActions } = useMyOverdueActions();
+  const completeMutation = useCompleteAction();
 
   const actions = actionsData?.data ?? [];
   const actionMeta = actionsData?.meta;
+  const totalVisible = actionMeta?.totalItems ?? actions.length;
 
-  const {
-    data: myOverdueActions,
-  } = useMyOverdueActions();
-
-  const completeMutation = useCompleteAction();
-
-  /* Priority filter is now applied server-side via useActionItems. */
-  const filteredActions = actions;
-
-  /* ---- Chart data for overdue by priority ---- */
-  const chartData = useMemo(() => {
-    if (!stats?.overdueByPriority) return [];
-    const priorities = ["critical", "high", "medium", "low"];
-    return priorities
-      .map((p) => ({
-        priority: p.charAt(0).toUpperCase() + p.slice(1),
-        count: stats.overdueByPriority[p] ?? 0,
-        key: p,
-      }))
-      .filter((d) => d.count > 0);
-  }, [stats]);
-
-  /* ---- Complete action handler ---- */
-  function handleComplete() {
-    if (!confirmCompleteId) return;
-    completeMutation.mutate({ id: confirmCompleteId }, {
-      onSuccess: () => {
-        toast.success("Action item marked as completed");
-        setConfirmCompleteId(null);
-      },
-      onError: () => {
-        toast.error("Failed to complete action item");
-      },
-    });
-  }
-
-  /* ---- Stat values ---- */
   const totalOverdue = stats?.totalOverdue ?? 0;
   const dueThisWeek = stats?.dueThisWeek ?? 0;
   const avgDaysOverdue = stats?.avgDaysOverdue ?? 0;
   const completedThisMonth = stats?.completedThisMonth ?? 0;
-
-  /* ---- My overdue count ---- */
   const myOverdueCount = myOverdueActions?.length ?? 0;
 
-  /* ---- Table columns ---- */
+  const visibleSummary = useMemo(() => {
+    const open = actions.filter(
+      (item) =>
+        item.status === "open" ||
+        item.status === "in_progress" ||
+        item.status === "overdue",
+    ).length;
+    const overdue = actions.filter(
+      (item) => isOverdue(item) || item.status === "overdue",
+    ).length;
+    const critical = actions.filter(
+      (item) => item.priority === "critical",
+    ).length;
+    const nextDue = [...actions]
+      .filter((item) => item.status !== "completed")
+      .sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      )[0];
+
+    return {
+      open,
+      overdue,
+      critical,
+      nextDue,
+    };
+  }, [actions]);
+
+  const priorityPressure = useMemo(
+    () =>
+      ["critical", "high", "medium", "low"].map((priority) => ({
+        priority,
+        count: stats?.overdueByPriority?.[priority] ?? 0,
+      })),
+    [stats?.overdueByPriority],
+  );
+
+  const topOwners = stats?.overdueByOwner ?? [];
+  const maxPriorityCount = Math.max(
+    ...priorityPressure.map((item) => item.count),
+    1,
+  );
+  const pulse = getActionPulse(totalOverdue, dueThisWeek, myOverdueCount);
+  const hasActiveFilters = Boolean(
+    statusFilter || priorityFilter || showMyActions,
+  );
+
+  function handleComplete() {
+    if (!confirmCompleteId) return;
+
+    completeMutation.mutate(
+      { id: confirmCompleteId },
+      {
+        onSuccess: () => {
+          toast.success("Action item marked as completed");
+          setConfirmCompleteId(null);
+        },
+        onError: () => {
+          toast.error("Failed to complete action item");
+        },
+      },
+    );
+  }
+
+  function resetFilters() {
+    setStatusFilter("");
+    setPriorityFilter("");
+    setShowMyActions(false);
+    setPage(1);
+  }
+
   const columns: Column<ActionItem>[] = [
     {
       key: "title",
-      header: "Title",
+      header: "Action",
       sortable: true,
-      className: "min-w-[220px]",
+      className: "min-w-[240px]",
       render: (item) => (
         <div>
           <p className="text-sm font-medium text-[var(--text-primary)]">
             {item.title}
           </p>
-          {item.description && (
-            <p className="text-xs text-[var(--neutral-gray)] line-clamp-1 max-w-[300px] mt-0.5">
-              {item.description}
-            </p>
-          )}
+          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+            {formatSourceType(item.sourceType)}
+          </p>
         </div>
-      ),
-    },
-    {
-      key: "sourceType",
-      header: "Source",
-      render: (item) => (
-        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize bg-[var(--surface-2)] text-[var(--text-secondary)]">
-          {item.sourceType.replace(/_/g, " ")}
-        </span>
       ),
     },
     {
       key: "priority",
       header: "Priority",
       render: (item) => {
-        const color = PRIORITY_COLORS[item.priority] ?? {
+        const tone = PRIORITY_COLORS[item.priority] ?? {
           bg: "var(--surface-2)",
-          text: "var(--neutral-gray)",
+          text: "var(--text-secondary)",
         };
+
         return (
           <span
-            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
-            style={{ backgroundColor: color.bg, color: color.text }}
+            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize"
+            style={{ backgroundColor: tone.bg, color: tone.text }}
           >
             {item.priority}
           </span>
@@ -283,37 +306,30 @@ export default function ActionTrackerPage() {
     },
     {
       key: "dueDate",
-      header: "Due Date",
+      header: "Due Window",
       sortable: true,
       render: (item) => {
         const overdue = isOverdue(item);
-        const days = overdue ? daysOverdue(item.dueDate) : 0;
+        const overdueDays = overdue ? daysOverdue(item.dueDate) : 0;
+
         return (
           <div>
-            <span
+            <p
               className={
                 overdue
-                  ? "text-sm font-medium text-[var(--error)]"
-                  : "text-sm text-[var(--text-secondary)]"
+                  ? "text-sm font-semibold text-[var(--error)]"
+                  : "text-sm font-medium text-[var(--text-primary)]"
               }
             >
               {formatDate(item.dueDate)}
-            </span>
-            {overdue && days > 0 && (
-              <span className="block text-xs font-medium text-[var(--error)] mt-0.5">
-                {days} day{days !== 1 ? "s" : ""} overdue
-              </span>
-            )}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+              {overdue
+                ? `${overdueDays} day${overdueDays !== 1 ? "s" : ""} overdue`
+                : "On timeline"}
+            </p>
           </div>
         );
-      },
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (item) => {
-        const displayStatus = isOverdue(item) && item.status !== "completed" ? "overdue" : item.status;
-        return <StatusBadge status={displayStatus} />;
       },
     },
     {
@@ -326,6 +342,18 @@ export default function ActionTrackerPage() {
       ),
     },
     {
+      key: "status",
+      header: "Status",
+      render: (item) => {
+        const displayStatus =
+          isOverdue(item) && item.status !== "completed"
+            ? "overdue"
+            : item.status;
+
+        return <StatusBadge status={displayStatus} />;
+      },
+    },
+    {
       key: "actions",
       header: "",
       align: "right",
@@ -333,8 +361,8 @@ export default function ActionTrackerPage() {
         item.status !== "completed" ? (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={(event) => {
+              event.stopPropagation();
               setConfirmCompleteId(item.id);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(34,197,94,0.1)]"
@@ -348,307 +376,553 @@ export default function ActionTrackerPage() {
     },
   ];
 
-  /* ================================================================ */
-  /*  Render                                                           */
-  /* ================================================================ */
-
   return (
     <PermissionGate permission="governance.view">
-    <div className="space-y-6 pb-8">
-      {/* ---- Header ---- */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
-          >
-            <ListChecks size={20} style={{ color: "#1B7340" }} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              Action Tracker
-            </h1>
-            <p className="text-sm text-[var(--neutral-gray)]">
-              Monitor and manage action items across all governance activities
-            </p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ---- Summary Cards ---- */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          icon={<AlertCircle size={20} />}
-          label="Total Overdue"
-          value={statsLoading ? "--" : totalOverdue}
-          color="#EF4444"
-          bgColor="rgba(239, 68, 68, 0.1)"
-          delay={0.05}
-        />
-        <SummaryCard
-          icon={<CalendarClock size={20} />}
-          label="Due This Week"
-          value={statsLoading ? "--" : dueThisWeek}
-          color="#F59E0B"
-          bgColor="rgba(245, 158, 11, 0.1)"
-          delay={0.1}
-        />
-        <SummaryCard
-          icon={<Clock size={20} />}
-          label="Avg Days Overdue"
-          value={statsLoading ? "--" : Math.round(avgDaysOverdue)}
-          color="#EA580C"
-          bgColor="rgba(234, 88, 12, 0.1)"
-          delay={0.15}
-        />
-        <SummaryCard
-          icon={<TrendingUp size={20} />}
-          label="Completed This Month"
-          value={statsLoading ? "--" : completedThisMonth}
-          color="#22C55E"
-          bgColor="rgba(34, 197, 94, 0.1)"
-          delay={0.2}
-        />
-      </div>
-
-      {/* ---- Filter Bar ---- */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.25 }}
-        className="flex flex-wrap items-center gap-3"
-      >
-        {/* My Actions Toggle */}
-        <button
-          type="button"
-          onClick={() => {
-            setShowMyActions((v) => !v);
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-all duration-200 ${
-            showMyActions
-              ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-sm"
-              : "border-[var(--border)] bg-[var(--surface-0)] text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
-          }`}
-        >
-          <User size={16} />
-          My Actions
-          {myOverdueCount > 0 && (
-            <span
-              className={`ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-bold ${
-                showMyActions
-                  ? "bg-white/20 text-white"
-                  : "bg-[var(--error)] text-white"
-              }`}
-            >
-              {myOverdueCount}
-            </span>
-          )}
-        </button>
-
-        {/* Status Filter */}
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-xl border px-3.5 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-          style={selectStyle}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-
-        {/* Priority Filter */}
-        <select
-          value={priorityFilter}
-          onChange={(e) => {
-            setPriorityFilter(e.target.value);
-            setPage(1); // reset page since priority is now a server-side filter
-          }}
-          className="rounded-xl border px-3.5 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-          style={selectStyle}
-        >
-          {PRIORITY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-
-        {/* Clear Filters */}
-        {(statusFilter || priorityFilter || showMyActions) && (
-          <button
-            type="button"
-            onClick={() => {
-              setStatusFilter("");
-              setPriorityFilter("");
-              setShowMyActions(false);
-              setPage(1);
-            }}
-            className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            Clear filters
-          </button>
-        )}
-      </motion.div>
-
-      {/* ---- Content Grid: Table + Chart ---- */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
-        {/* Data Table */}
+      <div className="space-y-8 pb-8">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-          className="xl:col-span-3"
+          transition={{ duration: 0.4 }}
+          className="relative overflow-hidden rounded-[32px] border p-6 lg:p-8"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "rgba(27, 115, 64, 0.16)",
+            backgroundImage:
+              "radial-gradient(circle at 12% 18%, rgba(27,115,64,0.16), transparent 30%), radial-gradient(circle at 88% 16%, rgba(239,68,68,0.12), transparent 26%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+            boxShadow: "0 28px 90px -58px rgba(27, 115, 64, 0.28)",
+          }}
         >
-          <DataTable
-            columns={columns}
-            data={filteredActions}
-            keyExtractor={(item) => item.id}
-            loading={actionsLoading}
-            emptyTitle="No action items found"
-            emptyDescription={
-              showMyActions
-                ? "You have no action items matching the current filters."
-                : "Action items from meetings and governance decisions will appear here."
-            }
-            pagination={
-              actionMeta
-                ? {
-                    currentPage: actionMeta.page,
-                    totalPages: actionMeta.totalPages,
-                    totalItems: actionMeta.totalItems,
-                    pageSize: actionMeta.pageSize,
-                    onPageChange: setPage,
-                  }
-                : undefined
-            }
-          />
-        </motion.div>
-
-        {/* Overdue by Priority Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.35 }}
-          className="xl:col-span-1"
-        >
-          <div
-            className="rounded-xl border p-5"
-            style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
-          >
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-4">
-              Overdue by Priority
-            </h3>
-            {statsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={24} className="animate-spin text-[var(--neutral-gray)]" />
+          <div className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${pulse.badgeClass}`}
+                >
+                  <Sparkles size={14} />
+                  {pulse.label}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)]/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] backdrop-blur-sm">
+                  <ListChecks size={14} className="text-[#1B7340]" />
+                  Governance action tracker
+                </span>
               </div>
-            ) : chartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <CheckCircle2
-                  size={32}
-                  className="text-[var(--success)] mb-2"
-                />
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  No overdue items
-                </p>
-                <p className="text-xs text-[var(--neutral-gray)] mt-0.5">
-                  All action items are on track
+
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+                  Action Tracker
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--text-secondary)] lg:text-lg">
+                  Ownership, deadlines, and overdue pressure in a stronger
+                  governance workspace so teams can see which actions are
+                  moving, which are stalled, and where escalation should land.
                 </p>
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chartData} layout="vertical">
-                  <XAxis
-                    type="number"
-                    tick={{ fontSize: 10, fill: "var(--text-secondary)" }}
-                    allowDecimals={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="priority"
-                    tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                    width={70}
-                  />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                    {chartData.map((entry) => (
-                      <Cell
-                        key={entry.key}
-                        fill={PRIORITY_CHART_COLORS[entry.key] ?? "var(--primary)"}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
 
-            {/* Additional stats below chart */}
-            {!statsLoading && stats && (
-              <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    Oldest overdue
-                  </span>
-                  <span className="text-xs font-semibold text-[var(--text-primary)] tabular-nums">
-                    {stats.oldestOverdueDays ?? 0} day{(stats.oldestOverdueDays ?? 0) !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                {stats.overdueByOwner && stats.overdueByOwner.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                      Top Overdue Owners
-                    </p>
-                    <div className="space-y-1.5">
-                      {stats.overdueByOwner.slice(0, 5).map((owner: OwnerOverdueCount) => (
-                        <div
-                          key={owner.ownerId}
-                          className="flex items-center justify-between"
-                        >
-                          <span className="text-xs text-[var(--text-primary)] truncate max-w-[120px]">
-                            {owner.ownerName || owner.ownerId.slice(0, 8) + "..."}
-                          </span>
-                          <span
-                            className="text-xs font-bold tabular-nums"
-                            style={{ color: "var(--error)" }}
-                          >
-                            {owner.count}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMyActions((current) => !current);
+                    setPage(1);
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                    showMyActions
+                      ? "bg-[var(--primary)] text-white"
+                      : "border border-[var(--border)] bg-[var(--surface-0)] text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
+                  }`}
+                >
+                  <User size={16} />
+                  My Action Lane
+                  {myOverdueCount > 0 && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                        showMyActions
+                          ? "bg-white/20 text-white"
+                          : "bg-[var(--error)] text-white"
+                      }`}
+                    >
+                      {myOverdueCount}
+                    </span>
+                  )}
+                </button>
+
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                  >
+                    Reset view
+                  </button>
                 )}
               </div>
-            )}
+            </div>
+
+            <div
+              className="rounded-[28px] border p-5"
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.74)",
+                borderColor: "rgba(255, 255, 255, 0.7)",
+                backdropFilter: "blur(18px)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Action pulse
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Execution telemetry
+                  </h2>
+                </div>
+                <Activity size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+                {pulse.description}
+              </p>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Total overdue
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {statsLoading ? <LoadingValue /> : totalOverdue}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Due this week
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {statsLoading ? <LoadingValue /> : dueThisWeek}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    My overdue
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {myOverdueCount}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Next due
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
+                    {actionsLoading ? (
+                      <LoadingValue width="w-20" />
+                    ) : visibleSummary.nextDue ? (
+                      formatDate(visibleSummary.nextDue.dueDate)
+                    ) : (
+                      "No due item"
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </motion.div>
-      </div>
 
-      {/* ---- Confirm Complete Dialog ---- */}
-      <ConfirmDialog
-        open={confirmCompleteId !== null}
-        onClose={() => setConfirmCompleteId(null)}
-        onConfirm={handleComplete}
-        title="Complete Action Item"
-        message="Are you sure you want to mark this action item as completed? This action cannot be undone."
-        confirmLabel="Mark Complete"
-        cancelLabel="Cancel"
-        variant="default"
-        loading={completeMutation.isPending}
-      />
-    </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="Overdue actions"
+            value={totalOverdue}
+            helper="All governance actions currently beyond due date."
+            color="#EF4444"
+            loading={statsLoading}
+          />
+          <MetricCard
+            label="Due this week"
+            value={dueThisWeek}
+            helper="Deadlines clustering inside the current operating window."
+            color="#F59E0B"
+            loading={statsLoading}
+          />
+          <MetricCard
+            label="Avg days overdue"
+            value={Math.round(avgDaysOverdue)}
+            helper="Average age of overdue work still unresolved."
+            color="#EA580C"
+            loading={statsLoading}
+          />
+          <MetricCard
+            label="Completed this month"
+            value={completedThisMonth}
+            helper="Actions closed out during the current monthly cycle."
+            color="#22C55E"
+            loading={statsLoading}
+          />
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+          <section className="space-y-4">
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Live board
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Action control board
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+                    {actionsLoading
+                      ? "Loading action visibility..."
+                      : `${totalVisible} item${totalVisible !== 1 ? "s" : ""} visible in the current governance lens.`}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {STATUS_OPTIONS.map((option) => {
+                    const active = statusFilter === option.value;
+
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(option.value);
+                          setPage(1);
+                        }}
+                        className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                        style={{
+                          borderColor: active
+                            ? "var(--primary)"
+                            : "var(--border)",
+                          backgroundColor: active
+                            ? "rgba(27, 115, 64, 0.1)"
+                            : "var(--surface-0)",
+                          color: active
+                            ? "var(--primary)"
+                            : "var(--text-secondary)",
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 lg:grid-cols-[auto_240px_auto]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMyActions((current) => !current);
+                    setPage(1);
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                    showMyActions
+                      ? "bg-[var(--primary)] text-white"
+                      : "border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
+                  }`}
+                >
+                  <User size={16} />
+                  My Actions
+                  {myOverdueCount > 0 && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                        showMyActions
+                          ? "bg-white/20 text-white"
+                          : "bg-[var(--error)] text-white"
+                      }`}
+                    >
+                      {myOverdueCount}
+                    </span>
+                  )}
+                </button>
+
+                <div>
+                  <label
+                    htmlFor="priority-filter"
+                    className="mb-1 block text-xs font-medium text-[var(--text-secondary)]"
+                  >
+                    Priority lens
+                  </label>
+                  <select
+                    id="priority-filter"
+                    value={priorityFilter}
+                    onChange={(event) => {
+                      setPriorityFilter(event.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  >
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] lg:self-end"
+                >
+                  Reset filters
+                </button>
+              </div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.08 }}
+              className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-1"
+            >
+              <DataTable
+                columns={columns}
+                data={actions}
+                keyExtractor={(item) => item.id}
+                loading={actionsLoading}
+                emptyTitle={
+                  showMyActions
+                    ? "No personal action items found"
+                    : "No action items found"
+                }
+                emptyDescription={
+                  showMyActions
+                    ? "You have no action items matching the current governance lens."
+                    : "Action items from meetings and governance decisions will appear here."
+                }
+                pagination={
+                  actionMeta
+                    ? {
+                        currentPage: actionMeta.page,
+                        totalPages: actionMeta.totalPages,
+                        totalItems: actionMeta.totalItems,
+                        pageSize: actionMeta.pageSize,
+                        onPageChange: setPage,
+                      }
+                    : undefined
+                }
+              />
+            </motion.div>
+          </section>
+
+          <aside className="space-y-5">
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Priority pressure
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Overdue by priority
+                  </h2>
+                </div>
+                <AlertCircle size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <div className="mt-5 space-y-4">
+                {statsLoading ? (
+                  [1, 2, 3, 4].map((index) => (
+                    <div
+                      key={index}
+                      className="h-12 animate-pulse rounded-2xl bg-[var(--surface-2)]"
+                    />
+                  ))
+                ) : priorityPressure.every((item) => item.count === 0) ? (
+                  <div className="rounded-[22px] border border-dashed border-[var(--border)] p-5 text-sm leading-7 text-[var(--text-secondary)]">
+                    No overdue actions are currently pressuring the priority
+                    mix.
+                  </div>
+                ) : (
+                  priorityPressure.map((item) => {
+                    const tone = PRIORITY_COLORS[item.priority];
+                    const width = `${(item.count / maxPriorityCount) * 100}%`;
+
+                    return (
+                      <div key={item.priority} className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium capitalize text-[var(--text-primary)]">
+                            {item.priority}
+                          </p>
+                          <span
+                            className="rounded-full px-2.5 py-1 text-xs font-semibold"
+                            style={{
+                              backgroundColor: tone.bg,
+                              color: tone.text,
+                            }}
+                          >
+                            {item.count}
+                          </span>
+                        </div>
+                        <div className="h-2.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width,
+                              backgroundColor: tone.text,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Owner watchlist
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Top overdue owners
+                  </h2>
+                </div>
+                <User size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {statsLoading ? (
+                  [1, 2, 3].map((index) => (
+                    <div
+                      key={index}
+                      className="h-14 animate-pulse rounded-2xl bg-[var(--surface-2)]"
+                    />
+                  ))
+                ) : topOwners.length === 0 ? (
+                  <div className="rounded-[22px] bg-[var(--surface-1)] p-4 text-sm text-[var(--text-secondary)]">
+                    No overdue owner concentration is visible right now.
+                  </div>
+                ) : (
+                  topOwners.slice(0, 5).map((owner: OwnerOverdueCount) => (
+                    <div
+                      key={owner.ownerId}
+                      className="flex items-center justify-between gap-3 rounded-[22px] bg-[var(--surface-1)] px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {owner.ownerName || `${owner.ownerId.slice(0, 8)}...`}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                          Overdue owner load
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[rgba(239,68,68,0.1)] px-2.5 py-1 text-xs font-semibold text-[#EF4444]">
+                        {owner.count}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Current lane
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Execution notes
+                  </h2>
+                </div>
+                <Clock3 size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#EF4444]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Visible overdue work
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {actionsLoading
+                          ? "Loading current overdue signal..."
+                          : `${visibleSummary.overdue} item${visibleSummary.overdue !== 1 ? "s are" : " is"} overdue in the current board.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <Target
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#2563EB]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Highest visible pressure
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {actionsLoading
+                          ? "Loading visible action pressure..."
+                          : `${visibleSummary.critical} critical item${visibleSummary.critical !== 1 ? "s are" : " is"} currently in view.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <TrendingUp
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#22C55E]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Completion pace
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {statsLoading
+                          ? "Loading completion pace..."
+                          : `${completedThisMonth} item${completedThisMonth !== 1 ? "s were" : " was"} completed this month.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <CalendarClock
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#D97706]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Next due action
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {visibleSummary.nextDue
+                          ? `${visibleSummary.nextDue.title} is due ${formatDate(visibleSummary.nextDue.dueDate)}.`
+                          : "No pending due action is visible in the current board."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <ConfirmDialog
+          open={confirmCompleteId !== null}
+          onClose={() => setConfirmCompleteId(null)}
+          onConfirm={handleComplete}
+          title="Complete Action Item"
+          message="Are you sure you want to mark this action item as completed? This action cannot be undone."
+          confirmLabel="Mark Complete"
+          cancelLabel="Cancel"
+          variant="default"
+          loading={completeMutation.isPending}
+        />
+      </div>
     </PermissionGate>
   );
 }

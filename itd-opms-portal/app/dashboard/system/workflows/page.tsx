@@ -3,17 +3,23 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
+  AlertTriangle,
   GitBranch,
   Plus,
   Pencil,
   Trash2,
   X,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock3,
   Loader2,
   ArrowRight,
   Eye,
   Search,
+  ShieldCheck,
+  Sparkles,
   User,
 } from "lucide-react";
 import {
@@ -79,10 +85,14 @@ function UserPickerInput({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Resolve current approver IDs → display names for chips.
-  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>(
+    {},
+  );
 
   const { data: searchResults, isFetching } = useSearchUsers(query);
-  const results: UserSearchResult[] = Array.isArray(searchResults) ? searchResults : [];
+  const results: UserSearchResult[] = Array.isArray(searchResults)
+    ? searchResults
+    : [];
 
   // Persist resolved names so chips show names even after dropdown closes.
   useEffect(() => {
@@ -94,7 +104,10 @@ function UserPickerInput({
   // Close dropdown on outside click.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -447,7 +460,11 @@ function StepFlowPreview({ steps }: { steps: WorkflowStepDef[] }) {
               {step.name}
             </span>
             <span className="text-[10px] text-[var(--neutral-gray)]">
-              ({step.mode === "any_of" ? `${step.quorum}/${step.approverIds.length}` : step.approverIds.length})
+              (
+              {step.mode === "any_of"
+                ? `${step.quorum}/${step.approverIds.length}`
+                : step.approverIds.length}
+              )
             </span>
           </div>
           {index < steps.length - 1 && (
@@ -455,6 +472,163 @@ function StepFlowPreview({ steps }: { steps: WorkflowStepDef[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function formatEntityTypeLabel(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatWorkflowDate(value?: string) {
+  if (!value) return "--";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function getWorkflowPulse(
+  workflowCount: number,
+  activeCount: number,
+  coveredEntities: number,
+) {
+  if (workflowCount === 0) {
+    return {
+      label: "Build the foundation",
+      badgeClass:
+        "border border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      description:
+        "No approval templates are live yet, so this workspace should focus on establishing core routing patterns and entity coverage.",
+    };
+  }
+
+  const activeRatio = activeCount / workflowCount;
+
+  if (activeRatio < 0.65 || coveredEntities < 3) {
+    return {
+      label: "Needs attention",
+      badgeClass:
+        "border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
+      description:
+        "Several workflow paths are inactive or coverage is still shallow, so the approval layer needs deliberate consolidation.",
+    };
+  }
+
+  if (activeRatio < 0.9 || coveredEntities < 5) {
+    return {
+      label: "Expanding well",
+      badgeClass:
+        "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      description:
+        "The workflow library is growing in the right direction, but a few entities still need stronger routing depth and cleaner activation.",
+    };
+  }
+
+  return {
+    label: "Well orchestrated",
+    badgeClass:
+      "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    description:
+      "Coverage, activation, and step design are in a healthy range, giving the approval program a predictable execution rhythm.",
+  };
+}
+
+function LoadingValue({ width = "w-14" }: { width?: string }) {
+  return (
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
+  );
+}
+
+function WorkflowMetricCard({
+  label,
+  value,
+  helper,
+  color,
+  loading,
+}: {
+  label: string;
+  value: string | number;
+  helper: string;
+  color: string;
+  loading?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-[28px] border p-5"
+      style={{
+        borderColor: `${color}1f`,
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${color}14, transparent 30%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-bold tabular-nums" style={{ color }}>
+        {loading ? <LoadingValue /> : value}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+        {helper}
+      </p>
+    </div>
+  );
+}
+
+function EntityCoverageCard({
+  entityType,
+  count,
+  activeCount,
+  avgSteps,
+}: {
+  entityType: string;
+  count: number;
+  activeCount: number;
+  avgSteps: string;
+}) {
+  return (
+    <div
+      className="rounded-[28px] border p-5"
+      style={{
+        borderColor: "rgba(99, 102, 241, 0.12)",
+        backgroundImage:
+          "radial-gradient(circle at 100% 0%, rgba(99,102,241,0.12), transparent 32%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Entity lane
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
+            {formatEntityTypeLabel(entityType)}
+          </h3>
+        </div>
+        <span className="text-3xl font-bold text-[#6366F1]">{count}</span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[20px] bg-[var(--surface-0)]/78 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+            Active
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {activeCount} live templates
+          </p>
+        </div>
+        <div className="rounded-[20px] bg-[var(--surface-0)]/78 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+            Avg steps
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {avgSteps} stages
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -477,13 +651,9 @@ function WorkflowModal({
   initial?: WorkflowDefinition | null;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [description, setDescription] = useState(
-    initial?.description ?? "",
-  );
+  const [description, setDescription] = useState(initial?.description ?? "");
   const [entityType, setEntityType] = useState(initial?.entityType ?? "");
-  const [steps, setSteps] = useState<WorkflowStepDef[]>(
-    initial?.steps ?? [],
-  );
+  const [steps, setSteps] = useState<WorkflowStepDef[]>(initial?.steps ?? []);
   const [showPreview, setShowPreview] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
@@ -601,7 +771,9 @@ function WorkflowModal({
               <option value="">Select entity type...</option>
               {ENTITY_TYPES.map((et) => (
                 <option key={et} value={et}>
-                  {et.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                  {et
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (l) => l.toUpperCase())}
                 </option>
               ))}
             </select>
@@ -637,7 +809,9 @@ function WorkflowModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !name.trim() || !entityType || steps.length === 0}
+              disabled={
+                loading || !name.trim() || !entityType || steps.length === 0
+              }
               className="flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[var(--secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 disabled:opacity-60"
             >
               {loading ? (
@@ -685,6 +859,11 @@ export default function WorkflowsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<WorkflowDefinition | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
+  const [entityFilter, setEntityFilter] = useState("");
 
   // For the edit modal, we need a separate hook call with the ID.
   const updateMutation = useUpdateWorkflowDefinition(editTarget?.id);
@@ -694,6 +873,97 @@ export default function WorkflowsPage() {
     : [];
 
   const workflowToDelete = workflowList.find((w) => w.id === deleteTarget);
+  const totalWorkflows = workflowList.length;
+  const activeWorkflows = workflowList.filter((workflow) => workflow.isActive);
+  const activeCount = activeWorkflows.length;
+  const inactiveCount = totalWorkflows - activeCount;
+  const totalSteps = workflowList.reduce(
+    (sum, workflow) => sum + workflow.steps.length,
+    0,
+  );
+  const avgSteps =
+    totalWorkflows > 0 ? (totalSteps / totalWorkflows).toFixed(1) : "0.0";
+  const coveredEntities = new Set(
+    workflowList.map((workflow) => workflow.entityType),
+  ).size;
+  const delegationReadyCount = workflowList.filter(
+    (workflow) =>
+      workflow.steps.length > 0 &&
+      workflow.steps.every((step) => step.allowDelegation),
+  ).length;
+  const latestUpdatedWorkflow = [...workflowList].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )[0];
+  const mostComplexWorkflow = [...workflowList].sort(
+    (a, b) => b.steps.length - a.steps.length,
+  )[0];
+  const uncoveredEntities = ENTITY_TYPES.filter(
+    (entityType) =>
+      !workflowList.some((workflow) => workflow.entityType === entityType),
+  );
+  const entityCoverage = ENTITY_TYPES.map((entityType) => {
+    const workflowsForEntity = workflowList.filter(
+      (workflow) => workflow.entityType === entityType,
+    );
+    const count = workflowsForEntity.length;
+    const entityStepCount = workflowsForEntity.reduce(
+      (sum, workflow) => sum + workflow.steps.length,
+      0,
+    );
+
+    return {
+      entityType,
+      count,
+      activeCount: workflowsForEntity.filter((workflow) => workflow.isActive)
+        .length,
+      avgSteps: count > 0 ? (entityStepCount / count).toFixed(1) : "0.0",
+    };
+  })
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const filteredWorkflows = workflowList.filter((workflow) => {
+    const matchesSearch =
+      searchQuery.trim().length === 0 ||
+      workflow.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (workflow.description ?? "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
+      workflow.entityType.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" ? workflow.isActive : !workflow.isActive);
+    const matchesEntity =
+      entityFilter.length === 0 || workflow.entityType === entityFilter;
+
+    return matchesSearch && matchesStatus && matchesEntity;
+  });
+
+  const spotlightSource =
+    filteredWorkflows.length > 0 ? filteredWorkflows : workflowList;
+  const spotlightWorkflows = [...spotlightSource]
+    .sort((a, b) => {
+      if (a.isActive !== b.isActive) {
+        return a.isActive ? 1 : -1;
+      }
+      if (b.steps.length !== a.steps.length) {
+        return b.steps.length - a.steps.length;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    })
+    .slice(0, 4);
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    statusFilter !== "all" ||
+    entityFilter.length > 0;
+  const workflowPulse = getWorkflowPulse(
+    totalWorkflows,
+    activeCount,
+    coveredEntities,
+  );
+  const activeRatio =
+    totalWorkflows > 0 ? Math.round((activeCount / totalWorkflows) * 100) : 0;
 
   const handleCreate = useCallback(
     (data: CreateWorkflowDefinitionBody) => {
@@ -727,6 +997,12 @@ export default function WorkflowsPage() {
     });
   }, [deleteTarget, deleteMutation]);
 
+  function resetFilters() {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setEntityFilter("");
+  }
+
   // Table columns.
   const columns: Column<WorkflowDefinition>[] = [
     {
@@ -748,29 +1024,46 @@ export default function WorkflowsPage() {
     },
     {
       key: "entityType",
-      header: "Entity Type",
+      header: "Entity",
       render: (item) => (
-        <span className="text-sm text-[var(--text-secondary)] capitalize">
-          {item.entityType.replace(/_/g, " ")}
+        <span className="inline-flex items-center rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+          {formatEntityTypeLabel(item.entityType)}
         </span>
       ),
     },
     {
       key: "steps",
-      header: "Steps",
+      header: "Approval Design",
+      className: "min-w-[240px]",
       render: (item) => (
-        <span className="text-sm text-[var(--text-secondary)]">
-          {item.steps.length} step{item.steps.length !== 1 ? "s" : ""}
-        </span>
+        <div>
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {item.steps.length} stage{item.steps.length !== 1 ? "s" : ""} with{" "}
+            {item.steps.filter((step) => step.allowDelegation).length}{" "}
+            delegation-ready
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--neutral-gray)]">
+            {item.steps
+              .slice(0, 2)
+              .map((step) => step.name)
+              .join(" → ")}
+            {item.steps.length > 2 ? " → …" : ""}
+          </p>
+        </div>
       ),
     },
     {
-      key: "version",
-      header: "Version",
+      key: "updatedAt",
+      header: "Updated",
       render: (item) => (
-        <span className="text-sm tabular-nums text-[var(--text-secondary)]">
-          v{item.version}
-        </span>
+        <div>
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {formatWorkflowDate(item.updatedAt)}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--neutral-gray)]">
+            Version {item.version}
+          </p>
+        </div>
       ),
     },
     {
@@ -818,69 +1111,511 @@ export default function WorkflowsPage() {
 
   return (
     <PermissionGate permission="approval.manage">
-      <div className="space-y-6 pb-8">
-        {/* Header */}
+      <div className="space-y-8 pb-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+          className="relative overflow-hidden rounded-[32px] border p-6 lg:p-8"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "rgba(99, 102, 241, 0.16)",
+            backgroundImage:
+              "radial-gradient(circle at 12% 18%, rgba(99,102,241,0.16), transparent 30%), radial-gradient(circle at 88% 16%, rgba(16,185,129,0.12), transparent 26%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+            boxShadow: "0 28px 90px -58px rgba(99, 102, 241, 0.28)",
+          }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{ backgroundColor: "rgba(99, 102, 241, 0.1)" }}
-            >
-              <GitBranch size={20} style={{ color: "#6366F1" }} />
+          <div className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${workflowPulse.badgeClass}`}
+                >
+                  <Sparkles size={14} />
+                  {workflowPulse.label}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)]/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] backdrop-blur-sm">
+                  <GitBranch size={14} className="text-[#6366F1]" />
+                  Workflow orchestration
+                </span>
+              </div>
+
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+                  Workflow Definitions
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--text-secondary)] lg:text-lg">
+                  Approval templates, routing logic, and escalation design in a
+                  stronger operational workspace so system owners can see which
+                  workflows are live, stale, or still missing from entity
+                  coverage.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  <Plus size={16} />
+                  Create Workflow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("inactive")}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <AlertTriangle size={16} />
+                  Review inactive
+                </button>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                  >
+                    Reset view
+                  </button>
+                )}
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-[var(--text-primary)]">
-                Workflow Definitions
-              </h1>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Manage approval workflow templates with configurable steps and
-                approvers
+
+            <div
+              className="rounded-[28px] border p-5"
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.74)",
+                borderColor: "rgba(255, 255, 255, 0.7)",
+                backdropFilter: "blur(18px)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Orchestration pulse
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Routing telemetry
+                  </h2>
+                </div>
+                <Activity size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+                {workflowPulse.description}
               </p>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Active ratio
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {isLoading ? (
+                      <LoadingValue width="w-16" />
+                    ) : (
+                      `${activeRatio}%`
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Average depth
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {isLoading ? <LoadingValue width="w-16" /> : avgSteps}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Delegation-ready
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                    {isLoading ? (
+                      <LoadingValue width="w-16" />
+                    ) : (
+                      delegationReadyCount
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    Latest change
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
+                    {isLoading ? (
+                      <LoadingValue width="w-20" />
+                    ) : (
+                      formatWorkflowDate(latestUpdatedWorkflow?.updatedAt)
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            <Plus size={16} />
-            Create Workflow
-          </button>
         </motion.div>
 
-        {/* Workflow Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <DataTable
-            columns={columns}
-            data={workflowList}
-            keyExtractor={(item) => item.id}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <WorkflowMetricCard
+            label="Templates in system"
+            value={totalWorkflows}
+            helper="All workflow definitions currently available to approval chains."
+            color="#6366F1"
             loading={isLoading}
-            emptyTitle="No workflow definitions"
-            emptyDescription="Create your first approval workflow to get started."
-            emptyAction={
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-              >
-                <Plus size={16} />
-                Create Workflow
-              </button>
-            }
           />
-        </motion.div>
+          <WorkflowMetricCard
+            label="Active templates"
+            value={activeCount}
+            helper="Live workflow paths that can be used for new approval requests."
+            color="#10B981"
+            loading={isLoading}
+          />
+          <WorkflowMetricCard
+            label="Entity coverage"
+            value={coveredEntities}
+            helper="Distinct entity types that already have at least one workflow path."
+            color="#2563EB"
+            loading={isLoading}
+          />
+          <WorkflowMetricCard
+            label="Inactive attention"
+            value={inactiveCount}
+            helper="Templates that need review before they can support fresh routing."
+            color="#DC2626"
+            loading={isLoading}
+          />
+        </div>
 
-        {/* Create Workflow Modal */}
+        {!isLoading && entityCoverage.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05 }}
+            className="space-y-4"
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Entity coverage
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                Routing depth by entity lane
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {entityCoverage.slice(0, 4).map((item) => (
+                <EntityCoverageCard
+                  key={item.entityType}
+                  entityType={item.entityType}
+                  count={item.count}
+                  activeCount={item.activeCount}
+                  avgSteps={item.avgSteps}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+          <section className="space-y-4">
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Registry
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Workflow registry
+                  </h2>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "all", label: "All templates" },
+                    { value: "active", label: "Active only" },
+                    { value: "inactive", label: "Inactive only" },
+                  ].map((option) => {
+                    const active = statusFilter === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() =>
+                          setStatusFilter(
+                            option.value as "all" | "active" | "inactive",
+                          )
+                        }
+                        className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                        style={{
+                          borderColor: active
+                            ? "var(--primary)"
+                            : "var(--border)",
+                          backgroundColor: active
+                            ? "rgba(99, 102, 241, 0.1)"
+                            : "var(--surface-0)",
+                          color: active
+                            ? "var(--primary)"
+                            : "var(--text-secondary)",
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_0.8fr_auto]">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                    Search workflows
+                  </label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--neutral-gray)]" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search workflow name, description, or entity..."
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] py-2.5 pl-10 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                    Entity lens
+                  </label>
+                  <select
+                    value={entityFilter}
+                    onChange={(event) => setEntityFilter(event.target.value)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  >
+                    <option value="">All entities</option>
+                    {ENTITY_TYPES.map((entityType) => (
+                      <option key={entityType} value={entityType}>
+                        {formatEntityTypeLabel(entityType)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] lg:self-end"
+                >
+                  Reset filters
+                </button>
+              </div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-1"
+            >
+              <DataTable
+                columns={columns}
+                data={filteredWorkflows}
+                keyExtractor={(item) => item.id}
+                loading={isLoading}
+                emptyTitle={
+                  totalWorkflows === 0
+                    ? "No workflow definitions"
+                    : "No workflows match this view"
+                }
+                emptyDescription={
+                  totalWorkflows === 0
+                    ? "Create your first approval workflow to get started."
+                    : "Adjust the registry filters or reset the current lens to surface more templates."
+                }
+                emptyAction={
+                  totalWorkflows === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreate(true)}
+                      className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                      <Plus size={16} />
+                      Create Workflow
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                    >
+                      Reset filters
+                    </button>
+                  )
+                }
+              />
+            </motion.div>
+          </section>
+
+          <aside className="space-y-5">
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Spotlight
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Template spotlight
+                  </h2>
+                </div>
+                <ShieldCheck size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {spotlightWorkflows.length === 0 ? (
+                  <div className="rounded-[24px] border border-dashed border-[var(--border)] p-5 text-sm leading-7 text-[var(--text-secondary)]">
+                    Create a workflow to start building approval routing depth
+                    across your operational entities.
+                  </div>
+                ) : (
+                  spotlightWorkflows.map((workflow) => (
+                    <button
+                      key={workflow.id}
+                      type="button"
+                      onClick={() => setEditTarget(workflow)}
+                      className="w-full rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-4 text-left transition-colors hover:bg-[var(--surface-1)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">
+                            {workflow.name}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {formatEntityTypeLabel(workflow.entityType)} •
+                            Version {workflow.version}
+                          </p>
+                        </div>
+                        <span
+                          className="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                          style={{
+                            backgroundColor: workflow.isActive
+                              ? "rgba(16,185,129,0.1)"
+                              : "rgba(245,158,11,0.12)",
+                            color: workflow.isActive ? "#10B981" : "#D97706",
+                          }}
+                        >
+                          {workflow.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+
+                      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+                        {workflow.steps.length} stages with{" "}
+                        {
+                          workflow.steps.filter((step) => step.allowDelegation)
+                            .length
+                        }{" "}
+                        delegation-ready checkpoints.
+                      </p>
+
+                      <div className="mt-3 overflow-hidden">
+                        <StepFlowPreview steps={workflow.steps.slice(0, 3)} />
+                      </div>
+
+                      {workflow.steps.length > 3 && (
+                        <p className="mt-2 text-xs text-[var(--neutral-gray)]">
+                          +{workflow.steps.length - 3} more stage
+                          {workflow.steps.length - 3 !== 1 ? "s" : ""}
+                        </p>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Coverage notes
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Program notes
+                  </h2>
+                </div>
+                <Clock3 size={20} className="text-[var(--primary)]" />
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#10B981]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Latest updated workflow
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {latestUpdatedWorkflow
+                          ? `${latestUpdatedWorkflow.name} refreshed on ${formatWorkflowDate(latestUpdatedWorkflow.updatedAt)}.`
+                          : "No workflow activity recorded yet."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <Activity
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#6366F1]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Deepest approval path
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {mostComplexWorkflow
+                          ? `${mostComplexWorkflow.name} currently carries ${mostComplexWorkflow.steps.length} stages.`
+                          : "Add a workflow to start mapping multi-stage approval paths."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] bg-[var(--surface-1)] p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#D97706]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Missing entity coverage
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {uncoveredEntities.length > 0
+                          ? uncoveredEntities
+                              .slice(0, 4)
+                              .map((entityType) =>
+                                formatEntityTypeLabel(entityType),
+                              )
+                              .join(", ")
+                          : "All tracked entities already have at least one workflow path."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-[24px] border border-dashed border-[var(--border)] p-4 text-sm leading-7 text-[var(--text-secondary)]">
+                {inactiveCount > 0
+                  ? `${inactiveCount} inactive template${inactiveCount !== 1 ? "s are" : " is"} waiting for review before new approval chains can rely on them.`
+                  : "All current workflow templates are active and ready for new approval chains."}
+              </div>
+            </div>
+          </aside>
+        </div>
+
         <AnimatePresence>
           {showCreate && (
             <WorkflowModal

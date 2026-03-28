@@ -3,9 +3,9 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
   UserPlus,
   Plus,
-  Filter,
   ChevronDown,
   ChevronUp,
   CheckCircle,
@@ -26,6 +26,8 @@ import {
   Calendar,
   User,
   MessageSquare,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import {
   useChecklists,
@@ -60,6 +62,21 @@ const CHECKLIST_STATUSES = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+const ONBOARDING_TAB_COPY = {
+  checklists: {
+    title: "Checklists",
+    description:
+      "Track each hire’s onboarding journey from kickoff to full completion.",
+    accent: "#2563EB",
+  },
+  templates: {
+    title: "Templates",
+    description:
+      "Standardize repeatable onboarding paths by role or team pattern.",
+    accent: "#8B5CF6",
+  },
+} as const;
+
 const STATUS_STYLES: Record<
   string,
   { bg: string; text: string; icon: typeof Circle; label: string }
@@ -90,10 +107,25 @@ const STATUS_STYLES: Record<
   },
 };
 
-const TASK_STATUSES: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280", label: "Pending" },
-  in_progress: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6", label: "In Progress" },
-  completed: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981", label: "Completed" },
+const TASK_STATUSES: Record<
+  string,
+  { bg: string; text: string; label: string }
+> = {
+  pending: {
+    bg: "rgba(107, 114, 128, 0.1)",
+    text: "#6B7280",
+    label: "Pending",
+  },
+  in_progress: {
+    bg: "rgba(59, 130, 246, 0.1)",
+    text: "#3B82F6",
+    label: "In Progress",
+  },
+  completed: {
+    bg: "rgba(16, 185, 129, 0.1)",
+    text: "#10B981",
+    label: "Completed",
+  },
   skipped: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B", label: "Skipped" },
 };
 
@@ -102,7 +134,8 @@ const TASK_STATUSES: Record<string, { bg: string; text: string; label: string }>
 /* ------------------------------------------------------------------ */
 
 function isOverdue(task: ChecklistTask): boolean {
-  if (task.status === "completed" || task.status === "skipped" || !task.dueDate) return false;
+  if (task.status === "completed" || task.status === "skipped" || !task.dueDate)
+    return false;
   return new Date(task.dueDate) < new Date();
 }
 
@@ -123,6 +156,140 @@ function daysAgo(dateStr: string): string {
   return `${diff} days ago`;
 }
 
+function shortId(value: string, size = 12): string {
+  if (value.length <= size) return value;
+  return `${value.slice(0, size)}...`;
+}
+
+function checklistNarrative(
+  checklist: PeopleChecklist,
+  template?: PeopleChecklistTemplate,
+) {
+  if (checklist.status === "completed") {
+    return "This onboarding run is complete and ready to be archived as a clean handoff.";
+  }
+
+  if (checklist.status === "cancelled") {
+    return "This onboarding run was cancelled before execution closed out every step.";
+  }
+
+  if (checklist.status === "in_progress") {
+    return `Execution is live${template ? ` against ${template.name}` : ""}, so task follow-through matters right now.`;
+  }
+
+  return `This onboarding run is staged${template ? ` from ${template.name}` : ""} and waiting for kickoff.`;
+}
+
+function templateTone(template: PeopleChecklistTemplate) {
+  if (!template.isActive) {
+    return {
+      accent: "#6B7280",
+      glow: "rgba(107, 114, 128, 0.12)",
+      surface: "rgba(107, 114, 128, 0.08)",
+      label: "Parked",
+      description:
+        "This template is stored for reference and not currently launch-ready.",
+    };
+  }
+
+  if (template.tasks.length >= 8) {
+    return {
+      accent: "#2563EB",
+      glow: "rgba(37, 99, 235, 0.14)",
+      surface: "rgba(37, 99, 235, 0.09)",
+      label: "Deep coverage",
+      description:
+        "A more thorough path with enough task density for complex hires.",
+    };
+  }
+
+  return {
+    accent: "#8B5CF6",
+    glow: "rgba(139, 92, 246, 0.14)",
+    surface: "rgba(139, 92, 246, 0.09)",
+    label: "Fast-start",
+    description:
+      "A leaner blueprint built for speed without losing the basics.",
+  };
+}
+
+function onboardingPosture(
+  pending: number,
+  inProgress: number,
+  avgCompletion: number,
+) {
+  if (pending >= 6 || (pending + inProgress >= 10 && avgCompletion < 55)) {
+    return {
+      label: "Needs acceleration",
+      accent: "#DC2626",
+      badgeClass:
+        "border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
+      description:
+        "The onboarding queue is building faster than it is being pushed through.",
+    };
+  }
+
+  if (inProgress >= 4 || avgCompletion < 80) {
+    return {
+      label: "In motion",
+      accent: "#D97706",
+      badgeClass:
+        "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      description:
+        "Work is moving, but completion discipline still needs active follow-through.",
+    };
+  }
+
+  return {
+    label: "On track",
+    accent: "#1B7340",
+    badgeClass:
+      "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    description:
+      "The onboarding pipeline is controlled and templates are supporting execution well.",
+  };
+}
+
+function LoadingValue({ width = "w-16" }: { width?: string }) {
+  return (
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
+  );
+}
+
+function HeroActionButton({
+  icon: Icon,
+  label,
+  primary,
+  onClick,
+}: {
+  icon: React.ElementType;
+  label: string;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${primary ? "bg-[var(--primary)] text-white hover:opacity-90" : "border text-[var(--text-primary)] hover:-translate-y-0.5 hover:shadow-md"}`}
+      style={
+        primary
+          ? undefined
+          : {
+              borderColor: "rgba(255,255,255,0.62)",
+              backgroundColor: "rgba(255, 255, 255, 0.74)",
+              backdropFilter: "blur(18px)",
+            }
+      }
+    >
+      <Icon size={16} />
+      {label}
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Summary Stats                                                      */
 /* ------------------------------------------------------------------ */
@@ -137,11 +304,15 @@ function SummaryStats({
   const stats = useMemo(() => {
     const total = checklists.length;
     const pending = checklists.filter((c) => c.status === "pending").length;
-    const inProgress = checklists.filter((c) => c.status === "in_progress").length;
+    const inProgress = checklists.filter(
+      (c) => c.status === "in_progress",
+    ).length;
     const completed = checklists.filter((c) => c.status === "completed").length;
     const avgCompletion =
       total > 0
-        ? Math.round(checklists.reduce((s, c) => s + c.completionPct, 0) / total)
+        ? Math.round(
+            checklists.reduce((s, c) => s + c.completionPct, 0) / total,
+          )
         : 0;
     return { total, pending, inProgress, completed, avgCompletion };
   }, [checklists]);
@@ -152,47 +323,76 @@ function SummaryStats({
       value: stats.total,
       color: "#3B82F6",
       bg: "rgba(59, 130, 246, 0.1)",
+      helper: "All onboarding runs currently tracked.",
     },
     {
       label: "Pending",
       value: stats.pending,
       color: "#6B7280",
       bg: "rgba(107, 114, 128, 0.1)",
+      helper: "Waiting to be kicked off by an owner.",
     },
     {
       label: "In Progress",
       value: stats.inProgress,
       color: "#F59E0B",
       bg: "rgba(245, 158, 11, 0.1)",
+      helper: "Active onboarding work that still needs follow-through.",
     },
     {
       label: "Completed",
       value: stats.completed,
       color: "#10B981",
       bg: "rgba(16, 185, 129, 0.1)",
+      helper: "Successfully closed onboarding journeys.",
+    },
+    {
+      label: "Avg Completion",
+      value: `${stats.avgCompletion}%`,
+      color: "#8B5CF6",
+      bg: "rgba(139, 92, 246, 0.1)",
+      helper: "Average completion across all onboarding checklists.",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       {cards.map((card, i) => (
         <motion.div
           key={card.label}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: i * 0.05 }}
-          className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
+          className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5"
+          style={{
+            backgroundImage: `radial-gradient(circle at 100% 0%, ${card.color}18, transparent 34%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+          }}
         >
-          <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: card.bg }}
+          >
+            <div
+              className="h-3.5 w-3.5 rounded-full"
+              style={{ backgroundColor: card.color }}
+            />
+          </div>
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
             {card.label}
           </p>
           {isLoading ? (
-            <div className="h-7 w-12 rounded bg-[var(--surface-2)] animate-pulse" />
+            <div className="mt-3 h-8 w-16 rounded bg-[var(--surface-2)] animate-pulse" />
           ) : (
-            <p className="text-2xl font-bold tabular-nums" style={{ color: card.color }}>
+            <p
+              className="mt-3 text-3xl font-bold tabular-nums"
+              style={{ color: card.color }}
+            >
               {card.value}
             </p>
           )}
+          <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+            {card.helper}
+          </p>
         </motion.div>
       ))}
     </div>
@@ -286,19 +486,28 @@ function AddTaskForm({
 /*  Task List Component                                                */
 /* ------------------------------------------------------------------ */
 
-function TaskList({ checklistId, checklistStatus }: { checklistId: string; checklistStatus: string }) {
+function TaskList({
+  checklistId,
+  checklistStatus,
+}: {
+  checklistId: string;
+  checklistStatus: string;
+}) {
   const { data: tasks, isLoading } = useChecklistTasks(checklistId);
   const completeMutation = useCompleteChecklistTask();
   const deleteMutation = useDeleteChecklistTask();
   const [addingTask, setAddingTask] = useState(false);
   const items = tasks ?? [];
-  const canEdit = checklistStatus !== "completed" && checklistStatus !== "cancelled";
+  const canEdit =
+    checklistStatus !== "completed" && checklistStatus !== "cancelled";
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
         <Loader2 size={16} className="animate-spin text-[var(--primary)]" />
-        <span className="ml-2 text-xs text-[var(--text-secondary)]">Loading tasks...</span>
+        <span className="ml-2 text-xs text-[var(--text-secondary)]">
+          Loading tasks...
+        </span>
       </div>
     );
   }
@@ -314,9 +523,14 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
       {items.length > 0 && (
         <div className="flex items-center gap-4 mb-3 text-xs text-[var(--text-secondary)]">
           <span>
-            <span className="font-semibold text-[var(--text-primary)]">{completedCount}</span> of{" "}
-            <span className="font-semibold text-[var(--text-primary)]">{items.length}</span> tasks
-            done
+            <span className="font-semibold text-[var(--text-primary)]">
+              {completedCount}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-[var(--text-primary)]">
+              {items.length}
+            </span>{" "}
+            tasks done
           </span>
           {overdueCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[#EF4444] font-medium">
@@ -329,7 +543,10 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
 
       {items.length === 0 && !addingTask ? (
         <div className="text-center py-4">
-          <ClipboardList size={20} className="mx-auto text-[var(--text-secondary)] mb-1.5" />
+          <ClipboardList
+            size={20}
+            className="mx-auto text-[var(--text-secondary)] mb-1.5"
+          />
           <p className="text-xs text-[var(--text-secondary)]">
             No tasks yet.{" "}
             {canEdit && (
@@ -346,9 +563,11 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
       ) : (
         <div className="space-y-1.5">
           {items.map((task, idx) => {
-            const isCompleted = task.status === "completed" || task.status === "skipped";
+            const isCompleted =
+              task.status === "completed" || task.status === "skipped";
             const overdue = isOverdue(task);
-            const taskStyle = TASK_STATUSES[task.status] ?? TASK_STATUSES.pending;
+            const taskStyle =
+              TASK_STATUSES[task.status] ?? TASK_STATUSES.pending;
 
             return (
               <motion.div
@@ -358,7 +577,9 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                 transition={{ delay: idx * 0.03 }}
                 className="group flex items-start gap-3 rounded-lg p-2.5 transition-colors hover:bg-[var(--surface-2)]"
                 style={{
-                  backgroundColor: overdue ? "rgba(239, 68, 68, 0.04)" : undefined,
+                  backgroundColor: overdue
+                    ? "rgba(239, 68, 68, 0.04)"
+                    : undefined,
                   borderLeft: overdue
                     ? "3px solid #EF4444"
                     : "3px solid transparent",
@@ -367,7 +588,9 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                 {/* Checkbox */}
                 <button
                   type="button"
-                  disabled={isCompleted || !canEdit || completeMutation.isPending}
+                  disabled={
+                    isCompleted || !canEdit || completeMutation.isPending
+                  }
                   onClick={() => completeMutation.mutate({ id: task.id })}
                   className="mt-0.5 shrink-0 transition-transform hover:scale-110"
                   title={isCompleted ? "Completed" : "Mark as complete"}
@@ -388,7 +611,9 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                     <p
                       className="text-sm font-medium leading-tight"
                       style={{
-                        color: isCompleted ? "var(--text-secondary)" : "var(--text-primary)",
+                        color: isCompleted
+                          ? "var(--text-secondary)"
+                          : "var(--text-primary)",
                         textDecoration: isCompleted ? "line-through" : "none",
                       }}
                     >
@@ -397,7 +622,10 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                     {overdue && (
                       <span
                         className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold shrink-0"
-                        style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#EF4444" }}
+                        style={{
+                          backgroundColor: "rgba(239, 68, 68, 0.1)",
+                          color: "#EF4444",
+                        }}
                       >
                         <AlertTriangle size={9} />
                         Overdue
@@ -405,7 +633,10 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                     )}
                     <span
                       className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0"
-                      style={{ backgroundColor: taskStyle.bg, color: taskStyle.text }}
+                      style={{
+                        backgroundColor: taskStyle.bg,
+                        color: taskStyle.text,
+                      }}
                     >
                       {taskStyle.label}
                     </span>
@@ -419,7 +650,9 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                     {task.dueDate && (
                       <span
                         className="inline-flex items-center gap-1 text-[10px] tabular-nums"
-                        style={{ color: overdue ? "#EF4444" : "var(--text-secondary)" }}
+                        style={{
+                          color: overdue ? "#EF4444" : "var(--text-secondary)",
+                        }}
                       >
                         <Calendar size={10} />
                         {formatDate(task.dueDate)}
@@ -457,7 +690,10 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
                     className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--surface-2)]"
                     title="Delete task"
                   >
-                    <Trash2 size={14} className="text-[var(--text-secondary)] hover:text-[#EF4444]" />
+                    <Trash2
+                      size={14}
+                      className="text-[var(--text-secondary)] hover:text-[#EF4444]"
+                    />
                   </button>
                 )}
               </motion.div>
@@ -469,9 +705,13 @@ function TaskList({ checklistId, checklistStatus }: { checklistId: string; check
       {/* Add task */}
       <AnimatePresence>
         {addingTask ? (
-          <AddTaskForm checklistId={checklistId} onClose={() => setAddingTask(false)} />
+          <AddTaskForm
+            checklistId={checklistId}
+            onClose={() => setAddingTask(false)}
+          />
         ) : (
-          canEdit && items.length > 0 && (
+          canEdit &&
+          items.length > 0 && (
             <button
               type="button"
               onClick={() => setAddingTask(true)}
@@ -509,7 +749,22 @@ function ChecklistCard({
   const StatusIcon = statusStyle.icon;
 
   const template = templates.find((t) => t.id === checklist.templateId);
-  const canChangeStatus = checklist.status !== "completed" && checklist.status !== "cancelled";
+  const canChangeStatus =
+    checklist.status !== "completed" && checklist.status !== "cancelled";
+  const narrative = checklistNarrative(checklist, template);
+  const checkpointLabel = checklist.completedAt
+    ? `Completed ${formatDate(checklist.completedAt)}`
+    : checklist.startedAt
+      ? `Started ${formatDate(checklist.startedAt)}`
+      : "Waiting to start";
+  const laneLabel =
+    checklist.status === "completed"
+      ? "Journey closed"
+      : checklist.status === "cancelled"
+        ? "Execution halted"
+        : checklist.status === "in_progress"
+          ? "Tasks underway"
+          : "Ready for kickoff";
 
   const handleStatusChange = (newStatus: string) => {
     updateStatus.mutate({ id: checklist.id, status: newStatus });
@@ -517,7 +772,11 @@ function ChecklistCard({
   };
 
   const handleDelete = () => {
-    if (confirm("Are you sure you want to delete this checklist? This action cannot be undone.")) {
+    if (
+      confirm(
+        "Are you sure you want to delete this checklist? This action cannot be undone.",
+      )
+    ) {
       deleteChecklist.mutate(checklist.id);
     }
     setShowActions(false);
@@ -529,20 +788,26 @@ function ChecklistCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden transition-shadow hover:shadow-sm"
+      className="overflow-hidden rounded-[30px] border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_70px_-48px_rgba(15,23,42,0.5)]"
+      style={{
+        borderColor: `${statusStyle.text}24`,
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${statusStyle.text}16, transparent 32%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
     >
-      {/* Card Header */}
-      <div className="p-4">
-        <div className="flex items-start justify-between">
+      <div className="p-5 lg:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <button
             type="button"
             onClick={onToggle}
-            className="flex-1 text-left min-w-0"
+            className="min-w-0 flex-1 text-left"
           >
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}
+                style={{
+                  backgroundColor: statusStyle.bg,
+                  color: statusStyle.text,
+                }}
               >
                 <StatusIcon size={12} />
                 {statusStyle.label}
@@ -559,18 +824,69 @@ function ChecklistCard({
                 </span>
               )}
             </div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
-              User: {checklist.userId.slice(0, 12)}...
-            </p>
+
+            <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Hire record
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+                  {shortId(checklist.userId, 22)}
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+                  {narrative}
+                </p>
+              </div>
+
+              <div
+                className="flex items-center gap-4 self-start rounded-[24px] border px-4 py-3"
+                style={{
+                  backgroundColor: "rgba(255, 255, 255, 0.72)",
+                  borderColor: "rgba(255,255,255,0.7)",
+                  backdropFilter: "blur(14px)",
+                }}
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Completion
+                  </p>
+                  <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+                    {checklist.completionPct}%
+                  </p>
+                </div>
+                <div className="h-12 w-px bg-[var(--border)]" />
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Task panel
+                  </p>
+                  <span
+                    className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold"
+                    style={{ color: statusStyle.text }}
+                  >
+                    {expanded ? "Collapse board" : "Review tasks"}
+                    <ArrowRight
+                      size={14}
+                      className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+                    />
+                  </span>
+                </div>
+              </div>
+            </div>
           </button>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 ml-3 relative">
-            <button type="button" onClick={onToggle}>
+          <div className="relative ml-0 flex items-center gap-2 lg:ml-3">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-2.5 transition-colors hover:bg-[var(--surface-1)]"
+            >
               {expanded ? (
                 <ChevronUp size={16} className="text-[var(--text-secondary)]" />
               ) : (
-                <ChevronDown size={16} className="text-[var(--text-secondary)]" />
+                <ChevronDown
+                  size={16}
+                  className="text-[var(--text-secondary)]"
+                />
               )}
             </button>
             <button
@@ -578,10 +894,12 @@ function ChecklistCard({
               onClick={() => setShowActions(!showActions)}
               className="p-1 rounded-lg hover:bg-[var(--surface-2)] transition-colors"
             >
-              <MoreHorizontal size={16} className="text-[var(--text-secondary)]" />
+              <MoreHorizontal
+                size={16}
+                className="text-[var(--text-secondary)]"
+              />
             </button>
 
-            {/* Dropdown menu */}
             <AnimatePresence>
               {showActions && (
                 <>
@@ -593,7 +911,7 @@ function ChecklistCard({
                     initial={{ opacity: 0, scale: 0.95, y: -4 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                    className="absolute right-0 top-8 z-20 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] shadow-lg overflow-hidden"
+                    className="absolute right-0 top-12 z-20 w-52 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] shadow-lg"
                   >
                     {canChangeStatus && checklist.status === "pending" && (
                       <button
@@ -651,10 +969,64 @@ function ChecklistCard({
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-[var(--text-secondary)]">Progress</span>
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/70 p-4">
+            <div className="flex items-center gap-2">
+              <Calendar size={14} className="text-[var(--text-secondary)]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Timeline
+              </p>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">
+              Created {daysAgo(checklist.createdAt)}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              {checkpointLabel}
+            </p>
+          </div>
+
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/70 p-4">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-[var(--text-secondary)]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Execution lane
+              </p>
+            </div>
+            <p
+              className="mt-3 text-sm font-semibold"
+              style={{ color: statusStyle.text }}
+            >
+              {laneLabel}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              {statusStyle.label} status is controlling the next available
+              actions.
+            </p>
+          </div>
+
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/70 p-4">
+            <div className="flex items-center gap-2">
+              <FileText size={14} className="text-[var(--text-secondary)]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Template source
+              </p>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">
+              {template?.name ?? "Blank onboarding path"}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              {template?.roleType
+                ? `${template.roleType} workflow shaping the journey.`
+                : "Built without a preset blueprint so tasks are managed manually."}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs text-[var(--text-secondary)]">
+              Progress
+            </span>
             <span
               className="text-xs font-bold tabular-nums"
               style={{ color: statusStyle.text }}
@@ -662,7 +1034,7 @@ function ChecklistCard({
               {checklist.completionPct}%
             </span>
           </div>
-          <div className="h-2 rounded-full bg-[var(--surface-2)] overflow-hidden">
+          <div className="h-2.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${checklist.completionPct}%` }}
@@ -672,26 +1044,8 @@ function ChecklistCard({
             />
           </div>
         </div>
-
-        {/* Dates */}
-        <div className="flex flex-wrap items-center gap-3 mt-2.5">
-          <span className="text-[10px] text-[var(--text-secondary)] tabular-nums">
-            Created {daysAgo(checklist.createdAt)}
-          </span>
-          {checklist.startedAt && (
-            <span className="text-[10px] text-[var(--text-secondary)] tabular-nums">
-              Started {formatDate(checklist.startedAt)}
-            </span>
-          )}
-          {checklist.completedAt && (
-            <span className="text-[10px] text-[#10B981] font-medium tabular-nums">
-              Completed {formatDate(checklist.completedAt)}
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* Expanded Tasks */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -699,13 +1053,39 @@ function ChecklistCard({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="border-t border-[var(--border)] bg-[var(--surface-1)] p-4"
+            className="border-t border-white/60 bg-[var(--surface-0)]/84 p-5 lg:p-6"
           >
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)] mb-3 flex items-center gap-1.5">
-              <ClipboardList size={12} />
-              Onboarding Tasks
-            </h3>
-            <TaskList checklistId={checklist.id} checklistStatus={checklist.status} />
+            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-1)] p-4 lg:p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                    <ClipboardList size={14} />
+                    Onboarding tasks
+                  </h3>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Use this task board to push the hire from kickoff to full
+                    readiness.
+                  </p>
+                </div>
+                <span
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+                  style={{
+                    backgroundColor: statusStyle.bg,
+                    color: statusStyle.text,
+                  }}
+                >
+                  <StatusIcon size={12} />
+                  {statusStyle.label}
+                </span>
+              </div>
+
+              <div className="mt-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-4">
+                <TaskList
+                  checklistId={checklist.id}
+                  checklistStatus={checklist.status}
+                />
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -823,7 +1203,8 @@ function CreateChecklistModal({
                 .map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
-                    {t.roleType ? ` (${t.roleType})` : ""} — {t.tasks.length} tasks
+                    {t.roleType ? ` (${t.roleType})` : ""} — {t.tasks.length}{" "}
+                    tasks
                   </option>
                 ))}
             </select>
@@ -888,7 +1269,9 @@ function TemplateModal({
 }) {
   const [name, setName] = useState(editTemplate?.name ?? "");
   const [roleType, setRoleType] = useState(editTemplate?.roleType ?? "");
-  const [tasks, setTasks] = useState<TemplateTaskDef[]>(editTemplate?.tasks ?? []);
+  const [tasks, setTasks] = useState<TemplateTaskDef[]>(
+    editTemplate?.tasks ?? [],
+  );
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
   const createTemplate = useCreateChecklistTemplate();
@@ -1016,7 +1399,10 @@ function TemplateModal({
                     key={idx}
                     className="flex items-center gap-2 rounded-lg bg-[var(--surface-1)] p-2.5"
                   >
-                    <GripVertical size={14} className="text-[var(--text-secondary)] shrink-0" />
+                    <GripVertical
+                      size={14}
+                      className="text-[var(--text-secondary)] shrink-0"
+                    />
                     <span className="text-xs font-bold text-[var(--text-secondary)] w-5 shrink-0">
                       {idx + 1}.
                     </span>
@@ -1035,7 +1421,10 @@ function TemplateModal({
                         disabled={idx === 0}
                         className="p-1 rounded hover:bg-[var(--surface-2)] disabled:opacity-30 transition-all"
                       >
-                        <ChevronUp size={12} className="text-[var(--text-secondary)]" />
+                        <ChevronUp
+                          size={12}
+                          className="text-[var(--text-secondary)]"
+                        />
                       </button>
                       <button
                         type="button"
@@ -1043,14 +1432,20 @@ function TemplateModal({
                         disabled={idx === tasks.length - 1}
                         className="p-1 rounded hover:bg-[var(--surface-2)] disabled:opacity-30 transition-all"
                       >
-                        <ChevronDown size={12} className="text-[var(--text-secondary)]" />
+                        <ChevronDown
+                          size={12}
+                          className="text-[var(--text-secondary)]"
+                        />
                       </button>
                       <button
                         type="button"
                         onClick={() => removeTask(idx)}
                         className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                       >
-                        <Trash2 size={12} className="text-[var(--text-secondary)] hover:text-[#EF4444]" />
+                        <Trash2
+                          size={12}
+                          className="text-[var(--text-secondary)] hover:text-[#EF4444]"
+                        />
                       </button>
                     </div>
                   </div>
@@ -1114,142 +1509,449 @@ function TemplateModal({
 /*  Templates Tab                                                      */
 /* ------------------------------------------------------------------ */
 
-function TemplatesTab({ templates, isLoading }: { templates: PeopleChecklistTemplate[]; isLoading: boolean }) {
+function TemplatesTab({
+  templates,
+  isLoading,
+}: {
+  templates: PeopleChecklistTemplate[];
+  isLoading: boolean;
+}) {
   const [showCreate, setShowCreate] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const deleteTemplate = useDeleteChecklistTemplate();
 
   const editTemplate = templates.find((t) => t.id === editId);
+  const templateStats = useMemo(() => {
+    const active = templates.filter((template) => template.isActive).length;
+    const inactive = templates.length - active;
+    const totalTasks = templates.reduce(
+      (sum, template) => sum + template.tasks.length,
+      0,
+    );
+    const roleCoverage = new Set(
+      templates
+        .map((template) => template.roleType)
+        .filter((role): role is string => Boolean(role)),
+    ).size;
+
+    return {
+      total: templates.length,
+      active,
+      inactive,
+      totalTasks,
+      averageTasks: templates.length
+        ? Math.round(totalTasks / templates.length)
+        : 0,
+      roleCoverage,
+    };
+  }, [templates]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-[var(--text-secondary)]">
-          {templates.length} template{templates.length !== 1 ? "s" : ""}
-        </p>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+    <div className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+        <div
+          className="rounded-[32px] border p-6 lg:p-7"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "rgba(139, 92, 246, 0.16)",
+            backgroundImage:
+              "radial-gradient(circle at 14% 18%, rgba(139,92,246,0.18), transparent 30%), radial-gradient(circle at 86% 14%, rgba(37,99,235,0.12), transparent 26%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+          }}
         >
-          <Plus size={14} />
-          New Template
-        </button>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                <Sparkles size={14} />
+                Template studio
+              </span>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--text-primary)]">
+                Build repeatable onboarding blueprints
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)] lg:text-base">
+                Shape reusable launch paths by role, tune the task density, and
+                keep your onboarding experience consistent before each hire ever
+                lands.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              <Plus size={16} />
+              New Template
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                label: "Total templates",
+                value: templateStats.total,
+                helper: "All onboarding blueprints in the catalog.",
+              },
+              {
+                label: "Active",
+                value: templateStats.active,
+                helper: "Launch-ready flows available to teams right now.",
+              },
+              {
+                label: "Task bank",
+                value: templateStats.totalTasks,
+                helper: "Total reusable checklist steps across every template.",
+              },
+              {
+                label: "Role coverage",
+                value: templateStats.roleCoverage,
+                helper: "Distinct role tracks with a dedicated setup path.",
+              },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/75 p-4"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  {stat.label}
+                </p>
+                <p className="mt-3 text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+                  {isLoading ? <LoadingValue width="w-14" /> : stat.value}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                  {stat.helper}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Build posture
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+              Blueprint health
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              {templateStats.active >=
+              Math.max(1, Math.ceil(templateStats.total / 2))
+                ? "Most of your catalog is launch-ready, which keeps onboarding starts from slowing down."
+                : "A larger share of templates is parked, so your reusable coverage is thinner than it should be."}
+            </p>
+            <div className="mt-5 rounded-[24px] bg-[var(--surface-1)] p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Activation rate
+                </span>
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  {templateStats.total
+                    ? `${Math.round((templateStats.active / templateStats.total) * 100)}%`
+                    : "0%"}
+                </span>
+              </div>
+              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                <div
+                  className="h-full rounded-full bg-[var(--primary)]"
+                  style={{
+                    width: templateStats.total
+                      ? `${(templateStats.active / templateStats.total) * 100}%`
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Catalog signal
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+              Task density
+            </h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-[24px] bg-[var(--surface-1)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Avg tasks
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {isLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    templateStats.averageTasks
+                  )}
+                </p>
+              </div>
+              <div className="rounded-[24px] bg-[var(--surface-1)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Parked templates
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {isLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    templateStats.inactive
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[1, 2].map((item) => (
+            <div
+              key={item}
+              className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-6"
+            >
+              <div className="h-5 w-28 animate-pulse rounded-full bg-[var(--surface-2)]" />
+              <div className="mt-4 h-8 w-56 animate-pulse rounded-xl bg-[var(--surface-2)]" />
+              <div className="mt-6 space-y-2">
+                <div className="h-4 animate-pulse rounded-xl bg-[var(--surface-2)]" />
+                <div className="h-4 w-10/12 animate-pulse rounded-xl bg-[var(--surface-2)]" />
+                <div className="h-4 w-8/12 animate-pulse rounded-xl bg-[var(--surface-2)]" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : templates.length === 0 ? (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-12 text-center">
-          <FileText size={24} className="mx-auto text-[var(--text-secondary)] mb-2" />
-          <p className="text-sm font-medium text-[var(--text-primary)]">
+        <div
+          className="rounded-[32px] border p-12 text-center"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "rgba(139, 92, 246, 0.14)",
+            backgroundImage:
+              "radial-gradient(circle at 50% 0%, rgba(139,92,246,0.12), transparent 34%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+          }}
+        >
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-violet-500/10">
+            <FileText
+              size={28}
+              className="text-violet-600 dark:text-violet-300"
+            />
+          </div>
+          <h3 className="mt-5 text-2xl font-semibold text-[var(--text-primary)]">
             No templates yet
-          </p>
-          <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">
-            Create templates to standardize your onboarding process.
+          </h3>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-[var(--text-secondary)]">
+            Stand up a template to standardize hardware setup, access
+            provisioning, and first-week readiness instead of rebuilding every
+            onboarding path from scratch.
           </p>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
-            <Plus size={14} />
+            <Plus size={16} />
             Create First Template
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {templates.map((template, idx) => (
-            <motion.div
-              key={template.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4 transition-shadow hover:shadow-sm"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                      {template.name}
-                    </h3>
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+        <div className="grid gap-4 xl:grid-cols-2">
+          {templates.map((template, idx) => {
+            const tone = templateTone(template);
+            const requiredCount = template.tasks.filter(
+              (task) => task.required,
+            ).length;
+
+            return (
+              <motion.div
+                key={template.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className="overflow-hidden rounded-[30px] border p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_70px_-48px_rgba(15,23,42,0.45)] lg:p-6"
+                style={{
+                  borderColor: `${tone.accent}26`,
+                  backgroundImage: `radial-gradient(circle at 100% 0%, ${tone.glow}, transparent 32%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+                }}
+              >
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+                          style={{
+                            backgroundColor: tone.surface,
+                            color: tone.accent,
+                          }}
+                        >
+                          {tone.label}
+                        </span>
+                        <span
+                          className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+                          style={{
+                            backgroundColor: template.isActive
+                              ? "rgba(16, 185, 129, 0.1)"
+                              : "rgba(107, 114, 128, 0.1)",
+                            color: template.isActive ? "#10B981" : "#6B7280",
+                          }}
+                        >
+                          {template.isActive ? "Active" : "Inactive"}
+                        </span>
+                        {template.roleType && (
+                          <span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                            {template.roleType}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+                        {template.name}
+                      </h3>
+                      <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+                        {tone.description}
+                      </p>
+                    </div>
+
+                    <div
+                      className="self-start rounded-[24px] border px-4 py-3"
                       style={{
-                        backgroundColor: template.isActive
-                          ? "rgba(16, 185, 129, 0.1)"
-                          : "rgba(107, 114, 128, 0.1)",
-                        color: template.isActive ? "#10B981" : "#6B7280",
+                        backgroundColor: "rgba(255, 255, 255, 0.72)",
+                        borderColor: "rgba(255,255,255,0.7)",
+                        backdropFilter: "blur(14px)",
                       }}
                     >
-                      {template.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  {template.roleType && (
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Role: {template.roleType}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {template.tasks.length} task{template.tasks.length !== 1 ? "s" : ""}
-                </span>
-                <span className="text-[var(--border)]">|</span>
-                <span className="text-xs text-[var(--text-secondary)]">
-                  Updated {daysAgo(template.updatedAt)}
-                </span>
-              </div>
-
-              {/* Task preview */}
-              {template.tasks.length > 0 && (
-                <div className="mb-3 space-y-1">
-                  {template.tasks.slice(0, 3).map((task, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                      <Circle size={10} className="shrink-0" />
-                      <span className="truncate">{task.title}</span>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                        Task bank
+                      </p>
+                      <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+                        {template.tasks.length}
+                      </p>
                     </div>
-                  ))}
-                  {template.tasks.length > 3 && (
-                    <p className="text-[10px] text-[var(--text-secondary)] pl-5">
-                      +{template.tasks.length - 3} more tasks
-                    </p>
-                  )}
-                </div>
-              )}
+                  </div>
 
-              <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={() => setEditId(template.id)}
-                  className="flex-1 rounded-lg py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-1)] transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Delete template "${template.name}"?`)) {
-                      deleteTemplate.mutate(template.id);
-                    }
-                  }}
-                  className="flex-1 rounded-lg py-1.5 text-xs font-medium text-[#EF4444] hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </motion.div>
-          ))}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/75 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                        Updated
+                      </p>
+                      <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">
+                        {daysAgo(template.updatedAt)}
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/75 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                        Required tasks
+                      </p>
+                      <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">
+                        {requiredCount} of {template.tasks.length}
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/75 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                        Role lane
+                      </p>
+                      <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">
+                        {template.roleType ?? "General"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)]/76 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                          Launch sequence
+                        </p>
+                        <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                          Preview the first actions this template will stamp
+                          into a new onboarding run.
+                        </p>
+                      </div>
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">
+                        Showing {Math.min(template.tasks.length, 4)} of{" "}
+                        {template.tasks.length}
+                      </span>
+                    </div>
+
+                    {template.tasks.length > 0 ? (
+                      <div className="mt-4 space-y-2.5">
+                        {template.tasks.slice(0, 4).map((task, index) => (
+                          <div
+                            key={`${template.id}-${task.title}-${index}`}
+                            className="flex items-start gap-3 rounded-[20px] bg-[var(--surface-1)] p-3"
+                          >
+                            <div
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl text-xs font-bold"
+                              style={{
+                                backgroundColor: tone.surface,
+                                color: tone.accent,
+                              }}
+                            >
+                              {index + 1}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                                  {task.title}
+                                </p>
+                                {task.required && (
+                                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                                    Required
+                                  </span>
+                                )}
+                              </div>
+                              {(task.description ||
+                                task.assigneeRole ||
+                                task.dueDays) && (
+                                <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                                  {task.description ??
+                                    `${task.assigneeRole ?? "Shared ownership"}${task.dueDays ? ` · due in ${task.dueDays} days` : ""}`}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-[20px] bg-[var(--surface-1)] p-4 text-sm text-[var(--text-secondary)]">
+                        No task definitions added yet. Open the template to
+                        build the launch sequence.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => setEditId(template.id)}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                    >
+                      Edit Template
+                      <ArrowRight size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Delete template "${template.name}"?`)) {
+                          deleteTemplate.mutate(template.id);
+                        }
+                      }}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
       <AnimatePresence>
         {showCreate && (
-          <TemplateModal open={showCreate} onClose={() => setShowCreate(false)} />
+          <TemplateModal
+            open={showCreate}
+            onClose={() => setShowCreate(false)}
+          />
         )}
         {editId && editTemplate && (
           <TemplateModal
@@ -1271,9 +1973,10 @@ export default function OnboardingPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"checklists" | "templates">("checklists");
+  const [activeTab, setActiveTab] = useState<"checklists" | "templates">(
+    "checklists",
+  );
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { data, isLoading } = useChecklists(
@@ -1283,13 +1986,47 @@ export default function OnboardingPage() {
     statusFilter || undefined,
   );
 
-  const { data: allChecklistsData, isLoading: allLoading } = useChecklists(1, 100, "onboarding");
-  const { data: templates, isLoading: templatesLoading } = useChecklistTemplates("onboarding");
+  const { data: allChecklistsData, isLoading: allLoading } = useChecklists(
+    1,
+    100,
+    "onboarding",
+  );
+  const { data: templates, isLoading: templatesLoading } =
+    useChecklistTemplates("onboarding");
 
   const checklists = data?.data ?? [];
   const allChecklists = allChecklistsData?.data ?? [];
   const meta = data?.meta;
   const templateList = templates ?? [];
+  const templateCount = templateList.length;
+
+  const onboardingStats = useMemo(() => {
+    const total = allChecklists.length;
+    const pending = allChecklists.filter((c) => c.status === "pending").length;
+    const inProgress = allChecklists.filter(
+      (c) => c.status === "in_progress",
+    ).length;
+    const completed = allChecklists.filter(
+      (c) => c.status === "completed",
+    ).length;
+    const avgCompletion =
+      total > 0
+        ? Math.round(
+            allChecklists.reduce(
+              (sum, checklist) => sum + checklist.completionPct,
+              0,
+            ) / total,
+          )
+        : 0;
+
+    return { total, pending, inProgress, completed, avgCompletion };
+  }, [allChecklists]);
+
+  const posture = onboardingPosture(
+    onboardingStats.pending,
+    onboardingStats.inProgress,
+    onboardingStats.avgCompletion,
+  );
 
   const filteredChecklists = useMemo(() => {
     if (!searchQuery.trim()) return checklists;
@@ -1318,39 +2055,143 @@ export default function OnboardingPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-8 pb-8">
+      {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        className="relative overflow-hidden rounded-[32px] border p-6 lg:p-8"
+        style={{
+          backgroundColor: "var(--surface-0)",
+          borderColor: "rgba(59, 130, 246, 0.14)",
+          backgroundImage:
+            "radial-gradient(circle at 12% 18%, rgba(59,130,246,0.16), transparent 32%), radial-gradient(circle at 88% 16%, rgba(139,92,246,0.14), transparent 28%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+          boxShadow: "0 28px 90px -58px rgba(59, 130, 246, 0.3)",
+        }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
-          >
-            <UserPlus size={20} style={{ color: "#3B82F6" }} />
+        <div className="grid gap-6 xl:grid-cols-[1.14fr_0.86fr]">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${posture.badgeClass}`}
+              >
+                <Sparkles size={14} />
+                {posture.label}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)]/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] backdrop-blur-sm">
+                <UserPlus size={14} className="text-[#2563EB]" />
+                Onboarding command center
+              </span>
+            </div>
+
+            <div className="max-w-3xl">
+              <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+                Onboarding
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--text-secondary)] lg:text-lg">
+                Manage onboarding checklists and templates for new team members
+                with a clearer operating view, stronger completion discipline,
+                and reusable setup paths.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <HeroActionButton
+                icon={Plus}
+                label="Start Onboarding"
+                primary
+                onClick={() => setShowCreateModal(true)}
+              />
+              <HeroActionButton
+                icon={ClipboardList}
+                label="Open Checklists"
+                onClick={() => setActiveTab("checklists")}
+              />
+              <HeroActionButton
+                icon={FileText}
+                label="Manage Templates"
+                onClick={() => setActiveTab("templates")}
+              />
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              Onboarding
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Manage onboarding checklists and templates for new team members
+
+          <div
+            className="rounded-[28px] border p-5"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.74)",
+              borderColor: "rgba(255, 255, 255, 0.7)",
+              backdropFilter: "blur(18px)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Workflow posture
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                  Onboarding pulse
+                </h2>
+              </div>
+              <Activity size={20} className="text-[var(--primary)]" />
+            </div>
+
+            <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+              {posture.description}
             </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Active runs
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {allLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    onboardingStats.pending + onboardingStats.inProgress
+                  )}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Avg completion
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {allLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    `${onboardingStats.avgCompletion}%`
+                  )}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Completed
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {allLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    onboardingStats.completed
+                  )}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Templates
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {templatesLoading ? (
+                    <LoadingValue width="w-14" />
+                  ) : (
+                    templateCount
+                  )}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 self-start sm:self-auto"
-        >
-          <Plus size={16} />
-          Start Onboarding
-        </button>
       </motion.div>
 
       {/* Summary Stats */}
@@ -1362,37 +2203,74 @@ export default function OnboardingPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.15 }}
       >
-        <div className="flex items-center gap-1 border-b border-[var(--border)]">
+        <div className="grid gap-3 md:grid-cols-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
+            const tabCopy = ONBOARDING_TAB_COPY[tab.key];
             return (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className="relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
+                className="relative overflow-hidden rounded-[28px] border p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 style={{
-                  color: isActive ? "var(--primary)" : "var(--text-secondary)",
+                  borderColor: isActive ? tabCopy.accent : "var(--border)",
+                  backgroundColor: isActive
+                    ? `${tabCopy.accent}10`
+                    : "var(--surface-0)",
                 }}
               >
-                <Icon size={15} />
-                {tab.label}
-                <span
-                  className="rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
-                  style={{
-                    backgroundColor: isActive
-                      ? "rgba(59, 130, 246, 0.1)"
-                      : "var(--surface-2)",
-                    color: isActive ? "var(--primary)" : "var(--text-secondary)",
-                  }}
-                >
-                  {tab.count}
-                </span>
+                <div className="flex items-start gap-4">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl"
+                    style={{
+                      backgroundColor: isActive
+                        ? `${tabCopy.accent}18`
+                        : "var(--surface-1)",
+                      color: isActive
+                        ? tabCopy.accent
+                        : "var(--text-secondary)",
+                    }}
+                  >
+                    <Icon size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p
+                        className="text-sm font-semibold"
+                        style={{
+                          color: isActive
+                            ? tabCopy.accent
+                            : "var(--text-primary)",
+                        }}
+                      >
+                        {tab.label}
+                      </p>
+                      <span
+                        className="rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                        style={{
+                          backgroundColor: isActive
+                            ? `${tabCopy.accent}16`
+                            : "var(--surface-2)",
+                          color: isActive
+                            ? tabCopy.accent
+                            : "var(--text-secondary)",
+                        }}
+                      >
+                        {tab.count}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                      {tabCopy.description}
+                    </p>
+                  </div>
+                </div>
                 {isActive && (
                   <motion.div
                     layoutId="onboarding-tab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full"
+                    className="absolute inset-x-0 top-0 h-1 rounded-t-[28px]"
+                    style={{ backgroundColor: tabCopy.accent }}
                   />
                 )}
               </button>
@@ -1410,78 +2288,71 @@ export default function OnboardingPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
+            className="space-y-4"
           >
             {/* Search & Filters */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
-              <div className="relative flex-1 w-full sm:max-w-sm">
-                <Search
-                  size={15}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
-                />
-                <input
-                  type="text"
-                  placeholder="Search by user ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                />
+            <div className="flex flex-col gap-4 rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                    Checklist board
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Active onboarding runs
+                  </h2>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  {meta?.totalItems ?? 0} run
+                  {(meta?.totalItems ?? 0) === 1 ? "" : "s"} in scope
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowFilters((f) => !f)}
-                className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
-              >
-                <Filter size={15} />
-                Filters
-                {statusFilter && (
-                  <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
-                )}
-              </button>
-            </div>
 
-            {/* Filter Panel */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
-                >
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
-                      Status
-                    </label>
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => {
-                        setStatusFilter(e.target.value);
-                        setPage(1);
-                      }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                    >
-                      {CHECKLIST_STATUSES.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {statusFilter && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="relative flex-1 w-full sm:max-w-sm">
+                  <Search
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search by user ID, checklist ID, or template ID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {CHECKLIST_STATUSES.map((statusOption) => {
+                  const active = statusOption.value === statusFilter;
+                  return (
                     <button
+                      key={statusOption.label}
                       type="button"
                       onClick={() => {
-                        setStatusFilter("");
+                        setStatusFilter(statusOption.value);
                         setPage(1);
                       }}
-                      className="rounded-lg px-3 py-2 text-xs font-medium text-[var(--primary)] hover:bg-[var(--surface-1)] transition-colors"
+                      className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                      style={{
+                        borderColor: active
+                          ? "var(--primary)"
+                          : "var(--border)",
+                        backgroundColor: active
+                          ? "rgba(59, 130, 246, 0.12)"
+                          : "var(--surface-0)",
+                        color: active
+                          ? "var(--primary)"
+                          : "var(--text-secondary)",
+                      }}
                     >
-                      Clear filters
+                      {statusOption.label}
                     </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Checklist Cards */}
             {isLoading ? (
@@ -1535,7 +2406,9 @@ export default function OnboardingPage() {
                     checklist={checklist}
                     expanded={expandedId === checklist.id}
                     onToggle={() =>
-                      setExpandedId(expandedId === checklist.id ? null : checklist.id)
+                      setExpandedId(
+                        expandedId === checklist.id ? null : checklist.id,
+                      )
                     }
                     templates={templateList}
                   />
@@ -1547,7 +2420,8 @@ export default function OnboardingPage() {
             {meta && meta.totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Page {meta.page} of {meta.totalPages} ({meta.totalItems} total)
+                  Page {meta.page} of {meta.totalPages} ({meta.totalItems}{" "}
+                  total)
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -1578,7 +2452,10 @@ export default function OnboardingPage() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            <TemplatesTab templates={templateList} isLoading={templatesLoading} />
+            <TemplatesTab
+              templates={templateList}
+              isLoading={templatesLoading}
+            />
           </motion.div>
         )}
       </AnimatePresence>
