@@ -42,6 +42,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/sendgrid"
 )
 
 // Server holds all dependencies and provides the HTTP server functionality.
@@ -159,8 +160,22 @@ func (s *Server) Setup() {
 		slog.Info("directory sync service initialized")
 	}
 
+	// --- Email sender: prefer Graph API, fall back to SendGrid ---
+	var emailSender notification.EmailSender
+	var teamsSender notification.TeamsSender
+	if graphClient != nil {
+		emailSender = graphClient
+		teamsSender = graphClient
+		slog.Info("email provider: Microsoft Graph API")
+	} else if s.cfg.SendGrid.APIKey != "" {
+		emailSender = sendgrid.NewClient(s.cfg.SendGrid)
+		slog.Info("email provider: SendGrid")
+	} else {
+		slog.Warn("no email provider configured — email notifications will be skipped")
+	}
+
 	// --- Notification outbox processor ---
-	outboxProcessor := notification.NewOutboxProcessor(s.pool, graphClient)
+	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)
 	s.outboxProcessor = outboxProcessor
 
 	// --- Notification orchestrator (NATS event listener) ---
