@@ -344,13 +344,11 @@ export function AttentionQueue({ className }: AttentionQueueProps) {
       transition={{ duration: 0.4, ease: "easeOut" }}
       className={className}
       style={{
-        background: "rgba(255, 255, 255, 0.6)",
+        background: "var(--surface-0)",
         WebkitBackdropFilter: "blur(20px)",
         backdropFilter: "blur(20px)",
-        border: "1px solid rgba(255, 255, 255, 0.18)",
+        border: "1px solid var(--border)",
         borderRadius: "16px",
-        boxShadow:
-          "0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04)",
       }}
     >
       {/* ---- Header ------------------------------------------------ */}
@@ -467,7 +465,7 @@ export function AttentionQueue({ className }: AttentionQueueProps) {
                       }}
                       onMouseEnter={(e) => {
                         (e.currentTarget as HTMLElement).style.backgroundColor =
-                          "rgba(0, 0, 0, 0.03)";
+                          "var(--surface-1)";
                       }}
                       onMouseLeave={(e) => {
                         (e.currentTarget as HTMLElement).style.backgroundColor =
@@ -522,19 +520,19 @@ export function AttentionQueue({ className }: AttentionQueueProps) {
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
                           style={{
                             color: "var(--primary)",
-                            backgroundColor: "rgba(27, 115, 64, 0.08)",
+                            backgroundColor: "var(--surface-0)",
                           }}
                           onMouseEnter={(e) => {
                             (
                               e.currentTarget as HTMLElement
                             ).style.backgroundColor =
-                              "rgba(27, 115, 64, 0.15)";
+                              "var(--surface-1)";
                           }}
                           onMouseLeave={(e) => {
                             (
                               e.currentTarget as HTMLElement
                             ).style.backgroundColor =
-                              "rgba(27, 115, 64, 0.08)";
+                              "var(--surface-0)";
                           }}
                         >
                           Investigate
@@ -552,7 +550,7 @@ export function AttentionQueue({ className }: AttentionQueueProps) {
                           onMouseEnter={(e) => {
                             (
                               e.currentTarget as HTMLElement
-                            ).style.backgroundColor = "rgba(0, 0, 0, 0.06)";
+                            ).style.backgroundColor = "var(--surface-1)";
                           }}
                           onMouseLeave={(e) => {
                             (
