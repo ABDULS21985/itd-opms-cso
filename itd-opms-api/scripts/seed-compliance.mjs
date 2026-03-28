@@ -8,51 +8,63 @@
 
 const API = "http://127.0.0.1:8089/api/v1";
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // ── Login ──────────────────────────────────────────────────────────
 async function login() {
-  const res = await fetch(`${API}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: "admin@itd.cbn.gov.ng",
-      password: "admin123",
-    }),
-  });
-  const json = await res.json();
-  if (json.status !== "success") throw new Error("Login failed: " + JSON.stringify(json));
-  return json.data.accessToken;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const res = await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "admin@itd.cbn.gov.ng",
+        password: "admin123",
+      }),
+    });
+    if (res.status === 429) {
+      console.log(`  Rate limited on login, waiting ${attempt * 2}s...`);
+      await sleep(attempt * 2000);
+      continue;
+    }
+    const json = await res.json();
+    if (json.status !== "success") throw new Error("Login failed: " + JSON.stringify(json));
+    return json.data.accessToken;
+  }
+  throw new Error("Login failed after 5 attempts");
 }
 
 // ── Create control ─────────────────────────────────────────────────
-async function createControl(token, control) {
-  const res = await fetch(`${API}/grc/compliance`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(control),
-  });
-  const json = await res.json();
-  if (res.status >= 400) {
-    console.error(`  FAIL ${control.controlId}: ${JSON.stringify(json)}`);
-    return false;
+async function createControl(token, control, retries = 5) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(`${API}/grc/compliance`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(control),
+    });
+    if (res.status === 429) {
+      // Rate limited — exponential back off and retry
+      const wait = attempt * 2000;
+      await sleep(wait);
+      continue;
+    }
+    const json = await res.json();
+    if (res.status === 409) {
+      // Already exists — skip silently
+      return true;
+    }
+    if (res.status >= 400) {
+      console.error(`  FAIL ${control.controlId}: ${JSON.stringify(json)}`);
+      return false;
+    }
+    return true;
   }
-  return true;
+  console.error(`  FAIL ${control.controlId}: rate-limited after ${retries} retries`);
+  return false;
 }
 
-// ── Statuses for variety ───────────────────────────────────────────
-const STATUSES = ["not_started", "partial", "implemented", "verified"];
-function randomStatus() {
-  const weights = [0.25, 0.30, 0.30, 0.15]; // realistic distribution
-  const r = Math.random();
-  let cum = 0;
-  for (let i = 0; i < weights.length; i++) {
-    cum += weights[i];
-    if (r <= cum) return STATUSES[i];
-  }
-  return STATUSES[0];
-}
 
 // ══════════════════════════════════════════════════════════════════
 //  FRAMEWORK DATA
@@ -557,6 +569,7 @@ async function main() {
       });
       if (ok) created++;
       else failed++;
+      await sleep(300); // throttle to avoid rate limiting
     }
 
     console.log(`  Created: ${created} | Failed: ${failed}`);

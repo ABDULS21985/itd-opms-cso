@@ -12,6 +12,15 @@ import {
   Trash2,
   Loader2,
   Save,
+  User,
+  Cpu,
+  Shield,
+  FileText,
+  ClipboardCheck,
+  HardDrive,
+  MemoryStick,
+  Network,
+  Info,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { useCreateSSARequest, useCreateServiceImpact } from "@/hooks/use-ssa";
@@ -43,11 +52,11 @@ interface ImpactEntry {
 /* ------------------------------------------------------------------ */
 
 const STEPS = [
-  { label: "Requestor", description: "Your information" },
-  { label: "Technical", description: "Server specifications" },
-  { label: "Impact", description: "Service impact analysis" },
-  { label: "Justification", description: "Business justification" },
-  { label: "Review", description: "Review & submit" },
+  { label: "Requestor", description: "Your information", icon: User },
+  { label: "Technical", description: "Server specifications", icon: Cpu },
+  { label: "Impact", description: "Service impact analysis", icon: Shield },
+  { label: "Justification", description: "Business justification", icon: FileText },
+  { label: "Review", description: "Review & submit", icon: ClipboardCheck },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -56,12 +65,12 @@ const STEPS = [
 
 const slideVariants = {
   enter: (direction: number) => ({
-    x: direction > 0 ? 80 : -80,
+    x: direction > 0 ? 60 : -60,
     opacity: 0,
   }),
   center: { x: 0, opacity: 1 },
   exit: (direction: number) => ({
-    x: direction < 0 ? 80 : -80,
+    x: direction < 0 ? 60 : -60,
     opacity: 0,
   }),
 };
@@ -288,7 +297,6 @@ export default function NewSSARequestPage() {
 
   /* ---- Submit Request ---- */
   async function handleSubmit() {
-    // Validate all steps before submitting
     for (let s = 0; s < STEPS.length - 1; s++) {
       if (!validateStep(s)) {
         setDirection(s < step ? -1 : 1);
@@ -300,7 +308,6 @@ export default function NewSSARequestPage() {
     setSubmitting(true);
 
     try {
-      // 1. Create the request as draft
       const body = buildRequestBody();
       const request = await new Promise<SSARequest>((resolve, reject) => {
         createSSARequest.mutate(body, {
@@ -309,8 +316,6 @@ export default function NewSSARequestPage() {
         });
       });
 
-      // 2. Create all service impact entries via apiClient directly
-      //    (the hook was initialized with undefined requestId)
       const { apiClient } = await import("@/lib/api-client");
       for (let i = 0; i < impacts.length; i++) {
         const entry = impacts[i];
@@ -326,7 +331,6 @@ export default function NewSSARequestPage() {
         );
       }
 
-      // 3. Submit the request
       await apiClient.post<SSARequest>(
         `/ssa/requests/${request.id}/submit`,
       );
@@ -371,13 +375,18 @@ export default function NewSSARequestPage() {
 
   const isPending = createSSARequest.isPending || submitting;
 
+  /* ---- Progress percentage ---- */
+  const completedSteps = stepComplete.filter(Boolean).length;
+  const progressPct = Math.round((completedSteps / (STEPS.length - 1)) * 100);
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-12">
+    <div className="pb-8">
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
+        className="mb-6"
       >
         <button
           type="button"
@@ -387,856 +396,862 @@ export default function NewSSARequestPage() {
           <ArrowLeft size={16} />
           Back to Requests
         </button>
-        <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
-          >
-            <Server size={20} style={{ color: "#1B7340" }} />
+
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <Server size={22} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+                New SSA Request
+              </h1>
+              <p className="text-sm text-[var(--text-secondary)]">
+                Server / Storage Allocation Request
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              New SSA Request
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Create a new server/storage allocation request
-            </p>
+
+          {/* Progress indicator */}
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5">
+            <div className="relative h-10 w-10">
+              <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="2.5" />
+                <circle
+                  cx="18" cy="18" r="15.5" fill="none"
+                  stroke="var(--primary)" strokeWidth="2.5"
+                  strokeDasharray={`${progressPct} 100`}
+                  strokeLinecap="round"
+                  className="transition-all duration-500"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-[var(--primary)]">
+                {progressPct}%
+              </span>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-[var(--text-primary)]">{completedSteps} of {STEPS.length - 1} sections</p>
+              <p className="text-xs text-[var(--text-secondary)]">completed</p>
+            </div>
           </div>
         </div>
       </motion.div>
 
-      {/* ── Stepper ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-6 py-5"
-      >
-        <div className="flex items-center justify-between">
-          {STEPS.map((s, i) => {
-            const isActive = i === step;
-            const isDone = i < step || stepComplete[i];
-            const isClickable = i <= step || stepComplete[step];
+      {/* Two-panel layout */}
+      <div className="flex gap-6 items-start">
+        {/* ── Left sidebar: Vertical stepper ── */}
+        <motion.aside
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          className="hidden lg:block w-64 shrink-0 sticky top-6"
+        >
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+            <nav className="space-y-1">
+              {STEPS.map((s, i) => {
+                const isActive = i === step;
+                const isDone = i < step || stepComplete[i];
+                const isClickable = i <= step || stepComplete[step];
+                const Icon = s.icon;
 
-            return (
-              <div
-                key={s.label}
-                className="flex items-center flex-1 last:flex-none"
-              >
-                <button
-                  type="button"
-                  onClick={() => isClickable && goTo(i)}
-                  className={`group flex flex-col items-center gap-1.5 transition-all ${
-                    isClickable ? "cursor-pointer" : "cursor-default"
-                  }`}
-                >
-                  <div
-                    className={`relative flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 ${
+                return (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => isClickable && goTo(i)}
+                    className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
                       isActive
-                        ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/25 scale-110"
-                        : isDone
-                          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
-                          : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--neutral-gray)]"
-                    } ${isClickable && !isActive ? "group-hover:border-[var(--primary)]/50 group-hover:scale-105" : ""}`}
-                  >
-                    {isDone && !isActive ? (
-                      <Check size={18} strokeWidth={2.5} />
-                    ) : (
-                      <span className="text-sm font-bold">{i + 1}</span>
-                    )}
-                  </div>
-                  <span
-                    className={`text-xs font-medium transition-colors hidden sm:block ${
-                      isActive
-                        ? "text-[var(--primary)]"
-                        : isDone
-                          ? "text-[var(--text-primary)]"
-                          : "text-[var(--neutral-gray)]"
+                        ? "bg-[var(--primary)]/10 shadow-sm"
+                        : isClickable
+                          ? "hover:bg-[var(--surface-1)]"
+                          : "opacity-50 cursor-default"
                     }`}
                   >
-                    {s.label}
-                  </span>
-                </button>
-
-                {i < STEPS.length - 1 && (
-                  <div className="flex-1 mx-2 sm:mx-3">
-                    <div className="h-0.5 w-full rounded-full bg-[var(--border)] overflow-hidden">
-                      <motion.div
-                        className="h-full bg-[var(--primary)]"
-                        initial={false}
-                        animate={{ width: i < step ? "100%" : "0%" }}
-                        transition={{ duration: 0.4, ease: "easeInOut" }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={step}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-            className="text-center text-xs text-[var(--neutral-gray)] mt-3"
-          >
-            Step {step + 1} of {STEPS.length} — {STEPS[step].description}
-          </motion.p>
-        </AnimatePresence>
-      </motion.div>
-
-      {/* ── Step Content ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-6 min-h-[320px] relative overflow-hidden"
-      >
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={step}
-            custom={direction}
-            variants={slideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-          >
-            {/* ============================================= */}
-            {/* Step 0: Requestor Information                  */}
-            {/* ============================================= */}
-            {step === 0 && (
-              <div>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Requestor Information
-                </h2>
-                <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Your details are auto-populated from your profile. Please
-                  confirm your division and status.
-                </p>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      label="Name"
-                      name="requestorName"
-                      value={requestorName || user?.displayName || ""}
-                      onChange={() => {}}
-                      disabled
-                    />
-                    <FormField
-                      label="Email"
-                      name="requestorEmail"
-                      type="email"
-                      value={requestorEmail || user?.email || ""}
-                      onChange={() => {}}
-                      disabled
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      label="Staff ID"
-                      name="requestorStaffId"
-                      value={requestorStaffId}
-                      onChange={() => {}}
-                      disabled
-                      placeholder="Auto-populated from profile"
-                    />
-                    <FormField
-                      label="Division/Office"
-                      name="divisionOffice"
-                      value={divisionOffice}
-                      onChange={setDivisionOffice}
-                      placeholder="e.g. Information Technology Division"
-                      required
-                      error={errors.divisionOffice}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      label="Status"
-                      name="requestorStatus"
-                      type="select"
-                      value={requestorStatus}
-                      onChange={setRequestorStatus}
-                      options={REQUESTOR_STATUSES}
-                      placeholder="Select status"
-                      required
-                      error={errors.requestorStatus}
-                    />
-                    <FormField
-                      label="Extension"
-                      name="extension"
-                      value={extension}
-                      onChange={setExtension}
-                      placeholder="e.g. 4521"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ============================================= */}
-            {/* Step 1: Technical Specifications               */}
-            {/* ============================================= */}
-            {step === 1 && (
-              <div>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Technical Specifications
-                </h2>
-                <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Specify the server and storage requirements for your
-                  application.
-                </p>
-                <div className="space-y-6">
-                  {/* Application & Database */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-                      Application Details
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <FormField
-                        label="Application Name"
-                        name="appName"
-                        value={appName}
-                        onChange={setAppName}
-                        placeholder="e.g. Enterprise Resource Planner"
-                        required
-                        error={errors.appName}
-                      />
-                      <FormField
-                        label="Database Name"
-                        name="dbName"
-                        value={dbName}
-                        onChange={setDbName}
-                        placeholder="e.g. erp_production"
-                        required
-                        error={errors.dbName}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Operating System & VLAN */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-                      Environment
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <FormField
-                        label="Operating System"
-                        name="operatingSystem"
-                        type="select"
-                        value={operatingSystem}
-                        onChange={setOperatingSystem}
-                        options={OPERATING_SYSTEMS}
-                        placeholder="Select OS"
-                        required
-                        error={errors.operatingSystem}
-                      />
-                      <FormField
-                        label="VLAN Zone"
-                        name="vlanZone"
-                        type="select"
-                        value={vlanZone}
-                        onChange={setVlanZone}
-                        options={VLAN_ZONES}
-                        placeholder="Select VLAN zone"
-                        required
-                        error={errors.vlanZone}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Server Type -- checkboxes */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-                      Server Type{" "}
-                      <span className="text-[var(--error)] ml-0.5">*</span>
-                    </h3>
-                    {errors.serverType && (
-                      <p className="text-xs text-[var(--error)] mb-2 font-medium">
-                        {errors.serverType}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-3 mt-2">
-                      {SERVER_TYPES.map((st) => {
-                        const isSelected = serverType.includes(st.value);
-                        return (
-                          <button
-                            key={st.value}
-                            type="button"
-                            onClick={() => toggleServerType(st.value)}
-                            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all ${
-                              isSelected
-                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
-                                : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:border-[var(--primary)]/40"
-                            }`}
-                          >
-                            <div
-                              className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                isSelected
-                                  ? "border-[var(--primary)] bg-[var(--primary)]"
-                                  : "border-[var(--border)]"
-                              }`}
-                            >
-                              {isSelected && (
-                                <Check
-                                  size={12}
-                                  strokeWidth={3}
-                                  className="text-white"
-                                />
-                              )}
-                            </div>
-                            {st.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Resource Allocation */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-                      Resource Allocation
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                      <FormField
-                        label="No. of CPUs"
-                        name="vcpuCount"
-                        type="number"
-                        value={vcpuCount}
-                        onChange={setVcpuCount}
-                        placeholder="4"
-                        required
-                        error={errors.vcpuCount}
-                      />
-                      <FormField
-                        label="Memory (GB)"
-                        name="memoryGb"
-                        type="number"
-                        value={memoryGb}
-                        onChange={setMemoryGb}
-                        placeholder="8"
-                        required
-                        error={errors.memoryGb}
-                      />
-                      <FormField
-                        label="No. of Disks"
-                        name="diskCount"
-                        type="number"
-                        value={diskCount}
-                        onChange={setDiskCount}
-                        placeholder="Optional"
-                      />
-                      <FormField
-                        label="Space (GB)"
-                        name="spaceGb"
-                        type="number"
-                        value={spaceGb}
-                        onChange={setSpaceGb}
-                        placeholder="100"
-                        required
-                        error={errors.spaceGb}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Special Requirements */}
-                  <FormField
-                    label="Special Requirements"
-                    name="specialRequirements"
-                    type="textarea"
-                    value={specialRequirements}
-                    onChange={setSpecialRequirements}
-                    placeholder="Any special requirements, software dependencies, network configurations, etc."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ============================================= */}
-            {/* Step 2: Service Impact Analysis                */}
-            {/* ============================================= */}
-            {step === 2 && (
-              <div>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Service Impact Analysis
-                </h2>
-                <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Identify potential risks and mitigation measures for this
-                  server allocation. At least one entry is required.
-                </p>
-
-                {errors.impacts && (
-                  <div className="mb-4 rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/5 px-4 py-3">
-                    <p className="text-sm text-[var(--error)] font-medium">
-                      {errors.impacts}
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  {impacts.map((entry, index) => (
-                    <motion.div
-                      key={entry.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -12 }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/50 p-4"
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+                        isActive
+                          ? "bg-[var(--primary)] text-white shadow-md shadow-[var(--primary)]/25"
+                          : isDone
+                            ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-[var(--surface-1)] text-[var(--neutral-gray)]"
+                      }`}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)]">
-                          Impact Entry #{index + 1}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => removeImpact(entry.id)}
-                          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--error)] transition-colors hover:bg-[var(--error)]/10"
-                        >
-                          <Trash2 size={14} />
-                          Remove
-                        </button>
+                      {isDone && !isActive ? (
+                        <Check size={16} strokeWidth={2.5} />
+                      ) : (
+                        <Icon size={16} />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold truncate ${
+                        isActive ? "text-[var(--primary)]" : isDone ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
+                      }`}>
+                        {s.label}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] truncate">
+                        {s.description}
+                      </p>
+                    </div>
+                    {isDone && !isActive && (
+                      <div className="ml-auto shrink-0">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
                       </div>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Helpful tip */}
+            <div className="mt-4 rounded-xl bg-[var(--surface-1)] p-3">
+              <div className="flex items-start gap-2">
+                <Info size={14} className="text-[var(--text-secondary)] mt-0.5 shrink-0" />
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  {step === 0 && "Your name and email are auto-populated from your profile."}
+                  {step === 1 && "Specify the resources needed. You can select multiple server types."}
+                  {step === 2 && "Add at least one risk entry with category, severity, and mitigation plan."}
+                  {step === 3 && "Provide a detailed justification (min. 100 characters) for the request."}
+                  {step === 4 && "Click any section to go back and edit before submitting."}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.aside>
+
+        {/* ── Main content ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="flex-1 min-w-0"
+        >
+          {/* Mobile stepper */}
+          <div className="lg:hidden mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              {STEPS.map((s, i) => {
+                const isActive = i === step;
+                const isDone = i < step || stepComplete[i];
+                return (
+                  <div key={s.label} className="flex items-center flex-1 last:flex-none">
+                    <button
+                      type="button"
+                      onClick={() => (i <= step || stepComplete[step]) && goTo(i)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                        isActive
+                          ? "bg-[var(--primary)] text-white shadow-md"
+                          : isDone
+                            ? "bg-emerald-100 text-emerald-600"
+                            : "bg-[var(--surface-1)] text-[var(--neutral-gray)]"
+                      }`}
+                    >
+                      {isDone && !isActive ? <Check size={14} strokeWidth={3} /> : i + 1}
+                    </button>
+                    {i < STEPS.length - 1 && (
+                      <div className="flex-1 mx-1.5">
+                        <div className="h-0.5 w-full rounded-full bg-[var(--border)] overflow-hidden">
+                          <motion.div
+                            className="h-full bg-[var(--primary)]"
+                            initial={false}
+                            animate={{ width: i < step ? "100%" : "0%" }}
+                            transition={{ duration: 0.4 }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-center text-xs text-[var(--text-secondary)] mt-2">
+              Step {step + 1}: {STEPS[step].description}
+            </p>
+          </div>
+
+          {/* Step content card */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden">
+            {/* Step header bar */}
+            <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/50 px-6 py-4">
+              <div className="flex items-center gap-3">
+                {(() => { const Icon = STEPS[step].icon; return (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+                    <Icon size={16} />
+                  </div>
+                ); })()}
+                <div>
+                  <h2 className="text-base font-semibold text-[var(--text-primary)]">
+                    {STEPS[step].label}
+                  </h2>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {STEPS[step].description}
+                  </p>
+                </div>
+                <div className="ml-auto hidden sm:flex items-center gap-1.5">
+                  {STEPS.map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        i === step
+                          ? "w-6 bg-[var(--primary)]"
+                          : i < step
+                            ? "w-1.5 bg-[var(--primary)]/40"
+                            : "w-1.5 bg-[var(--border)]"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Step body */}
+            <div className="p-6 min-h-[400px] relative overflow-hidden">
+              <AnimatePresence mode="wait" custom={direction}>
+                <motion.div
+                  key={step}
+                  custom={direction}
+                  variants={slideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                >
+                  {/* ============================================= */}
+                  {/* Step 0: Requestor Information                  */}
+                  {/* ============================================= */}
+                  {step === 0 && (
+                    <div className="space-y-6">
+                      <div className="rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 px-4 py-3 flex items-start gap-3">
+                        <Info size={16} className="text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Your name, email, and staff ID are auto-populated from your profile and cannot be changed here.
+                        </p>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <User size={14} className="text-[var(--text-secondary)]" />
+                          Personal Details
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                          <FormField
+                            label="Full Name"
+                            name="requestorName"
+                            value={requestorName || user?.displayName || ""}
+                            onChange={() => {}}
+                            disabled
+                          />
+                          <FormField
+                            label="Email Address"
+                            name="requestorEmail"
+                            type="email"
+                            value={requestorEmail || user?.email || ""}
+                            onChange={() => {}}
+                            disabled
+                          />
+                          <FormField
+                            label="Staff ID"
+                            name="requestorStaffId"
+                            value={requestorStaffId}
+                            onChange={() => {}}
+                            disabled
+                            placeholder="Auto-populated"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <Network size={14} className="text-[var(--text-secondary)]" />
+                          Organization Details
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                          <FormField
+                            label="Division/Office"
+                            name="divisionOffice"
+                            value={divisionOffice}
+                            onChange={setDivisionOffice}
+                            placeholder="e.g. Information Technology Division"
+                            required
+                            error={errors.divisionOffice}
+                          />
+                          <FormField
+                            label="Status"
+                            name="requestorStatus"
+                            type="select"
+                            value={requestorStatus}
+                            onChange={setRequestorStatus}
+                            options={REQUESTOR_STATUSES}
+                            placeholder="Select status"
+                            required
+                            error={errors.requestorStatus}
+                          />
+                          <FormField
+                            label="Extension"
+                            name="extension"
+                            value={extension}
+                            onChange={setExtension}
+                            placeholder="e.g. 4521"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ============================================= */}
+                  {/* Step 1: Technical Specifications               */}
+                  {/* ============================================= */}
+                  {step === 1 && (
+                    <div className="space-y-6">
+                      {/* Application & Database */}
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <Server size={14} className="text-[var(--text-secondary)]" />
+                          Application Details
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <FormField
+                            label="Application Name"
+                            name="appName"
+                            value={appName}
+                            onChange={setAppName}
+                            placeholder="e.g. Enterprise Resource Planner"
+                            required
+                            error={errors.appName}
+                          />
+                          <FormField
+                            label="Database Name"
+                            name="dbName"
+                            value={dbName}
+                            onChange={setDbName}
+                            placeholder="e.g. erp_production"
+                            required
+                            error={errors.dbName}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Operating System & VLAN */}
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <Network size={14} className="text-[var(--text-secondary)]" />
+                          Environment
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <FormField
+                            label="Operating System"
+                            name="operatingSystem"
+                            type="select"
+                            value={operatingSystem}
+                            onChange={setOperatingSystem}
+                            options={OPERATING_SYSTEMS}
+                            placeholder="Select OS"
+                            required
+                            error={errors.operatingSystem}
+                          />
+                          <FormField
+                            label="VLAN Zone"
+                            name="vlanZone"
+                            type="select"
+                            value={vlanZone}
+                            onChange={setVlanZone}
+                            options={VLAN_ZONES}
+                            placeholder="Select VLAN zone"
+                            required
+                            error={errors.vlanZone}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Server Type -- checkboxes */}
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+                          <HardDrive size={14} className="text-[var(--text-secondary)]" />
+                          Server Type
+                          <span className="text-[var(--error)] ml-0.5">*</span>
+                        </h3>
+                        {errors.serverType && (
+                          <p className="text-xs text-[var(--error)] mb-2 font-medium">
+                            {errors.serverType}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mt-2">
+                          {SERVER_TYPES.map((st) => {
+                            const isSelected = serverType.includes(st.value);
+                            return (
+                              <button
+                                key={st.value}
+                                type="button"
+                                onClick={() => toggleServerType(st.value)}
+                                className={`flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
+                                  isSelected
+                                    ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] shadow-sm shadow-[var(--primary)]/10"
+                                    : "border-[var(--border)] bg-[var(--surface-1)]/50 text-[var(--text-secondary)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]"
+                                }`}
+                              >
+                                <div
+                                  className={`flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all ${
+                                    isSelected
+                                      ? "border-[var(--primary)] bg-[var(--primary)]"
+                                      : "border-[var(--border)]"
+                                  }`}
+                                >
+                                  {isSelected && (
+                                    <Check
+                                      size={12}
+                                      strokeWidth={3}
+                                      className="text-white"
+                                    />
+                                  )}
+                                </div>
+                                {st.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Resource Allocation */}
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <MemoryStick size={14} className="text-[var(--text-secondary)]" />
+                          Resource Allocation
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                          <FormField
+                            label="No. of CPUs"
+                            name="vcpuCount"
+                            type="number"
+                            value={vcpuCount}
+                            onChange={setVcpuCount}
+                            placeholder="4"
+                            required
+                            error={errors.vcpuCount}
+                          />
+                          <FormField
+                            label="Memory (GB)"
+                            name="memoryGb"
+                            type="number"
+                            value={memoryGb}
+                            onChange={setMemoryGb}
+                            placeholder="8"
+                            required
+                            error={errors.memoryGb}
+                          />
+                          <FormField
+                            label="No. of Disks"
+                            name="diskCount"
+                            type="number"
+                            value={diskCount}
+                            onChange={setDiskCount}
+                            placeholder="Optional"
+                          />
+                          <FormField
+                            label="Space (GB)"
+                            name="spaceGb"
+                            type="number"
+                            value={spaceGb}
+                            onChange={setSpaceGb}
+                            placeholder="100"
+                            required
+                            error={errors.spaceGb}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Special Requirements */}
+                      <FormField
+                        label="Special Requirements"
+                        name="specialRequirements"
+                        type="textarea"
+                        value={specialRequirements}
+                        onChange={setSpecialRequirements}
+                        placeholder="Any special requirements, software dependencies, network configurations, etc."
+                        rows={3}
+                      />
+                    </div>
+                  )}
+
+                  {/* ============================================= */}
+                  {/* Step 2: Service Impact Analysis                */}
+                  {/* ============================================= */}
+                  {step === 2 && (
+                    <div className="space-y-5">
+                      {errors.impacts && (
+                        <div className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/5 px-4 py-3">
+                          <p className="text-sm text-[var(--error)] font-medium">
+                            {errors.impacts}
+                          </p>
+                        </div>
+                      )}
 
                       <div className="space-y-4">
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          <FormField
-                            label="Risk Category"
-                            name={`impact_${index}_riskCategory`}
-                            type="select"
-                            value={entry.riskCategory}
-                            onChange={(val) =>
-                              updateImpact(entry.id, "riskCategory", val)
-                            }
-                            options={RISK_CATEGORIES}
-                            placeholder="Select category"
-                            required
-                            error={errors[`impact_${index}_riskCategory`]}
-                          />
-                          <FormField
-                            label="Severity"
-                            name={`impact_${index}_severity`}
-                            type="select"
-                            value={entry.severity}
-                            onChange={(val) =>
-                              updateImpact(entry.id, "severity", val)
-                            }
-                            options={SEVERITY_LEVELS}
-                            placeholder="Select severity"
-                            required
-                            error={errors[`impact_${index}_severity`]}
-                          />
-                        </div>
-                        <FormField
-                          label="Risk Description"
-                          name={`impact_${index}_riskDescription`}
-                          type="textarea"
-                          value={entry.riskDescription}
-                          onChange={(val) =>
-                            updateImpact(entry.id, "riskDescription", val)
-                          }
-                          placeholder="Describe the risk in detail (minimum 50 characters)"
-                          rows={3}
-                          required
-                          error={errors[`impact_${index}_riskDescription`]}
-                          description={`${entry.riskDescription.length}/50 characters minimum`}
-                        />
-                        <FormField
-                          label="Mitigation Measures"
-                          name={`impact_${index}_mitigationMeasures`}
-                          type="textarea"
-                          value={entry.mitigationMeasures}
-                          onChange={(val) =>
-                            updateImpact(
-                              entry.id,
-                              "mitigationMeasures",
-                              val,
-                            )
-                          }
-                          placeholder="Describe the mitigation measures (minimum 50 characters)"
-                          rows={3}
-                          required
-                          error={
-                            errors[`impact_${index}_mitigationMeasures`]
-                          }
-                          description={`${entry.mitigationMeasures.length}/50 characters minimum`}
-                        />
+                        {impacts.map((entry, index) => (
+                          <motion.div
+                            key={entry.id}
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -12 }}
+                            className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 overflow-hidden"
+                          >
+                            <div className="flex items-center justify-between px-4 py-3 bg-[var(--surface-1)]/50 border-b border-[var(--border)]">
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--primary)]/10 text-xs font-bold text-[var(--primary)]">
+                                  {index + 1}
+                                </div>
+                                <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+                                  Impact Entry
+                                </h4>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeImpact(entry.id)}
+                                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--error)] transition-colors hover:bg-[var(--error)]/10"
+                              >
+                                <Trash2 size={13} />
+                                Remove
+                              </button>
+                            </div>
+
+                            <div className="p-4 space-y-4">
+                              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <FormField
+                                  label="Risk Category"
+                                  name={`impact_${index}_riskCategory`}
+                                  type="select"
+                                  value={entry.riskCategory}
+                                  onChange={(val) =>
+                                    updateImpact(entry.id, "riskCategory", val)
+                                  }
+                                  options={RISK_CATEGORIES}
+                                  placeholder="Select category"
+                                  required
+                                  error={errors[`impact_${index}_riskCategory`]}
+                                />
+                                <FormField
+                                  label="Severity"
+                                  name={`impact_${index}_severity`}
+                                  type="select"
+                                  value={entry.severity}
+                                  onChange={(val) =>
+                                    updateImpact(entry.id, "severity", val)
+                                  }
+                                  options={SEVERITY_LEVELS}
+                                  placeholder="Select severity"
+                                  required
+                                  error={errors[`impact_${index}_severity`]}
+                                />
+                              </div>
+                              <FormField
+                                label="Risk Description"
+                                name={`impact_${index}_riskDescription`}
+                                type="textarea"
+                                value={entry.riskDescription}
+                                onChange={(val) =>
+                                  updateImpact(entry.id, "riskDescription", val)
+                                }
+                                placeholder="Describe the risk in detail (minimum 50 characters)"
+                                rows={3}
+                                required
+                                error={errors[`impact_${index}_riskDescription`]}
+                                description={`${entry.riskDescription.length}/50 characters minimum`}
+                              />
+                              <FormField
+                                label="Mitigation Measures"
+                                name={`impact_${index}_mitigationMeasures`}
+                                type="textarea"
+                                value={entry.mitigationMeasures}
+                                onChange={(val) =>
+                                  updateImpact(
+                                    entry.id,
+                                    "mitigationMeasures",
+                                    val,
+                                  )
+                                }
+                                placeholder="Describe the mitigation measures (minimum 50 characters)"
+                                rows={3}
+                                required
+                                error={
+                                  errors[`impact_${index}_mitigationMeasures`]
+                                }
+                                description={`${entry.mitigationMeasures.length}/50 characters minimum`}
+                              />
+                            </div>
+                          </motion.div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={addImpact}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--border)] px-4 py-4 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--primary)]/40 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5"
+                        >
+                          <Plus size={16} />
+                          Add Impact Entry
+                        </button>
                       </div>
-                    </motion.div>
-                  ))}
+                    </div>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={addImpact}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--primary)]/40 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5"
-                  >
-                    <Plus size={16} />
-                    Add Impact Entry
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ============================================= */}
-            {/* Step 3: Justification                          */}
-            {/* ============================================= */}
-            {step === 3 && (
-              <div>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Business Justification
-                </h2>
-                <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Provide a clear business justification for this
-                  server/storage allocation request.
-                </p>
-                <div className="space-y-4">
-                  <FormField
-                    label="Business Justification"
-                    name="justification"
-                    type="textarea"
-                    value={justification}
-                    onChange={setJustification}
-                    placeholder="Provide a detailed justification for the server/storage allocation request. Explain the business need, expected outcomes, and why the requested resources are necessary (minimum 100 characters)."
-                    rows={6}
-                    required
-                    error={errors.justification}
-                    description={`${justification.length}/100 characters minimum`}
-                  />
-
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-                      Current Space Usage
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* ============================================= */}
+                  {/* Step 3: Justification                          */}
+                  {/* ============================================= */}
+                  {step === 3 && (
+                    <div className="space-y-6">
                       <FormField
-                        label="Present Space Allocated (GB)"
-                        name="presentSpaceAllocatedGb"
-                        type="number"
-                        value={presentSpaceAllocatedGb}
-                        onChange={setPresentSpaceAllocatedGb}
-                        placeholder="0"
-                      />
-                      <FormField
-                        label="Present Space In Use (GB)"
-                        name="presentSpaceInUseGb"
-                        type="number"
-                        value={presentSpaceInUseGb}
-                        onChange={setPresentSpaceInUseGb}
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ============================================= */}
-            {/* Step 4: Review & Submit                        */}
-            {/* ============================================= */}
-            {step === 4 && (
-              <div>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
-                  Review &amp; Submit
-                </h2>
-                <p className="text-sm text-[var(--neutral-gray)] mb-5">
-                  Review the details below. Click any section to go back and
-                  edit.
-                </p>
-
-                <div className="space-y-4">
-                  {/* Requestor Information summary */}
-                  <button
-                    type="button"
-                    onClick={() => goTo(0)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Server
-                        size={14}
-                        className="text-[var(--primary)]"
-                      />
-                      <span className="text-xs font-semibold text-[var(--primary)] uppercase tracking-wide">
-                        Requestor Information
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                      <ReviewField
-                        label="Name"
-                        value={
-                          requestorName || user?.displayName || ""
-                        }
-                      />
-                      <ReviewField
-                        label="Email"
-                        value={requestorEmail || user?.email || ""}
-                      />
-                      <ReviewField
-                        label="Staff ID"
-                        value={requestorStaffId}
-                      />
-                      <ReviewField
-                        label="Division/Office"
-                        value={divisionOffice}
-                      />
-                      <ReviewField
-                        label="Status"
-                        value={findLabel(
-                          REQUESTOR_STATUSES,
-                          requestorStatus,
-                        )}
-                      />
-                      <ReviewField label="Extension" value={extension} />
-                    </div>
-                  </button>
-
-                  {/* Technical Specifications summary */}
-                  <button
-                    type="button"
-                    onClick={() => goTo(1)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Server
-                        size={14}
-                        className="text-[var(--primary)]"
-                      />
-                      <span className="text-xs font-semibold text-[var(--primary)] uppercase tracking-wide">
-                        Technical Specifications
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                      <ReviewField label="Application" value={appName} />
-                      <ReviewField label="Database" value={dbName} />
-                      <ReviewField
-                        label="Operating System"
-                        value={findLabel(
-                          OPERATING_SYSTEMS,
-                          operatingSystem,
-                        )}
-                      />
-                      <ReviewField
-                        label="Server Type"
-                        value={
-                          serverType
-                            .map((st) => findLabel(SERVER_TYPES, st))
-                            .join(", ") || "\u2014"
-                        }
-                      />
-                      <ReviewField label="CPUs" value={vcpuCount} />
-                      <ReviewField
-                        label="Memory"
-                        value={`${memoryGb} GB`}
-                      />
-                      <ReviewField
-                        label="Disks"
-                        value={diskCount || "\u2014"}
-                      />
-                      <ReviewField
-                        label="Space"
-                        value={`${spaceGb} GB`}
-                      />
-                      <ReviewField
-                        label="VLAN Zone"
-                        value={findLabel(VLAN_ZONES, vlanZone)}
-                      />
-                    </div>
-                    {specialRequirements && (
-                      <div className="mt-2">
-                        <ReviewField
-                          label="Special Requirements"
-                          value={
-                            specialRequirements.length > 120
-                              ? specialRequirements.slice(0, 120) + "..."
-                              : specialRequirements
-                          }
-                        />
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Service Impact summary */}
-                  <button
-                    type="button"
-                    onClick={() => goTo(2)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Server
-                        size={14}
-                        className="text-[var(--primary)]"
-                      />
-                      <span className="text-xs font-semibold text-[var(--primary)] uppercase tracking-wide">
-                        Service Impact Analysis ({impacts.length}{" "}
-                        {impacts.length === 1 ? "entry" : "entries"})
-                      </span>
-                    </div>
-                    {impacts.map((entry, i) => (
-                      <div
-                        key={entry.id}
-                        className={`${i > 0 ? "mt-3 pt-3 border-t border-[var(--border)]" : ""}`}
-                      >
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                          <ReviewField
-                            label="Risk Category"
-                            value={findLabel(
-                              RISK_CATEGORIES,
-                              entry.riskCategory,
-                            )}
-                          />
-                          <ReviewField
-                            label="Severity"
-                            value={findLabel(
-                              SEVERITY_LEVELS,
-                              entry.severity,
-                            )}
-                          />
-                        </div>
-                        <div className="mt-1">
-                          <ReviewField
-                            label="Risk"
-                            value={
-                              entry.riskDescription.length > 80
-                                ? entry.riskDescription.slice(0, 80) +
-                                  "..."
-                                : entry.riskDescription
-                            }
-                          />
-                        </div>
-                        <div className="mt-1">
-                          <ReviewField
-                            label="Mitigation"
-                            value={
-                              entry.mitigationMeasures.length > 80
-                                ? entry.mitigationMeasures.slice(0, 80) +
-                                  "..."
-                                : entry.mitigationMeasures
-                            }
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </button>
-
-                  {/* Justification summary */}
-                  <button
-                    type="button"
-                    onClick={() => goTo(3)}
-                    className="w-full text-left rounded-xl border border-[var(--border)] p-4 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--surface-1)]/50 group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Server
-                        size={14}
-                        className="text-[var(--primary)]"
-                      />
-                      <span className="text-xs font-semibold text-[var(--primary)] uppercase tracking-wide">
-                        Justification
-                      </span>
-                    </div>
-                    <div className="mb-1">
-                      <ReviewField
                         label="Business Justification"
-                        value={
-                          justification.length > 200
-                            ? justification.slice(0, 200) + "..."
-                            : justification
-                        }
+                        name="justification"
+                        type="textarea"
+                        value={justification}
+                        onChange={setJustification}
+                        placeholder="Provide a detailed justification for the server/storage allocation request. Explain the business need, expected outcomes, and why the requested resources are necessary (minimum 100 characters)."
+                        rows={8}
+                        required
+                        error={errors.justification}
+                        description={`${justification.length}/100 characters minimum`}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                      <ReviewField
-                        label="Space Allocated"
-                        value={`${presentSpaceAllocatedGb} GB`}
-                      />
-                      <ReviewField
-                        label="Space In Use"
-                        value={`${presentSpaceInUseGb} GB`}
-                      />
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </motion.div>
 
-      {/* ── Navigation ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.15 }}
-        className="flex items-center justify-between"
-      >
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                          <HardDrive size={14} className="text-[var(--text-secondary)]" />
+                          Current Space Usage
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <FormField
+                            label="Present Space Allocated (GB)"
+                            name="presentSpaceAllocatedGb"
+                            type="number"
+                            value={presentSpaceAllocatedGb}
+                            onChange={setPresentSpaceAllocatedGb}
+                            placeholder="0"
+                          />
+                          <FormField
+                            label="Present Space In Use (GB)"
+                            name="presentSpaceInUseGb"
+                            type="number"
+                            value={presentSpaceInUseGb}
+                            onChange={setPresentSpaceInUseGb}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        {parseInt(presentSpaceAllocatedGb, 10) > 0 && parseInt(presentSpaceInUseGb, 10) > 0 && (
+                          <div className="mt-3 rounded-xl bg-[var(--surface-1)] p-3">
+                            <div className="flex items-center justify-between text-xs mb-1.5">
+                              <span className="text-[var(--text-secondary)]">Current utilization</span>
+                              <span className="font-semibold text-[var(--text-primary)]">
+                                {Math.round(
+                                  (parseInt(presentSpaceInUseGb, 10) /
+                                    parseInt(presentSpaceAllocatedGb, 10)) *
+                                    100,
+                                )}%
+                              </span>
+                            </div>
+                            <div className="h-2 rounded-full bg-[var(--border)] overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-[var(--primary)] transition-all"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Math.round(
+                                      (parseInt(presentSpaceInUseGb, 10) /
+                                        parseInt(presentSpaceAllocatedGb, 10)) *
+                                        100,
+                                    ),
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ============================================= */}
+                  {/* Step 4: Review & Submit                        */}
+                  {/* ============================================= */}
+                  {step === 4 && (
+                    <div className="space-y-4">
+                      {/* Requestor Information summary */}
+                      <ReviewSection
+                        icon={<User size={14} />}
+                        title="Requestor Information"
+                        onEdit={() => goTo(0)}
+                      >
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                          <ReviewField label="Name" value={requestorName || user?.displayName || ""} />
+                          <ReviewField label="Email" value={requestorEmail || user?.email || ""} />
+                          <ReviewField label="Staff ID" value={requestorStaffId} />
+                          <ReviewField label="Division/Office" value={divisionOffice} />
+                          <ReviewField label="Status" value={findLabel(REQUESTOR_STATUSES, requestorStatus)} />
+                          <ReviewField label="Extension" value={extension} />
+                        </div>
+                      </ReviewSection>
+
+                      {/* Technical Specifications summary */}
+                      <ReviewSection
+                        icon={<Cpu size={14} />}
+                        title="Technical Specifications"
+                        onEdit={() => goTo(1)}
+                      >
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                          <ReviewField label="Application" value={appName} />
+                          <ReviewField label="Database" value={dbName} />
+                          <ReviewField label="Operating System" value={findLabel(OPERATING_SYSTEMS, operatingSystem)} />
+                          <ReviewField label="Server Type" value={serverType.map((st) => findLabel(SERVER_TYPES, st)).join(", ") || "\u2014"} />
+                          <ReviewField label="CPUs" value={vcpuCount} />
+                          <ReviewField label="Memory" value={`${memoryGb} GB`} />
+                          <ReviewField label="Disks" value={diskCount || "\u2014"} />
+                          <ReviewField label="Space" value={`${spaceGb} GB`} />
+                          <ReviewField label="VLAN Zone" value={findLabel(VLAN_ZONES, vlanZone)} />
+                        </div>
+                        {specialRequirements && (
+                          <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                            <ReviewField
+                              label="Special Requirements"
+                              value={specialRequirements.length > 150 ? specialRequirements.slice(0, 150) + "..." : specialRequirements}
+                            />
+                          </div>
+                        )}
+                      </ReviewSection>
+
+                      {/* Service Impact summary */}
+                      <ReviewSection
+                        icon={<Shield size={14} />}
+                        title={`Service Impact Analysis (${impacts.length} ${impacts.length === 1 ? "entry" : "entries"})`}
+                        onEdit={() => goTo(2)}
+                      >
+                        {impacts.map((entry, i) => (
+                          <div
+                            key={entry.id}
+                            className={`${i > 0 ? "mt-3 pt-3 border-t border-[var(--border)]" : ""}`}
+                          >
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                              <ReviewField label="Risk Category" value={findLabel(RISK_CATEGORIES, entry.riskCategory)} />
+                              <ReviewField label="Severity" value={findLabel(SEVERITY_LEVELS, entry.severity)} />
+                            </div>
+                            <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                              <ReviewField label="Risk" value={entry.riskDescription.length > 100 ? entry.riskDescription.slice(0, 100) + "..." : entry.riskDescription} />
+                              <ReviewField label="Mitigation" value={entry.mitigationMeasures.length > 100 ? entry.mitigationMeasures.slice(0, 100) + "..." : entry.mitigationMeasures} />
+                            </div>
+                          </div>
+                        ))}
+                      </ReviewSection>
+
+                      {/* Justification summary */}
+                      <ReviewSection
+                        icon={<FileText size={14} />}
+                        title="Justification"
+                        onEdit={() => goTo(3)}
+                      >
+                        <ReviewField
+                          label="Business Justification"
+                          value={justification.length > 250 ? justification.slice(0, 250) + "..." : justification}
+                        />
+                        <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2">
+                          <ReviewField label="Space Allocated" value={`${presentSpaceAllocatedGb} GB`} />
+                          <ReviewField label="Space In Use" value={`${presentSpaceInUseGb} GB`} />
+                        </div>
+                      </ReviewSection>
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Navigation bar (inside card) */}
+            <div className="border-t border-[var(--border)] bg-[var(--surface-1)]/30 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={
+                    step === 0 ? () => router.push("/dashboard/ssa") : goPrev
+                  }
+                  className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <ArrowLeft size={16} />
+                  {step === 0 ? "Cancel" : "Previous"}
+                </button>
+
+                {isLastStep ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveAsDraft}
+                      disabled={isPending}
+                      className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {createSSARequest.isPending && !submitting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Save size={16} />
+                      )}
+                      Save as Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isPending}
+                      className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-emerald-600/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Check size={16} />
+                      )}
+                      Submit Request
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 hover:shadow-lg hover:shadow-[var(--primary)]/25"
+                  >
+                    Continue
+                    <ArrowRight size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Review section wrapper                                             */
+/* ------------------------------------------------------------------ */
+
+function ReviewSection({
+  icon,
+  title,
+  onEdit,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] transition-colors hover:border-[var(--primary)]/30 group">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--surface-1)]/40 rounded-t-xl">
+        <div className="flex items-center gap-2">
+          <span className="text-[var(--primary)]">{icon}</span>
+          <span className="text-xs font-semibold text-[var(--primary)] uppercase tracking-wide">
+            {title}
+          </span>
+        </div>
         <button
           type="button"
-          onClick={
-            step === 0 ? () => router.push("/dashboard/ssa") : goPrev
-          }
-          className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+          onClick={onEdit}
+          className="text-xs font-medium text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--primary)]"
         >
-          <ArrowLeft size={16} />
-          {step === 0 ? "Cancel" : "Previous"}
+          Edit
         </button>
-
-        <div className="flex items-center gap-1.5">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === step
-                  ? "w-6 bg-[var(--primary)]"
-                  : i < step
-                    ? "w-1.5 bg-[var(--primary)]/40"
-                    : "w-1.5 bg-[var(--border)]"
-              }`}
-            />
-          ))}
-        </div>
-
-        {isLastStep ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSaveAsDraft}
-              disabled={isPending}
-              className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {createSSARequest.isPending && !submitting ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Save size={16} />
-              )}
-              Save as Draft
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isPending}
-              className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 hover:shadow-lg hover:shadow-[var(--primary)]/25 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Check size={16} />
-              )}
-              Submit Request
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={goNext}
-            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 hover:shadow-lg hover:shadow-[var(--primary)]/25"
-          >
-            Continue
-            <ArrowRight size={16} />
-          </button>
-        )}
-      </motion.div>
+      </div>
+      <div className="px-4 py-3">{children}</div>
     </div>
   );
 }

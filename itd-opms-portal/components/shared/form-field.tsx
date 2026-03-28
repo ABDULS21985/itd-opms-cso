@@ -25,7 +25,7 @@ interface FormFieldProps {
   required?: boolean;
   disabled?: boolean;
   rows?: number;
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; group?: string }[];
   className?: string;
 }
 
@@ -79,6 +79,37 @@ export function FormField({
     }
 
     if (type === "select") {
+      const hasGroups = options.some((opt) => opt.group);
+
+      const renderOptions = () => {
+        if (!hasGroups) {
+          return options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ));
+        }
+        const groups: { name: string; items: typeof options }[] = [];
+        for (const opt of options) {
+          const gName = opt.group || "";
+          let g = groups.find((x) => x.name === gName);
+          if (!g) {
+            g = { name: gName, items: [] };
+            groups.push(g);
+          }
+          g.items.push(opt);
+        }
+        return groups.map((g) => (
+          <optgroup key={g.name} label={g.name}>
+            {g.items.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </optgroup>
+        ));
+      };
+
       return (
         <select
           id={id}
@@ -92,11 +123,7 @@ export function FormField({
           className={cn(inputClass, "px-3.5 py-2.5")}
         >
           <option value="">{placeholder || "Select..."}</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
+          {renderOptions()}
         </select>
       );
     }

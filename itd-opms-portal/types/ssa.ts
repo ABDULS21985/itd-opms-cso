@@ -278,10 +278,24 @@ export const VLAN_ZONES = [
 ];
 
 export const REQUESTOR_STATUSES = [
-  { value: "S/S", label: "Senior Staff (S/S)" },
-  { value: "D/S", label: "Deputy Staff (D/S)" },
-  { value: "P/S", label: "Professional Staff (P/S)" },
-  { value: "Contract", label: "Contract" },
+  // Junior & Clerical Cadres
+  { value: "GL.14", label: "Motor Driver & Equivalent – GL 14", group: "Junior & Clerical Cadres" },
+  { value: "GL.13", label: "Clerk & Equivalent – GL 13", group: "Junior & Clerical Cadres" },
+  { value: "GL.11", label: "Senior Clerk & Equivalent – GL 11", group: "Junior & Clerical Cadres" },
+  // Supervisory Cadres
+  { value: "GL.10", label: "Supervisor & Equivalent – GL 10", group: "Supervisory Cadres" },
+  { value: "GL.09", label: "Senior Supervisor II & Equivalent – GL 09", group: "Supervisory Cadres" },
+  { value: "GL.08", label: "Senior Supervisor & Equivalent – GL 08", group: "Supervisory Cadres" },
+  // Management Transition Cadres
+  { value: "GL.07", label: "Assistant Manager & Equivalent – GL 07", group: "Management Transition Cadres" },
+  { value: "GL.06", label: "Deputy Manager – GL 06", group: "Management Transition Cadres" },
+  { value: "GL.05", label: "Manager & Equivalent – GL 05", group: "Management Transition Cadres" },
+  // Senior Management
+  { value: "GL.04", label: "Senior Manager & Equivalent – GL 04", group: "Senior Management" },
+  { value: "GL.39", label: "Principal Manager – GL 39", group: "Senior Management" },
+  { value: "GL.03", label: "Assistant Director – GL 03", group: "Senior Management" },
+  { value: "GL.02", label: "Deputy Director – GL 02", group: "Senior Management" },
+  { value: "GL.01", label: "Director – GL 01", group: "Senior Management" },
 ];
 
 export const ASSESSMENT_OUTCOMES = [
