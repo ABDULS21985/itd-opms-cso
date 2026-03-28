@@ -225,15 +225,42 @@ export function useAssetsByStatus() {
 }
 
 /**
+ * Convert a shorthand time range (e.g. "7d", "30d", "90d", "today") to an
+ * RFC3339 date string the backend expects.
+ */
+function resolveTimeRange(range?: string): string | undefined {
+  if (!range) return undefined;
+  const now = new Date();
+  switch (range) {
+    case "today":
+      now.setHours(0, 0, 0, 0);
+      return now.toISOString();
+    case "7d":
+      now.setDate(now.getDate() - 7);
+      return now.toISOString();
+    case "30d":
+      now.setDate(now.getDate() - 30);
+      return now.toISOString();
+    case "90d":
+      now.setDate(now.getDate() - 90);
+      return now.toISOString();
+    default:
+      // Already RFC3339 or unknown — pass through
+      return range;
+  }
+}
+
+/**
  * GET /reporting/dashboards/charts/sla-compliance - SLA compliance rate.
  */
 export function useSLACompliance(since?: string) {
+  const resolvedSince = resolveTimeRange(since);
   return useQuery({
     queryKey: ["chart-sla-compliance", since],
     queryFn: () =>
       apiClient.get<SLAComplianceRate>(
         "/reporting/dashboards/charts/sla-compliance",
-        { since },
+        { since: resolvedSince },
       ),
   });
 }

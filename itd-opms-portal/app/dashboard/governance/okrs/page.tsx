@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,9 +12,19 @@ import {
   GitBranch,
   ChevronRight,
   ChevronDown,
+  TrendingUp,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
+import {
+  KPIStatCard,
+  ChartCard,
+  DonutChart,
+  GaugeChart,
+  StackedBarChart,
+} from "@/components/dashboard/charts";
 import { useOKRs, useOKRTree } from "@/hooks/use-governance";
 import type { OKR } from "@/types";
 
@@ -150,6 +160,109 @@ function OKRTreeNode({
 type ViewMode = "list" | "tree";
 
 /* ------------------------------------------------------------------ */
+/*  Analytics Helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+function computeOKRStats(okrs: OKR[]) {
+  const total = okrs.length;
+  if (total === 0)
+    return { total: 0, active: 0, completed: 0, avgProgress: 0, completionRate: 0, atRisk: 0, needsAttention: 0 };
+  const active = okrs.filter((o) => o.status === "active").length;
+  const completed = okrs.filter((o) => o.status === "completed").length;
+  const avgProgress = Math.round(okrs.reduce((s, o) => s + (o.progressPct ?? 0), 0) / total);
+  const completionRate = Math.round((completed / total) * 100);
+  const atRisk = okrs.filter((o) => o.status === "active" && (o.progressPct ?? 0) < 40).length;
+  const needsAttention = okrs.filter((o) => o.status === "active" && (o.progressPct ?? 0) >= 40 && (o.progressPct ?? 0) < 70).length;
+  return { total, active, completed, avgProgress, completionRate, atRisk, needsAttention };
+}
+
+function computeProgressDistribution(okrs: OKR[]) {
+  const bands = { onTrack: 0, attention: 0, risk: 0 };
+  for (const o of okrs) {
+    const p = o.progressPct ?? 0;
+    if (p >= 70) bands.onTrack++;
+    else if (p >= 40) bands.attention++;
+    else bands.risk++;
+  }
+  return [
+    { name: "On Track (70-100%)", value: bands.onTrack, color: "#22C55E" },
+    { name: "Needs Attention (40-69%)", value: bands.attention, color: "#F59E0B" },
+    { name: "At Risk (0-39%)", value: bands.risk, color: "#EF4444" },
+  ];
+}
+
+function computeStatusBreakdown(okrs: OKR[]) {
+  const STATUS_COLORS: Record<string, string> = {
+    draft: "#9CA3AF", active: "#3B82F6", completed: "#22C55E", cancelled: "#EF4444",
+  };
+  const counts: Record<string, number> = {};
+  for (const o of okrs) {
+    const s = o.status || "draft";
+    counts[s] = (counts[s] || 0) + 1;
+  }
+  return Object.entries(counts).map(([name, value]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    value,
+    color: STATUS_COLORS[name] || "#9CA3AF",
+  }));
+}
+
+function computeLevelStatusData(okrs: OKR[]) {
+  const levelMap: Record<string, Record<string, number>> = {};
+  const allStatuses = new Set<string>();
+  for (const o of okrs) {
+    const level = o.level || "unknown";
+    const status = o.status || "draft";
+    allStatuses.add(status);
+    if (!levelMap[level]) levelMap[level] = {};
+    levelMap[level][status] = (levelMap[level][status] || 0) + 1;
+  }
+  const categories = Array.from(allStatuses).sort();
+  const data = Object.entries(levelMap).map(([name, statuses]) => {
+    const row: Record<string, string | number> = { name: name.charAt(0).toUpperCase() + name.slice(1) };
+    for (const s of categories) row[s] = statuses[s] || 0;
+    return row;
+  });
+  return { data, categories };
+}
+
+function computeLevelProgress(okrs: OKR[]) {
+  const levelMap: Record<string, { sum: number; count: number }> = {};
+  for (const o of okrs) {
+    const level = o.level || "unknown";
+    if (!levelMap[level]) levelMap[level] = { sum: 0, count: 0 };
+    levelMap[level].sum += o.progressPct ?? 0;
+    levelMap[level].count++;
+  }
+  return Object.entries(levelMap).map(([level, { sum, count }]) => ({
+    level: level.charAt(0).toUpperCase() + level.slice(1),
+    avgProgress: Math.round(sum / count),
+    count,
+  }));
+}
+
+function computePeriodData(okrs: OKR[]) {
+  const periodMap: Record<string, Record<string, number>> = {};
+  const allStatuses = new Set<string>();
+  for (const o of okrs) {
+    const period = o.period || "Unknown";
+    const status = o.status || "draft";
+    allStatuses.add(status);
+    if (!periodMap[period]) periodMap[period] = {};
+    periodMap[period][status] = (periodMap[period][status] || 0) + 1;
+  }
+  const categories = Array.from(allStatuses).sort();
+  const data = Object.entries(periodMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, statuses]) => {
+      const row: Record<string, string | number> = { name };
+      for (const s of categories) row[s] = statuses[s] || 0;
+      return row;
+    });
+  return { data, categories };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -176,6 +289,17 @@ export default function OKRListPage() {
     statusFilter,
   );
   const { data: _treeData, isLoading: _treeLoading } = useOKRTree(undefined);
+
+  /* Analytics: fetch all OKRs (unfiltered) for dashboard computations */
+  const { data: allOkrsData, isLoading: analyticsLoading } = useOKRs(1, 200);
+  const allOkrs: OKR[] = allOkrsData?.data ?? [];
+
+  const stats = useMemo(() => computeOKRStats(allOkrs), [allOkrs]);
+  const progressDistData = useMemo(() => computeProgressDistribution(allOkrs), [allOkrs]);
+  const statusData = useMemo(() => computeStatusBreakdown(allOkrs), [allOkrs]);
+  const levelStatusData = useMemo(() => computeLevelStatusData(allOkrs), [allOkrs]);
+  const levelProgress = useMemo(() => computeLevelProgress(allOkrs), [allOkrs]);
+  const periodData = useMemo(() => computePeriodData(allOkrs), [allOkrs]);
 
   const okrs = okrsData?.data ?? [];
   const meta = okrsData?.meta;
@@ -283,11 +407,182 @@ export default function OKRListPage() {
         </Link>
       </motion.div>
 
+      {/* ── Analytics Dashboard ── */}
+
+      {/* KPI Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KPIStatCard
+          label="Total OKRs"
+          value={stats.total}
+          icon={Target}
+          color="#1B7340"
+          bgColor="rgba(27, 115, 64, 0.1)"
+          isLoading={analyticsLoading}
+          index={0}
+          subtitle={`${stats.active} active`}
+          hint="Total Objectives across all levels and periods."
+        />
+        <KPIStatCard
+          label="Avg Progress"
+          value={stats.avgProgress}
+          suffix="%"
+          icon={TrendingUp}
+          color="#3B82F6"
+          bgColor="rgba(59, 130, 246, 0.1)"
+          isLoading={analyticsLoading}
+          index={1}
+          subtitle={stats.avgProgress >= 70 ? "On track" : stats.avgProgress >= 40 ? "Needs attention" : "At risk"}
+          hint="Average progress percentage across all OKRs."
+        />
+        <KPIStatCard
+          label="Completion Rate"
+          value={stats.completionRate}
+          suffix="%"
+          icon={CheckCircle2}
+          color="#22C55E"
+          bgColor="rgba(34, 197, 94, 0.1)"
+          isLoading={analyticsLoading}
+          index={2}
+          subtitle={`${stats.completed} of ${stats.total} completed`}
+          hint="Percentage of OKRs with completed status."
+        />
+        <KPIStatCard
+          label="At Risk"
+          value={stats.atRisk}
+          icon={AlertTriangle}
+          color="#EF4444"
+          bgColor="rgba(239, 68, 68, 0.1)"
+          isLoading={analyticsLoading}
+          index={3}
+          subtitle={`${stats.needsAttention} need attention`}
+          hint="Active OKRs with progress below 40%."
+        />
+      </div>
+
+      {/* Chart Row 1: Progress Distribution + Status Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard
+          title="Progress Distribution"
+          subtitle="OKRs grouped by progress health"
+          delay={0.15}
+          isLoading={analyticsLoading}
+          isEmpty={allOkrs.length === 0}
+          expandable
+        >
+          <DonutChart
+            data={progressDistData}
+            height={240}
+            innerRadius={50}
+            outerRadius={80}
+            centerLabel="OKRs"
+            centerValue={stats.total}
+            showLegend
+          />
+        </ChartCard>
+
+        <ChartCard
+          title="Status Breakdown"
+          subtitle="OKRs by current status"
+          delay={0.2}
+          isLoading={analyticsLoading}
+          isEmpty={allOkrs.length === 0}
+          expandable
+        >
+          <DonutChart
+            data={statusData}
+            height={240}
+            innerRadius={50}
+            outerRadius={80}
+            centerLabel="Status"
+            centerValue={stats.total}
+            showLegend
+          />
+        </ChartCard>
+      </div>
+
+      {/* Chart Row 2: By Level + Level Progress + Period */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ChartCard
+          title="OKRs by Level"
+          subtitle="Distribution across organizational levels"
+          delay={0.25}
+          isLoading={analyticsLoading}
+          isEmpty={allOkrs.length === 0}
+          expandable
+        >
+          <StackedBarChart
+            data={levelStatusData.data}
+            categories={levelStatusData.categories}
+            height={220}
+            layout="vertical"
+            colors={["#3B82F6", "#EF4444", "#22C55E", "#9CA3AF"]}
+            showLegend
+          />
+        </ChartCard>
+
+        <ChartCard
+          title="Avg Progress by Level"
+          subtitle="Average completion per organizational level"
+          delay={0.3}
+          isLoading={analyticsLoading}
+          isEmpty={allOkrs.length === 0}
+        >
+          <div className="flex items-center justify-around flex-wrap gap-4 py-2">
+            {levelProgress.map((lp, i) => (
+              <div key={lp.level} className="flex flex-col items-center">
+                <GaugeChart
+                  value={lp.avgProgress}
+                  size={90}
+                  label={lp.level}
+                  delay={0.35 + i * 0.05}
+                  suffix="%"
+                  showValue
+                />
+                <span className="text-[10px] text-[var(--text-muted)] mt-1">
+                  {lp.count} OKR{lp.count !== 1 ? "s" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+
+        <ChartCard
+          title="Period Comparison"
+          subtitle="OKRs across different periods"
+          delay={0.35}
+          isLoading={analyticsLoading}
+          isEmpty={allOkrs.length === 0}
+          expandable
+        >
+          <StackedBarChart
+            data={periodData.data}
+            categories={periodData.categories}
+            height={220}
+            colors={["#3B82F6", "#EF4444", "#22C55E", "#9CA3AF"]}
+            showLegend
+          />
+        </ChartCard>
+      </div>
+
+      {/* Section divider */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.4 }}
+        className="flex items-center gap-3"
+      >
+        <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+        <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+          All Objectives
+        </span>
+        <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+      </motion.div>
+
       {/* Controls: View toggle + Filters */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
+        transition={{ duration: 0.4, delay: 0.45 }}
         className="flex flex-wrap items-center gap-3"
       >
         {/* View toggle */}
@@ -383,7 +678,7 @@ export default function OKRListPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
       >
         {viewMode === "list" ? (
           <DataTable
