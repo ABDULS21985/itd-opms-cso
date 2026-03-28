@@ -66,6 +66,10 @@ func NewHandler(
 // Routes mounts all System sub-routes on the given router, split into
 // read-only (system.view) and admin (system.manage) permission groups.
 func (h *Handler) Routes(r chi.Router) {
+	// Cross-module endpoints — accessible to any authenticated user.
+	// User search (autocomplete) is used by pickers across all modules.
+	r.Get("/users/search", h.user.SearchUsers)
+
 	// Read-only endpoints — requires system.view (SR-004)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequirePermission("system.view"))

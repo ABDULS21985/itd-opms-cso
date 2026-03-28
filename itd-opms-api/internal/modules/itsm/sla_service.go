@@ -641,8 +641,8 @@ func (s *SLAService) GetComplianceStats(ctx context.Context, priority *string) (
 	query := `
 		SELECT
 			COUNT(*) AS total_tickets,
-			COUNT(*) FILTER (WHERE response_sla_met = true) AS response_met,
-			COUNT(*) FILTER (WHERE resolution_sla_met = true) AS resolution_met
+			COUNT(*) FILTER (WHERE sla_response_met = true) AS response_met,
+			COUNT(*) FILTER (WHERE sla_resolution_met = true) AS resolution_met
 		FROM tickets
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR priority = $2)`
