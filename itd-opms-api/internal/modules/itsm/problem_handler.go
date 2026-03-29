@@ -209,6 +209,44 @@ func (h *ProblemHandler) LinkIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
+// Problem Transition Handler
+// ──────────────────────────────────────────────
+
+// TransitionProblem handles POST /{id}/transition — transitions problem status.
+func (h *ProblemHandler) TransitionProblem(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid problem ID")
+		return
+	}
+
+	var req TransitionProblemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.TargetStatus == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Target status is required")
+		return
+	}
+
+	problem, err := h.svc.TransitionProblem(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, problem, nil)
+}
+
+// ──────────────────────────────────────────────
 // Known Error Handlers
 // ──────────────────────────────────────────────
 

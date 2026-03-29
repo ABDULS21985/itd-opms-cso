@@ -3,15 +3,16 @@ package itsm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -24,13 +25,15 @@ import (
 type ProblemService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	js       nats.JetStreamContext
 }
 
 // NewProblemService creates a new ProblemService.
-func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *ProblemService {
+func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStreamContext) *ProblemService {
 	return &ProblemService{
 		pool:     pool,
 		auditSvc: auditSvc,
+		js:       js,
 	}
 }
 
@@ -347,11 +350,9 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 		return Problem{}, err
 	}
 
-	// Validate transition against state machine.
-	if !IsValidProblemTransition(existing.Status, req.TargetStatus) {
-		return Problem{}, apperrors.BadRequest(
-			fmt.Sprintf("invalid problem transition from '%s' to '%s'", existing.Status, req.TargetStatus),
-		)
+	// Validate transition against workflow state machine.
+	if err := workflow.ProblemStateMachine.Validate(existing.Status, req.TargetStatus); err != nil {
+		return Problem{}, apperrors.BadRequest(err.Error())
 	}
 
 	now := time.Now().UTC()
@@ -412,6 +413,31 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 		Changes:    changes,
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	// Publish NATS event.
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"problemId":      id,
+			"problemNumber":  p.ProblemNumber,
+			"title":          p.Title,
+			"previousStatus": existing.Status,
+			"newStatus":      req.TargetStatus,
+			"comment":        req.Comment,
+			"actorId":        auth.UserID,
+			"ownerId":        p.OwnerID,
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type":       "itsm.problem.transitioned",
+			"tenantId":   auth.TenantID,
+			"actorId":    auth.UserID,
+			"entityType": "problem",
+			"entityId":   id,
+			"data":       json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.problem.transitioned", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish problem transition event", "error", pubErr)
+		}
 	}
 
 	return p, nil

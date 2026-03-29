@@ -280,6 +280,11 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      9,
 		},
+		"itsm.problem.transitioned": {
+			EmailTemplate: "problem_transition",
+			Channels:      []string{"in_app"},
+			Priority:      5,
+		},
 	}
 
 	return configs[eventType]

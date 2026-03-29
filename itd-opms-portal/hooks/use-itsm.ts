@@ -974,6 +974,39 @@ export function useDeleteProblem() {
 }
 
 /**
+ * POST /itsm/problems/{id}/transition - transition problem status.
+ */
+export function useTransitionProblem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      targetStatus,
+      comment,
+    }: {
+      id: string;
+      targetStatus: string;
+      comment?: string;
+    }) =>
+      apiClient.post(`/itsm/problems/${id}/transition`, {
+        targetStatus,
+        comment,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
+      queryClient.invalidateQueries({
+        queryKey: ["itsm-problem", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["known-errors"] });
+      toast.success("Problem status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition problem");
+    },
+  });
+}
+
+/**
  * POST /itsm/problems/{id}/link-incident - link an incident to a problem.
  */
 export function useLinkIncidentToProblem() {

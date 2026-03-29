@@ -195,7 +195,7 @@ func (s *Server) Setup() {
 	governanceHandler := governance.NewHandler(s.pool, auditService)
 	peopleHandler := people.NewHandler(s.pool, auditService)
 	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
-	itsmHandler := itsm.NewHandler(s.pool, auditService)
+	itsmHandler := itsm.NewHandler(s.pool, auditService, s.js)
 	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)

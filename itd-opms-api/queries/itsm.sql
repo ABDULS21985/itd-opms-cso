@@ -464,6 +464,13 @@ UPDATE problems
 SET linked_incident_ids = array_append(linked_incident_ids, $3)
 WHERE id = $1 AND tenant_id = $2;
 
+-- name: TransitionProblemStatus :one
+UPDATE problems
+SET status = $3,
+    updated_at = now()
+WHERE id = $1 AND tenant_id = $2
+RETURNING *;
+
 -- ──────────────────────────────────────────────
 -- Known Errors
 -- ──────────────────────────────────────────────

@@ -697,29 +697,4 @@ func IsValidTicketTransition(from, to string) bool {
 	return false
 }
 
-// ──────────────────────────────────────────────
-// Problem status transition map
-// ──────────────────────────────────────────────
-
-// validProblemTransitions defines the allowed state machine transitions for problems.
-var validProblemTransitions = map[string][]string{
-	ProblemStatusLogged:              {ProblemStatusInvestigating},
-	ProblemStatusInvestigating:       {ProblemStatusRootCauseIdentified, ProblemStatusKnownError},
-	ProblemStatusRootCauseIdentified: {ProblemStatusKnownError, ProblemStatusResolved},
-	ProblemStatusKnownError:          {ProblemStatusResolved},
-	ProblemStatusResolved:            {ProblemStatusInvestigating}, // reopen
-}
-
-// IsValidProblemTransition checks whether a problem status transition from -> to is allowed.
-func IsValidProblemTransition(from, to string) bool {
-	allowed, ok := validProblemTransitions[from]
-	if !ok {
-		return false
-	}
-	for _, s := range allowed {
-		if s == to {
-			return true
-		}
-	}
-	return false
-}
+// Problem status transitions are enforced via workflow.ProblemStateMachine.

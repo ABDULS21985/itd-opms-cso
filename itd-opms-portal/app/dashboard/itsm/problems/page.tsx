@@ -11,11 +11,14 @@ import {
   CheckCircle2,
   ClipboardList,
   ExternalLink,
+  Eye,
   FileText,
   Link as LinkIcon,
   Loader2,
   Plus,
+  RotateCcw,
   Save,
+  Search,
   Sparkles,
   X,
   type LucideIcon,
@@ -28,6 +31,7 @@ import {
   useCreateProblem,
   useKnownErrors,
   useProblems,
+  useTransitionProblem,
 } from "@/hooks/use-itsm";
 import type { ITSMProblem, KnownError } from "@/types";
 
@@ -114,6 +118,29 @@ const STATUS_SUMMARY: Record<
     bgColor: "rgba(27, 115, 64, 0.12)",
     description: "Problem record has reached closure.",
   },
+};
+
+const PROBLEM_TRANSITIONS: Record<
+  string,
+  { value: string; label: string; icon: LucideIcon; accent: string }[]
+> = {
+  logged: [
+    { value: "investigating", label: "Investigate", icon: Search, accent: "#2563EB" },
+  ],
+  investigating: [
+    { value: "root_cause_identified", label: "Root Cause Found", icon: Eye, accent: "#D97706" },
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+  ],
+  root_cause_identified: [
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  known_error: [
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  resolved: [
+    { value: "investigating", label: "Reopen", icon: RotateCcw, accent: "#2563EB" },
+  ],
 };
 
 function clampPercent(value: number) {
@@ -442,8 +469,10 @@ function ProblemCard({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const transitionProblem = useTransitionProblem();
   const statusMeta = getStatusMeta(problem.status);
   const incidentCount = problem.linkedIncidentIds.length;
+  const transitions = PROBLEM_TRANSITIONS[problem.status] ?? [];
 
   const highlights = [
     {
@@ -545,21 +574,51 @@ function ProblemCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-        <div className="max-w-2xl text-sm text-[var(--text-secondary)]">
-          {statusMeta.description}
+        <div className="flex flex-wrap items-center gap-2">
+          {transitions.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                disabled={transitionProblem.isPending}
+                onClick={() =>
+                  transitionProblem.mutate({
+                    id: problem.id,
+                    targetStatus: t.value,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                style={{
+                  borderColor: `${t.accent}40`,
+                  backgroundColor: `${t.accent}10`,
+                  color: t.accent,
+                }}
+              >
+                {transitionProblem.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Icon size={13} />
+                )}
+                {t.label}
+              </button>
+            );
+          })}
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
-          style={{ borderColor: "var(--border)" }}
-        >
-          {expanded ? "Hide diagnostics" : "Expand diagnostics"}
-          <ArrowRight
-            size={15}
-            className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-          />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {expanded ? "Hide diagnostics" : "Expand diagnostics"}
+            <ArrowRight
+              size={15}
+              className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+            />
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>

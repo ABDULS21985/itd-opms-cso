@@ -469,14 +469,16 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 
 	now := time.Now().UTC()
 
-	// Handle SLA pause/resume for pending_customer transitions.
+	// Handle SLA pause/resume for pending_customer and pending_vendor transitions.
 	var slaPausedAt *time.Time
 	slaPausedDurationMinutes := existing.SLAPausedDurationMinutes
+	isPending := req.Status == "pending_customer" || req.Status == "pending_vendor"
+	wasPending := existing.Status == "pending_customer" || existing.Status == "pending_vendor"
 
-	if req.Status == "pending_customer" {
+	if isPending {
 		// Pause SLA clock.
 		slaPausedAt = &now
-	} else if existing.Status == "pending_customer" && existing.SLAPausedAt != nil {
+	} else if wasPending && existing.SLAPausedAt != nil {
 		// Resume SLA clock — calculate how long it was paused.
 		pausedMinutes := int(math.Round(now.Sub(*existing.SLAPausedAt).Minutes()))
 		slaPausedDurationMinutes += pausedMinutes

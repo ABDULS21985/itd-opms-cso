@@ -3,6 +3,7 @@ package itsm
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 )
@@ -21,12 +22,12 @@ type Handler struct {
 }
 
 // NewHandler creates a new ITSM Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStreamContext) *Handler {
 	catalogSvc := NewCatalogService(pool, auditSvc)
 	catalogSearchSvc := NewCatalogSearchService(pool)
 	ticketSvc := NewTicketService(pool, auditSvc)
 	slaSvc := NewSLAService(pool, auditSvc)
-	problemSvc := NewProblemService(pool, auditSvc)
+	problemSvc := NewProblemService(pool, auditSvc, js)
 	queueSvc := NewQueueService(pool, auditSvc)
 	requestSvc := NewRequestService(pool, auditSvc)
 
