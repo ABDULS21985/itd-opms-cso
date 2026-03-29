@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useMemo, useEffect, useRef } from "react";
+import { use, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,7 +22,6 @@ import {
   Pause,
   Link as LinkIcon,
   Tag,
-  User,
   Users,
   Layers,
   Hash,
@@ -532,23 +531,23 @@ function DetailCard({
         }}
       />
       <div className="relative flex items-start gap-3">
-      <div
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-        style={{ backgroundColor: accent ? `${accent}15` : "var(--surface-2)" }}
-      >
-        <Icon
-          size={15}
-          style={{ color: accent || "var(--neutral-gray)" }}
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
-          {label}
-        </p>
-        <p className="text-sm font-medium text-[var(--text-primary)] truncate mt-0.5">
-          {value}
-        </p>
-      </div>
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: accent ? `${accent}15` : "var(--surface-2)" }}
+        >
+          <Icon
+            size={15}
+            style={{ color: accent || "var(--neutral-gray)" }}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
+            {label}
+          </p>
+          <p className="mt-0.5 truncate text-sm font-medium text-[var(--text-primary)]">
+            {value}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -1170,6 +1169,68 @@ export default function TicketDetailPage({
     });
   }
 
+  const cardSurface =
+    "rounded-[1.7rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  const softSurface =
+    "rounded-[1.35rem] border border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  const heroSummary =
+    ticket.description.length > 230
+      ? `${ticket.description.slice(0, 227)}...`
+      : ticket.description;
+  const linkedContextCount =
+    (ticket.linkedProblemId ? 1 : 0) +
+    ticket.linkedAssetIds.length +
+    ticket.relatedTicketIds.length;
+  const internalCommentCount = comments.filter((comment) => comment.isInternal).length;
+  const publicCommentCount = comments.length - internalCommentCount;
+  const responseSignal = getSlaSignal({
+    target: ticket.slaResponseTarget,
+    met: ticket.slaResponseMet,
+    isPaused: !!ticket.slaPausedAt,
+    slaPausedDurationMinutes: ticket.slaPausedDurationMinutes,
+  });
+  const resolutionSignal = getSlaSignal({
+    target: ticket.slaResolutionTarget,
+    met: ticket.slaResolutionMet,
+    isPaused: !!ticket.slaPausedAt,
+    slaPausedDurationMinutes: ticket.slaPausedDurationMinutes,
+  });
+  const currentOwnerName =
+    ticket.assigneeName ||
+    (ticket.assigneeId ? resolveUser(ticket.assigneeId) : "Unassigned");
+  const currentOwnerMeta = formatActorMeta(
+    ticket.assigneeId,
+    ticket.assigneeDepartment,
+  );
+  const latestActivityActor =
+    latestTimelineItem?.kind === "created"
+      ? ticket.reporterName || resolveUser(ticket.reporterId)
+      : resolveUser(getTimelineActorId(latestTimelineItem));
+  const latestActivityMeta =
+    latestTimelineItem?.kind === "created"
+      ? formatActorMeta(ticket.reporterId, ticket.reporterDepartment)
+      : formatActorMeta(getTimelineActorId(latestTimelineItem));
+  const heroMetaItems = [
+    {
+      icon: Layers,
+      label: ticket.type.replace(/_/g, " "),
+    },
+    {
+      icon: Megaphone,
+      label: ticket.channel,
+    },
+    {
+      icon: Calendar,
+      label: getAge(ticket.createdAt),
+    },
+    ticket.category
+      ? {
+          icon: Inbox,
+          label: `${ticket.category}${ticket.subcategory ? ` / ${ticket.subcategory}` : ""}`,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ icon: React.ElementType; label: string }>;
+
   const priorityInfo = PRIORITY_META[ticket.priority] ?? {
     bg: "var(--surface-2)",
     text: "var(--neutral-gray)",
@@ -1260,180 +1321,251 @@ export default function TicketDetailPage({
     { key: "sla" as const, label: "SLA", icon: Shield },
   ];
 
-  const isPendingStatus =
-    ticket.status === "pending_customer" || ticket.status === "pending_vendor";
-
   return (
-    <div className="mx-auto max-w-7xl space-y-0">
-      {/* ============================================================ */}
-      {/*  Priority Accent Bar + Back Navigation                       */}
-      {/* ============================================================ */}
+    <div className="relative mx-auto max-w-[96rem] space-y-6 pb-10">
+      <div className="pointer-events-none absolute inset-x-10 top-4 h-72 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.14),_transparent_64%)] blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-56 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.12),_transparent_68%)] blur-3xl" />
+
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
+        className="relative overflow-hidden rounded-[2.2rem] border border-[rgba(15,23,42,0.08)] bg-[linear-gradient(135deg,rgba(3,29,59,0.98),rgba(14,60,130,0.94)_48%,rgba(37,99,235,0.86))] p-6 shadow-[0_32px_90px_rgba(15,23,42,0.14)] sm:p-8"
       >
-        <div
-          className={`rounded-t-2xl bg-gradient-to-r ${priorityInfo.gradient} px-5 pt-4 pb-3`}
-        >
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/itsm/tickets")}
-            className="flex items-center gap-1.5 text-xs font-medium text-[var(--neutral-gray)] transition-colors hover:text-[var(--text-primary)]"
-          >
-            <ArrowLeft size={14} />
-            All Tickets
-          </button>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.14),_transparent_22%),radial-gradient(circle_at_16%_18%,_rgba(255,255,255,0.08),_transparent_24%)]" />
+        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(96,165,250,0.28),_transparent_68%)]" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.2),_transparent_68%)]" />
+
+        <div className="relative grid gap-8 xl:grid-cols-[1.12fr_0.88fr]">
+          <div className="max-w-3xl">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/itsm/tickets")}
+              className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/78 backdrop-blur-xl transition-all hover:border-white/22 hover:bg-white/14"
+            >
+              <ArrowLeft size={13} />
+              All tickets
+            </button>
+
+            <div className="mt-6 flex items-start gap-4">
+              <div className={`flex h-16 w-16 items-center justify-center rounded-[1.35rem] border border-white/12 bg-white/10 shadow-lg shadow-blue-950/20 ring-1 ${priorityInfo.ring}`}>
+                <Radio className="h-7 w-7 text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={copyTicketNumber}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 font-mono text-xs text-white/82 transition-colors hover:text-white"
+                    title="Copy ticket number"
+                  >
+                    <Hash size={12} />
+                    {ticket.ticketNumber}
+                    {copiedId ? (
+                      <CheckCircle size={12} className="text-emerald-300" />
+                    ) : (
+                      <Copy size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                    )}
+                  </button>
+                  <span
+                    className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold"
+                    style={{
+                      backgroundColor: priorityInfo.bg,
+                      color: priorityInfo.text,
+                    }}
+                  >
+                    {priorityInfo.label}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-white/14 bg-white/10 px-3 py-1 text-[11px] font-semibold capitalize text-white/88">
+                    {ticket.status.replace(/_/g, " ")}
+                  </span>
+                  {ticket.isMajorIncident && (
+                    <motion.span
+                      className="inline-flex items-center gap-1 rounded-full border border-red-300/25 bg-red-500/15 px-3 py-1 text-[11px] font-bold uppercase text-red-100"
+                      animate={{ scale: [1, 1.03, 1] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                    >
+                      <AlertTriangle size={11} />
+                      Major Incident
+                    </motion.span>
+                  )}
+                </div>
+
+                <h1 className="mt-4 text-3xl font-bold tracking-[-0.045em] text-white sm:text-[2.7rem]">
+                  {ticket.title}
+                </h1>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-100/78 sm:text-base">
+                  {heroSummary}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {heroMetaItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={`${item.label}`}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3.5 py-2 text-xs font-medium tracking-[0.08em] text-white/82"
+                  >
+                    <Icon size={13} />
+                    {item.label}
+                  </div>
+                );
+              })}
+            </div>
+
+            {canManage && (
+              <div className="mt-7 flex flex-wrap items-center gap-2.5">
+                {transitions.map((t) => {
+                  const TIcon = t.icon;
+                  let btnClass =
+                    "inline-flex items-center gap-1.5 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all hover:border-white/28 hover:bg-white/14 disabled:opacity-50";
+                  if (t.variant === "primary") {
+                    btnClass =
+                      "inline-flex items-center gap-1.5 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#14386e] transition-all hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50";
+                  }
+                  if (t.variant === "success") {
+                    btnClass =
+                      "inline-flex items-center gap-1.5 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50";
+                  }
+                  if (t.variant === "danger") {
+                    btnClass =
+                      "inline-flex items-center gap-1.5 rounded-2xl border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm font-semibold text-red-50 transition-all hover:bg-red-500/18 disabled:opacity-50";
+                  }
+
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      disabled={isActing}
+                      onClick={() => handleTransition(t.value)}
+                      className={btnClass}
+                    >
+                      {TIcon && <TIcon size={16} />}
+                      {t.label}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  disabled={isActing}
+                  onClick={() => setShowAssignForm((f) => !f)}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all hover:border-white/28 hover:bg-white/14 disabled:opacity-50"
+                >
+                  <UserPlus size={16} />
+                  Assign
+                </button>
+
+                {!ticket.isMajorIncident &&
+                  ticket.type === "incident" &&
+                  ticket.status !== "closed" &&
+                  ticket.status !== "cancelled" && (
+                    <button
+                      type="button"
+                      disabled={isActing}
+                      onClick={handleDeclareMajor}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm font-semibold text-red-50 transition-all hover:bg-red-500/18 disabled:opacity-50"
+                    >
+                      <AlertTriangle size={16} />
+                      Declare Major
+                    </button>
+                  )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <MetricTile
+              icon={Timer}
+              label="Response clock"
+              value={responseSignal.label}
+              helper={responseSignal.helper}
+              accent={responseSignal.color}
+              inverted
+            />
+            <MetricTile
+              icon={Gauge}
+              label="Resolution clock"
+              value={resolutionSignal.label}
+              helper={resolutionSignal.helper}
+              accent={resolutionSignal.color}
+              inverted
+            />
+            <MetricTile
+              icon={Users}
+              label="Current owner"
+              value={currentOwnerName}
+              helper={currentOwnerMeta || "No current assignee on this ticket."}
+              accent="#60A5FA"
+              inverted
+            />
+            <MetricTile
+              icon={TrendingUp}
+              label="Latest activity"
+              value={latestActivityActor}
+              helper={latestActivityMeta || `${timeline.length} activity events recorded.`}
+              accent="#34D399"
+              inverted
+            />
+          </div>
+        </div>
+
+        <div className="relative mt-8 rounded-[1.7rem] border border-white/14 bg-white/10 p-5 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">
+                Lifecycle progress
+              </p>
+              <p className="mt-2 text-sm leading-6 text-white/78">
+                Move from intake to closure with a single operational view of where the ticket sits right now.
+              </p>
+            </div>
+            <div className="inline-flex items-center rounded-full border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/82">
+              {ticket.status.replace(/_/g, " ")}
+            </div>
+          </div>
+          <div className="mt-6">
+            <StatusPipeline currentStatus={ticket.status} />
+          </div>
         </div>
       </motion.div>
 
-      {/* ============================================================ */}
-      {/*  Hero Header                                                  */}
-      {/* ============================================================ */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-        className="rounded-b-2xl border border-t-0 border-[var(--border)] bg-[var(--surface-0)] px-5 pb-5"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08 }}
+        className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
       >
-        {/* Ticket Number + Badges Row */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between pt-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <button
-                type="button"
-                onClick={copyTicketNumber}
-                className="group flex items-center gap-1.5 text-sm font-mono text-[var(--neutral-gray)] hover:text-[var(--text-primary)] transition-colors"
-                title="Copy ticket number"
-              >
-                <Hash size={13} />
-                {ticket.ticketNumber}
-                {copiedId ? (
-                  <CheckCircle size={12} style={{ color: "#10B981" }} />
-                ) : (
-                  <Copy
-                    size={12}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  />
-                )}
-              </button>
-              <span className="text-[var(--surface-3)]">|</span>
-              <span
-                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold"
-                style={{
-                  backgroundColor: priorityInfo.bg,
-                  color: priorityInfo.text,
-                }}
-              >
-                {priorityInfo.label}
-              </span>
-              <StatusBadge status={ticket.status} />
-              {ticket.isMajorIncident && (
-                <motion.span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase"
-                  style={{
-                    backgroundColor: "rgba(239, 68, 68, 0.12)",
-                    color: "#EF4444",
-                  }}
-                  animate={{ scale: [1, 1.03, 1] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                >
-                  <AlertTriangle size={11} />
-                  Major Incident
-                </motion.span>
-              )}
-            </div>
-            <h1 className="text-lg font-bold text-[var(--text-primary)] leading-snug">
-              {ticket.title}
-            </h1>
-            <div className="mt-1.5 flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--neutral-gray)]">
-              <span className="flex items-center gap-1">
-                <Layers size={12} />
-                {ticket.type.replace(/_/g, " ")}
-              </span>
-              <span className="flex items-center gap-1">
-                <Megaphone size={12} />
-                {ticket.channel}
-              </span>
-              <span className="flex items-center gap-1">
-                <Calendar size={12} />
-                {getAge(ticket.createdAt)}
-              </span>
-              {ticket.category && (
-                <span className="flex items-center gap-1">
-                  <Inbox size={12} />
-                  {ticket.category}
-                  {ticket.subcategory && ` / ${ticket.subcategory}`}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Action Buttons — only shown when user has itsm.manage permission */}
-          {canManage && (
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {transitions.map((t) => {
-              const TIcon = t.icon;
-              let btnClass =
-                "rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)] disabled:opacity-50";
-              if (t.variant === "primary")
-                btnClass =
-                  "rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50";
-              if (t.variant === "success")
-                btnClass =
-                  "rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50";
-              if (t.variant === "danger")
-                btnClass =
-                  "rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-all hover:bg-red-50 disabled:opacity-50";
-
-              return (
-                <button
-                  key={t.value}
-                  type="button"
-                  disabled={isActing}
-                  onClick={() => handleTransition(t.value)}
-                  className={btnClass}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {TIcon && <TIcon size={13} />}
-                    {t.label}
-                  </span>
-                </button>
-              );
-            })}
-
-            <button
-              type="button"
-              disabled={isActing}
-              onClick={() => setShowAssignForm((f) => !f)}
-              className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)] disabled:opacity-50"
-            >
-              <UserPlus size={13} />
-              Assign
-            </button>
-
-            {!ticket.isMajorIncident &&
-              ticket.type === "incident" &&
-              ticket.status !== "closed" &&
-              ticket.status !== "cancelled" && (
-                <button
-                  type="button"
-                  disabled={isActing}
-                  onClick={handleDeclareMajor}
-                  className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  <AlertTriangle size={13} />
-                  Major
-                </button>
-              )}
-          </div>
-          )}
-        </div>
-
-        {/* Status Pipeline */}
-        <div className="mt-5 pt-4 border-t border-[var(--border)]">
-          <StatusPipeline currentStatus={ticket.status} />
-        </div>
+        <MetricTile
+          icon={MessageSquare}
+          label="Collaboration"
+          value={`${publicCommentCount} public / ${internalCommentCount} internal`}
+          helper={`${timeline.length} total activity events recorded on this ticket.`}
+          accent="#3B82F6"
+        />
+        <MetricTile
+          icon={LinkIcon}
+          label="Linked context"
+          value={`${linkedContextCount} connected records`}
+          helper="Related tickets, linked assets, and problem records grouped into one view."
+          accent="#8B5CF6"
+        />
+        <MetricTile
+          icon={Clock}
+          label="Ticket age"
+          value={getAge(ticket.createdAt)}
+          helper={`Opened ${new Date(ticket.createdAt).toLocaleString()}.`}
+          accent="#F59E0B"
+        />
+        <MetricTile
+          icon={Radio}
+          label="Delivery channel"
+          value={ticket.channel}
+          helper={`${ticket.type.replace(/_/g, " ")} workflow with ${ticket.priority.replace("_", " ")} priority.`}
+          accent="#10B981"
+        />
       </motion.div>
 
       {/* ============================================================ */}
@@ -1446,7 +1578,7 @@ export default function TicketDetailPage({
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
             animate={{ opacity: 1, height: "auto", marginTop: 16 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            className="flex items-end gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 overflow-hidden"
+            className={`${cardSurface} flex items-end gap-3 overflow-hidden p-5`}
           >
             <div className="flex-1">
               <UserPicker
@@ -1488,7 +1620,7 @@ export default function TicketDetailPage({
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
             animate={{ opacity: 1, height: "auto", marginTop: 16 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4 overflow-hidden"
+            className="space-y-3 overflow-hidden rounded-[1.7rem] border border-emerald-200/70 bg-[linear-gradient(180deg,rgba(236,253,245,0.9),rgba(255,255,255,0.96))] p-5 shadow-[0_18px_40px_rgba(16,185,129,0.08)]"
           >
             <div className="flex items-center gap-2">
               <CheckCircle size={16} style={{ color: "#10B981" }} />
@@ -1530,21 +1662,26 @@ export default function TicketDetailPage({
       {/* ============================================================ */}
       {/*  Two-Column Layout                                            */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* ---- Main Column (2/3) ---- */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="space-y-6 lg:col-span-2">
           {/* SLA Gauges */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+            className={`${cardSurface} overflow-hidden`}
           >
-            <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-              <Timer size={15} className="text-[var(--primary)]" />
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                SLA Performance
-              </h2>
+            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-2">
+              <div className="flex items-center gap-2">
+                <Timer size={15} className="text-[var(--primary)]" />
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                  SLA Performance
+                </h2>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Response and resolution posture side by side.
+              </p>
             </div>
             <div className="grid grid-cols-2 divide-x divide-[var(--border)]">
               <SLAGauge
@@ -1574,7 +1711,7 @@ export default function TicketDetailPage({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.15 }}
           >
-            <div className="flex gap-0.5 bg-[var(--surface-1)] rounded-xl p-1 border border-[var(--border)]">
+            <div className="flex gap-1 rounded-[1.4rem] border border-slate-200/70 bg-white/78 p-1.5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.key;
@@ -1583,16 +1720,16 @@ export default function TicketDetailPage({
                     key={tab.key}
                     type="button"
                     onClick={() => setActiveTab(tab.key)}
-                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all flex-1 justify-center"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-[1rem] px-4 py-2.5 text-xs font-semibold transition-all"
                     style={{
                       color: isActive
                         ? "var(--primary)"
                         : "var(--neutral-gray)",
                       backgroundColor: isActive
-                        ? "var(--surface-0)"
+                        ? "rgba(255,255,255,0.95)"
                         : "transparent",
                       boxShadow: isActive
-                        ? "0 1px 3px rgba(0,0,0,0.08)"
+                        ? "0 10px 22px rgba(15,23,42,0.07)"
                         : "none",
                     }}
                   >
@@ -1630,7 +1767,7 @@ export default function TicketDetailPage({
               {activeTab === "details" && (
                 <div className="space-y-4">
                   {/* Description */}
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+                  <div className={`${cardSurface} p-5`}>
                     <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                       <MessageSquare size={15} className="text-[var(--primary)]" />
                       Description
@@ -1644,7 +1781,7 @@ export default function TicketDetailPage({
                   {(ticket.linkedProblemId ||
                     ticket.linkedAssetIds.length > 0 ||
                     ticket.relatedTicketIds.length > 0) && (
-                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden">
+                    <div className={`${cardSurface} overflow-hidden`}>
                       <button
                         type="button"
                         onClick={() => toggleSection("links")}
@@ -1675,7 +1812,7 @@ export default function TicketDetailPage({
                           >
                             <div className="px-5 pb-4 space-y-2">
                               {ticket.linkedProblemId && (
-                                <div className="flex items-center gap-3 rounded-xl bg-[var(--surface-1)] p-3 text-sm">
+                                <div className={`flex items-center gap-3 p-3 text-sm ${softSurface}`}>
                                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10">
                                     <LinkIcon size={13} style={{ color: "#8B5CF6" }} />
                                   </div>
@@ -1690,7 +1827,7 @@ export default function TicketDetailPage({
                                 </div>
                               )}
                               {ticket.linkedAssetIds.length > 0 && (
-                                <div className="flex items-center gap-3 rounded-xl bg-[var(--surface-1)] p-3 text-sm">
+                                <div className={`flex items-center gap-3 p-3 text-sm ${softSurface}`}>
                                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10">
                                     <Layers size={13} style={{ color: "#3B82F6" }} />
                                   </div>
@@ -1705,7 +1842,7 @@ export default function TicketDetailPage({
                                 </div>
                               )}
                               {ticket.relatedTicketIds.length > 0 && (
-                                <div className="flex items-center gap-3 rounded-xl bg-[var(--surface-1)] p-3 text-sm">
+                                <div className={`flex items-center gap-3 p-3 text-sm ${softSurface}`}>
                                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10">
                                     <CircleDot size={13} style={{ color: "#10B981" }} />
                                   </div>
@@ -1728,7 +1865,7 @@ export default function TicketDetailPage({
 
                   {/* Tags */}
                   {ticket.tags.length > 0 && (
-                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+                    <div className={`${cardSurface} p-5`}>
                       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                         <Tag size={15} className="text-[var(--primary)]" />
                         Tags
@@ -1751,10 +1888,10 @@ export default function TicketDetailPage({
                   {/* Resolution */}
                   {ticket.resolutionNotes && (
                     <div
-                      className="rounded-2xl border p-5"
+                      className="rounded-[1.7rem] border p-5 shadow-[0_18px_40px_rgba(16,185,129,0.08)]"
                       style={{
                         borderColor: "#10B98130",
-                        backgroundColor: "rgba(16, 185, 129, 0.03)",
+                        background: "linear-gradient(180deg, rgba(236,253,245,0.78), rgba(255,255,255,0.96))",
                       }}
                     >
                       <div className="flex items-center gap-2 mb-3">
@@ -1802,20 +1939,34 @@ export default function TicketDetailPage({
                   {/* Add comment form */}
                   <form
                     onSubmit={handleAddComment}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
+                    className={`${cardSurface} p-5`}
                   >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]/70">
+                          Ticket activity
+                        </p>
+                        <h2 className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
+                          Send an update or leave an internal note
+                        </h2>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-slate-50/80 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                        <History size={12} />
+                        {timeline.length} events
+                      </div>
+                    </div>
                     <textarea
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
                       placeholder="Write a comment..."
                       rows={3}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:bg-[var(--surface-0)] resize-none transition-all"
+                      className="mt-4 w-full rounded-[1.25rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(255,255,255,0.98))] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/10 resize-none transition-all"
                     />
-                    <div className="mt-3 flex items-center justify-between">
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <button
                         type="button"
                         onClick={() => setIsInternalComment((v) => !v)}
-                        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all"
+                        className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-all"
                         style={{
                           backgroundColor: isInternalComment
                             ? "rgba(245, 158, 11, 0.1)"
@@ -1841,7 +1992,7 @@ export default function TicketDetailPage({
                       <button
                         type="submit"
                         disabled={addComment.isPending || !commentText.trim()}
-                        className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-40"
+                        className="flex items-center gap-1.5 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40"
                       >
                         {addComment.isPending ? (
                           <Loader2 size={14} className="animate-spin" />
@@ -1855,7 +2006,7 @@ export default function TicketDetailPage({
 
                   {/* Timeline items */}
                   {timeline.length === 0 ? (
-                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-10 text-center">
+                    <div className={`${cardSurface} p-10 text-center`}>
                       <div className="flex flex-col items-center gap-2">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)]">
                           <History
@@ -1872,7 +2023,7 @@ export default function TicketDetailPage({
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+                    <div className={`${cardSurface} p-5`}>
                       <div className="space-y-0">
                         {timeline.map((item, idx) => (
                           <TimelineEntry
@@ -1893,7 +2044,7 @@ export default function TicketDetailPage({
               {activeTab === "sla" && (
                 <div className="space-y-4">
                   {/* SLA Policy Info */}
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+                  <div className={`${cardSurface} p-5`}>
                     <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                       <Shield size={15} className="text-[var(--primary)]" />
                       SLA Policy Details
@@ -1990,7 +2141,7 @@ export default function TicketDetailPage({
                   </div>
 
                   {/* SLA Breaches */}
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+                  <div className={`${cardSurface} p-5`}>
                     <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                       <AlertTriangle size={15} className="text-red-500" />
                       Breach History
@@ -2051,13 +2202,13 @@ export default function TicketDetailPage({
 
         {/* ---- Sidebar (1/3) ---- */}
         <motion.div
-          className="space-y-4"
+          className="space-y-4 self-start lg:sticky lg:top-6"
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
         >
           {/* People */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 space-y-3">
+          <div className={`${cardSurface} space-y-3 p-4`}>
             <h3 className="text-xs font-bold text-[var(--neutral-gray)] uppercase tracking-wider flex items-center gap-1.5">
               <Users size={13} />
               People
@@ -2130,40 +2281,40 @@ export default function TicketDetailPage({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 space-y-3">
+          <div className={`${cardSurface} space-y-3 p-4`}>
             <h3 className="text-xs font-bold text-[var(--neutral-gray)] uppercase tracking-wider flex items-center gap-1.5">
               <History size={13} />
               Ownership Trail
             </h3>
             <div className="space-y-3">
               {ownershipEntries.map((entry) => (
-                  <div
-                    key={`${entry.label}-${entry.timestamp ?? "na"}`}
-                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3"
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
-                      {entry.label}
+                <div
+                  key={`${entry.label}-${entry.timestamp ?? "na"}`}
+                  className={`p-3 ${softSurface}`}
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
+                    {entry.label}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {entry.name}
+                  </p>
+                  {entry.meta && (
+                    <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                      {entry.meta}
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
-                      {entry.name}
+                  )}
+                  {entry.timestamp && (
+                    <p className="mt-1.5 text-[10px] tabular-nums text-[var(--neutral-gray)]">
+                      {new Date(entry.timestamp).toLocaleString()}
                     </p>
-                    {entry.meta && (
-                      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-                        {entry.meta}
-                      </p>
-                    )}
-                    {entry.timestamp && (
-                      <p className="mt-1.5 text-[10px] tabular-nums text-[var(--neutral-gray)]">
-                        {new Date(entry.timestamp).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Quick Info */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 space-y-3">
+          <div className={`${cardSurface} space-y-3 p-4`}>
             <h3 className="text-xs font-bold text-[var(--neutral-gray)] uppercase tracking-wider flex items-center gap-1.5">
               <BarChart3 size={13} />
               Classification
@@ -2239,7 +2390,7 @@ export default function TicketDetailPage({
           </div>
 
           {/* Dates */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 space-y-3">
+          <div className={`${cardSurface} space-y-3 p-4`}>
             <h3 className="text-xs font-bold text-[var(--neutral-gray)] uppercase tracking-wider flex items-center gap-1.5">
               <Calendar size={13} />
               Dates
@@ -2329,7 +2480,7 @@ export default function TicketDetailPage({
           {/* CSAT Score (if available) */}
           {ticket.satisfactionScore != null && (
             <div
-              className="rounded-2xl border p-4 text-center"
+              className="rounded-[1.7rem] border p-4 text-center shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
               style={{
                 borderColor:
                   ticket.satisfactionScore >= 4

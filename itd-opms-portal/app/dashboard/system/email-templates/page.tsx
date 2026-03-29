@@ -28,6 +28,10 @@ import type { EmailTemplate } from "@/types";
 
 const CATEGORY_OPTIONS = [
   { value: "", label: "All Categories" },
+  { value: "itsm", label: "ITSM" },
+  { value: "governance", label: "Governance" },
+  { value: "grc", label: "GRC" },
+  { value: "cmdb", label: "CMDB" },
   { value: "onboarding", label: "Onboarding" },
   { value: "password-reset", label: "Password Reset" },
   { value: "notifications", label: "Notifications" },
@@ -37,6 +41,10 @@ const CATEGORY_OPTIONS = [
 ];
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  itsm: { bg: "rgba(59, 130, 246, 0.12)", text: "#2563EB" },
+  governance: { bg: "rgba(139, 92, 246, 0.12)", text: "#7C3AED" },
+  grc: { bg: "rgba(245, 158, 11, 0.12)", text: "#D97706" },
+  cmdb: { bg: "rgba(6, 182, 212, 0.12)", text: "#0891B2" },
   onboarding: { bg: "rgba(16, 185, 129, 0.12)", text: "#059669" },
   "password-reset": { bg: "rgba(239, 68, 68, 0.12)", text: "#DC2626" },
   notifications: { bg: "rgba(59, 130, 246, 0.12)", text: "#2563EB" },
