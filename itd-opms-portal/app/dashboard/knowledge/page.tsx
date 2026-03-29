@@ -137,8 +137,8 @@ function HeroActionButton({
         primary
           ? undefined
           : {
-              borderColor: "rgba(255,255,255,0.62)",
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
+              borderColor: "var(--border)",
+              backgroundColor: "var(--surface-0)",
               backdropFilter: "blur(18px)",
             }
       }
@@ -576,8 +576,8 @@ export default function KnowledgeHubPage() {
           <div
             className="rounded-[28px] border p-5"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
-              borderColor: "rgba(255, 255, 255, 0.7)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >

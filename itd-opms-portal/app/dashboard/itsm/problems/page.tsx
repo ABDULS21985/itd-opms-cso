@@ -522,8 +522,8 @@ function ProblemCard({
             key={item.label}
             className="rounded-[24px] border p-4"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.76)",
-              borderColor: "rgba(255, 255, 255, 0.72)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >
@@ -816,8 +816,8 @@ export default function ProblemsPage() {
           <div
             className="rounded-[28px] border p-5"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
-              borderColor: "rgba(255, 255, 255, 0.7)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >

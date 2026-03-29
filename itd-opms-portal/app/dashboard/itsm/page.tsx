@@ -192,8 +192,8 @@ function ActionLink({
       href={href}
       className="group inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
       style={{
-        backgroundColor: "rgba(255, 255, 255, 0.72)",
-        borderColor: "rgba(255, 255, 255, 0.6)",
+        backgroundColor: "var(--surface-0)",
+        borderColor: "var(--border)",
         color: "var(--text-primary)",
         backdropFilter: "blur(18px)",
       }}
@@ -918,8 +918,8 @@ export default function ITSMHubPage() {
             <div
               className="rounded-[28px] border p-5"
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.72)",
-                borderColor: "rgba(255, 255, 255, 0.62)",
+                backgroundColor: "var(--surface-0)",
+                borderColor: "var(--border)",
                 backdropFilter: "blur(20px)",
               }}
             >
@@ -995,8 +995,8 @@ export default function ITSMHubPage() {
             <div
               className="rounded-[28px] border p-5"
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.72)",
-                borderColor: "rgba(255, 255, 255, 0.62)",
+                backgroundColor: "var(--surface-0)",
+                borderColor: "var(--border)",
                 backdropFilter: "blur(20px)",
               }}
             >

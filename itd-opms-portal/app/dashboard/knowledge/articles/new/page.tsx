@@ -476,8 +476,8 @@ export default function NewArticlePage() {
           <div
             className="rounded-[28px] border p-5"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
-              borderColor: "rgba(255, 255, 255, 0.7)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >

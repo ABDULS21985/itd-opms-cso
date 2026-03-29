@@ -17,6 +17,13 @@ import {
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import {
+  SSAHero,
+  SSAHeroChip,
+  SSAHeroInsight,
+  SSASectionCard,
+  SSAStatCard,
+} from "./_components/ssa-ui";
+import {
   useSSARequests,
   useSSARequestStats,
   useSearchSSARequests,
@@ -224,491 +231,260 @@ export default function SSARequestsPage() {
     },
   ];
 
+  const filterSummary = [
+    status ? SSA_STATUS_LABELS[status] || status : "All statuses",
+    division || "All divisions",
+    isSearching ? `Search: ${debouncedSearch}` : "Portfolio view",
+  ];
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      {/* ──────────────── Stats Bar ──────────────── */}
-      {stats && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "1rem",
-          }}
-        >
-          {/* Total Requests */}
-          <div
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-0)",
-              padding: "1rem",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "0.25rem",
-              }}
-            >
-              <FileText size={14} style={{ color: "var(--text-secondary)" }} />
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "var(--text-secondary)",
-                  margin: 0,
-                }}
+    <div className="space-y-8 pb-8">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
+        <SSAHero
+          icon={Server}
+          eyebrow="SSA Workspace"
+          title="Server and storage requests with clearer operational control."
+          description="Track demand, review lifecycle state, and move quickly from intake to allocation without losing governance context."
+          accent="emerald"
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa/new")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#0D4A29] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
-                Total Requests
-              </p>
-            </div>
-            <p
-              style={{
-                marginTop: "0.25rem",
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "var(--text-primary)",
-                fontVariantNumeric: "tabular-nums",
-                margin: 0,
-              }}
-            >
-              {stats.total}
-            </p>
-          </div>
-
-          {/* In Progress */}
-          <div
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-0)",
-              padding: "1rem",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "0.25rem",
-              }}
-            >
-              <Clock size={14} style={{ color: "#f59e0b" }} />
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "var(--text-secondary)",
-                  margin: 0,
-                }}
+                <Plus size={16} />
+                New Request
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa/approvals")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all duration-200 hover:border-white/28 hover:bg-white/14"
               >
-                In Progress
-              </p>
-            </div>
-            <p
-              style={{
-                marginTop: "0.25rem",
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "#f59e0b",
-                fontVariantNumeric: "tabular-nums",
-                margin: 0,
-              }}
-            >
-              {stats.inProgress}
-            </p>
-          </div>
-
-          {/* Completed */}
-          <div
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-0)",
-              padding: "1rem",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "0.25rem",
-              }}
-            >
-              <CheckCircle2 size={14} style={{ color: "#22c55e" }} />
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "var(--text-secondary)",
-                  margin: 0,
-                }}
-              >
-                Completed
-              </p>
-            </div>
-            <p
-              style={{
-                marginTop: "0.25rem",
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "#22c55e",
-                fontVariantNumeric: "tabular-nums",
-                margin: 0,
-              }}
-            >
-              {stats.completed}
-            </p>
-          </div>
-
-          {/* Rejected */}
-          <div
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-0)",
-              padding: "1rem",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "0.25rem",
-              }}
-            >
-              <XCircle size={14} style={{ color: "#ef4444" }} />
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "var(--text-secondary)",
-                  margin: 0,
-                }}
-              >
-                Rejected
-              </p>
-            </div>
-            <p
-              style={{
-                marginTop: "0.25rem",
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "#ef4444",
-                fontVariantNumeric: "tabular-nums",
-                margin: 0,
-              }}
-            >
-              {stats.rejected}
-            </p>
-          </div>
-        </motion.div>
-      )}
-
-      {/* ──────────────── Header ──────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "1rem",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <div
-            style={{
-              display: "flex",
-              height: "2.5rem",
-              width: "2.5rem",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "0.75rem",
-              backgroundColor: "rgba(27,115,64,0.1)",
-            }}
-          >
-            <Server size={20} style={{ color: "#1B7340" }} />
-          </div>
-          <div>
-            <h1
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: 700,
-                color: "var(--text-primary)",
-                margin: 0,
-              }}
-            >
-              Server/Storage Allocation
-            </h1>
-            <p
-              style={{
-                fontSize: "0.875rem",
-                color: "var(--text-secondary)",
-                margin: 0,
-              }}
-            >
-              Manage server and storage allocation requests
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          {/* Search */}
-          <div style={{ position: "relative" }}>
-            <Search
-              size={14}
-              style={{
-                position: "absolute",
-                left: "0.75rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--text-secondary)",
-                pointerEvents: "none",
-              }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search requests..."
-              style={{
-                borderRadius: "0.75rem",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--surface-0)",
-                paddingLeft: "2.25rem",
-                paddingRight: "0.75rem",
-                paddingTop: "0.5rem",
-                paddingBottom: "0.5rem",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          {/* Filter toggle */}
-          <button
-            type="button"
-            onClick={() => setShowFilters((f) => !f)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "transparent",
-              padding: "0.5rem 0.875rem",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--text-primary)",
-              cursor: "pointer",
-            }}
-          >
-            <Filter size={16} />
-            Filters
-          </button>
-
-          {/* New Request */}
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/ssa/new")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              borderRadius: "0.75rem",
-              border: "none",
-              backgroundColor: "var(--primary)",
-              padding: "0.5rem 1rem",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "#ffffff",
-              cursor: "pointer",
-            }}
-          >
-            <Plus size={16} />
-            New Request
-          </button>
-        </div>
-      </motion.div>
-
-      {/* ──────────────── Filters ──────────────── */}
-      {showFilters && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "flex-end",
-            gap: "0.75rem",
-            borderRadius: "0.75rem",
-            border: "1px solid var(--border)",
-            backgroundColor: "var(--surface-0)",
-            padding: "1rem",
-          }}
-        >
-          {/* Status filter */}
-          <div>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.25rem",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                color: "var(--text-secondary)",
-              }}
-            >
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              style={{
-                borderRadius: "0.75rem",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--surface-0)",
-                padding: "0.5rem 0.75rem",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            >
-              <option value="">All Statuses</option>
-              {SSA_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {SSA_STATUS_LABELS[s] || s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Division filter */}
-          <div>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.25rem",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                color: "var(--text-secondary)",
-              }}
-            >
-              Division
-            </label>
-            <input
-              type="text"
-              value={division}
-              onChange={(e) => {
-                setDivision(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Filter by division..."
-              style={{
-                borderRadius: "0.75rem",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--surface-0)",
-                padding: "0.5rem 0.75rem",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          {/* Clear filters */}
-          <button
-            type="button"
-            onClick={handleClearFilters}
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "transparent",
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--text-secondary)",
-              cursor: "pointer",
-            }}
-          >
-            Clear Filters
-          </button>
-        </motion.div>
-      )}
-
-      {/* ──────────────── Data Table ──────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
-        <DataTable
-          columns={columns}
-          data={requests}
-          keyExtractor={(item) => item.id}
-          loading={isLoading}
-          emptyTitle="No requests found"
-          emptyDescription="Create your first server/storage allocation request to get started."
-          emptyAction={
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/ssa/new")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                borderRadius: "0.75rem",
-                border: "none",
-                backgroundColor: "var(--primary)",
-                padding: "0.5rem 1rem",
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "#ffffff",
-                cursor: "pointer",
-              }}
-            >
-              <Plus size={16} />
-              New Request
-            </button>
+                Review approvals
+              </button>
+            </>
           }
-          onRowClick={(item) => router.push(`/dashboard/ssa/${item.id}`)}
-          pagination={
-            meta
-              ? {
-                  currentPage: meta.page,
-                  totalPages: meta.totalPages,
-                  totalItems: meta.totalItems,
-                  pageSize: meta.pageSize,
-                  onPageChange: setPage,
-                }
-              : undefined
+          chips={
+            <>
+              <SSAHeroChip>{stats?.total ?? 0} total requests</SSAHeroChip>
+              <SSAHeroChip>{requests.length} visible in current view</SSAHeroChip>
+              {filterSummary.map((item) => (
+                <SSAHeroChip key={item}>{item}</SSAHeroChip>
+              ))}
+            </>
+          }
+          aside={
+            <>
+              <SSAHeroInsight
+                icon={Clock}
+                eyebrow="Flow"
+                accent="amber"
+                title={`${stats?.inProgress ?? 0} requests in progress`}
+                description="Keep intake moving while preserving division context and approval traceability."
+              />
+              <SSAHeroInsight
+                icon={CheckCircle2}
+                eyebrow="Completion"
+                accent="emerald"
+                title={`${stats?.completed ?? 0} fulfilled allocations`}
+                description="Completed requests remain searchable so provisioning history stays easy to audit."
+              />
+              <SSAHeroInsight
+                icon={AlertTriangle}
+                eyebrow="Attention"
+                accent="rose"
+                title={`${stats?.rejected ?? 0} rejected or stalled items`}
+                description="Surface exceptions early so resubmission and clarification happen with less delay."
+              />
+            </>
           }
         />
+      </motion.div>
+
+      {stats && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <SSAStatCard
+            label="Total Requests"
+            value={stats.total}
+            helper="Full SSA portfolio currently tracked in the workspace."
+            icon={FileText}
+            accent="indigo"
+          />
+          <SSAStatCard
+            label="In Progress"
+            value={stats.inProgress}
+            helper="Requests still moving through assessment, approval, or provisioning."
+            icon={Clock}
+            accent="amber"
+          />
+          <SSAStatCard
+            label="Completed"
+            value={stats.completed}
+            helper="Allocations that have fully cleared the workflow."
+            icon={CheckCircle2}
+            accent="emerald"
+          />
+          <SSAStatCard
+            label="Rejected"
+            value={stats.rejected}
+            helper="Requests requiring revision, clarification, or cancellation follow-up."
+            icon={XCircle}
+            accent="rose"
+          />
+        </motion.div>
+      )}
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+        <SSASectionCard
+          eyebrow="Request Portfolio"
+          title="Search, filter, and review the active request book"
+          description="Use quick filters to narrow the list before opening individual requests for full detail and routing context."
+          actions={
+            <button
+              type="button"
+              onClick={() => setShowFilters((f) => !f)}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                showFilters
+                  ? "border-[var(--primary)]/20 bg-[var(--primary)]/8 text-[var(--primary)]"
+                  : "border-[var(--border)] bg-white text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
+              }`}
+            >
+              <Filter size={16} />
+              {showFilters ? "Hide filters" : "Show filters"}
+            </button>
+          }
+        >
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative max-w-xl flex-1">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search by reference number, application, requestor, or division..."
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] py-3 pl-11 pr-4 text-sm text-[var(--text-primary)] shadow-sm outline-none transition-all placeholder:text-[var(--text-secondary)]/70 focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/ssa/admin")}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
+                >
+                  Admin dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/ssa/delegations")}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
+                >
+                  Delegations
+                </button>
+              </div>
+            </div>
+
+            {showFilters && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden rounded-[1.35rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(249,250,251,0.9),_rgba(255,255,255,0.92))] p-4"
+              >
+                <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                      Status
+                    </label>
+                    <select
+                      value={status}
+                      onChange={(e) => {
+                        setStatus(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                    >
+                      <option value="">All Statuses</option>
+                      {SSA_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {SSA_STATUS_LABELS[s] || s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                      Division
+                    </label>
+                    <input
+                      type="text"
+                      value={division}
+                      onChange={(e) => {
+                        setDivision(e.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Filter by division or office..."
+                      className="w-full rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-secondary)]/70 focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-[var(--border)] px-4 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:border-[var(--primary)]/20 hover:bg-[var(--primary)]/6 hover:text-[var(--primary)]"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            <DataTable
+              columns={columns}
+              data={requests}
+              keyExtractor={(item) => item.id}
+              loading={isLoading}
+              emptyTitle="No requests found"
+              emptyDescription="Create your first server/storage allocation request to get started."
+              emptyAction={
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/ssa/new")}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-all hover:opacity-90 hover:shadow-lg hover:shadow-[var(--primary)]/20"
+                >
+                  <Plus size={16} />
+                  New Request
+                </button>
+              }
+              onRowClick={(item) => router.push(`/dashboard/ssa/${item.id}`)}
+              pagination={
+                meta
+                  ? {
+                      currentPage: meta.page,
+                      totalPages: meta.totalPages,
+                      totalItems: meta.totalItems,
+                      pageSize: meta.pageSize,
+                      onPageChange: setPage,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </SSASectionCard>
       </motion.div>
     </div>
   );

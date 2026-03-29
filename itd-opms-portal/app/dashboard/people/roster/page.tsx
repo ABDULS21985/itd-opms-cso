@@ -326,8 +326,8 @@ function WorkspaceJumpButton({
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-200 ${active ? "text-white shadow-lg" : "text-[var(--text-primary)] hover:-translate-y-0.5 hover:shadow-md"}`}
       style={{
-        borderColor: active ? "transparent" : "rgba(255,255,255,0.62)",
-        backgroundColor: active ? "var(--primary)" : "rgba(255, 255, 255, 0.72)",
+        borderColor: active ? "transparent" : "var(--border)",
+        backgroundColor: active ? "var(--primary)" : "var(--surface-0)",
         backdropFilter: "blur(18px)",
       }}
     >
@@ -1939,8 +1939,8 @@ export default function PeopleDirectoryPage() {
           <div
             className="rounded-[28px] border p-5"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
-              borderColor: "rgba(255, 255, 255, 0.7)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >

@@ -1,11 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@/test/test-utils";
-
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, userEvent } from "@/test/test-utils";
 
 const mockPush = vi.fn();
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mockPush,
@@ -15,21 +12,9 @@ vi.mock("next/navigation", () => ({
     forward: vi.fn(),
     prefetch: vi.fn(),
   }),
-  usePathname: () => "/dashboard/itsm/tickets",
-  useSearchParams: () => new URLSearchParams(),
-  useParams: () => ({}),
 }));
 
-// Mock framer-motion to render children directly
-vi.mock("framer-motion", () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...stripMotionProps(props)}>{children}</div>,
-    form: ({ children, ...props }: any) => <form {...stripMotionProps(props)}>{children}</form>,
-  },
-  AnimatePresence: ({ children }: any) => <>{children}</>,
-}));
-
-function stripMotionProps(props: Record<string, any>) {
+function stripMotionProps(props: Record<string, unknown>) {
   const {
     initial,
     animate,
@@ -43,10 +28,22 @@ function stripMotionProps(props: Record<string, any>) {
     variants,
     ...rest
   } = props;
+
   return rest;
 }
 
-// Mock auth provider
+vi.mock("framer-motion", () => ({
+  motion: {
+    div: ({ children, ...props }: any) => (
+      <div {...stripMotionProps(props)}>{children}</div>
+    ),
+    form: ({ children, ...props }: any) => (
+      <form {...stripMotionProps(props)}>{children}</form>
+    ),
+  },
+  AnimatePresence: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => ({
     user: {
@@ -62,12 +59,10 @@ vi.mock("@/providers/auth-provider", () => ({
   }),
 }));
 
-// Mock sonner toast
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-// Mock api-client
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: vi.fn(),
@@ -77,12 +72,10 @@ vi.mock("@/lib/api-client", () => ({
   },
 }));
 
-// Mock export-utils
 vi.mock("@/lib/export-utils", () => ({
   exportToCSV: vi.fn(),
 }));
 
-// Mock shared components that use complex internals
 vi.mock("@/components/shared/data-table", () => ({
   DataTable: ({
     data,
@@ -94,6 +87,7 @@ vi.mock("@/components/shared/data-table", () => ({
     if (loading) {
       return <div data-testid="data-table-loading">Loading...</div>;
     }
+
     if (!data || data.length === 0) {
       return (
         <div data-testid="data-table-empty">
@@ -102,12 +96,13 @@ vi.mock("@/components/shared/data-table", () => ({
         </div>
       );
     }
+
     return (
       <table data-testid="data-table">
         <thead>
           <tr>
-            {columns?.map((col: any) => (
-              <th key={col.key}>{col.header}</th>
+            {columns?.map((column: any) => (
+              <th key={column.key}>{column.header}</th>
             ))}
           </tr>
         </thead>
@@ -131,18 +126,12 @@ vi.mock("@/components/shared/status-badge", () => ({
 }));
 
 vi.mock("@/components/shared/inline-edit", () => ({
-  InlineSelect: ({ renderValue }: any) =>
-    renderValue ? renderValue() : null,
-  InlineText: ({ value }: any) => <span>{value}</span>,
+  InlineSelect: ({ renderValue }: any) => (renderValue ? renderValue() : null),
 }));
 
 vi.mock("@/components/shared/export-dropdown", () => ({
   ExportDropdown: () => <button>Export</button>,
 }));
-
-// ---------------------------------------------------------------------------
-// ITSM hook mocks – must be hoisted
-// ---------------------------------------------------------------------------
 
 const mockUseTickets = vi.fn();
 const mockUseTicketStats = vi.fn();
@@ -154,89 +143,108 @@ vi.mock("@/hooks/use-itsm", () => ({
   useBulkUpdateTickets: (...args: any[]) => mockUseBulkUpdateTickets(...args),
 }));
 
-// ---------------------------------------------------------------------------
-// Import component under test AFTER mocks
-// ---------------------------------------------------------------------------
-
 import TicketsPage from "../tickets/page";
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const mockTickets = [
+  {
+    id: "t-1",
+    ticketNumber: "TKT-001",
+    title: "Email server down",
+    type: "incident",
+    priority: "P1_critical",
+    status: "in_progress",
+    assigneeId: "user-1",
+    assigneeName: "Admin User",
+    reporterId: "reporter-1",
+    reporterName: "Nora Reporter",
+    teamQueueId: "queue-1",
+    teamQueueName: "Service Desk",
+    createdAt: "2026-03-15T10:00:00Z",
+    slaResolutionMet: null,
+    slaResponseMet: null,
+    slaPausedAt: null,
+    slaResolutionTarget: null,
+    isMajorIncident: true,
+  },
+  {
+    id: "t-2",
+    ticketNumber: "TKT-002",
+    title: "VPN connection issues",
+    type: "service_request",
+    priority: "P3_medium",
+    status: "logged",
+    assigneeId: null,
+    assigneeName: null,
+    reporterId: "reporter-2",
+    reporterName: "Musa Requester",
+    teamQueueId: "queue-2",
+    teamQueueName: "Network",
+    createdAt: "2026-03-16T14:30:00Z",
+    slaResolutionMet: null,
+    slaResponseMet: null,
+    slaPausedAt: null,
+    slaResolutionTarget: null,
+    isMajorIncident: false,
+  },
+];
+
+function setLoadedState() {
+  mockUseTickets.mockReturnValue({
+    data: {
+      data: mockTickets,
+      meta: { page: 1, totalPages: 1, totalItems: 2, pageSize: 20 },
+    },
+    isLoading: false,
+  });
+
+  mockUseTicketStats.mockReturnValue({
+    data: {
+      total: 150,
+      openCount: 42,
+      slaBreachedCount: 5,
+      majorIncidents: 2,
+    },
+    isLoading: false,
+  });
+}
+
+function setEmptyState() {
+  mockUseTickets.mockReturnValue({
+    data: {
+      data: [],
+      meta: { page: 1, totalPages: 1, totalItems: 0, pageSize: 20 },
+    },
+    isLoading: false,
+  });
+
+  mockUseTicketStats.mockReturnValue({
+    data: {
+      total: 0,
+      openCount: 0,
+      slaBreachedCount: 0,
+      majorIncidents: 0,
+    },
+    isLoading: false,
+  });
+}
 
 describe("TicketsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPush.mockReset();
     mockUseBulkUpdateTickets.mockReturnValue({ mutateAsync: vi.fn() });
   });
 
-  it("renders loading state when tickets are loading", () => {
-    mockUseTickets.mockReturnValue({ data: undefined, isLoading: true });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
+  it("renders the upgraded ticket command workspace", () => {
+    setLoadedState();
 
     render(<TicketsPage />);
 
-    expect(screen.getByTestId("data-table-loading")).toBeInTheDocument();
-  });
-
-  it("renders empty state when there are no tickets", () => {
-    mockUseTickets.mockReturnValue({
-      data: { data: [], meta: { page: 1, totalPages: 1, totalItems: 0, pageSize: 20 } },
-      isLoading: false,
-    });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
-
-    render(<TicketsPage />);
-
-    expect(screen.getByTestId("data-table-empty")).toBeInTheDocument();
-    expect(screen.getByText("No tickets found")).toBeInTheDocument();
-  });
-
-  it("renders ticket list when data is available", () => {
-    const mockTickets = [
-      {
-        id: "t-1",
-        ticketNumber: "TKT-001",
-        title: "Email server down",
-        type: "incident",
-        priority: "P1_critical",
-        status: "in_progress",
-        assigneeId: "user-1",
-        createdAt: "2025-01-15T10:00:00Z",
-        slaResolutionMet: null,
-        slaResponseMet: null,
-        slaPausedAt: null,
-        slaResolutionTarget: null,
-        isMajorIncident: false,
-      },
-      {
-        id: "t-2",
-        ticketNumber: "TKT-002",
-        title: "VPN connection issues",
-        type: "service_request",
-        priority: "P3_medium",
-        status: "logged",
-        assigneeId: null,
-        createdAt: "2025-01-16T14:30:00Z",
-        slaResolutionMet: null,
-        slaResponseMet: null,
-        slaPausedAt: null,
-        slaResolutionTarget: null,
-        isMajorIncident: false,
-      },
-    ];
-
-    mockUseTickets.mockReturnValue({
-      data: {
-        data: mockTickets,
-        meta: { page: 1, totalPages: 1, totalItems: 2, pageSize: 20 },
-      },
-      isLoading: false,
-    });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
-
-    render(<TicketsPage />);
-
+    expect(screen.getByText("Tickets")).toBeInTheDocument();
+    expect(screen.getByText(/Ticket operations desk/)).toBeInTheDocument();
+    expect(screen.getByText("Ticket command board")).toBeInTheDocument();
+    expect(screen.getByText("Coverage pressure")).toBeInTheDocument();
+    expect(screen.getByText("Visible mix")).toBeInTheDocument();
     expect(screen.getByTestId("data-table")).toBeInTheDocument();
     expect(screen.getByTestId("ticket-row-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("ticket-row-t-2")).toBeInTheDocument();
@@ -244,59 +252,43 @@ describe("TicketsPage", () => {
     expect(screen.getByText("TKT-002")).toBeInTheDocument();
   });
 
-  it("renders ticket stats when stats data is available", () => {
-    mockUseTickets.mockReturnValue({
-      data: { data: [], meta: { page: 1, totalPages: 1, totalItems: 0, pageSize: 20 } },
-      isLoading: false,
-    });
-    mockUseTicketStats.mockReturnValue({
-      data: {
-        total: 150,
-        openCount: 42,
-        slaBreachedCount: 5,
-        majorIncidents: 2,
-      },
-    });
+  it("reveals the filter workspace when Filters is clicked", async () => {
+    setLoadedState();
+    const user = userEvent.setup();
 
     render(<TicketsPage />);
 
-    expect(screen.getByText("Total Tickets")).toBeInTheDocument();
-    expect(screen.getByText("150")).toBeInTheDocument();
-    expect(screen.getByText("Open")).toBeInTheDocument();
-    expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByText("SLA Breached")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.getByText("Major Incidents")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Filters" })[0]);
+
+    expect(screen.getByDisplayValue("All Statuses")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("All Priorities")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("All Types")).toBeInTheDocument();
   });
 
-  it("renders page heading and description", () => {
-    mockUseTickets.mockReturnValue({ data: undefined, isLoading: true });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
+  it("renders the stronger empty state when no tickets exist", () => {
+    setEmptyState();
 
     render(<TicketsPage />);
 
-    expect(screen.getByText("Tickets")).toBeInTheDocument();
+    expect(screen.getByTestId("data-table-empty")).toBeInTheDocument();
+    expect(screen.getByText("No tickets found")).toBeInTheDocument();
     expect(
-      screen.getByText("Manage incidents, service requests, and changes"),
+      screen.getByText("Create your first ticket to get started."),
     ).toBeInTheDocument();
   });
 
-  it("renders Create Ticket button", () => {
-    mockUseTickets.mockReturnValue({ data: undefined, isLoading: true });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
+  it("shows the upgraded stats cards", () => {
+    setLoadedState();
 
     render(<TicketsPage />);
 
-    expect(screen.getByText("Create Ticket")).toBeInTheDocument();
-  });
-
-  it("renders Filters button", () => {
-    mockUseTickets.mockReturnValue({ data: undefined, isLoading: true });
-    mockUseTicketStats.mockReturnValue({ data: undefined });
-
-    render(<TicketsPage />);
-
-    expect(screen.getByText("Filters")).toBeInTheDocument();
+    expect(screen.getAllByText("Total Tickets").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("150").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Open").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("42").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SLA Breached").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("5").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Major Incidents").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
   });
 });

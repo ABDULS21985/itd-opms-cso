@@ -27,6 +27,12 @@ import {
   useSSARequests,
   useSSARequestStats,
 } from "@/hooks/use-ssa";
+import {
+  SSAHero,
+  SSAHeroChip,
+  SSAHeroInsight,
+  SSAStatCard,
+} from "../_components/ssa-ui";
 import type { SSARequest, SSARequestStats } from "@/types/ssa";
 import {
   SSA_STATUS_LABELS,
@@ -405,105 +411,104 @@ export default function SSAAdminPage() {
 
   return (
     <div className="space-y-6">
-      {/* ================================================ */}
-      {/*  HERO HEADER                                      */}
-      {/* ================================================ */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)]"
       >
-        <div className="absolute inset-0 overflow-hidden">
-          <div
-            className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-[0.04]"
-            style={{
-              background:
-                "radial-gradient(circle, #1B7340 0%, transparent 70%)",
-            }}
-          />
-          <div
-            className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full opacity-[0.03]"
-            style={{
-              background:
-                "radial-gradient(circle, #14B8A6 0%, transparent 70%)",
-            }}
-          />
-        </div>
-
-        <div className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg"
-              style={{
-                background: "linear-gradient(135deg, #1B7340, #10B981)",
-              }}
-            >
-              <Server size={26} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-                SSA Admin Dashboard
-              </h1>
-              <p className="mt-0.5 text-sm text-[var(--neutral-gray)]">
-                Overview and management of all server/storage allocation
-                requests
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/ssa/new")}
-            className="flex items-center gap-2 self-start rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:brightness-110"
-            style={{
-              background: "linear-gradient(135deg, #1B7340, #10B981)",
-            }}
-          >
-            <Plus size={16} />
-            New Request
-          </button>
-        </div>
+        <SSAHero
+          icon={Server}
+          eyebrow="SSA Administration"
+          title="Manage the full SSA portfolio from one operational command view."
+          description="Switch between portfolio states, inspect requests in grid or table format, and keep the lifecycle from submission through provisioning under tighter control."
+          accent="emerald"
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa/new")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#0D4A29] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <Plus size={16} />
+                New Request
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa/approvals")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all duration-200 hover:border-white/28 hover:bg-white/14"
+              >
+                Open approvals
+              </button>
+            </>
+          }
+          chips={
+            <>
+              <SSAHeroChip>{stats?.total ?? 0} total requests</SSAHeroChip>
+              <SSAHeroChip>{status ? STATUS_GROUP_TABS.find((tab) => tab.value === status)?.label ?? status : "All request states"}</SSAHeroChip>
+              <SSAHeroChip>{viewMode === "grid" ? "Grid view active" : "Table view active"}</SSAHeroChip>
+              {division ? <SSAHeroChip>{division}</SSAHeroChip> : null}
+            </>
+          }
+          aside={
+            <>
+              <SSAHeroInsight
+                icon={Clock}
+                eyebrow="Pipeline"
+                accent="amber"
+                title={`${stats?.inProgress ?? 0} active requests`}
+                description="Monitor the current working load still moving through technical review, approvals, or provisioning."
+              />
+              <SSAHeroInsight
+                icon={CheckCircle2}
+                eyebrow="Delivered"
+                accent="emerald"
+                title={`${stats?.completed ?? 0} completed`}
+                description="Keep completed allocations visible for validation, support history, and downstream audit reference."
+              />
+              <SSAHeroInsight
+                icon={TrendingUp}
+                eyebrow="Oversight"
+                accent="cyan"
+                title="Grid and table control"
+                description="Choose the visual density you need, then filter the book by status, division, and request search."
+              />
+            </>
+          }
+        />
       </motion.div>
 
-      {/* ================================================ */}
-      {/*  STATS ROW + BREAKDOWN                            */}
-      {/* ================================================ */}
       {stats && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* Left: 4 stat cards in 2x2 grid */}
           <div className="lg:col-span-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatCard
+            <SSAStatCard
               label="Total Requests"
               value={stats.total}
+              helper="Full population currently represented in the SSA register."
               icon={FileText}
-              color="#6366F1"
-              delay={0.05}
+              accent="indigo"
             />
-            <StatCard
+            <SSAStatCard
               label="In Progress"
               value={stats.inProgress}
+              helper="Requests still in the active review and fulfillment lifecycle."
               icon={Clock}
-              color="#F59E0B"
-              delay={0.1}
+              accent="amber"
             />
-            <StatCard
+            <SSAStatCard
               label="Completed"
               value={stats.completed}
+              helper="Successfully fulfilled allocations available for later lookup."
               icon={CheckCircle2}
-              color="#10B981"
-              delay={0.15}
+              accent="emerald"
             />
-            <StatCard
+            <SSAStatCard
               label="Rejected"
               value={stats.rejected}
+              helper="Requests requiring follow-up, clarification, or rework."
               icon={XCircle}
-              color="#EF4444"
-              delay={0.2}
+              accent="rose"
             />
           </div>
-
-          {/* Right: Status breakdown */}
           <div className="lg:col-span-4">
             <StatusBreakdown stats={stats} />
           </div>

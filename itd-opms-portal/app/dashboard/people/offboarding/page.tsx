@@ -279,8 +279,8 @@ function HeroActionButton({
         primary
           ? { backgroundColor: "#DC2626" }
           : {
-              borderColor: "rgba(255,255,255,0.62)",
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
+              borderColor: "var(--border)",
+              backgroundColor: "var(--surface-0)",
               backdropFilter: "blur(18px)",
             }
       }
@@ -842,8 +842,8 @@ function OffboardingCard({
               <div
                 className="flex items-center gap-4 self-start rounded-[24px] border px-4 py-3"
                 style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.72)",
-                  borderColor: "rgba(255,255,255,0.7)",
+                  backgroundColor: "var(--surface-0)",
+                  borderColor: "var(--border)",
                   backdropFilter: "blur(14px)",
                 }}
               >
@@ -1055,7 +1055,7 @@ function OffboardingCard({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="border-t border-white/60 bg-[var(--surface-0)]/84 p-5 lg:p-6"
+            className="border-t border-[var(--border)] bg-[var(--surface-0)] p-5 lg:p-6"
           >
             <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-1)] p-4 lg:p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -1806,8 +1806,8 @@ function TemplatesTab({
                   <div
                     className="rounded-[24px] border px-4 py-3"
                     style={{
-                      backgroundColor: "rgba(255,255,255,0.72)",
-                      borderColor: "rgba(255,255,255,0.7)",
+                      backgroundColor: "var(--surface-0)",
+                      borderColor: "var(--border)",
                       backdropFilter: "blur(14px)",
                     }}
                   >
@@ -2099,8 +2099,8 @@ export default function OffboardingPage() {
           <div
             className="rounded-[28px] border p-5"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.74)",
-              borderColor: "rgba(255, 255, 255, 0.7)",
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
               backdropFilter: "blur(18px)",
             }}
           >

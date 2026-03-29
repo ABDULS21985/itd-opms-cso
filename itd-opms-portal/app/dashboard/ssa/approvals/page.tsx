@@ -5,17 +5,20 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   CheckSquare,
-  Search,
   Filter,
-  Loader2,
   Clock,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
-  Check,
+  Layers3,
+  ShieldCheck,
 } from "lucide-react";
-import { toast } from "sonner";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import {
+  SSAHero,
+  SSAHeroChip,
+  SSAHeroInsight,
+  SSASectionCard,
+  SSAStatCard,
+} from "../_components/ssa-ui";
 import {
   useEndorsementQueue,
   useASDQueue,
@@ -23,8 +26,6 @@ import {
   useApprovalQueue,
   useSANQueue,
   useDCOQueue,
-  useSubmitEndorsement,
-  useSubmitApproval,
 } from "@/hooks/use-ssa";
 import type { SSARequest } from "@/types/ssa";
 import { SSA_STATUS_LABELS, SSA_STATUS_COLORS } from "@/types/ssa";
@@ -113,6 +114,9 @@ export default function SSAApprovalsPage() {
   const { data, isLoading } = useQueueData(activeTab, page, stage);
   const requests: SSARequest[] = data?.data ?? [];
   const meta = data?.meta;
+  const activeQueueLabel = QUEUE_TABS.find((tab) => tab.key === activeTab)?.label ?? "Queue";
+  const activeStageLabel =
+    APPROVAL_STAGES.find((option) => option.value === stage)?.label ?? "All stages";
 
   const columns: Column<SSARequest>[] = [
     {
@@ -204,128 +208,190 @@ export default function SSAApprovalsPage() {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      {/* ── Header ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <div
-            style={{
-              display: "flex",
-              height: "2.5rem",
-              width: "2.5rem",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "0.75rem",
-              backgroundColor: "rgba(27,115,64,0.1)",
-            }}
-          >
-            <CheckSquare size={20} style={{ color: "#1B7340" }} />
-          </div>
-          <div>
-            <h1 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-              SSA Approvals Queue
-            </h1>
-            <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
-              Review and process pending SSA requests
-            </p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ── Queue Tabs ── */}
-      <div
-        style={{
-          display: "flex",
-          gap: "0.25rem",
-          borderBottom: "2px solid var(--border)",
-          overflowX: "auto",
-        }}
-      >
-        {QUEUE_TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => {
-              setActiveTab(t.key);
-              setPage(1);
-            }}
-            style={{
-              padding: "0.5rem 0.875rem",
-              fontSize: "0.8125rem",
-              fontWeight: activeTab === t.key ? 600 : 400,
-              color: activeTab === t.key ? "var(--primary)" : "var(--text-secondary)",
-              background: "none",
-              border: "none",
-              borderBottom: activeTab === t.key ? "2px solid var(--primary)" : "2px solid transparent",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              marginBottom: "-2px",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Stage filter (approvals tab only) ── */}
-      {activeTab === "approvals" && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <Filter size={14} style={{ color: "var(--text-secondary)" }} />
-          <select
-            value={stage}
-            onChange={(e) => {
-              setStage(e.target.value);
-              setPage(1);
-            }}
-            style={{
-              borderRadius: "0.75rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-0)",
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.875rem",
-              color: "var(--text-primary)",
-              outline: "none",
-            }}
-          >
-            {APPROVAL_STAGES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* ── Data Table ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
-        <DataTable
-          columns={columns}
-          data={requests}
-          keyExtractor={(item) => item.id}
-          loading={isLoading}
-          emptyTitle="No pending items"
-          emptyDescription="There are no requests pending your review in this queue."
-          onRowClick={(item) => router.push(`/dashboard/ssa/${item.id}`)}
-          pagination={
-            meta
-              ? {
-                  currentPage: meta.page,
-                  totalPages: meta.totalPages,
-                  totalItems: meta.totalItems,
-                  pageSize: meta.pageSize,
-                  onPageChange: setPage,
+    <div className="space-y-8 pb-8">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
+        <SSAHero
+          icon={CheckSquare}
+          eyebrow="SSA Approval Flow"
+          title="Route endorsements, technical checks, and formal approvals with less queue blindness."
+          description="Switch between operating lanes, focus stage-specific work, and open requests directly into the detailed review surface."
+          accent="amber"
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#7C2D12] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                View request portfolio
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/ssa/admin")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all duration-200 hover:border-white/28 hover:bg-white/14"
+              >
+                Open admin view
+              </button>
+            </>
+          }
+          chips={
+            <>
+              <SSAHeroChip>{activeQueueLabel}</SSAHeroChip>
+              <SSAHeroChip>{meta?.totalItems ?? requests.length} items in selected lane</SSAHeroChip>
+              <SSAHeroChip>{activeTab === "approvals" ? activeStageLabel : "Stage filter not required"}</SSAHeroChip>
+            </>
+          }
+          aside={
+            <>
+              <SSAHeroInsight
+                icon={Layers3}
+                eyebrow="Lanes"
+                accent="indigo"
+                title={`${QUEUE_TABS.length} approval lanes`}
+                description="Move between HOO, ASD, QCMD, approval, SAN, and DCO queues without leaving the workspace."
+              />
+              <SSAHeroInsight
+                icon={Clock}
+                eyebrow="Current queue"
+                accent="amber"
+                title={activeQueueLabel}
+                description={`${meta?.totalItems ?? requests.length} items currently require attention in this lane.`}
+              />
+              <SSAHeroInsight
+                icon={ShieldCheck}
+                eyebrow="Approval stage"
+                accent="emerald"
+                title={activeTab === "approvals" ? activeStageLabel : "Lane-specific review"}
+                description={
+                  activeTab === "approvals"
+                    ? "Filter the formal approval queue to the exact stage you need to clear."
+                    : "The selected lane already maps to a specific workflow responsibility."
                 }
-              : undefined
+              />
+            </>
           }
         />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        <SSAStatCard
+          label="Selected Queue"
+          value={meta?.totalItems ?? requests.length}
+          helper={`Items available inside ${activeQueueLabel}.`}
+          icon={CheckSquare}
+          accent="amber"
+          loading={isLoading}
+        />
+        <SSAStatCard
+          label="Visible This Page"
+          value={requests.length}
+          helper="Currently rendered requests ready for review."
+          icon={Clock}
+          accent="indigo"
+          loading={isLoading}
+        />
+        <SSAStatCard
+          label="Approval Stages"
+          value={activeTab === "approvals" ? APPROVAL_STAGES.length - 1 : QUEUE_TABS.length}
+          helper={
+            activeTab === "approvals"
+              ? "Formal approval stages available for focused filtering."
+              : "Workflow queues available across the SSA review chain."
+          }
+          icon={Filter}
+          accent="emerald"
+        />
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+        <SSASectionCard
+          eyebrow="Queue Management"
+          title="Operate the review lanes"
+          description="Change lanes, focus formal approvals by stage, and open any request into the detailed decision page."
+        >
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              {QUEUE_TABS.map((tab) => {
+                const active = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      setPage(1);
+                    }}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                      active
+                        ? "border-transparent bg-[var(--primary)] text-white shadow-sm"
+                        : "border-[var(--border)] bg-white text-[var(--text-secondary)] hover:bg-[var(--surface-1)]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeTab === "approvals" && (
+              <div className="rounded-[1.35rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(249,250,251,0.9),_rgba(255,255,255,0.92))] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                      Formal Approval Stage
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Filter size={15} className="text-[var(--text-secondary)]" />
+                      <select
+                        value={stage}
+                        onChange={(e) => {
+                          setStage(e.target.value);
+                          setPage(1);
+                        }}
+                        className="rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                      >
+                        {APPROVAL_STAGES.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                    {activeStageLabel}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DataTable
+              columns={columns}
+              data={requests}
+              keyExtractor={(item) => item.id}
+              loading={isLoading}
+              emptyTitle="No pending items"
+              emptyDescription="There are no requests pending your review in this queue."
+              onRowClick={(item) => router.push(`/dashboard/ssa/${item.id}`)}
+              pagination={
+                meta
+                  ? {
+                      currentPage: meta.page,
+                      totalPages: meta.totalPages,
+                      totalItems: meta.totalItems,
+                      pageSize: meta.pageSize,
+                      onPageChange: setPage,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </SSASectionCard>
       </motion.div>
     </div>
   );

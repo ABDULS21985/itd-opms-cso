@@ -26,6 +26,12 @@ import {
   useCreateDelegation,
   useDeleteDelegation,
 } from "@/hooks/use-ssa";
+import {
+  SSAHero,
+  SSAHeroChip,
+  SSAHeroInsight,
+  SSAStatCard,
+} from "../_components/ssa-ui";
 import { UserPicker } from "@/components/shared/pickers";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { SSADelegation } from "@/types/ssa";
@@ -520,97 +526,97 @@ export default function SSADelegationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ================================================ */}
-      {/*  HERO HEADER                                      */}
-      {/* ================================================ */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)]"
       >
-        <div className="absolute inset-0 overflow-hidden">
-          <div
-            className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-[0.04]"
-            style={{
-              background: "radial-gradient(circle, #6366F1 0%, transparent 70%)",
-            }}
-          />
-          <div
-            className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full opacity-[0.03]"
-            style={{
-              background: "radial-gradient(circle, #8B5CF6 0%, transparent 70%)",
-            }}
-          />
-        </div>
-
-        <div className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg"
-              style={{
-                background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-              }}
+        <SSAHero
+          icon={ArrowRightLeft}
+          eyebrow="Delegation Control"
+          title="Approval continuity without breaking the SSA audit trail."
+          description="Delegate specific workflow stages, control effective periods, and keep delegated authority visible across active, scheduled, and expired windows."
+          accent="indigo"
+          actions={
+            <button
+              type="button"
+              onClick={() => setShowForm((f) => !f)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#312E81] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
-              <ArrowRightLeft size={26} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-                SSA Delegations
-              </h1>
-              <p className="mt-0.5 text-sm text-[var(--neutral-gray)]">
-                Manage approval delegations for SSA workflow stages
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowForm((f) => !f)}
-            className="flex items-center gap-2 self-start rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:brightness-110"
-            style={{
-              background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-            }}
-          >
-            {showForm ? <ChevronUp size={16} /> : <Plus size={16} />}
-            {showForm ? "Hide Form" : "New Delegation"}
-          </button>
-        </div>
+              {showForm ? <ChevronUp size={16} /> : <Plus size={16} />}
+              {showForm ? "Hide Form" : "New Delegation"}
+            </button>
+          }
+          chips={
+            <>
+              <SSAHeroChip>{stats.total} delegations tracked</SSAHeroChip>
+              <SSAHeroChip>{stats.active} active right now</SSAHeroChip>
+              <SSAHeroChip>{statusFilter === "all" ? "All statuses" : `${statusFilter} filter`}</SSAHeroChip>
+            </>
+          }
+          aside={
+            <>
+              <SSAHeroInsight
+                icon={CheckCircle2}
+                eyebrow="Active authority"
+                accent="emerald"
+                title={`${stats.active} delegations live`}
+                description="Delegated approvers can currently act on the workflow stages assigned to them."
+              />
+              <SSAHeroInsight
+                icon={Calendar}
+                eyebrow="Planned cover"
+                accent="amber"
+                title={`${stats.scheduled} scheduled`}
+                description="Future delegations are staged now so coverage starts automatically when the time window opens."
+              />
+              <SSAHeroInsight
+                icon={Shield}
+                eyebrow="Governance"
+                accent="indigo"
+                title="Stage-specific delegation only"
+                description="Authority remains limited to the exact SSA workflow stage selected for each delegation."
+              />
+            </>
+          }
+        />
       </motion.div>
 
-      {/* ================================================ */}
-      {/*  STAT CARDS                                       */}
-      {/* ================================================ */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <SSAStatCard
           label="Total Delegations"
           value={stats.total}
+          helper="Every historical and active delegation retained for workflow continuity."
           icon={Users}
-          color="#6366F1"
-          delay={0.05}
+          accent="indigo"
         />
-        <StatCard
+        <SSAStatCard
           label="Active"
           value={stats.active}
+          helper="Delegations presently capable of acting on behalf of the original approver."
           icon={CheckCircle2}
-          color="#10B981"
-          delay={0.1}
+          accent="emerald"
         />
-        <StatCard
+        <SSAStatCard
           label="Scheduled"
           value={stats.scheduled}
+          helper="Time-bound delegations queued to activate automatically."
           icon={Calendar}
-          color="#F59E0B"
-          delay={0.15}
+          accent="amber"
         />
-        <StatCard
+        <SSAStatCard
           label="Expired"
           value={stats.expired}
+          helper="Expired delegations stay visible so authority history remains auditable."
           icon={Clock}
-          color="#6B7280"
-          delay={0.2}
+          accent="rose"
         />
-      </div>
+      </motion.div>
 
       {/* ================================================ */}
       {/*  CREATE FORM                                      */}

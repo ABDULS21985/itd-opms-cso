@@ -23,6 +23,11 @@ import {
   Info,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import {
+  SSAHero,
+  SSAHeroChip,
+  SSAHeroInsight,
+} from "../_components/ssa-ui";
 import { useCreateSSARequest, useCreateServiceImpact } from "@/hooks/use-ssa";
 import { useAuth } from "@/providers/auth-provider";
 import type { SSARequest, ServiceImpact } from "@/types/ssa";
@@ -381,72 +386,86 @@ export default function NewSSARequestPage() {
 
   return (
     <div className="pb-8">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
         className="mb-6"
       >
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/ssa")}
-          className="mb-4 flex items-center gap-1.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        >
-          <ArrowLeft size={16} />
-          Back to Requests
-        </button>
-
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Server size={22} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-                New SSA Request
-              </h1>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Server / Storage Allocation Request
-              </p>
-            </div>
-          </div>
-
-          {/* Progress indicator */}
-          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5">
-            <div className="relative h-10 w-10">
-              <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="2.5" />
-                <circle
-                  cx="18" cy="18" r="15.5" fill="none"
-                  stroke="var(--primary)" strokeWidth="2.5"
-                  strokeDasharray={`${progressPct} 100`}
-                  strokeLinecap="round"
-                  className="transition-all duration-500"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-[var(--primary)]">
-                {progressPct}%
-              </span>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-[var(--text-primary)]">{completedSteps} of {STEPS.length - 1} sections</p>
-              <p className="text-xs text-[var(--text-secondary)]">completed</p>
-            </div>
-          </div>
-        </div>
+        <SSAHero
+          icon={Server}
+          eyebrow="Request Builder"
+          title="Compose a governed SSA request without losing technical detail."
+          description="Move through requestor data, technical scope, impact analysis, and final justification in one guided submission flow."
+          accent="emerald"
+          actions={
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/ssa")}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#0D4A29] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <ArrowLeft size={16} />
+              Back to Requests
+            </button>
+          }
+          chips={
+            <>
+              <SSAHeroChip>{progressPct}% complete</SSAHeroChip>
+              <SSAHeroChip>
+                Step {step + 1} of {STEPS.length}: {STEPS[step].label}
+              </SSAHeroChip>
+              <SSAHeroChip>{impacts.length} impact entries</SSAHeroChip>
+              <SSAHeroChip>{serverType.length} server types selected</SSAHeroChip>
+            </>
+          }
+          aside={
+            <>
+              <SSAHeroInsight
+                icon={ClipboardCheck}
+                eyebrow="Current step"
+                accent="emerald"
+                title={STEPS[step].label}
+                description={STEPS[step].description}
+              />
+              <SSAHeroInsight
+                icon={Cpu}
+                eyebrow="Technical scope"
+                accent="cyan"
+                title={appName.trim() ? appName : "Application not set yet"}
+                description={
+                  appName.trim()
+                    ? `${serverType.length || 0} server type selections, ${vcpuCount} vCPU, ${memoryGb}GB RAM, ${spaceGb}GB space requested.`
+                    : "Define application, platform, and resource requirements in the technical step."
+                }
+              />
+              <SSAHeroInsight
+                icon={Shield}
+                eyebrow="Impact coverage"
+                accent="amber"
+                title={
+                  impacts.length > 0
+                    ? `${impacts.length} impact ${impacts.length === 1 ? "entry" : "entries"} drafted`
+                    : "Impact analysis pending"
+                }
+                description={
+                  impacts.length > 0
+                    ? "Each risk entry should include category, severity, description, and mitigation for approval readiness."
+                    : "Add at least one impact record to complete the governance portion of the request."
+                }
+              />
+            </>
+          }
+        />
       </motion.div>
 
-      {/* Two-panel layout */}
-      <div className="flex gap-6 items-start">
-        {/* ── Left sidebar: Vertical stepper ── */}
+      <div className="grid items-start gap-6 xl:grid-cols-[17rem_minmax(0,1fr)]">
         <motion.aside
           initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="hidden lg:block w-64 shrink-0 sticky top-6"
+          className="hidden xl:block xl:sticky xl:top-6"
         >
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+          <div className="overflow-hidden rounded-[1.75rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(248,250,252,0.92))] p-4 shadow-[0_18px_35px_rgba(15,23,42,0.05)]">
             <nav className="space-y-1">
               {STEPS.map((s, i) => {
                 const isActive = i === step;
@@ -461,9 +480,9 @@ export default function NewSSARequestPage() {
                     onClick={() => isClickable && goTo(i)}
                     className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
                       isActive
-                        ? "bg-[var(--primary)]/10 shadow-sm"
+                        ? "bg-[var(--primary)]/10 shadow-sm shadow-[var(--primary)]/8"
                         : isClickable
-                          ? "hover:bg-[var(--surface-1)]"
+                          ? "hover:bg-white"
                           : "opacity-50 cursor-default"
                     }`}
                   >
@@ -502,8 +521,7 @@ export default function NewSSARequestPage() {
               })}
             </nav>
 
-            {/* Helpful tip */}
-            <div className="mt-4 rounded-xl bg-[var(--surface-1)] p-3">
+            <div className="mt-4 rounded-xl bg-[var(--surface-1)]/80 p-3">
               <div className="flex items-start gap-2">
                 <Info size={14} className="text-[var(--text-secondary)] mt-0.5 shrink-0" />
                 <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
@@ -525,8 +543,7 @@ export default function NewSSARequestPage() {
           transition={{ duration: 0.4, delay: 0.1 }}
           className="flex-1 min-w-0"
         >
-          {/* Mobile stepper */}
-          <div className="lg:hidden mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3">
+          <div className="xl:hidden mb-4 rounded-[1.5rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(248,250,252,0.92))] px-4 py-3 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
             <div className="flex items-center justify-between gap-2">
               {STEPS.map((s, i) => {
                 const isActive = i === step;
@@ -567,10 +584,8 @@ export default function NewSSARequestPage() {
             </p>
           </div>
 
-          {/* Step content card */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden">
-            {/* Step header bar */}
-            <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/50 px-6 py-4">
+          <div className="overflow-hidden rounded-[1.9rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.94))] shadow-[0_22px_45px_rgba(15,23,42,0.06)]">
+            <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/60 px-6 py-4">
               <div className="flex items-center gap-3">
                 {(() => { const Icon = STEPS[step].icon; return (
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
@@ -602,7 +617,6 @@ export default function NewSSARequestPage() {
               </div>
             </div>
 
-            {/* Step body */}
             <div className="p-6 min-h-[400px] relative overflow-hidden">
               <AnimatePresence mode="wait" custom={direction}>
                 <motion.div
@@ -1157,7 +1171,6 @@ export default function NewSSARequestPage() {
               </AnimatePresence>
             </div>
 
-            {/* Navigation bar (inside card) */}
             <div className="border-t border-[var(--border)] bg-[var(--surface-1)]/30 px-6 py-4">
               <div className="flex items-center justify-between">
                 <button

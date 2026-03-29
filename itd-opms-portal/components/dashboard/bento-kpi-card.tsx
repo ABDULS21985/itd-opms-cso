@@ -119,10 +119,10 @@ export default function BentoKPICard({
   /* ----- Dynamic inline styles ------------------------------------ */
   const glassStyle: React.CSSProperties = {
     /* light-mode glass — overridden by CSS vars in dark mode */
-    background: "rgba(255, 255, 255, 0.6)",
+    background: "var(--surface-0)",
     WebkitBackdropFilter: "blur(20px)",
     backdropFilter: "blur(20px)",
-    border: "1px solid rgba(255, 255, 255, 0.18)",
+    border: "1px solid var(--border)",
     boxShadow:
       "0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04)",
     /* CSS variable for the conic gradient border */

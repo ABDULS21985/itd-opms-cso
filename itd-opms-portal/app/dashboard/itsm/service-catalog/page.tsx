@@ -1,33 +1,39 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ElementType,
+  type ReactNode,
+} from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  ShoppingCart,
-  Clock,
-  ShieldCheck,
-  Search,
   ArrowRight,
-  Layers,
-  Package,
+  Check,
+  ChevronDown,
+  Clock,
+  FileText,
   Heart,
-  X,
+  History,
+  Layers,
   LayoutGrid,
   List,
-  ChevronDown,
-  Check,
-  TrendingUp,
-  History,
-  Star,
-  FileText,
-  Settings,
   Loader2,
+  Package,
+  Search,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  TrendingUp,
+  X,
 } from "lucide-react";
 import {
   useCatalogCategories,
@@ -35,30 +41,23 @@ import {
 } from "@/hooks/use-itsm";
 import { apiClient } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import type { CatalogItem, CatalogCategory } from "@/types";
-
-/* ------------------------------------------------------------------ */
-/*  Inline hook: useDebounce                                           */
-/* ------------------------------------------------------------------ */
+import type { CatalogCategory, CatalogItem, PaginatedResponse } from "@/types";
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
   }, [value, delay]);
 
   return debouncedValue;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Inline hook: useLocalStorage                                       */
-/* ------------------------------------------------------------------ */
-
 function useLocalStorage<T>(key: string, initialValue: T): [T, (v: T) => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     if (typeof window === "undefined") return initialValue;
+
     try {
       const item = window.localStorage.getItem(key);
       return item ? (JSON.parse(item) as T) : initialValue;
@@ -80,81 +79,156 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, (v: T) => void] {
   return [storedValue, setValue];
 }
 
-/* ------------------------------------------------------------------ */
-/*  Skeleton Components                                                */
-/* ------------------------------------------------------------------ */
+function formatRelativeTimeInline(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
-function CardSkeleton() {
+  if (diffSeconds < 60) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 7)}w ago`;
+}
+
+function LoadingValue({ width = "w-16" }: { width?: string }) {
   return (
-    <div
-      className="rounded-xl border p-5 animate-pulse"
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
+  );
+}
+
+function HeroActionButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: ElementType;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
       style={{
-        backgroundColor: "var(--surface-0)",
-        borderColor: "var(--border)",
+        borderColor: "rgba(255,255,255,0.6)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        backdropFilter: "blur(18px)",
       }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-9 h-9 rounded-lg bg-[var(--surface-2)]" />
-        <div className="w-6 h-6 rounded bg-[var(--surface-2)]" />
-      </div>
-      <div className="h-4 w-3/4 rounded bg-[var(--surface-2)] mb-2" />
-      <div className="h-3 w-full rounded bg-[var(--surface-2)] mb-1" />
-      <div className="h-3 w-2/3 rounded bg-[var(--surface-2)] mb-3" />
-      <div className="flex gap-2">
-        <div className="h-5 w-16 rounded-full bg-[var(--surface-2)]" />
-        <div className="h-5 w-24 rounded-full bg-[var(--surface-2)]" />
-      </div>
+      <Icon size={16} />
+      {label}
+    </button>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  helper,
+  accent,
+  loading,
+}: {
+  label: string;
+  value: ReactNode;
+  helper: string;
+  accent: string;
+  loading?: boolean;
+}) {
+  return (
+    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)]/78 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+        {label}
+      </p>
+      {loading ? (
+        <div className="mt-3">
+          <LoadingValue />
+        </div>
+      ) : (
+        <p className="mt-3 text-2xl font-bold" style={{ color: accent }}>
+          {value}
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+        {helper}
+      </p>
     </div>
   );
 }
 
-function ListRowSkeleton() {
+function QuickLaneCard({
+  title,
+  description,
+  count,
+  active,
+  accent,
+  icon: Icon,
+  onClick,
+  ariaLabel,
+}: {
+  title: string;
+  description: string;
+  count: number;
+  active: boolean;
+  accent: string;
+  icon: ElementType;
+  onClick: () => void;
+  ariaLabel: string;
+}) {
   return (
-    <div
-      className="flex items-center gap-4 rounded-xl border px-5 py-4 animate-pulse"
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      onClick={onClick}
+      className="group rounded-[26px] border p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
       style={{
-        backgroundColor: "var(--surface-0)",
-        borderColor: "var(--border)",
+        borderColor: active ? `${accent}46` : "var(--border)",
+        backgroundImage: active
+          ? `radial-gradient(circle at top right, ${accent}18, transparent 36%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`
+          : "linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)",
       }}
     >
-      <div className="w-9 h-9 rounded-lg bg-[var(--surface-2)] shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="h-4 w-48 rounded bg-[var(--surface-2)] mb-1" />
-        <div className="h-3 w-72 rounded bg-[var(--surface-2)]" />
+      <div className="flex items-start justify-between gap-3">
+        <span
+          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: `${accent}15`, color: accent }}
+        >
+          <Icon size={18} />
+        </span>
+        <span
+          className="text-2xl font-bold tabular-nums"
+          style={{ color: active ? accent : "var(--text-primary)" }}
+        >
+          {count}
+        </span>
       </div>
-      <div className="h-5 w-20 rounded-full bg-[var(--surface-2)]" />
-      <div className="h-5 w-16 rounded bg-[var(--surface-2)]" />
-      <div className="w-6 h-6 rounded bg-[var(--surface-2)]" />
-    </div>
+
+      <h3 className="mt-5 text-lg font-semibold text-[var(--text-primary)]">
+        {title}
+      </h3>
+      <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+        {description}
+      </p>
+    </button>
   );
 }
-
-function HorizontalCardSkeleton() {
-  return (
-    <div
-      className="min-w-[180px] rounded-xl border p-4 animate-pulse shrink-0"
-      style={{
-        backgroundColor: "var(--surface-0)",
-        borderColor: "var(--border)",
-      }}
-    >
-      <div className="w-8 h-8 rounded-lg bg-[var(--surface-2)] mb-2" />
-      <div className="h-3 w-24 rounded bg-[var(--surface-2)] mb-1" />
-      <div className="h-2.5 w-16 rounded bg-[var(--surface-2)]" />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Category Multi-Select Dropdown                                     */
-/* ------------------------------------------------------------------ */
 
 function CategoryMultiSelect({
   categories,
+  categoryCounts,
   selectedIds,
   onChange,
 }: {
   categories: CatalogCategory[];
+  categoryCounts: Record<string, number>;
   selectedIds: string[];
   onChange: (ids: string[]) => void;
 }) {
@@ -162,42 +236,47 @@ function CategoryMultiSelect({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const toggle = (id: string) => {
     if (selectedIds.includes(id)) {
-      onChange(selectedIds.filter((sid) => sid !== id));
-    } else {
-      onChange([...selectedIds, id]);
+      onChange(selectedIds.filter((selectedId) => selectedId !== id));
+      return;
     }
+
+    onChange([...selectedIds, id]);
   };
 
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        type="button"
+        aria-label="Open category lens"
+        onClick={() => setOpen((current) => !current)}
         className={cn(
-          "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+          "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
           selectedIds.length > 0 && "ring-1 ring-[var(--primary)]",
         )}
         style={{
           backgroundColor: "var(--surface-0)",
-          borderColor: selectedIds.length > 0 ? "var(--primary)" : "var(--border)",
+          borderColor:
+            selectedIds.length > 0 ? "var(--primary)" : "var(--border)",
           color: "var(--text-primary)",
         }}
       >
-        <Layers size={14} />
-        Categories
+        <Layers size={15} />
+        Category lens
         {selectedIds.length > 0 && (
           <span
-            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold text-white"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
             style={{ backgroundColor: "var(--primary)" }}
           >
             {selectedIds.length}
@@ -219,49 +298,65 @@ function CategoryMultiSelect({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-30 mt-1 w-64 rounded-xl border shadow-lg overflow-hidden"
+            className="absolute z-30 mt-2 w-72 overflow-hidden rounded-[24px] border shadow-lg"
             style={{
               backgroundColor: "var(--surface-0)",
               borderColor: "var(--border)",
             }}
           >
-            <div className="max-h-64 overflow-y-auto p-1">
-              {categories.map((cat) => {
-                const selected = selectedIds.includes(cat.id);
+            <div className="border-b border-[var(--border)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Category lens
+              </p>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                Select multiple service families to narrow the board.
+              </p>
+            </div>
+
+            <div className="max-h-72 space-y-1 overflow-y-auto p-2">
+              {categories.map((category) => {
+                const selected = selectedIds.includes(category.id);
                 return (
                   <button
-                    key={cat.id}
-                    onClick={() => toggle(cat.id)}
-                    className="flex items-center gap-2.5 w-full text-left rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--surface-1)]"
+                    key={category.id}
+                    type="button"
+                    onClick={() => toggle(category.id)}
+                    className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--surface-1)]"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <div
                       className={cn(
-                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                         selected
-                          ? "bg-[var(--primary)] border-[var(--primary)]"
+                          ? "border-[var(--primary)] bg-[var(--primary)]"
                           : "border-[var(--border)]",
                       )}
                     >
                       {selected && <Check size={10} className="text-white" />}
                     </div>
-                    <Package size={14} className="text-[var(--text-secondary)] shrink-0" />
-                    <span className="truncate">{cat.name}</span>
+                    <Package
+                      size={14}
+                      className="shrink-0 text-[var(--text-secondary)]"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {category.name}
+                    </span>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      {categoryCounts[category.id] || 0}
+                    </span>
                   </button>
                 );
               })}
             </div>
+
             {selectedIds.length > 0 && (
-              <div
-                className="border-t px-3 py-2"
-                style={{ borderColor: "var(--border)" }}
-              >
+              <div className="border-t border-[var(--border)] px-4 py-3">
                 <button
+                  type="button"
                   onClick={() => onChange([])}
-                  className="text-xs font-medium"
-                  style={{ color: "var(--primary)" }}
+                  className="text-sm font-medium text-[var(--primary)]"
                 >
-                  Clear all
+                  Clear category lens
                 </button>
               </div>
             )}
@@ -272,45 +367,87 @@ function CategoryMultiSelect({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Favorite Heart Button                                              */
-/* ------------------------------------------------------------------ */
-
 function FavoriteButton({
   itemId,
+  itemName,
   isFavorited,
   onToggle,
   size = 16,
 }: {
   itemId: string;
+  itemName: string;
   isFavorited: boolean;
   onToggle: (id: string) => void;
   size?: number;
 }) {
   return (
     <button
-      onClick={(e) => {
-        e.stopPropagation();
-        e.preventDefault();
+      type="button"
+      aria-label={`Toggle favorite for ${itemName}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
         onToggle(itemId);
       }}
-      className="p-1 rounded-md transition-colors hover:bg-[var(--surface-2)]"
+      className="rounded-xl p-2 transition-colors hover:bg-[var(--surface-2)]"
       title={isFavorited ? "Remove from favorites" : "Add to favorites"}
     >
       <Heart
         size={size}
         className={cn(
           "transition-colors duration-200",
-          isFavorited ? "fill-red-500 text-red-500" : "text-[var(--text-secondary)]",
+          isFavorited
+            ? "fill-red-500 text-red-500"
+            : "text-[var(--text-secondary)]",
         )}
       />
     </button>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Service Card (Grid View)                                           */
-/* ------------------------------------------------------------------ */
+function ServiceMetaBadges({
+  item,
+  categoryName,
+}: {
+  item: CatalogItem;
+  categoryName?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {categoryName && (
+        <span
+          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+          style={{
+            backgroundColor: "var(--surface-2)",
+            color: "var(--text-secondary)",
+          }}
+        >
+          {categoryName}
+        </span>
+      )}
+
+      {item.estimatedDelivery && (
+        <span className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+          <Clock size={12} />
+          {item.estimatedDelivery}
+        </span>
+      )}
+
+      {item.approvalRequired && (
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+          style={{
+            backgroundColor: "rgba(249,115,22,0.12)",
+            color: "#C2410C",
+          }}
+        >
+          <ShieldCheck size={12} />
+          Approval
+        </span>
+      )}
+    </div>
+  );
+}
 
 function ServiceCard({
   item,
@@ -327,88 +464,70 @@ function ServiceCard({
   onClick: () => void;
   index?: number;
 }) {
+  const accent = item.approvalRequired ? "#F97316" : "#2563EB";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
     >
-      <button
-        onClick={onClick}
-        className="group block w-full text-left rounded-xl border p-5 transition-all duration-200 hover:shadow-md relative"
+      <div
+        className="group flex h-full flex-col rounded-[28px] border p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
         style={{
-          backgroundColor: "var(--surface-0)",
-          borderColor: "var(--border)",
+          borderColor: `${accent}18`,
+          backgroundImage: `radial-gradient(circle at top right, ${accent}12, transparent 32%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
         }}
       >
-        {/* Favorite heart — top-right */}
-        <div className="absolute top-3 right-3">
+        <div className="flex items-start justify-between gap-3">
+          <span
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: `${accent}15`, color: accent }}
+          >
+            <Package size={20} />
+          </span>
+
           <FavoriteButton
             itemId={item.id}
+            itemName={item.name}
             isFavorited={isFavorited}
             onToggle={onToggleFavorite}
           />
         </div>
 
-        <div className="flex items-start justify-between mb-3 pr-8">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
-          >
-            <Package size={18} style={{ color: "#3B82F6" }} />
+        <button
+          type="button"
+          aria-label={`Open service ${item.name}`}
+          onClick={onClick}
+          className="mt-5 flex flex-1 flex-col text-left"
+        >
+          <div className="flex-1">
+            <h4 className="text-lg font-semibold text-[var(--text-primary)]">
+              {item.name}
+            </h4>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              {item.description ||
+                "Service details will open in the request brief."}
+            </p>
           </div>
-          <ArrowRight
-            size={16}
-            className="text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5"
-          />
-        </div>
-        <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-1 line-clamp-1">
-          {item.name}
-        </h4>
-        {item.description && (
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-3 line-clamp-2">
-            {item.description}
-          </p>
-        )}
-        <div className="flex items-center gap-2 flex-wrap">
-          {categoryName && (
-            <span
-              className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {categoryName}
-            </span>
-          )}
-          {item.estimatedDelivery && (
-            <span className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-              <Clock size={12} />
-              {item.estimatedDelivery}
-            </span>
-          )}
-          {item.approvalRequired && (
-            <span
-              className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "rgba(249, 115, 22, 0.1)",
-                color: "#F97316",
-              }}
-            >
-              <ShieldCheck size={12} />
-              Approval
-            </span>
-          )}
-        </div>
-      </button>
+
+          <div className="mt-5 space-y-4">
+            <ServiceMetaBadges item={item} categoryName={categoryName} />
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-[var(--text-primary)]">
+                Open request brief
+              </span>
+              <ArrowRight
+                size={16}
+                className="text-[var(--text-secondary)] transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-[var(--text-primary)]"
+              />
+            </div>
+          </div>
+        </button>
+      </div>
     </motion.div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Service Row (List View)                                            */
-/* ------------------------------------------------------------------ */
 
 function ServiceRow({
   item,
@@ -425,127 +544,320 @@ function ServiceRow({
   onClick: () => void;
   index?: number;
 }) {
+  const accent = item.approvalRequired ? "#F97316" : "#2563EB";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.03 }}
     >
-      <button
-        onClick={onClick}
-        className="group flex items-center gap-4 w-full text-left rounded-xl border px-5 py-4 transition-all duration-200 hover:shadow-md"
+      <div
+        className="group flex items-center gap-4 rounded-[24px] border px-5 py-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
         style={{
-          backgroundColor: "var(--surface-0)",
-          borderColor: "var(--border)",
+          borderColor: `${accent}18`,
+          backgroundImage: `linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
         }}
       >
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-          style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
+        <button
+          type="button"
+          aria-label={`Open service ${item.name}`}
+          onClick={onClick}
+          className="flex min-w-0 flex-1 items-center gap-4 text-left"
         >
-          <Package size={18} style={{ color: "#3B82F6" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate">
-            {item.name}
-          </h4>
-          {item.description && (
-            <p className="text-xs text-[var(--text-secondary)] truncate">
-              {item.description}
+          <span
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: `${accent}15`, color: accent }}
+          >
+            <Package size={18} />
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                {item.name}
+              </h4>
+              {item.approvalRequired && (
+                <span
+                  className="hidden rounded-full px-2 py-0.5 text-[11px] font-semibold sm:inline-flex"
+                  style={{
+                    backgroundColor: "rgba(249,115,22,0.12)",
+                    color: "#C2410C",
+                  }}
+                >
+                  Approval
+                </span>
+              )}
+            </div>
+            <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
+              {item.description ||
+                "Open the request brief to view service details."}
             </p>
-          )}
-        </div>
-        {categoryName && (
-          <span
-            className="hidden md:inline-flex items-center text-xs font-medium rounded-full px-2.5 py-0.5 shrink-0"
-            style={{
-              backgroundColor: "var(--surface-2)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            {categoryName}
-          </span>
-        )}
-        {item.estimatedDelivery && (
-          <span className="hidden lg:inline-flex items-center gap-1 text-xs text-[var(--text-secondary)] shrink-0">
-            <Clock size={12} />
-            {item.estimatedDelivery}
-          </span>
-        )}
-        {item.approvalRequired && (
-          <span
-            className="hidden sm:inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 shrink-0"
-            style={{
-              backgroundColor: "rgba(249, 115, 22, 0.1)",
-              color: "#F97316",
-            }}
-          >
-            <ShieldCheck size={12} />
-            Approval
-          </span>
-        )}
+          </div>
+
+          <div className="hidden shrink-0 md:block">
+            <ServiceMetaBadges item={item} categoryName={categoryName} />
+          </div>
+
+          <ArrowRight
+            size={16}
+            className="shrink-0 text-[var(--text-secondary)] transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-[var(--text-primary)]"
+          />
+        </button>
+
         <FavoriteButton
           itemId={item.id}
+          itemName={item.name}
           isFavorited={isFavorited}
           onToggle={onToggleFavorite}
         />
-        <ArrowRight
-          size={16}
-          className="text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5 shrink-0"
-        />
-      </button>
+      </div>
     </motion.div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Empty State                                                        */
-/* ------------------------------------------------------------------ */
+function ServiceCollection({
+  items,
+  viewMode,
+  categoryMap,
+  favoriteSet,
+  onToggleFavorite,
+  onViewItem,
+  showCategory = true,
+}: {
+  items: CatalogItem[];
+  viewMode: "grid" | "list";
+  categoryMap: Record<string, CatalogCategory>;
+  favoriteSet: Set<string>;
+  onToggleFavorite: (id: string) => void;
+  onViewItem: (item: CatalogItem) => void;
+  showCategory?: boolean;
+}) {
+  if (viewMode === "grid") {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+        {items.map((item, index) => (
+          <ServiceCard
+            key={item.id}
+            item={item}
+            categoryName={
+              showCategory && item.categoryId
+                ? categoryMap[item.categoryId]?.name
+                : undefined
+            }
+            isFavorited={favoriteSet.has(item.id)}
+            onToggleFavorite={onToggleFavorite}
+            onClick={() => onViewItem(item)}
+            index={index}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <ServiceRow
+          key={item.id}
+          item={item}
+          categoryName={
+            showCategory && item.categoryId
+              ? categoryMap[item.categoryId]?.name
+              : undefined
+          }
+          isFavorited={favoriteSet.has(item.id)}
+          onToggleFavorite={onToggleFavorite}
+          onClick={() => onViewItem(item)}
+          index={index}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SpotlightCollection({
+  title,
+  description,
+  icon: Icon,
+  items,
+  loading,
+  accent,
+  emptyTitle,
+  emptyDescription,
+  categoryMap,
+  favoriteSet,
+  onToggleFavorite,
+  onViewItem,
+  getMeta,
+}: {
+  title: string;
+  description: string;
+  icon: ElementType;
+  items: CatalogItem[];
+  loading: boolean;
+  accent: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  categoryMap: Record<string, CatalogCategory>;
+  favoriteSet: Set<string>;
+  onToggleFavorite: (id: string) => void;
+  onViewItem: (item: CatalogItem) => void;
+  getMeta: (item: CatalogItem) => string;
+}) {
+  return (
+    <div
+      className="rounded-[28px] border p-5"
+      style={{
+        borderColor: `${accent}20`,
+        backgroundImage: `radial-gradient(circle at top right, ${accent}12, transparent 36%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            {title}
+          </p>
+          <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+            {description}
+          </p>
+        </div>
+        <span
+          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: `${accent}15`, color: accent }}
+        >
+          <Icon size={18} />
+        </span>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-20 animate-pulse rounded-[22px] bg-[var(--surface-0)]/70"
+            />
+          ))
+        ) : items.length === 0 ? (
+          <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-0)]/72 p-4">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {emptyTitle}
+            </p>
+            <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+              {emptyDescription}
+            </p>
+          </div>
+        ) : (
+          items.slice(0, 3).map((item) => (
+            <div
+              key={item.id}
+              className="group flex w-full items-start gap-3 rounded-[22px] border border-[var(--border)] bg-[var(--surface-0)]/80 p-4 text-left transition-colors hover:bg-[var(--surface-0)]"
+            >
+              <button
+                type="button"
+                onClick={() => onViewItem(item)}
+                className="flex min-w-0 flex-1 items-start gap-3 text-left"
+              >
+                <span
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+                  style={{ backgroundColor: `${accent}14`, color: accent }}
+                >
+                  <Package size={16} />
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                      {item.name}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
+                      {item.categoryId
+                        ? categoryMap[item.categoryId]?.name ||
+                          "General services"
+                        : "General services"}
+                    </p>
+                  </div>
+
+                  <p className="mt-3 text-sm text-[var(--text-secondary)]">
+                    {getMeta(item)}
+                  </p>
+                </div>
+              </button>
+
+              <FavoriteButton
+                itemId={item.id}
+                itemName={item.name}
+                isFavorited={favoriteSet.has(item.id)}
+                onToggle={onToggleFavorite}
+                size={14}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function EmptyState({
   icon: Icon,
   title,
   description,
+  actionLabel,
+  onAction,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: ElementType;
   title: string;
   description: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col items-center justify-center py-16"
+      className="rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)] p-12 text-center"
     >
-      <Icon size={48} className="text-[var(--text-secondary)] mb-4 opacity-40" />
-      <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
+      <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--surface-1)] text-[var(--text-secondary)]">
+        <Icon size={28} />
+      </span>
+      <h3 className="mt-5 text-xl font-semibold text-[var(--text-primary)]">
         {title}
+      </h3>
+      <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+        {description}
       </p>
-      <p className="text-xs text-[var(--text-secondary)]">{description}</p>
+
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-6 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: "#0F766E" }}
+        >
+          {actionLabel}
+        </button>
+      )}
     </motion.div>
   );
 }
-
-/* ================================================================== */
-/*  Page                                                               */
-/* ================================================================== */
 
 export default function ServiceCatalogPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  /* ---- URL-based state ---- */
   const urlSearch = searchParams.get("q") || "";
-  const urlCategories = searchParams.get("categories")?.split(",").filter(Boolean) || [];
+  const urlCategories =
+    searchParams.get("categories")?.split(",").filter(Boolean) || [];
   const urlApprovalRequired = searchParams.get("approval") === "true";
-  const urlEntitledOnly = searchParams.get("entitled") !== "false"; // default true
+  const urlEntitledOnly = searchParams.get("entitled") !== "false";
   const urlViewMode = (searchParams.get("view") as "grid" | "list") || null;
 
-  /* ---- Local state ---- */
   const [searchInput, setSearchInput] = useState(urlSearch);
   const debouncedSearch = useDebounce(searchInput, 300);
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(urlCategories);
+  const [selectedCategoryIds, setSelectedCategoryIds] =
+    useState<string[]>(urlCategories);
   const [approvalRequired, setApprovalRequired] = useState(urlApprovalRequired);
   const [entitledOnly, setEntitledOnly] = useState(urlEntitledOnly);
   const [viewMode, setViewMode] = useLocalStorage<"grid" | "list">(
@@ -554,38 +866,38 @@ export default function ServiceCatalogPage() {
   );
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
-  /* ---- Sync state to URL search params ---- */
   const updateSearchParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+
       Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === undefined) {
+        if (!value) {
           params.delete(key);
-        } else {
-          params.set(key, value);
+          return;
         }
+
+        params.set(key, value);
       });
+
       const newUrl = params.toString()
         ? `?${params.toString()}`
         : window.location.pathname;
       router.replace(newUrl, { scroll: false });
     },
-    [searchParams, router],
+    [router, searchParams],
   );
 
-  /* Sync debounced search to URL */
   useEffect(() => {
     updateSearchParams({ q: debouncedSearch || null });
   }, [debouncedSearch, updateSearchParams]);
 
-  /* Sync category filters to URL */
   useEffect(() => {
     updateSearchParams({
-      categories: selectedCategoryIds.length > 0 ? selectedCategoryIds.join(",") : null,
+      categories:
+        selectedCategoryIds.length > 0 ? selectedCategoryIds.join(",") : null,
     });
   }, [selectedCategoryIds, updateSearchParams]);
 
-  /* Sync toggles to URL */
   useEffect(() => {
     updateSearchParams({
       approval: approvalRequired ? "true" : null,
@@ -594,14 +906,26 @@ export default function ServiceCatalogPage() {
     });
   }, [approvalRequired, entitledOnly, viewMode, updateSearchParams]);
 
-  /* ---- Data queries ---- */
   const { data: categories, isLoading: categoriesLoading } =
     useCatalogCategories();
-  const { data: entitledItems, isLoading: itemsLoading } =
+  const { data: entitledItems, isLoading: entitledItemsLoading } =
     useEntitledCatalogItems();
 
-  /* Server-side search */
+  const { data: marketplaceResponse, isLoading: marketplaceLoading } = useQuery(
+    {
+      queryKey: ["catalog-marketplace", entitledOnly],
+      queryFn: () =>
+        apiClient.get<PaginatedResponse<CatalogItem>>("/itsm/catalog/items", {
+          page: 1,
+          limit: 150,
+          status: "active",
+        }),
+      enabled: !entitledOnly,
+    },
+  );
+
   const isSearchActive = debouncedSearch.trim().length > 0;
+
   const { data: searchResults, isLoading: searchLoading } = useQuery({
     queryKey: [
       "catalog-search",
@@ -612,7 +936,8 @@ export default function ServiceCatalogPage() {
     queryFn: () =>
       apiClient.get<CatalogItem[]>("/itsm/catalog/search/search", {
         q: debouncedSearch,
-        category_id: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined,
+        category_id:
+          selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined,
         approval_required: approvalRequired ? true : undefined,
         page: 1,
         limit: 50,
@@ -620,17 +945,28 @@ export default function ServiceCatalogPage() {
     enabled: isSearchActive,
   });
 
-  /* Favorites */
   const { data: favoriteIds } = useQuery({
     queryKey: ["catalog-favorites"],
-    queryFn: () =>
-      apiClient.get<string[]>("/itsm/catalog/search/favorites"),
+    queryFn: () => apiClient.get<string[]>("/itsm/catalog/search/favorites"),
   });
 
-  const favoriteSet = useMemo(
-    () => new Set(favoriteIds || []),
-    [favoriteIds],
-  );
+  const { data: popularItems, isLoading: popularLoading } = useQuery({
+    queryKey: ["catalog-popular"],
+    queryFn: () =>
+      apiClient.get<CatalogItem[]>("/itsm/catalog/search/popular", {
+        limit: 5,
+      }),
+  });
+
+  const { data: recentItems, isLoading: recentLoading } = useQuery({
+    queryKey: ["catalog-recent"],
+    queryFn: () =>
+      apiClient.get<CatalogItem[]>("/itsm/catalog/search/recent", {
+        limit: 5,
+      }),
+  });
+
+  const favoriteSet = useMemo(() => new Set(favoriteIds || []), [favoriteIds]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: (itemId: string) =>
@@ -639,17 +975,30 @@ export default function ServiceCatalogPage() {
       ),
     onMutate: async (itemId) => {
       await queryClient.cancelQueries({ queryKey: ["catalog-favorites"] });
-      const previousFavorites = queryClient.getQueryData<string[]>(["catalog-favorites"]);
-      queryClient.setQueryData<string[]>(["catalog-favorites"], (old) => {
-        if (!old) return [itemId];
-        if (old.includes(itemId)) return old.filter((id) => id !== itemId);
-        return [...old, itemId];
-      });
+      const previousFavorites = queryClient.getQueryData<string[]>([
+        "catalog-favorites",
+      ]);
+
+      queryClient.setQueryData<string[]>(
+        ["catalog-favorites"],
+        (currentFavorites) => {
+          if (!currentFavorites) return [itemId];
+          if (currentFavorites.includes(itemId)) {
+            return currentFavorites.filter((id) => id !== itemId);
+          }
+
+          return [...currentFavorites, itemId];
+        },
+      );
+
       return { previousFavorites };
     },
-    onError: (_err, _itemId, context) => {
+    onError: (_error, _itemId, context) => {
       if (context?.previousFavorites) {
-        queryClient.setQueryData(["catalog-favorites"], context.previousFavorites);
+        queryClient.setQueryData(
+          ["catalog-favorites"],
+          context.previousFavorites,
+        );
       }
     },
     onSettled: () => {
@@ -664,101 +1013,373 @@ export default function ServiceCatalogPage() {
     [toggleFavoriteMutation],
   );
 
-  /* Popular items */
-  const { data: popularItems, isLoading: popularLoading } = useQuery({
-    queryKey: ["catalog-popular"],
-    queryFn: () =>
-      apiClient.get<CatalogItem[]>("/itsm/catalog/search/popular", {
-        limit: 5,
-      }),
-  });
+  const sourceItems = entitledOnly
+    ? entitledItems || []
+    : marketplaceResponse?.data || [];
 
-  /* Recent items */
-  const { data: recentItems, isLoading: recentLoading } = useQuery({
-    queryKey: ["catalog-recent"],
-    queryFn: () =>
-      apiClient.get<CatalogItem[]>("/itsm/catalog/search/recent", {
-        limit: 5,
-      }),
-  });
+  const entitledSet = useMemo(
+    () => new Set((entitledItems || []).map((item) => item.id)),
+    [entitledItems],
+  );
 
-  /* ---- Derived data ---- */
   const categoryMap = useMemo(() => {
     const map: Record<string, CatalogCategory> = {};
-    if (categories) {
-      for (const cat of categories) {
-        map[cat.id] = cat;
-      }
+    for (const category of categories || []) {
+      map[category.id] = category;
     }
     return map;
   }, [categories]);
 
-  /* Count items per category (from entitled items) */
   const categoryItemCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    if (entitledItems) {
-      for (const item of entitledItems) {
-        const key = item.categoryId || "uncategorized";
-        counts[key] = (counts[key] || 0) + 1;
-      }
+    for (const item of sourceItems) {
+      const key = item.categoryId || "uncategorized";
+      counts[key] = (counts[key] || 0) + 1;
     }
     return counts;
-  }, [entitledItems]);
+  }, [sourceItems]);
 
-  /* Determine which items to display */
-  const displayItems = useMemo(() => {
-    if (isSearchActive) {
-      return searchResults || [];
+  const searchScopedItems = useMemo(() => {
+    let items = searchResults || [];
+
+    if (entitledOnly) {
+      items = items.filter((item) => entitledSet.has(item.id));
     }
 
-    let items = entitledItems || [];
+    return items;
+  }, [entitledOnly, entitledSet, searchResults]);
 
-    // Category filter
+  const displayItems = useMemo(() => {
+    let items = isSearchActive ? searchScopedItems : sourceItems;
+
     if (selectedCategoryIds.length > 0) {
       items = items.filter(
-        (item) => item.categoryId && selectedCategoryIds.includes(item.categoryId),
+        (item) =>
+          item.categoryId && selectedCategoryIds.includes(item.categoryId),
       );
     }
 
-    // Approval required filter
     if (approvalRequired) {
       items = items.filter((item) => item.approvalRequired);
     }
 
-    // Favorites only filter
     if (showFavoritesOnly) {
       items = items.filter((item) => favoriteSet.has(item.id));
     }
 
     return items;
   }, [
-    isSearchActive,
-    searchResults,
-    entitledItems,
-    selectedCategoryIds,
     approvalRequired,
-    showFavoritesOnly,
     favoriteSet,
+    isSearchActive,
+    searchScopedItems,
+    selectedCategoryIds,
+    showFavoritesOnly,
+    sourceItems,
   ]);
 
-  /* Group items by category for "All Services" view */
   const groupedItems = useMemo(() => {
     const groups: Record<string, CatalogItem[]> = {};
+
     for (const item of displayItems) {
       const key = item.categoryId || "uncategorized";
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     }
-    return groups;
-  }, [displayItems]);
 
-  /* Favorited items list */
-  const favoritedItems = useMemo(() => {
-    if (!entitledItems || favoriteSet.size === 0) return [];
-    return entitledItems.filter((item) => favoriteSet.has(item.id));
-  }, [entitledItems, favoriteSet]);
+    return Object.entries(groups).sort(([leftId], [rightId]) => {
+      const leftName = categoryMap[leftId]?.name || "General services";
+      const rightName = categoryMap[rightId]?.name || "General services";
+      return leftName.localeCompare(rightName);
+    });
+  }, [categoryMap, displayItems]);
 
-  const isLoading = categoriesLoading || itemsLoading;
+  const favoriteItemMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>();
+    const collections = [
+      sourceItems,
+      searchResults || [],
+      popularItems || [],
+      recentItems || [],
+    ];
+
+    for (const collection of collections) {
+      for (const item of collection) {
+        if (!map.has(item.id)) {
+          map.set(item.id, item);
+        }
+      }
+    }
+
+    return map;
+  }, [popularItems, recentItems, searchResults, sourceItems]);
+
+  const favoritedItems = useMemo(
+    () =>
+      Array.from(favoriteSet)
+        .map((id) => favoriteItemMap.get(id))
+        .filter((item): item is CatalogItem => Boolean(item)),
+    [favoriteItemMap, favoriteSet],
+  );
+
+  const approvalItemCount = useMemo(
+    () => sourceItems.filter((item) => item.approvalRequired).length,
+    [sourceItems],
+  );
+
+  const activeCategoryCount = useMemo(
+    () =>
+      (categories || []).filter(
+        (category) => (categoryItemCounts[category.id] || 0) > 0,
+      ).length,
+    [categories, categoryItemCounts],
+  );
+
+  const topCategories = useMemo(
+    () =>
+      (categories || [])
+        .map((category) => ({
+          ...category,
+          count: categoryItemCounts[category.id] || 0,
+        }))
+        .filter((category) => category.count > 0)
+        .sort((left, right) => right.count - left.count)
+        .slice(0, 3),
+    [categories, categoryItemCounts],
+  );
+
+  const activeCategoryNames = selectedCategoryIds.map(
+    (id) => categoryMap[id]?.name || id,
+  );
+
+  const hasBoardFilters =
+    selectedCategoryIds.length > 0 ||
+    approvalRequired ||
+    showFavoritesOnly ||
+    !entitledOnly;
+
+  const showPersonalizedSections = !isSearchActive && !hasBoardFilters;
+
+  const catalogLoading =
+    categoriesLoading ||
+    (entitledOnly ? entitledItemsLoading : marketplaceLoading);
+
+  const pulseMeta = useMemo(() => {
+    if (isSearchActive) {
+      return {
+        title: `Searching "${debouncedSearch}"`,
+        description:
+          "Live catalog search is active. The board below reflects the current query after local lensing is applied.",
+        accent: "#2563EB",
+        icon: Search,
+      };
+    }
+
+    if (showFavoritesOnly) {
+      return {
+        title: "Favorites in focus",
+        description:
+          "Only your saved request shortcuts are shown, making it easier to jump back into recurring asks.",
+        accent: "#DC2626",
+        icon: Heart,
+      };
+    }
+
+    if (approvalRequired) {
+      return {
+        title: "Approval-routed services",
+        description:
+          "This view is concentrated on catalog items that trigger an approval workflow before fulfillment.",
+        accent: "#F97316",
+        icon: ShieldAlert,
+      };
+    }
+
+    if (selectedCategoryIds.length === 1) {
+      return {
+        title: `${activeCategoryNames[0]} in focus`,
+        description:
+          "The board is narrowed to a single category lens so the service set is easier to compare.",
+        accent: "#0F766E",
+        icon: Layers,
+      };
+    }
+
+    if (selectedCategoryIds.length > 1) {
+      return {
+        title: "Multi-category lens",
+        description:
+          "Several categories are active, so the board is blending multiple service families into one working set.",
+        accent: "#7C3AED",
+        icon: Layers,
+      };
+    }
+
+    if (!entitledOnly) {
+      return {
+        title: "Expanded marketplace",
+        description:
+          "The entitlement guardrail is open, so you are browsing the wider active catalog instead of just your default set.",
+        accent: "#D97706",
+        icon: Sparkles,
+      };
+    }
+
+    return {
+      title: "Entitled marketplace",
+      description:
+        "The board is showing the services currently available to you with no extra lenses applied.",
+      accent: "#2563EB",
+      icon: ShoppingCart,
+    };
+  }, [
+    activeCategoryNames,
+    approvalRequired,
+    debouncedSearch,
+    entitledOnly,
+    isSearchActive,
+    selectedCategoryIds.length,
+    showFavoritesOnly,
+  ]);
+
+  const currentBoardTitle = useMemo(() => {
+    if (isSearchActive) return "Search results";
+    if (showFavoritesOnly) return "Favorite services";
+    if (selectedCategoryIds.length === 1)
+      return `${activeCategoryNames[0]} services`;
+    if (selectedCategoryIds.length > 1) return "Multi-category selection";
+    if (approvalRequired) return "Approval-routed services";
+    if (!entitledOnly) return "Expanded marketplace";
+    return "All services";
+  }, [
+    activeCategoryNames,
+    approvalRequired,
+    entitledOnly,
+    isSearchActive,
+    selectedCategoryIds.length,
+    showFavoritesOnly,
+  ]);
+
+  const currentBoardDescription = useMemo(() => {
+    if (isSearchActive) {
+      return `Showing ${displayItems.length} matched service${displayItems.length === 1 ? "" : "s"} for the current search query.`;
+    }
+
+    if (showFavoritesOnly) {
+      return "This board only contains the services you have explicitly saved for faster repeat requests.";
+    }
+
+    if (selectedCategoryIds.length === 1) {
+      return `Browse ${activeCategoryNames[0]} without the rest of the catalog competing for attention.`;
+    }
+
+    if (selectedCategoryIds.length > 1) {
+      return "This board blends multiple categories into one working set so you can compare related services side by side.";
+    }
+
+    if (approvalRequired) {
+      return "Every service shown here routes into an approval path before fulfillment begins.";
+    }
+
+    if (!entitledOnly) {
+      return "The board is broadened to the wider active marketplace instead of just your entitled set.";
+    }
+
+    return "Browse the full service collection available to you, grouped by category when the board is open.";
+  }, [
+    activeCategoryNames,
+    approvalRequired,
+    displayItems.length,
+    entitledOnly,
+    isSearchActive,
+    selectedCategoryIds.length,
+    showFavoritesOnly,
+  ]);
+
+  const activeLensChips = [
+    ...activeCategoryNames,
+    ...(approvalRequired ? ["Approval required"] : []),
+    ...(showFavoritesOnly ? ["Favorites only"] : []),
+    ...(entitledOnly ? ["Entitled only"] : ["Expanded marketplace"]),
+  ];
+
+  const quickLanes = [
+    {
+      key: "all",
+      title: "All services",
+      description: "Return to the full board and browse the wider service mix.",
+      count: sourceItems.length,
+      active:
+        !showFavoritesOnly &&
+        selectedCategoryIds.length === 0 &&
+        !approvalRequired &&
+        entitledOnly,
+      accent: "#2563EB",
+      icon: ShoppingCart,
+      ariaLabel: "Focus all services",
+      onClick: () => {
+        setShowFavoritesOnly(false);
+        setSelectedCategoryIds([]);
+        setApprovalRequired(false);
+        setEntitledOnly(true);
+      },
+    },
+    {
+      key: "favorites",
+      title: "Saved favorites",
+      description: "Jump straight to the items you keep returning to.",
+      count: favoritedItems.length,
+      active: showFavoritesOnly,
+      accent: "#DC2626",
+      icon: Heart,
+      ariaLabel: "Focus favorites",
+      onClick: () => {
+        setShowFavoritesOnly(true);
+        setSelectedCategoryIds([]);
+        setApprovalRequired(false);
+      },
+    },
+    {
+      key: "approval",
+      title: "Approval flow",
+      description:
+        "Surface items that route into governance or manager approval.",
+      count: approvalItemCount,
+      active: approvalRequired,
+      accent: "#F97316",
+      icon: ShieldAlert,
+      ariaLabel: "Focus approval required services",
+      onClick: () => {
+        setApprovalRequired(true);
+        setShowFavoritesOnly(false);
+      },
+    },
+    ...topCategories.map((category) => ({
+      key: category.id,
+      title: category.name,
+      description: `Browse ${category.count} service${category.count === 1 ? "" : "s"} in this category lane.`,
+      count: category.count,
+      active:
+        selectedCategoryIds.length === 1 &&
+        selectedCategoryIds[0] === category.id &&
+        !showFavoritesOnly,
+      accent: "#0F766E",
+      icon: Layers,
+      ariaLabel: `Focus lane ${category.name}`,
+      onClick: () => {
+        setSelectedCategoryIds([category.id]);
+        setShowFavoritesOnly(false);
+      },
+    })),
+  ];
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setSelectedCategoryIds([]);
+    setApprovalRequired(false);
+    setEntitledOnly(true);
+    setShowFavoritesOnly(false);
+  };
 
   const handleViewItem = useCallback(
     (item: CatalogItem) => {
@@ -767,745 +1388,746 @@ export default function ServiceCatalogPage() {
     [router],
   );
 
-  /* ---- Are filters active? ---- */
-  const hasActiveFilters =
-    selectedCategoryIds.length > 0 || approvalRequired || showFavoritesOnly || !entitledOnly;
+  const PulseIcon = pulseMeta.icon;
 
-  /* ---- Show personalized sections only when not searching and no active filters ---- */
-  const showPersonalizedSections = !isSearchActive && !hasActiveFilters;
-
-  /* ================================================================ */
-  /*  Render                                                           */
-  /* ================================================================ */
   return (
     <div className="space-y-6 pb-8">
-      {/* Header */}
-      <motion.div
+      <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
+        className="overflow-hidden rounded-[32px] border shadow-sm"
+        style={{
+          borderColor: "rgba(37, 99, 235, 0.16)",
+          backgroundImage:
+            "radial-gradient(circle at 0% 0%, rgba(37,99,235,0.16), transparent 28%), radial-gradient(circle at 100% 0%, rgba(249,115,22,0.12), transparent 24%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+        }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
-            >
-              <ShoppingCart size={20} style={{ color: "#3B82F6" }} />
+        <div className="grid gap-6 p-6 lg:p-8 xl:grid-cols-[1.15fr_0.85fr]">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+              <Sparkles size={14} />
+              Request marketplace
+            </span>
+
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+              Service Catalog
+            </h1>
+            <p className="mt-4 max-w-3xl text-sm leading-8 text-[var(--text-secondary)] lg:text-base">
+              Browse fulfillment-ready IT services, focus the board with quick
+              lenses, and move from discovery into request submission without
+              losing the operational context around approvals, favorites, and
+              recent demand.
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <HeroActionButton
+                icon={FileText}
+                label="My Requests"
+                onClick={() =>
+                  router.push("/dashboard/itsm/service-catalog/my-requests")
+                }
+              />
+              <HeroActionButton
+                icon={Settings}
+                label="Manage Catalog"
+                onClick={() =>
+                  router.push("/dashboard/itsm/service-catalog/manage")
+                }
+              />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                Service Catalog
-              </h1>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Browse and request IT services available to you.
-              </p>
+
+            <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Visible services"
+                value={sourceItems.length}
+                helper="Services currently available in the active catalog scope."
+                accent="#2563EB"
+                loading={catalogLoading}
+              />
+              <MetricCard
+                label="Approval flows"
+                value={approvalItemCount}
+                helper="Services that route into approval before fulfillment."
+                accent="#F97316"
+                loading={catalogLoading}
+              />
+              <MetricCard
+                label="Saved favorites"
+                value={favoriteSet.size}
+                helper="Services you have pinned as repeat request shortcuts."
+                accent="#DC2626"
+              />
+              <MetricCard
+                label="Active categories"
+                value={activeCategoryCount}
+                helper="Service families with live items in the current scope."
+                accent="#0F766E"
+                loading={catalogLoading}
+              />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                router.push("/dashboard/itsm/service-catalog/my-requests")
-              }
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-1)]"
-              style={{
-                borderColor: "var(--border)",
-                color: "var(--text-primary)",
-              }}
-            >
-              <FileText size={14} />
-              My Requests
-            </button>
-            <button
-              onClick={() =>
-                router.push("/dashboard/itsm/service-catalog/manage")
-              }
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-1)]"
-              style={{
-                borderColor: "var(--border)",
-                color: "var(--text-primary)",
-              }}
-            >
-              <Settings size={14} />
-              Manage
-            </button>
+
+          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)]/82 p-6 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Catalog pulse
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+                  {pulseMeta.title}
+                </h2>
+              </div>
+              <span
+                className="inline-flex h-12 w-12 items-center justify-center rounded-2xl"
+                style={{
+                  backgroundColor: `${pulseMeta.accent}14`,
+                  color: pulseMeta.accent,
+                }}
+              >
+                <PulseIcon size={20} />
+              </span>
+            </div>
+
+            <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+              {pulseMeta.description}
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-1)]/55 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Trending lead
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {popularItems?.[0]?.name || "No trend signal yet"}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-1)]/55 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Recent motion
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {recentItems?.[0]?.name || "No recent request signal"}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-1)]/55 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Favorite bank
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {favoriteSet.size} saved shortcut
+                  {favoriteSet.size === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      </motion.div>
+      </motion.section>
 
-      {/* Search Bar */}
-      <motion.div
+      <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="space-y-4"
       >
-        <div
-          className={cn(
-            "flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
-            isSearchActive && "ring-1 ring-[var(--primary)]",
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Focus lanes
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+              Jump into the right service slice
+            </h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+            These quick lanes reset the board into useful views before you reach
+            for the heavier search and filter controls.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          {quickLanes.map((lane) => (
+            <QuickLaneCard
+              key={lane.key}
+              title={lane.title}
+              description={lane.description}
+              count={lane.count}
+              active={lane.active}
+              accent={lane.accent}
+              icon={lane.icon}
+              onClick={lane.onClick}
+              ariaLabel={lane.ariaLabel}
+            />
+          ))}
+        </div>
+      </motion.section>
+
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08 }}
+        className="overflow-hidden rounded-[30px] border border-[var(--border)] bg-[var(--surface-0)]"
+      >
+        <div className="p-5 lg:p-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Search console
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                Find the right service fast
+              </h2>
+            </div>
+            <p className="text-sm leading-7 text-[var(--text-secondary)]">
+              {isSearchActive && !searchLoading
+                ? `${displayItems.length} service match${displayItems.length === 1 ? "" : "es"} are currently visible.`
+                : "Search by service name or description, then layer category and approval lenses on top."}
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+            <div
+              className={cn(
+                "flex items-center gap-3 rounded-[24px] border px-4 py-4 transition-colors",
+                isSearchActive && "ring-1 ring-[var(--primary)]",
+              )}
+              style={{
+                backgroundColor: "var(--surface-0)",
+                borderColor: isSearchActive
+                  ? "var(--primary)"
+                  : "var(--border)",
+              }}
+            >
+              {searchLoading && isSearchActive ? (
+                <Loader2
+                  size={18}
+                  className="animate-spin text-[var(--primary)]"
+                />
+              ) : (
+                <Search size={18} className="text-[var(--text-secondary)]" />
+              )}
+
+              <input
+                type="text"
+                placeholder="Search services by name or description"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                className="flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
+              />
+
+              {searchInput && (
+                <button
+                  type="button"
+                  aria-label="Clear service search"
+                  onClick={() => setSearchInput("")}
+                  className="rounded-xl p-2 transition-colors hover:bg-[var(--surface-2)]"
+                >
+                  <X size={16} className="text-[var(--text-secondary)]" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <CategoryMultiSelect
+                categories={categories || []}
+                categoryCounts={categoryItemCounts}
+                selectedIds={selectedCategoryIds}
+                onChange={setSelectedCategoryIds}
+              />
+
+              <button
+                type="button"
+                onClick={() => setApprovalRequired((current) => !current)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
+                  approvalRequired && "ring-1 ring-[var(--primary)]",
+                )}
+                style={{
+                  backgroundColor: approvalRequired
+                    ? "rgba(249,115,22,0.08)"
+                    : "var(--surface-0)",
+                  borderColor: approvalRequired ? "#F97316" : "var(--border)",
+                  color: approvalRequired ? "#C2410C" : "var(--text-primary)",
+                }}
+              >
+                <ShieldCheck size={15} />
+                Approval required
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEntitledOnly((current) => !current)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
+                  entitledOnly && "ring-1 ring-[var(--primary)]",
+                )}
+                style={{
+                  backgroundColor: entitledOnly
+                    ? "rgba(37,99,235,0.08)"
+                    : "var(--surface-0)",
+                  borderColor: entitledOnly ? "#2563EB" : "var(--border)",
+                  color: entitledOnly ? "#1D4ED8" : "var(--text-primary)",
+                }}
+              >
+                <Check size={15} />
+                Entitled only
+              </button>
+
+              <div
+                className="flex items-center overflow-hidden rounded-2xl border"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <button
+                  type="button"
+                  aria-label="Switch to grid view"
+                  onClick={() => setViewMode("grid")}
+                  className="flex h-11 w-11 items-center justify-center transition-colors"
+                  style={{
+                    backgroundColor:
+                      viewMode === "grid"
+                        ? "var(--primary)"
+                        : "var(--surface-0)",
+                    color:
+                      viewMode === "grid" ? "#fff" : "var(--text-secondary)",
+                  }}
+                >
+                  <LayoutGrid size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Switch to list view"
+                  onClick={() => setViewMode("list")}
+                  className="flex h-11 w-11 items-center justify-center transition-colors"
+                  style={{
+                    backgroundColor:
+                      viewMode === "list"
+                        ? "var(--primary)"
+                        : "var(--surface-0)",
+                    color:
+                      viewMode === "list" ? "#fff" : "var(--text-secondary)",
+                  }}
+                >
+                  <List size={16} />
+                </button>
+              </div>
+
+              {(hasBoardFilters || isSearchActive) && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  Reset lens
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeLensChips.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {activeLensChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+                  style={{
+                    backgroundColor: "rgba(37,99,235,0.08)",
+                    color: "var(--primary)",
+                  }}
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
           )}
-          style={{
-            backgroundColor: "var(--surface-0)",
-            borderColor: isSearchActive ? "var(--primary)" : "var(--border)",
-          }}
+        </div>
+      </motion.section>
+
+      {showPersonalizedSections && (
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.12 }}
+          className="space-y-4"
         >
-          {searchLoading && isSearchActive ? (
-            <Loader2
-              size={18}
-              className="text-[var(--primary)] animate-spin"
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                For you
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                Request momentum
+              </h2>
+            </div>
+            <p className="max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+              These collections give you a faster way back into services you
+              recently touched, saved, or are seeing traction across the
+              catalog.
+            </p>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            <SpotlightCollection
+              title="Recently requested"
+              description="Your latest catalog activity surfaced as a quick re-entry path."
+              icon={History}
+              items={recentItems || []}
+              loading={recentLoading}
+              accent="#2563EB"
+              emptyTitle="No recent requests"
+              emptyDescription="Request activity will show up here once you start using the catalog."
+              categoryMap={categoryMap}
+              favoriteSet={favoriteSet}
+              onToggleFavorite={handleToggleFavorite}
+              onViewItem={handleViewItem}
+              getMeta={(item) =>
+                item.createdAt
+                  ? `Requested ${formatRelativeTimeInline(item.createdAt)}`
+                  : "Recently touched"
+              }
+            />
+            <SpotlightCollection
+              title="Popular right now"
+              description="Services seeing current demand so you can spot common request paths."
+              icon={TrendingUp}
+              items={popularItems || []}
+              loading={popularLoading}
+              accent="#0F766E"
+              emptyTitle="No trend data yet"
+              emptyDescription="Popular services will appear once usage data is available."
+              categoryMap={categoryMap}
+              favoriteSet={favoriteSet}
+              onToggleFavorite={handleToggleFavorite}
+              onViewItem={handleViewItem}
+              getMeta={(item) =>
+                item.estimatedDelivery
+                  ? `Typical delivery: ${item.estimatedDelivery}`
+                  : "Trending service"
+              }
+            />
+            <SpotlightCollection
+              title="Saved favorites"
+              description="Pinned services ready for faster repeat requests."
+              icon={Star}
+              items={favoritedItems}
+              loading={false}
+              accent="#DC2626"
+              emptyTitle="No favorites saved"
+              emptyDescription="Use the heart action on any service to build a reusable shortlist."
+              categoryMap={categoryMap}
+              favoriteSet={favoriteSet}
+              onToggleFavorite={handleToggleFavorite}
+              onViewItem={handleViewItem}
+              getMeta={(item) =>
+                item.approvalRequired
+                  ? "Saved and approval-routed"
+                  : "Saved for quick access"
+              }
+            />
+          </div>
+        </motion.section>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.14 }}
+          className="space-y-4"
+        >
+          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Live service board
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+              {currentBoardTitle}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              {currentBoardDescription}
+            </p>
+          </div>
+
+          {catalogLoading || (isSearchActive && searchLoading) ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-56 animate-pulse rounded-[28px] bg-[var(--surface-1)]"
+                />
+              ))}
+            </div>
+          ) : displayItems.length === 0 ? (
+            isSearchActive ? (
+              <EmptyState
+                icon={Search}
+                title="No matching services found"
+                description={`No services match "${debouncedSearch}" with the current catalog lens. Broaden the query or reset the board filters.`}
+                actionLabel="Reset lens"
+                onAction={clearFilters}
+              />
+            ) : showFavoritesOnly ? (
+              <EmptyState
+                icon={Heart}
+                title="No favorites saved yet"
+                description="Use the heart action on any service to build a shortlist of repeat-request items."
+              />
+            ) : (
+              <EmptyState
+                icon={ShoppingCart}
+                title="No services available in this board"
+                description="The current lens does not expose any services. Adjust the filters or wait for the catalog to be populated."
+                actionLabel={hasBoardFilters ? "Reset lens" : undefined}
+                onAction={hasBoardFilters ? clearFilters : undefined}
+              />
+            )
+          ) : isSearchActive ||
+            showFavoritesOnly ||
+            selectedCategoryIds.length > 1 ||
+            approvalRequired ||
+            !entitledOnly ? (
+            <ServiceCollection
+              items={displayItems}
+              viewMode={viewMode}
+              categoryMap={categoryMap}
+              favoriteSet={favoriteSet}
+              onToggleFavorite={handleToggleFavorite}
+              onViewItem={handleViewItem}
             />
           ) : (
-            <Search size={18} className="text-[var(--text-secondary)]" />
+            <div className="space-y-4">
+              {groupedItems.map(([categoryId, items]) => (
+                <div
+                  key={categoryId}
+                  className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                        {items.length} service{items.length === 1 ? "" : "s"}
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                        {categoryMap[categoryId]?.name || "General services"}
+                      </h3>
+                    </div>
+                    {categoryMap[categoryId] ? (
+                      <button
+                        type="button"
+                        aria-label={`Focus category ${categoryMap[categoryId]?.name}`}
+                        onClick={() => setSelectedCategoryIds([categoryId])}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                      >
+                        Focus category
+                        <ArrowRight size={15} />
+                      </button>
+                    ) : (
+                      <span className="text-sm text-[var(--text-secondary)]">
+                        General service lane
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-5">
+                    <ServiceCollection
+                      items={items}
+                      viewMode={viewMode}
+                      categoryMap={categoryMap}
+                      favoriteSet={favoriteSet}
+                      onToggleFavorite={handleToggleFavorite}
+                      onViewItem={handleViewItem}
+                      showCategory={false}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-          <input
-            type="text"
-            placeholder="Search services by name or description..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="flex-1 bg-transparent outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
-          />
-          {searchInput && (
-            <button
-              onClick={() => setSearchInput("")}
-              className="p-1 rounded-md hover:bg-[var(--surface-2)] transition-colors"
-            >
-              <X size={16} className="text-[var(--text-secondary)]" />
-            </button>
-          )}
-        </div>
-        {/* Search result count */}
-        {isSearchActive && !searchLoading && searchResults && (
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            <span className="font-semibold text-[var(--text-primary)]">
-              {searchResults.length}
-            </span>{" "}
-            result{searchResults.length !== 1 ? "s" : ""} for{" "}
-            <span className="font-medium text-[var(--text-primary)]">
-              &lsquo;{debouncedSearch}&rsquo;
-            </span>
-          </p>
-        )}
-      </motion.div>
+        </motion.section>
 
-      {/* Filter Bar */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.15 }}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Category multi-select */}
-          <CategoryMultiSelect
-            categories={categories || []}
-            selectedIds={selectedCategoryIds}
-            onChange={setSelectedCategoryIds}
-          />
-
-          {/* Approval required toggle */}
-          <button
-            onClick={() => setApprovalRequired(!approvalRequired)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-              approvalRequired && "ring-1 ring-[var(--primary)]",
-            )}
-            style={{
-              backgroundColor: approvalRequired
-                ? "rgba(59, 130, 246, 0.08)"
-                : "var(--surface-0)",
-              borderColor: approvalRequired ? "var(--primary)" : "var(--border)",
-              color: approvalRequired
-                ? "var(--primary)"
-                : "var(--text-primary)",
-            }}
-          >
-            <ShieldCheck size={14} />
-            Approval Required
-          </button>
-
-          {/* Entitled only toggle */}
-          <button
-            onClick={() => setEntitledOnly(!entitledOnly)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-              entitledOnly && "ring-1 ring-[var(--primary)]",
-            )}
-            style={{
-              backgroundColor: entitledOnly
-                ? "rgba(59, 130, 246, 0.08)"
-                : "var(--surface-0)",
-              borderColor: entitledOnly ? "var(--primary)" : "var(--border)",
-              color: entitledOnly
-                ? "var(--primary)"
-                : "var(--text-primary)",
-            }}
-          >
-            <Check size={14} />
-            Entitled Only
-          </button>
-
-          {/* Category filter chips */}
-          {selectedCategoryIds.map((catId) => (
-            <span
-              key={catId}
-              className="inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-1 text-xs font-medium"
-              style={{
-                backgroundColor: "rgba(59, 130, 246, 0.1)",
-                color: "var(--primary)",
-              }}
-            >
-              {categoryMap[catId]?.name || catId}
-              <button
-                onClick={() =>
-                  setSelectedCategoryIds(
-                    selectedCategoryIds.filter((id) => id !== catId),
-                  )
-                }
-                className="p-0.5 rounded-full hover:bg-[rgba(59,130,246,0.2)] transition-colors"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* View mode toggle */}
-          <div
-            className="flex items-center rounded-lg border overflow-hidden"
-            style={{
-              borderColor: "var(--border)",
-            }}
-          >
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "flex items-center justify-center w-9 h-9 transition-colors",
-              )}
-              style={{
-                backgroundColor:
-                  viewMode === "grid" ? "var(--primary)" : "var(--surface-0)",
-                color: viewMode === "grid" ? "#fff" : "var(--text-secondary)",
-              }}
-              title="Grid view"
-            >
-              <LayoutGrid size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center justify-center w-9 h-9 transition-colors",
-              )}
-              style={{
-                backgroundColor:
-                  viewMode === "list" ? "var(--primary)" : "var(--surface-0)",
-                color: viewMode === "list" ? "#fff" : "var(--text-secondary)",
-              }}
-              title="List view"
-            >
-              <List size={16} />
-            </button>
-          </div>
-        </div>
-      </motion.div>
-
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Category Sidebar */}
-        <motion.div
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          className="lg:w-64 shrink-0"
+        <motion.aside
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.18 }}
+          className="space-y-4"
         >
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
-            Categories
-          </h2>
-          <div className="space-y-1">
-            {/* Favorites filter button */}
-            <button
-              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-              className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150"
-              style={{
-                backgroundColor: showFavoritesOnly
-                  ? "var(--primary)"
-                  : "transparent",
-                color: showFavoritesOnly ? "#fff" : "var(--text-primary)",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Heart
-                    size={16}
-                    className={cn(showFavoritesOnly && "fill-white")}
-                  />
-                  Favorites
-                </div>
-                {favoritedItems.length > 0 && (
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: showFavoritesOnly
-                        ? "rgba(255,255,255,0.2)"
-                        : "var(--surface-2)",
-                      color: showFavoritesOnly
-                        ? "#fff"
-                        : "var(--text-secondary)",
-                    }}
-                  >
-                    {favoritedItems.length}
-                  </span>
-                )}
-              </div>
-            </button>
+          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Current lens
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+              Board context
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              The current board lens is{" "}
+              <span className="font-semibold text-[var(--text-primary)]">
+                {pulseMeta.title.toLowerCase()}
+              </span>
+              . Use this summary to understand whether you are browsing
+              favorites, approvals, category slices, or the wider marketplace.
+            </p>
 
-            {/* Divider */}
-            <div
-              className="mx-3 my-1 border-t"
-              style={{ borderColor: "var(--border)" }}
-            />
+            <div className="mt-5 flex flex-wrap gap-2">
+              {activeLensChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+                  style={{
+                    backgroundColor: "rgba(37,99,235,0.08)",
+                    color: "var(--primary)",
+                  }}
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
 
-            {/* All Services */}
-            <button
-              onClick={() => {
-                setSelectedCategoryIds([]);
-                setShowFavoritesOnly(false);
-              }}
-              className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150"
-              style={{
-                backgroundColor:
-                  selectedCategoryIds.length === 0 && !showFavoritesOnly
-                    ? "var(--primary)"
-                    : "transparent",
-                color:
-                  selectedCategoryIds.length === 0 && !showFavoritesOnly
-                    ? "#fff"
-                    : "var(--text-primary)",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers size={16} />
-                  All Services
-                </div>
-                {entitledItems && (
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor:
-                        selectedCategoryIds.length === 0 && !showFavoritesOnly
-                          ? "rgba(255,255,255,0.2)"
-                          : "var(--surface-2)",
-                      color:
-                        selectedCategoryIds.length === 0 && !showFavoritesOnly
-                          ? "#fff"
-                          : "var(--text-secondary)",
-                    }}
-                  >
-                    {entitledItems.length}
-                  </span>
-                )}
-              </div>
-            </button>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <MetricCard
+                label="Board items"
+                value={displayItems.length}
+                helper="Services currently visible on the main board."
+                accent={pulseMeta.accent}
+              />
+              <MetricCard
+                label="Search term"
+                value={isSearchActive ? debouncedSearch : "None"}
+                helper="The active search term applied to the board."
+                accent="#7C3AED"
+              />
+              <MetricCard
+                label="View mode"
+                value={viewMode === "grid" ? "Grid" : "List"}
+                helper="Current board layout for catalog browsing."
+                accent="#0F766E"
+              />
+            </div>
+          </div>
 
-            {/* Category list */}
-            {categoriesLoading ? (
-              <div className="space-y-2 px-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="h-9 rounded-lg bg-[var(--surface-2)] animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : (
-              categories?.map((cat) => {
-                const isActive =
+          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Category coverage
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+              Service families
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              Use these category controls as a secondary way to narrow the board
+              without opening the multi-select lens.
+            </p>
+
+            <div className="mt-5 space-y-2">
+              {(categories || []).map((category) => {
+                const active =
                   selectedCategoryIds.length === 1 &&
-                  selectedCategoryIds[0] === cat.id &&
-                  !showFavoritesOnly;
+                  selectedCategoryIds[0] === category.id;
+                const count = categoryItemCounts[category.id] || 0;
+
                 return (
                   <button
-                    key={cat.id}
+                    key={category.id}
+                    type="button"
+                    aria-label={`Focus category ${category.name}`}
                     onClick={() => {
-                      setSelectedCategoryIds([cat.id]);
+                      setSelectedCategoryIds([category.id]);
                       setShowFavoritesOnly(false);
                     }}
-                    className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150"
+                    className="flex w-full items-center justify-between rounded-[22px] border px-4 py-3 text-left transition-colors"
                     style={{
-                      backgroundColor: isActive
-                        ? "var(--primary)"
-                        : "transparent",
-                      color: isActive ? "#fff" : "var(--text-primary)",
+                      borderColor: active
+                        ? "rgba(15,118,110,0.28)"
+                        : "var(--border)",
+                      backgroundColor: active
+                        ? "rgba(15,118,110,0.08)"
+                        : "var(--surface-0)",
                     }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Package size={16} />
-                        <span className="truncate">{cat.name}</span>
-                      </div>
+                    <div className="flex items-center gap-3">
                       <span
-                        className="text-xs px-1.5 py-0.5 rounded-full"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl"
                         style={{
-                          backgroundColor: isActive
-                            ? "rgba(255,255,255,0.2)"
-                            : "var(--surface-2)",
-                          color: isActive ? "#fff" : "var(--text-secondary)",
+                          backgroundColor: active
+                            ? "rgba(15,118,110,0.14)"
+                            : "var(--surface-1)",
+                          color: active ? "#0F766E" : "var(--text-secondary)",
                         }}
                       >
-                        {categoryItemCounts[cat.id] || 0}
+                        <Package size={15} />
                       </span>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {category.name}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {count} service{count === 1 ? "" : "s"}
+                        </p>
+                      </div>
                     </div>
+                    <ArrowRight
+                      size={15}
+                      className="text-[var(--text-secondary)]"
+                    />
                   </button>
                 );
-              })
-            )}
+              })}
+            </div>
           </div>
-        </motion.div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 space-y-8 min-w-0">
-          {/* Personalized Sections (only when NOT searching and no active filters) */}
-          {showPersonalizedSections && (
-            <>
-              {/* Recently Requested */}
-              {recentLoading ? (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                    <History size={14} />
-                    Recently Requested
-                  </h3>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {[1, 2, 3, 4].map((i) => (
-                      <HorizontalCardSkeleton key={i} />
-                    ))}
-                  </div>
-                </section>
-              ) : recentItems && recentItems.length > 0 ? (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                >
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                    <History size={14} />
-                    Recently Requested
-                  </h3>
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                    {recentItems.map((item, idx) => (
-                      <motion.button
-                        key={item.id}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: idx * 0.05 }}
-                        onClick={() => handleViewItem(item)}
-                        className="group min-w-[180px] rounded-xl border p-4 text-left transition-all duration-200 hover:shadow-md shrink-0"
-                        style={{
-                          backgroundColor: "var(--surface-0)",
-                          borderColor: "var(--border)",
-                        }}
-                      >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center mb-2"
-                          style={{
-                            backgroundColor: "rgba(59, 130, 246, 0.1)",
-                          }}
-                        >
-                          <Package size={16} style={{ color: "#3B82F6" }} />
-                        </div>
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate mb-0.5">
-                          {item.name}
-                        </h4>
-                        <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
-                          <Clock size={10} />
-                          {item.createdAt
-                            ? `Requested ${formatRelativeTimeInline(item.createdAt)}`
-                            : "Recently"}
-                        </p>
-                      </motion.button>
-                    ))}
-                  </div>
-                </motion.section>
-              ) : null}
-
-              {/* My Favorites */}
-              {favoritedItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.05 }}
-                >
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                    <Star size={14} />
-                    My Favorites
-                  </h3>
-                  {viewMode === "grid" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {favoritedItems.map((item, index) => (
-                        <ServiceCard
-                          key={item.id}
-                          item={item}
-                          categoryName={
-                            item.categoryId
-                              ? categoryMap[item.categoryId]?.name
-                              : undefined
-                          }
-                          isFavorited={true}
-                          onToggleFavorite={handleToggleFavorite}
-                          onClick={() => handleViewItem(item)}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {favoritedItems.map((item, index) => (
-                        <ServiceRow
-                          key={item.id}
-                          item={item}
-                          categoryName={
-                            item.categoryId
-                              ? categoryMap[item.categoryId]?.name
-                              : undefined
-                          }
-                          isFavorited={true}
-                          onToggleFavorite={handleToggleFavorite}
-                          onClick={() => handleViewItem(item)}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </motion.section>
-              )}
-
-              {/* Popular Services */}
-              {popularLoading ? (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                    <TrendingUp size={14} />
-                    Popular Services
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {[1, 2, 3].map((i) => (
-                      <CardSkeleton key={i} />
-                    ))}
-                  </div>
-                </section>
-              ) : popularItems && popularItems.length > 0 ? (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.1 }}
-                >
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                    <TrendingUp size={14} />
-                    Popular Services
-                  </h3>
-                  {viewMode === "grid" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {popularItems.map((item, index) => (
-                        <ServiceCard
-                          key={item.id}
-                          item={item}
-                          categoryName={
-                            item.categoryId
-                              ? categoryMap[item.categoryId]?.name
-                              : undefined
-                          }
-                          isFavorited={favoriteSet.has(item.id)}
-                          onToggleFavorite={handleToggleFavorite}
-                          onClick={() => handleViewItem(item)}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {popularItems.map((item, index) => (
-                        <ServiceRow
-                          key={item.id}
-                          item={item}
-                          categoryName={
-                            item.categoryId
-                              ? categoryMap[item.categoryId]?.name
-                              : undefined
-                          }
-                          isFavorited={favoriteSet.has(item.id)}
-                          onToggleFavorite={handleToggleFavorite}
-                          onClick={() => handleViewItem(item)}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </motion.section>
-              ) : null}
-            </>
-          )}
-
-          {/* All Services / Search Results */}
-          <section>
-            {!showPersonalizedSections && (
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
-                {isSearchActive
-                  ? "Search Results"
-                  : showFavoritesOnly
-                    ? "Favorite Services"
-                    : "All Services"}
-              </h3>
-            )}
-            {showPersonalizedSections && (
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                <Layers size={14} />
-                All Services
-              </h3>
-            )}
-
-            {/* Loading state */}
-            {(isLoading || (isSearchActive && searchLoading)) ? (
-              viewMode === "grid" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <CardSkeleton key={i} />
-                  ))}
+          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Request shortcuts
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+              Next moves
+            </h3>
+            <div className="mt-5 space-y-3">
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/dashboard/itsm/service-catalog/my-requests")
+                }
+                className="flex w-full items-center justify-between rounded-[22px] border border-[var(--border)] px-4 py-3 text-left transition-colors hover:bg-[var(--surface-1)]"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                    My requests
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Track submitted requests and current fulfillment state.
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <ListRowSkeleton key={i} />
-                  ))}
+                <FileText size={16} className="text-[var(--text-secondary)]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/dashboard/itsm/service-catalog/manage")
+                }
+                className="flex w-full items-center justify-between rounded-[22px] border border-[var(--border)] px-4 py-3 text-left transition-colors hover:bg-[var(--surface-1)]"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                    Catalog management
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Review categories, items, and supporting catalog structure.
+                  </p>
                 </div>
-              )
-            ) : displayItems.length === 0 ? (
-              /* Empty state */
-              isSearchActive ? (
-                <EmptyState
-                  icon={Search}
-                  title="No results found"
-                  description={`No services match "${debouncedSearch}". Try a different search term.`}
-                />
-              ) : showFavoritesOnly ? (
-                <EmptyState
-                  icon={Heart}
-                  title="No favorites yet"
-                  description="Click the heart icon on any service to add it to your favorites."
-                />
-              ) : (
-                <EmptyState
-                  icon={ShoppingCart}
-                  title="No services available"
-                  description="No services match your current filters."
-                />
-              )
-            ) : isSearchActive || showFavoritesOnly || selectedCategoryIds.length > 1 ? (
-              /* Flat list (search / favorites / multi-category filter) */
-              viewMode === "grid" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {displayItems.map((item, index) => (
-                    <ServiceCard
-                      key={item.id}
-                      item={item}
-                      categoryName={
-                        item.categoryId
-                          ? categoryMap[item.categoryId]?.name
-                          : undefined
-                      }
-                      isFavorited={favoriteSet.has(item.id)}
-                      onToggleFavorite={handleToggleFavorite}
-                      onClick={() => handleViewItem(item)}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {displayItems.map((item, index) => (
-                    <ServiceRow
-                      key={item.id}
-                      item={item}
-                      categoryName={
-                        item.categoryId
-                          ? categoryMap[item.categoryId]?.name
-                          : undefined
-                      }
-                      isFavorited={favoriteSet.has(item.id)}
-                      onToggleFavorite={handleToggleFavorite}
-                      onClick={() => handleViewItem(item)}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              )
-            ) : (
-              /* Grouped by category */
-              Object.entries(groupedItems).map(
-                ([categoryId, categoryItems]) => (
-                  <motion.div
-                    key={categoryId}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4 }}
-                    className="mb-6 last:mb-0"
-                  >
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
-                      {categoryMap[categoryId]?.name || "General Services"}
-                    </h4>
-                    {viewMode === "grid" ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {categoryItems.map((item, index) => (
-                          <ServiceCard
-                            key={item.id}
-                            item={item}
-                            isFavorited={favoriteSet.has(item.id)}
-                            onToggleFavorite={handleToggleFavorite}
-                            onClick={() => handleViewItem(item)}
-                            index={index}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {categoryItems.map((item, index) => (
-                          <ServiceRow
-                            key={item.id}
-                            item={item}
-                            isFavorited={favoriteSet.has(item.id)}
-                            onToggleFavorite={handleToggleFavorite}
-                            onClick={() => handleViewItem(item)}
-                            index={index}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </motion.div>
-                ),
-              )
-            )}
-          </section>
-        </div>
+                <Settings size={16} className="text-[var(--text-secondary)]" />
+              </button>
+
+              <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-1)]/55 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Quick note
+                </p>
+                <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+                  {approvalItemCount > 0
+                    ? `${approvalItemCount} service${approvalItemCount === 1 ? "" : "s"} in the current scope require approval.`
+                    : "No approval-routed services are exposed in the current scope."}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.aside>
       </div>
     </div>
   );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Inline utility: lightweight relative time for "recent" cards       */
-/* ------------------------------------------------------------------ */
-
-function formatRelativeTimeInline(date: string | Date): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) return "just now";
-  if (diffMinutes < 60)
-    return `${diffMinutes}m ago`;
-  if (diffHours < 24)
-    return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return `${Math.floor(diffDays / 7)}w ago`;
 }
