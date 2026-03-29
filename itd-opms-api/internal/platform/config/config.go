@@ -24,9 +24,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-	Env  string `mapstructure:"env"`
+	Host        string `mapstructure:"host"`
+	Port        int    `mapstructure:"port"`
+	Env         string `mapstructure:"env"`
+	FrontendURL string `mapstructure:"frontend_url"`
 }
 
 type DatabaseConfig struct {
@@ -139,6 +140,7 @@ func Load() (*Config, error) {
 	v.SetDefault("SERVER_HOST", "0.0.0.0")
 	v.SetDefault("SERVER_PORT", 8089)
 	v.SetDefault("SERVER_ENV", "development")
+	v.SetDefault("FRONTEND_URL", "http://localhost:3004")
 	v.SetDefault("DB_HOST", "localhost")
 	v.SetDefault("DB_PORT", 5432)
 	v.SetDefault("DB_USER", "opms")
@@ -197,9 +199,10 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Host: v.GetString("SERVER_HOST"),
-			Port: v.GetInt("SERVER_PORT"),
-			Env:  v.GetString("SERVER_ENV"),
+			Host:        v.GetString("SERVER_HOST"),
+			Port:        v.GetInt("SERVER_PORT"),
+			Env:         v.GetString("SERVER_ENV"),
+			FrontendURL: v.GetString("FRONTEND_URL"),
 		},
 		Database: DatabaseConfig{
 			Host:       v.GetString("DB_HOST"),

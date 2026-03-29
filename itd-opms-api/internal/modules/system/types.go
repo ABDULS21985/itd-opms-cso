@@ -55,6 +55,7 @@ type UserSearchResult struct {
 	Email       string    `json:"email"`
 	PhotoURL    *string   `json:"photoUrl"`
 	Department  *string   `json:"department"`
+	JobTitle    *string   `json:"jobTitle"`
 	IsActive    bool      `json:"isActive"`
 }
 

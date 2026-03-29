@@ -522,7 +522,16 @@ function DetailCard({
   accent?: string;
 }) {
   return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
+    <div className="relative overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] p-3.5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          backgroundImage: accent
+            ? `radial-gradient(circle at 100% 0%, ${accent}16, transparent 32%)`
+            : "radial-gradient(circle at 100% 0%, rgba(148,163,184,0.08), transparent 32%)",
+        }}
+      />
+      <div className="relative flex items-start gap-3">
       <div
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
         style={{ backgroundColor: accent ? `${accent}15` : "var(--surface-2)" }}
@@ -540,6 +549,85 @@ function DetailCard({
           {value}
         </p>
       </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  accent,
+  inverted = false,
+  className = "",
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  helper: string;
+  accent: string;
+  inverted?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-[1.55rem] p-4 ${className}`}
+      style={{
+        border: inverted ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(148,163,184,0.18)",
+        background: inverted
+          ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.08))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))",
+        boxShadow: inverted
+          ? "0 16px 36px rgba(2, 6, 23, 0.12)"
+          : "0 18px 40px rgba(15, 23, 42, 0.06)",
+        backdropFilter: "blur(18px)",
+      }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-80"
+        style={{
+          backgroundImage: `radial-gradient(circle at 100% 0%, ${accent}${inverted ? "26" : "18"}, transparent 34%)`,
+        }}
+      />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-2xl"
+            style={{
+              backgroundColor: inverted ? `${accent}22` : `${accent}16`,
+              border: inverted ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(255,255,255,0.6)",
+            }}
+          >
+            <Icon
+              size={18}
+              style={{ color: inverted ? "#fff" : accent }}
+            />
+          </div>
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${
+              inverted ? "text-white/58" : "text-[var(--text-secondary)]"
+            }`}
+          >
+            {label}
+          </p>
+        </div>
+        <p
+          className={`mt-5 text-lg font-semibold leading-6 ${
+            inverted ? "text-white" : "text-[var(--text-primary)]"
+          }`}
+        >
+          {value}
+        </p>
+        <p
+          className={`mt-2 text-sm leading-6 ${
+            inverted ? "text-slate-100/72" : "text-[var(--text-secondary)]"
+          }`}
+        >
+          {helper}
+        </p>
+      </div>
     </div>
   );
 }
@@ -549,10 +637,59 @@ function DetailCard({
 /* ------------------------------------------------------------------ */
 
 type TimelineItem =
+  | {
+      kind: "created";
+      data: { id: string; actorId: string; createdAt: string };
+      timestamp: string;
+    }
   | { kind: "comment"; data: TicketComment; timestamp: string }
   | { kind: "status"; data: TicketStatusHistory; timestamp: string };
 
-function TimelineEntry({ item, index, resolveUser }: { item: TimelineItem; index: number; resolveUser: (id: string | undefined | null) => string }) {
+function TimelineEntry({ item, index, resolveUser, resolveUserInfo }: { item: TimelineItem; index: number; resolveUser: (id: string | undefined | null) => string; resolveUserInfo: (id: string | undefined | null) => { name: string; department?: string; jobTitle?: string } | null }) {
+  if (item.kind === "created") {
+    const created = item.data;
+    return (
+      <motion.div
+        className="flex gap-3 py-3 group"
+        initial={{ opacity: 0, x: -12 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: index * 0.04, duration: 0.3 }}
+      >
+        <div className="relative flex flex-col items-center">
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: "rgba(27, 115, 64, 0.1)" }}
+          >
+            <CircleDot size={15} className="text-[var(--primary)]" />
+          </div>
+          <div className="flex-1 w-[2px] bg-[var(--surface-3)] mt-1 opacity-0 group-last:hidden group-[:not(:last-child)]:opacity-100" />
+        </div>
+        <div className="flex-1 pb-2">
+          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1">
+            <span className="text-xs font-semibold text-[var(--text-primary)]">
+              {resolveUser(created.actorId)}
+            </span>
+            <span className="text-xs text-[var(--text-secondary)]">created this ticket</span>
+          </div>
+          {(() => {
+            const info = resolveUserInfo(created.actorId);
+            if (!info) return null;
+            const parts = [info.jobTitle, info.department].filter(Boolean);
+            if (parts.length === 0) return null;
+            return (
+              <p className="mt-0.5 text-[10px] text-[var(--neutral-gray)]">
+                {parts.join(" · ")}
+              </p>
+            );
+          })()}
+          <p className="mt-1.5 text-[10px] text-[var(--neutral-gray)] tabular-nums">
+            {new Date(created.createdAt).toLocaleString()}
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (item.kind === "status") {
     const h = item.data;
     return (
@@ -581,6 +718,17 @@ function TimelineEntry({ item, index, resolveUser }: { item: TimelineItem; index
             <span className="text-xs text-[var(--neutral-gray)]">&rarr;</span>
             <StatusBadge status={h.toStatus} dot={false} />
           </div>
+          {(() => {
+            const info = resolveUserInfo(h.changedBy);
+            if (!info) return null;
+            const parts = [info.jobTitle, info.department].filter(Boolean);
+            if (parts.length === 0) return null;
+            return (
+              <p className="mt-0.5 text-[10px] text-[var(--neutral-gray)]">
+                {parts.join(" · ")}
+              </p>
+            );
+          })()}
           {h.reason && (
             <p className="mt-1.5 text-xs text-[var(--neutral-gray)] italic bg-[var(--surface-1)] rounded-lg px-2.5 py-1.5 border-l-2 border-purple-300">
               {h.reason}
@@ -621,10 +769,23 @@ function TimelineEntry({ item, index, resolveUser }: { item: TimelineItem; index
         <div className="flex-1 w-[2px] bg-[var(--surface-3)] mt-1 opacity-0 group-last:hidden group-[:not(:last-child)]:opacity-100" />
       </div>
       <div className="flex-1 pb-2">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-xs font-semibold text-[var(--text-primary)]">
-            {resolveUser(c.authorId)}
-          </span>
+        <div className="flex items-center gap-2 mb-1">
+          <div>
+            <span className="text-xs font-semibold text-[var(--text-primary)]">
+              {resolveUser(c.authorId)}
+            </span>
+            {(() => {
+              const info = resolveUserInfo(c.authorId);
+              if (!info) return null;
+              const parts = [info.jobTitle, info.department].filter(Boolean);
+              if (parts.length === 0) return null;
+              return (
+                <p className="text-[10px] text-[var(--neutral-gray)]">
+                  {parts.join(" · ")}
+                </p>
+              );
+            })()}
+          </div>
           {isInternal && (
             <span
               className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase"
@@ -672,6 +833,68 @@ function getAge(dateStr: string): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
+function getSlaSignal({
+  target,
+  met,
+  isPaused,
+  slaPausedDurationMinutes = 0,
+}: {
+  target?: string;
+  met?: boolean;
+  isPaused: boolean;
+  slaPausedDurationMinutes?: number;
+}) {
+  if (!target) {
+    return { label: "No SLA", helper: "No policy attached yet.", color: "#94A3B8" };
+  }
+
+  if (isPaused) {
+    return { label: "Paused", helper: "Clock is temporarily paused.", color: "#94A3B8" };
+  }
+
+  if (met === true) {
+    return { label: "Met", helper: "Target achieved within SLA.", color: "#10B981" };
+  }
+
+  if (met === false) {
+    return { label: "Breached", helper: "Target exceeded.", color: "#EF4444" };
+  }
+
+  const remainingMs =
+    new Date(target).getTime() +
+    slaPausedDurationMinutes * 60 * 1000 -
+    Date.now();
+
+  if (remainingMs <= 0) {
+    return { label: "Overdue", helper: "Action window has elapsed.", color: "#EF4444" };
+  }
+
+  const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+  const remainingDays = Math.floor(remainingHours / 24);
+
+  if (remainingHours <= 2) {
+    return {
+      label: "Critical",
+      helper: remainingHours > 0 ? `${remainingHours}h remaining.` : "Less than 1h remaining.",
+      color: "#EF4444",
+    };
+  }
+
+  if (remainingHours <= 8) {
+    return {
+      label: "At Risk",
+      helper: `${Math.max(remainingHours, 1)}h remaining.`,
+      color: "#F59E0B",
+    };
+  }
+
+  return {
+    label: "On Track",
+    helper: remainingDays > 0 ? `${remainingDays}d remaining.` : `${remainingHours}h remaining.`,
+    color: "#10B981",
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -705,16 +928,33 @@ export default function TicketDetailPage({
   /* ---- User name resolution ---- */
   const { data: allUsers } = useSearchUsers("");
   const userMap = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { name: string; department?: string; jobTitle?: string }>();
     if (allUsers) {
       for (const u of allUsers) {
-        map.set(u.id, u.displayName);
+        map.set(u.id, { name: u.displayName, department: u.department, jobTitle: u.jobTitle });
       }
     }
+    if (currentUser?.id) {
+      map.set(currentUser.id, {
+        name: currentUser.displayName,
+        department: currentUser.department,
+        jobTitle: currentUser.jobTitle,
+      });
+    }
     return map;
-  }, [allUsers]);
+  }, [allUsers, currentUser]);
   const resolveUser = (userId: string | undefined | null) =>
-    userId ? userMap.get(userId) ?? userId.slice(0, 12) + "..." : "—";
+    userId ? userMap.get(userId)?.name ?? userId.slice(0, 12) + "..." : "—";
+  const resolveUserInfo = (userId: string | undefined | null) =>
+    userId ? userMap.get(userId) ?? null : null;
+  const formatActorMeta = (
+    userId: string | undefined | null,
+    fallbackDepartment?: string,
+  ) => {
+    const info = resolveUserInfo(userId);
+    const parts = [info?.jobTitle, info?.department || fallbackDepartment].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  };
 
   /* ---- Local state ---- */
   const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla">(
@@ -741,7 +981,18 @@ export default function TicketDetailPage({
   const breaches: SLABreachEntry[] = breachesData ?? [];
 
   const timeline = useMemo<TimelineItem[]>(() => {
+    if (!ticket) return [];
+
     const items: TimelineItem[] = [
+      {
+        kind: "created",
+        data: {
+          id: `${ticket.id}-created`,
+          actorId: ticket.reporterId,
+          createdAt: ticket.createdAt,
+        },
+        timestamp: ticket.createdAt,
+      },
       ...comments.map(
         (c): TimelineItem => ({
           kind: "comment",
@@ -762,7 +1013,37 @@ export default function TicketDetailPage({
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
     return items;
-  }, [comments, statusHistory]);
+  }, [comments, statusHistory, ticket]);
+
+  const latestTimelineItem = timeline[0];
+  const latestComment = useMemo(
+    () =>
+      [...comments].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0],
+    [comments],
+  );
+  const resolvedEvent = useMemo(
+    () =>
+      [...statusHistory]
+        .reverse()
+        .find((entry) => entry.toStatus === "resolved"),
+    [statusHistory],
+  );
+  const closedEvent = useMemo(
+    () =>
+      [...statusHistory]
+        .reverse()
+        .find((entry) => entry.toStatus === "closed"),
+    [statusHistory],
+  );
+
+  const getTimelineActorId = (item: TimelineItem | undefined) => {
+    if (!item) return undefined;
+    if (item.kind === "created") return item.data.actorId;
+    if (item.kind === "comment") return item.data.authorId;
+    return item.data.changedBy;
+  };
 
   const isActing =
     transitionTicket.isPending ||
@@ -823,6 +1104,71 @@ export default function TicketDetailPage({
   }
 
   /* ---- Helpers ---- */
+
+  const ownershipEntries: Array<{
+    label: string;
+    name: string;
+    meta: string | null;
+    timestamp?: string;
+  }> = [
+    {
+      label: "Created by",
+      name: ticket.reporterName || resolveUser(ticket.reporterId),
+      meta: formatActorMeta(ticket.reporterId, ticket.reporterDepartment),
+      timestamp: ticket.createdAt,
+    },
+    {
+      label: "Updated by",
+      name:
+        latestTimelineItem?.kind === "created"
+          ? ticket.reporterName || resolveUser(ticket.reporterId)
+          : resolveUser(getTimelineActorId(latestTimelineItem)),
+      meta:
+        latestTimelineItem?.kind === "created"
+          ? formatActorMeta(ticket.reporterId, ticket.reporterDepartment)
+          : formatActorMeta(getTimelineActorId(latestTimelineItem)),
+      timestamp: latestTimelineItem?.timestamp || ticket.updatedAt,
+    },
+  ];
+
+  if (resolvedEvent || ticket.resolvedAt) {
+    ownershipEntries.push({
+      label: "Resolved by",
+      name:
+        resolvedEvent
+          ? resolveUser(resolvedEvent.changedBy)
+          : ticket.assigneeName || (ticket.assigneeId ? resolveUser(ticket.assigneeId) : "—"),
+      meta:
+        resolvedEvent
+          ? formatActorMeta(resolvedEvent.changedBy)
+          : formatActorMeta(ticket.assigneeId, ticket.assigneeDepartment),
+      timestamp: resolvedEvent?.createdAt || ticket.resolvedAt,
+    });
+  }
+
+  if (closedEvent || ticket.closedAt) {
+    ownershipEntries.push({
+      label: "Closed by",
+      name:
+        closedEvent
+          ? resolveUser(closedEvent.changedBy)
+          : ticket.assigneeName || (ticket.assigneeId ? resolveUser(ticket.assigneeId) : "—"),
+      meta:
+        closedEvent
+          ? formatActorMeta(closedEvent.changedBy)
+          : formatActorMeta(ticket.assigneeId, ticket.assigneeDepartment),
+      timestamp: closedEvent?.createdAt || ticket.closedAt,
+    });
+  }
+
+  if (latestComment) {
+    ownershipEntries.push({
+      label: latestComment.isInternal ? "Last internal note" : "Last comment by",
+      name: resolveUser(latestComment.authorId),
+      meta: formatActorMeta(latestComment.authorId),
+      timestamp: latestComment.createdAt,
+    });
+  }
 
   const priorityInfo = PRIORITY_META[ticket.priority] ?? {
     bg: "var(--surface-2)",
@@ -1534,6 +1880,7 @@ export default function TicketDetailPage({
                             item={item}
                             index={idx}
                             resolveUser={resolveUser}
+                            resolveUserInfo={resolveUserInfo}
                           />
                         ))}
                       </div>
@@ -1728,9 +2075,9 @@ export default function TicketDetailPage({
                   <p className="text-sm font-medium text-[var(--text-primary)] truncate">
                     {ticket.reporterName || resolveUser(ticket.reporterId)}
                   </p>
-                  {ticket.reporterDepartment && (
+                  {formatActorMeta(ticket.reporterId, ticket.reporterDepartment) && (
                     <p className="text-[11px] text-[var(--text-secondary)] truncate">
-                      {ticket.reporterDepartment}
+                      {formatActorMeta(ticket.reporterId, ticket.reporterDepartment)}
                     </p>
                   )}
                 </div>
@@ -1757,9 +2104,9 @@ export default function TicketDetailPage({
                   <p className="text-sm font-medium text-[var(--text-primary)] truncate">
                     {ticket.assigneeName || (ticket.assigneeId ? resolveUser(ticket.assigneeId) : "Unassigned")}
                   </p>
-                  {ticket.assigneeDepartment && (
+                  {ticket.assigneeId && formatActorMeta(ticket.assigneeId, ticket.assigneeDepartment) && (
                     <p className="text-[11px] text-[var(--text-secondary)] truncate">
-                      {ticket.assigneeDepartment}
+                      {formatActorMeta(ticket.assigneeId, ticket.assigneeDepartment)}
                     </p>
                   )}
                 </div>
@@ -1780,6 +2127,38 @@ export default function TicketDetailPage({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 space-y-3">
+            <h3 className="text-xs font-bold text-[var(--neutral-gray)] uppercase tracking-wider flex items-center gap-1.5">
+              <History size={13} />
+              Ownership Trail
+            </h3>
+            <div className="space-y-3">
+              {ownershipEntries.map((entry) => (
+                  <div
+                    key={`${entry.label}-${entry.timestamp ?? "na"}`}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
+                      {entry.label}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                      {entry.name}
+                    </p>
+                    {entry.meta && (
+                      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                        {entry.meta}
+                      </p>
+                    )}
+                    {entry.timestamp && (
+                      <p className="mt-1.5 text-[10px] tabular-nums text-[var(--neutral-gray)]">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ))}
             </div>
           </div>
 
@@ -1873,6 +2252,9 @@ export default function TicketDetailPage({
                 <p className="text-xs font-medium text-[var(--text-primary)] tabular-nums mt-0.5">
                   {new Date(ticket.createdAt).toLocaleString()}
                 </p>
+                <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                  by {ticket.reporterName || resolveUser(ticket.reporterId)}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
@@ -1881,6 +2263,17 @@ export default function TicketDetailPage({
                 <p className="text-xs font-medium text-[var(--text-primary)] tabular-nums mt-0.5">
                   {new Date(ticket.updatedAt).toLocaleString()}
                 </p>
+                {(() => {
+                  const lastChange = statusHistory.length > 0
+                    ? statusHistory.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b)
+                    : null;
+                  if (!lastChange) return null;
+                  return (
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                      by {resolveUser(lastChange.changedBy)}
+                    </p>
+                  );
+                })()}
               </div>
               {ticket.firstResponseAt && (
                 <div>
@@ -1900,6 +2293,15 @@ export default function TicketDetailPage({
                   <p className="text-xs font-medium text-emerald-600 tabular-nums mt-0.5">
                     {new Date(ticket.resolvedAt).toLocaleString()}
                   </p>
+                  {(() => {
+                    const resolver = statusHistory.find(h => h.toStatus === "resolved");
+                    if (!resolver) return null;
+                    return (
+                      <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                        by {resolveUser(resolver.changedBy)}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
               {ticket.closedAt && (
@@ -1910,6 +2312,15 @@ export default function TicketDetailPage({
                   <p className="text-xs font-medium text-[var(--text-primary)] tabular-nums mt-0.5">
                     {new Date(ticket.closedAt).toLocaleString()}
                   </p>
+                  {(() => {
+                    const closer = statusHistory.find(h => h.toStatus === "closed");
+                    if (!closer) return null;
+                    return (
+                      <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                        by {resolveUser(closer.changedBy)}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
             </div>

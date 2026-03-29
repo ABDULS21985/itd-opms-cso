@@ -37,9 +37,8 @@ module.exports = {
         JWT_REFRESH_EXPIRY: '168h',
         OTEL_EXPORTER_OTLP_ENDPOINT: 'localhost:4317',
         OTEL_SERVICE_NAME: 'itd-opms-api',
-        SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || '',
-        SENDGRID_FROM_EMAIL: 'noreply@cbn.gov.ng',
-        SENDGRID_FROM_NAME: 'ITD-OPMS',
+        // SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME
+        // loaded from itd-opms-api/.env by godotenv at runtime
         LOG_LEVEL: 'debug',
         LOG_FORMAT: 'text',
       },

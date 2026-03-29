@@ -32,6 +32,7 @@ export interface UserSearchResult {
   email: string;
   photoUrl?: string;
   department?: string;
+  jobTitle?: string;
   isActive: boolean;
 }
 

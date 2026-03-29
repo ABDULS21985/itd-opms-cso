@@ -741,7 +741,7 @@ func (s *UserService) RevokeDelegation(ctx context.Context, tenantID, delegation
 // SearchUsers performs a quick search for user autocomplete.
 func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query string) ([]UserSearchResult, error) {
 	sqlQuery := `
-		SELECT id, display_name, email, photo_url, department, is_active
+		SELECT id, display_name, email, photo_url, department, job_title, is_active
 		FROM users
 		WHERE tenant_id = $1 AND is_active = true
 		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')
@@ -757,7 +757,7 @@ func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query
 	var results []UserSearchResult
 	for rows.Next() {
 		var u UserSearchResult
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.PhotoURL, &u.Department, &u.IsActive); err != nil {
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.PhotoURL, &u.Department, &u.JobTitle, &u.IsActive); err != nil {
 			return nil, err
 		}
 		results = append(results, u)

@@ -117,7 +117,6 @@ func (s *Server) Setup() {
 	authService := auth.NewAuthService(s.pool, s.cfg.JWT, s.minio, s.cfg.MinIO)
 	auditService := audit.NewAuditService(s.pool)
 	revocationService := auth.NewRevocationService(s.redis)
-	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
 	auditHandler := audit.NewAuditHandler(auditService)
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
 
@@ -173,6 +172,9 @@ func (s *Server) Setup() {
 	} else {
 		slog.Warn("no email provider configured — email notifications will be skipped")
 	}
+
+	// --- Auth handler (needs email sender for password resets) ---
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL)
 
 	// --- Notification outbox processor ---
 	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)

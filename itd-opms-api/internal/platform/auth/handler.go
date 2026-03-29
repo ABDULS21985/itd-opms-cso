@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -18,16 +20,23 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
+// EmailSender is an interface for sending transactional emails.
+type EmailSender interface {
+	SendMail(ctx context.Context, to, subject, htmlBody string) error
+}
+
 // AuthHandler provides HTTP handlers for authentication endpoints.
 type AuthHandler struct {
 	service           *AuthService
 	auditService      *audit.AuditService
 	revocationService *RevocationService
+	emailSender       EmailSender
+	frontendURL       string
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService) *AuthHandler {
-	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService}
+func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService, emailSender EmailSender, frontendURL string) *AuthHandler {
+	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService, emailSender: emailSender, frontendURL: frontendURL}
 }
 
 // Routes is intentionally unused — all auth routes are registered directly in
@@ -341,13 +350,67 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		"message": "If an account with that email exists, a password reset link has been generated.",
 	}
 
-	// In dev mode, include the token in the response so it can be used directly.
 	if token != "" {
-		resp["resetToken"] = token
-		resp["resetUrl"] = "/auth/reset-password?token=" + token
+		resetURL := h.frontendURL + "/auth/reset-password?token=" + token
+		resp["resetUrl"] = resetURL
+
+		// Send password reset email via configured email provider.
+		if h.emailSender != nil {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				htmlBody := buildPasswordResetEmail(req.Email, resetURL)
+				if err := h.emailSender.SendMail(ctx, req.Email, "Password Reset - ITD-OPMS", htmlBody); err != nil {
+					slog.Error("failed to send password reset email", "email", req.Email, "error", err)
+				} else {
+					slog.Info("password reset email sent", "email", req.Email)
+				}
+			}()
+			resp["emailSent"] = "true"
+		} else {
+			// Dev mode fallback: include token in response for direct use.
+			resp["resetToken"] = token
+			resp["devMode"] = "true"
+		}
 	}
 
 	types.OK(w, resp, nil)
+}
+
+// buildPasswordResetEmail generates a branded HTML email for password resets.
+func buildPasswordResetEmail(email, resetURL string) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 0">
+<tr><td align="center">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+  <tr><td style="background:linear-gradient(135deg,#1B7340,#22C55E);padding:32px;text-align:center">
+    <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:700">ITD-OPMS</h1>
+    <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:13px">Operations &amp; Project Management System</p>
+  </td></tr>
+  <tr><td style="padding:32px">
+    <h2 style="margin:0 0 8px;font-size:20px;color:#1a1a1a">Password Reset</h2>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px">
+      We received a password reset request for <strong>%s</strong>.
+      Click the button below to set a new password. This link expires in 30 minutes.
+    </p>
+    <table cellpadding="0" cellspacing="0" width="100%%"><tr><td align="center">
+      <a href="%s" style="display:inline-block;background:#1B7340;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:14px;font-weight:600">
+        Reset Password
+      </a>
+    </td></tr></table>
+    <p style="color:#888;font-size:12px;line-height:1.5;margin:24px 0 0">
+      If you didn't request this, you can safely ignore this email. Your password won't change.
+    </p>
+  </td></tr>
+  <tr><td style="background:#f8f9fa;padding:20px 32px;text-align:center;border-top:1px solid #e9ecef">
+    <p style="color:#999;font-size:11px;margin:0">Central Bank of Nigeria — Information Technology Department</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`, email, resetURL)
 }
 
 // resetPasswordRequest is the JSON body for POST /api/v1/auth/reset-password.
