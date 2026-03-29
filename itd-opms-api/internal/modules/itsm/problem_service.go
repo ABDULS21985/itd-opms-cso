@@ -3,6 +3,7 @@ package itsm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -328,6 +329,92 @@ func (s *ProblemService) LinkIncident(ctx context.Context, problemID, incidentID
 	}
 
 	return nil
+}
+
+// ──────────────────────────────────────────────
+// Problem Status Transitions
+// ──────────────────────────────────────────────
+
+// TransitionProblem validates and performs a status transition on a problem.
+func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, req TransitionProblemRequest) (Problem, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Problem{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetProblem(ctx, id)
+	if err != nil {
+		return Problem{}, err
+	}
+
+	// Validate transition against state machine.
+	if !IsValidProblemTransition(existing.Status, req.TargetStatus) {
+		return Problem{}, apperrors.BadRequest(
+			fmt.Sprintf("invalid problem transition from '%s' to '%s'", existing.Status, req.TargetStatus),
+		)
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE problems SET
+			status = $1,
+			updated_at = $2
+		WHERE id = $3 AND tenant_id = $4
+		RETURNING id, tenant_id, problem_number, title, description,
+			root_cause, status, linked_incident_ids, workaround,
+			permanent_fix, linked_change_id, owner_id,
+			created_at, updated_at`
+
+	var p Problem
+	err = s.pool.QueryRow(ctx, query, req.TargetStatus, now, id, auth.TenantID).Scan(
+		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
+		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		return Problem{}, apperrors.Internal("failed to transition problem status", err)
+	}
+
+	// Auto-create known_error record when transitioning to known_error.
+	if req.TargetStatus == ProblemStatusKnownError {
+		var keCount int
+		_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM known_errors WHERE problem_id = $1`, id).Scan(&keCount)
+		if keCount == 0 {
+			keID := uuid.New()
+			keTitle := "Known Error — " + p.Title
+			_, keErr := s.pool.Exec(ctx, `
+				INSERT INTO known_errors (id, problem_id, title, description, workaround, status, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)`,
+				keID, id, keTitle, p.RootCause, p.Workaround, now, now,
+			)
+			if keErr != nil {
+				slog.ErrorContext(ctx, "failed to auto-create known error", "error", keErr)
+			} else {
+				slog.InfoContext(ctx, "auto-created known error for problem", "problem_id", id, "known_error_id", keID)
+			}
+		}
+	}
+
+	// Log audit event.
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": existing.Status,
+		"new_status":      req.TargetStatus,
+		"comment":         req.Comment,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "transition:problem",
+		EntityType: "problem",
+		EntityID:   id,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return p, nil
 }
 
 // ──────────────────────────────────────────────

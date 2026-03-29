@@ -572,6 +572,12 @@ type UpdateProblemRequest struct {
 	OwnerID        *uuid.UUID `json:"ownerId"`
 }
 
+// TransitionProblemRequest is the payload for changing problem status.
+type TransitionProblemRequest struct {
+	TargetStatus string  `json:"targetStatus" validate:"required"`
+	Comment      *string `json:"comment"`
+}
+
 // LinkIncidentToProblemRequest is the payload for linking an incident to a problem.
 type LinkIncidentToProblemRequest struct {
 	IncidentID uuid.UUID `json:"incidentId" validate:"required"`
@@ -680,6 +686,33 @@ var validTicketTransitions = map[string][]string{
 // IsValidTicketTransition checks whether a status transition from -> to is allowed.
 func IsValidTicketTransition(from, to string) bool {
 	allowed, ok := validTicketTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
+}
+
+// ──────────────────────────────────────────────
+// Problem status transition map
+// ──────────────────────────────────────────────
+
+// validProblemTransitions defines the allowed state machine transitions for problems.
+var validProblemTransitions = map[string][]string{
+	ProblemStatusLogged:              {ProblemStatusInvestigating},
+	ProblemStatusInvestigating:       {ProblemStatusRootCauseIdentified, ProblemStatusKnownError},
+	ProblemStatusRootCauseIdentified: {ProblemStatusKnownError, ProblemStatusResolved},
+	ProblemStatusKnownError:          {ProblemStatusResolved},
+	ProblemStatusResolved:            {ProblemStatusInvestigating}, // reopen
+}
+
+// IsValidProblemTransition checks whether a problem status transition from -> to is allowed.
+func IsValidProblemTransition(from, to string) bool {
+	allowed, ok := validProblemTransitions[from]
 	if !ok {
 		return false
 	}

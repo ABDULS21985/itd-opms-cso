@@ -32,6 +32,7 @@ func (h *ProblemHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteProblem)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/transition", h.TransitionProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link-incident", h.LinkIncident)
 
 	// Known Errors
