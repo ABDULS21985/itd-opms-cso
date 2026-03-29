@@ -90,6 +90,8 @@ export interface Ticket {
   pirRequired: boolean;
   pirCompleted: boolean;
   pirNotes?: string;
+  cabNotes?: string;
+  changeSuccess?: boolean;
   // Enrichment fields (from JOINs)
   reporterName?: string;
   reporterDepartment?: string;
@@ -251,6 +253,12 @@ export interface CABMeeting {
   attendees: string[];
   minutes?: string;
   decisions: Record<string, unknown>[];
+  durationMinutes?: number;
+  location?: string;
+  meetingType: string;
+  secretaryUserId?: string;
+  agenda?: Record<string, unknown>[];
+  changeTicketIds?: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;

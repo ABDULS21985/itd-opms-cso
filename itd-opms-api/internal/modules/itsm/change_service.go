@@ -296,6 +296,277 @@ func (s *ChangeService) UpdateChange(ctx context.Context, id uuid.UUID, req Upda
 }
 
 // ──────────────────────────────────────────────
+// Risk Assessment
+// ──────────────────────────────────────────────
+
+// SubmitRiskAssessment updates the risk assessment data on a change ticket.
+func (s *ChangeService) SubmitRiskAssessment(ctx context.Context, changeID uuid.UUID, req SubmitRiskAssessmentRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE tickets SET
+			risk_assessment = $1,
+			risk_level = COALESCE($2, risk_level),
+			updated_at = $3
+		WHERE id = $4 AND tenant_id = $5 AND type = 'change'
+		RETURNING ` + ticketColumns
+
+	t, err := scanTicket(s.pool.QueryRow(ctx, query,
+		req.RiskAssessment, req.RiskLevel, now, changeID, auth.TenantID,
+	))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Ticket{}, apperrors.NotFound("Change", changeID.String())
+		}
+		return Ticket{}, apperrors.Internal("failed to submit risk assessment", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{"riskAssessment": "updated", "riskLevel": req.RiskLevel})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "risk_assessment:change",
+		EntityType: "change",
+		EntityID:   changeID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return t, nil
+}
+
+// ──────────────────────────────────────────────
+// Implement / Complete / Rollback
+// ──────────────────────────────────────────────
+
+// ImplementChange transitions a change to implementing and records actual_start.
+func (s *ChangeService) ImplementChange(ctx context.Context, changeID uuid.UUID, req ImplementChangeRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetChange(ctx, changeID)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	if err := workflow.ChangeStateMachine.Validate(existing.Status, workflow.ChangeImplementing); err != nil {
+		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE tickets SET
+			status = $1,
+			actual_start = $2,
+			updated_at = $3
+		WHERE id = $4 AND tenant_id = $5 AND type = 'change'
+		RETURNING ` + ticketColumns
+
+	t, err := scanTicket(s.pool.QueryRow(ctx, query,
+		workflow.ChangeImplementing, now, now, changeID, auth.TenantID,
+	))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to implement change", err)
+	}
+
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New(), changeID, existing.Status, workflow.ChangeImplementing, auth.UserID, req.Comment, now,
+	)
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": existing.Status, "new_status": workflow.ChangeImplementing, "comment": req.Comment,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID: auth.TenantID, ActorID: auth.UserID,
+		Action: "implement:change", EntityType: "change", EntityID: changeID, Changes: changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
+			"previousStatus": existing.Status, "newStatus": workflow.ChangeImplementing, "actorId": auth.UserID,
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type": "itsm.change.implementing", "tenantId": auth.TenantID,
+			"actorId": auth.UserID, "entityType": "change", "entityId": changeID,
+			"data": json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.change.implementing", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish change implement event", "error", pubErr)
+		}
+	}
+
+	return t, nil
+}
+
+// CompleteChange marks a change as implemented or failed and sets actual_end + change_success.
+func (s *ChangeService) CompleteChange(ctx context.Context, changeID uuid.UUID, req CompleteChangeRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetChange(ctx, changeID)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	var targetStatus string
+	if req.Success {
+		targetStatus = workflow.ChangeImplemented
+	} else {
+		targetStatus = workflow.ChangeFailed
+	}
+
+	if err := workflow.ChangeStateMachine.Validate(existing.Status, targetStatus); err != nil {
+		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+
+	now := time.Now().UTC()
+
+	pirRequired := existing.PIRRequired
+	if !req.Success {
+		pirRequired = true
+	}
+
+	query := `
+		UPDATE tickets SET
+			status = $1,
+			actual_end = $2,
+			change_success = $3,
+			cab_notes = COALESCE($4, cab_notes),
+			pir_required = $5,
+			updated_at = $6
+		WHERE id = $7 AND tenant_id = $8 AND type = 'change'
+		RETURNING ` + ticketColumns
+
+	t, err := scanTicket(s.pool.QueryRow(ctx, query,
+		targetStatus, now, req.Success, req.Notes, pirRequired, now, changeID, auth.TenantID,
+	))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to complete change", err)
+	}
+
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New(), changeID, existing.Status, targetStatus, auth.UserID, req.Notes, now,
+	)
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": existing.Status, "new_status": targetStatus,
+		"success": req.Success, "notes": req.Notes,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID: auth.TenantID, ActorID: auth.UserID,
+		Action: "complete:change", EntityType: "change", EntityID: changeID, Changes: changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
+			"previousStatus": existing.Status, "newStatus": targetStatus,
+			"success": req.Success, "actorId": auth.UserID,
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type": "itsm.change.completed", "tenantId": auth.TenantID,
+			"actorId": auth.UserID, "entityType": "change", "entityId": changeID,
+			"data": json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.change.completed", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish change complete event", "error", pubErr)
+		}
+	}
+
+	return t, nil
+}
+
+// RollbackChange transitions a change to rolled_back and sets actual_end.
+func (s *ChangeService) RollbackChange(ctx context.Context, changeID uuid.UUID, req RollbackChangeRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetChange(ctx, changeID)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	if err := workflow.ChangeStateMachine.Validate(existing.Status, workflow.ChangeRolledBack); err != nil {
+		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE tickets SET
+			status = $1,
+			actual_end = $2,
+			change_success = false,
+			cab_notes = COALESCE($3, cab_notes),
+			updated_at = $4
+		WHERE id = $5 AND tenant_id = $6 AND type = 'change'
+		RETURNING ` + ticketColumns
+
+	t, err := scanTicket(s.pool.QueryRow(ctx, query,
+		workflow.ChangeRolledBack, now, &req.Reason, now, changeID, auth.TenantID,
+	))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to rollback change", err)
+	}
+
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New(), changeID, existing.Status, workflow.ChangeRolledBack, auth.UserID, &req.Reason, now,
+	)
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": existing.Status, "new_status": workflow.ChangeRolledBack, "reason": req.Reason,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID: auth.TenantID, ActorID: auth.UserID,
+		Action: "rollback:change", EntityType: "change", EntityID: changeID, Changes: changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
+			"previousStatus": existing.Status, "newStatus": workflow.ChangeRolledBack,
+			"reason": req.Reason, "actorId": auth.UserID,
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type": "itsm.change.rolled_back", "tenantId": auth.TenantID,
+			"actorId": auth.UserID, "entityType": "change", "entityId": changeID,
+			"data": json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.change.rolled_back", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish change rollback event", "error", pubErr)
+		}
+	}
+
+	return t, nil
+}
+
+// ──────────────────────────────────────────────
 // Transition
 // ──────────────────────────────────────────────
 
@@ -327,17 +598,24 @@ func (s *ChangeService) TransitionChange(ctx context.Context, id uuid.UUID, req 
 		actualEnd = &now
 	}
 
+	// Auto-set PIR required on failure.
+	pirRequired := existing.PIRRequired
+	if req.TargetStatus == workflow.ChangeFailed {
+		pirRequired = true
+	}
+
 	query := `
 		UPDATE tickets SET
 			status = $1,
 			actual_start = COALESCE($2, actual_start),
 			actual_end = COALESCE($3, actual_end),
-			updated_at = $4
-		WHERE id = $5 AND tenant_id = $6 AND type = 'change'
+			pir_required = $4,
+			updated_at = $5
+		WHERE id = $6 AND tenant_id = $7 AND type = 'change'
 		RETURNING ` + ticketColumns
 
 	t, err := scanTicket(s.pool.QueryRow(ctx, query,
-		req.TargetStatus, actualStart, actualEnd, now, id, auth.TenantID,
+		req.TargetStatus, actualStart, actualEnd, pirRequired, now, id, auth.TenantID,
 	))
 	if err != nil {
 		return Ticket{}, apperrors.Internal("failed to transition change status", err)
@@ -728,13 +1006,17 @@ func (s *ChangeService) CheckFreezePeriod(ctx context.Context, startTime, endTim
 // ──────────────────────────────────────────────
 
 const cabMeetingColumns = `id, tenant_id, title, description, scheduled_date, status,
-	chair_id, attendees, minutes, decisions, created_by, created_at, updated_at`
+	chair_id, attendees, minutes, decisions,
+	duration_minutes, location, meeting_type, secretary_user_id, agenda, change_ticket_ids,
+	created_by, created_at, updated_at`
 
 func scanCABMeeting(row pgx.Row) (CABMeeting, error) {
 	var m CABMeeting
 	err := row.Scan(
 		&m.ID, &m.TenantID, &m.Title, &m.Description, &m.ScheduledDate, &m.Status,
-		&m.ChairID, &m.Attendees, &m.Minutes, &m.Decisions, &m.CreatedBy, &m.CreatedAt, &m.UpdatedAt,
+		&m.ChairID, &m.Attendees, &m.Minutes, &m.Decisions,
+		&m.DurationMinutes, &m.Location, &m.MeetingType, &m.SecretaryUserID, &m.Agenda, &m.ChangeTicketIDs,
+		&m.CreatedBy, &m.CreatedAt, &m.UpdatedAt,
 	)
 	return m, err
 }
@@ -754,16 +1036,25 @@ func (s *ChangeService) CreateCABMeeting(ctx context.Context, req CreateCABMeeti
 		attendees = []uuid.UUID{}
 	}
 
+	changeTicketIDs := req.ChangeTicketIDs
+	if changeTicketIDs == nil {
+		changeTicketIDs = []uuid.UUID{}
+	}
+
 	query := `
 		INSERT INTO cab_meetings (
 			id, tenant_id, title, description, scheduled_date,
-			chair_id, attendees, created_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			chair_id, attendees,
+			duration_minutes, location, meeting_type, secretary_user_id, agenda, change_ticket_ids,
+			created_by, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'regular'), $11, COALESCE($12, '[]'), $13, $14, $15, $16)
 		RETURNING ` + cabMeetingColumns
 
 	m, err := scanCABMeeting(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description, req.ScheduledDate,
-		req.ChairID, attendees, auth.UserID, now, now,
+		req.ChairID, attendees,
+		req.DurationMinutes, req.Location, req.MeetingType, req.SecretaryUserID, req.Agenda, changeTicketIDs,
+		auth.UserID, now, now,
 	))
 	if err != nil {
 		return CABMeeting{}, apperrors.Internal("failed to create CAB meeting", err)
@@ -865,13 +1156,20 @@ func (s *ChangeService) UpdateCABMeeting(ctx context.Context, id uuid.UUID, req 
 			attendees = COALESCE($5, attendees),
 			minutes = COALESCE($6, minutes),
 			status = COALESCE($7, status),
-			updated_at = $8
-		WHERE id = $9 AND tenant_id = $10
+			duration_minutes = COALESCE($8, duration_minutes),
+			location = COALESCE($9, location),
+			meeting_type = COALESCE($10, meeting_type),
+			secretary_user_id = COALESCE($11, secretary_user_id),
+			agenda = COALESCE($12, agenda),
+			change_ticket_ids = COALESCE($13, change_ticket_ids),
+			updated_at = $14
+		WHERE id = $15 AND tenant_id = $16
 		RETURNING ` + cabMeetingColumns
 
 	m, err := scanCABMeeting(s.pool.QueryRow(ctx, query,
 		req.Title, req.Description, req.ScheduledDate,
 		req.ChairID, req.Attendees, req.Minutes, req.Status,
+		req.DurationMinutes, req.Location, req.MeetingType, req.SecretaryUserID, req.Agenda, req.ChangeTicketIDs,
 		now, id, auth.TenantID,
 	))
 	if err != nil {

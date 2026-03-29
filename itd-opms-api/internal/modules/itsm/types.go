@@ -237,6 +237,8 @@ type Ticket struct {
 	PIRRequired          bool            `json:"pirRequired"`
 	PIRCompleted         bool            `json:"pirCompleted"`
 	PIRNotes             *string         `json:"pirNotes,omitempty"`
+	CABNotes             *string         `json:"cabNotes,omitempty"`
+	ChangeSuccess        *bool           `json:"changeSuccess,omitempty"`
 
 	// Enrichment fields (populated via JOINs on SELECT queries, not on INSERT/UPDATE RETURNING).
 	ReporterName       *string `json:"reporterName,omitempty"`
@@ -785,8 +787,14 @@ type CABMeeting struct {
 	ChairID       *uuid.UUID      `json:"chairId"`
 	Attendees     []uuid.UUID     `json:"attendees"`
 	Minutes       *string         `json:"minutes"`
-	Decisions     json.RawMessage `json:"decisions"`
-	CreatedBy     uuid.UUID       `json:"createdBy"`
+	Decisions       json.RawMessage `json:"decisions"`
+	DurationMinutes *int            `json:"durationMinutes,omitempty"`
+	Location        *string         `json:"location,omitempty"`
+	MeetingType     string          `json:"meetingType"`
+	SecretaryUserID *uuid.UUID      `json:"secretaryUserId,omitempty"`
+	Agenda          json.RawMessage `json:"agenda"`
+	ChangeTicketIDs []uuid.UUID     `json:"changeTicketIds"`
+	CreatedBy       uuid.UUID       `json:"createdBy"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	UpdatedAt     time.Time       `json:"updatedAt"`
 }
@@ -880,22 +888,56 @@ type CompletePIRRequest struct {
 	PIRNotes string `json:"pirNotes" validate:"required"`
 }
 
+// SubmitRiskAssessmentRequest is the payload for submitting a risk assessment on a change.
+type SubmitRiskAssessmentRequest struct {
+	RiskAssessment json.RawMessage `json:"riskAssessment" validate:"required"`
+	RiskLevel      *string         `json:"riskLevel,omitempty"`
+}
+
+// ImplementChangeRequest is the payload for starting change implementation.
+type ImplementChangeRequest struct {
+	Comment *string `json:"comment,omitempty"`
+}
+
+// CompleteChangeRequest is the payload for marking a change as complete.
+type CompleteChangeRequest struct {
+	Success bool    `json:"success"`
+	Notes   *string `json:"notes,omitempty"`
+}
+
+// RollbackChangeRequest is the payload for triggering a change rollback.
+type RollbackChangeRequest struct {
+	Reason string `json:"reason" validate:"required"`
+}
+
 // CreateCABMeetingRequest is the payload for creating a CAB meeting.
 type CreateCABMeetingRequest struct {
-	Title         string      `json:"title" validate:"required"`
-	Description   *string     `json:"description"`
-	ScheduledDate time.Time   `json:"scheduledDate" validate:"required"`
-	ChairID       *uuid.UUID  `json:"chairId"`
-	Attendees     []uuid.UUID `json:"attendees"`
+	Title           string          `json:"title" validate:"required"`
+	Description     *string         `json:"description"`
+	ScheduledDate   time.Time       `json:"scheduledDate" validate:"required"`
+	ChairID         *uuid.UUID      `json:"chairId"`
+	Attendees       []uuid.UUID     `json:"attendees"`
+	DurationMinutes *int            `json:"durationMinutes"`
+	Location        *string         `json:"location"`
+	MeetingType     *string         `json:"meetingType"`
+	SecretaryUserID *uuid.UUID      `json:"secretaryUserId"`
+	Agenda          json.RawMessage `json:"agenda"`
+	ChangeTicketIDs []uuid.UUID     `json:"changeTicketIds"`
 }
 
 // UpdateCABMeetingRequest is the payload for updating a CAB meeting.
 type UpdateCABMeetingRequest struct {
-	Title         *string     `json:"title"`
-	Description   *string     `json:"description"`
-	ScheduledDate *time.Time  `json:"scheduledDate"`
-	ChairID       *uuid.UUID  `json:"chairId"`
-	Attendees     []uuid.UUID `json:"attendees"`
-	Minutes       *string     `json:"minutes"`
-	Status        *string     `json:"status"`
+	Title           *string         `json:"title"`
+	Description     *string         `json:"description"`
+	ScheduledDate   *time.Time      `json:"scheduledDate"`
+	ChairID         *uuid.UUID      `json:"chairId"`
+	Attendees       []uuid.UUID     `json:"attendees"`
+	Minutes         *string         `json:"minutes"`
+	Status          *string         `json:"status"`
+	DurationMinutes *int            `json:"durationMinutes"`
+	Location        *string         `json:"location"`
+	MeetingType     *string         `json:"meetingType"`
+	SecretaryUserID *uuid.UUID      `json:"secretaryUserId"`
+	Agenda          json.RawMessage `json:"agenda"`
+	ChangeTicketIDs []uuid.UUID     `json:"changeTicketIds"`
 }

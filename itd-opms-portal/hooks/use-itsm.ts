@@ -1578,6 +1578,85 @@ export function useCompletePIR(id: string | undefined) {
   });
 }
 
+/**
+ * POST /itsm/changes/{id}/risk-assessment - submit risk assessment.
+ */
+export function useSubmitRiskAssessment(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { riskAssessment: Record<string, unknown>; riskLevel?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/risk-assessment`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      toast.success("Risk assessment submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit risk assessment");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/implement - start implementation.
+ */
+export function useImplementChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body?: { comment?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/implement`, body ?? {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Implementation started");
+    },
+    onError: () => {
+      toast.error("Failed to start implementation");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/complete - complete change with success/failure.
+ */
+export function useCompleteChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { success: boolean; notes?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/complete`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/rollback - trigger rollback.
+ */
+export function useRollbackChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/rollback`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change rolled back");
+    },
+    onError: () => {
+      toast.error("Failed to rollback change");
+    },
+  });
+}
+
 /* ================================================================== */
 /*  CAB Meetings — Queries                                             */
 /* ================================================================== */

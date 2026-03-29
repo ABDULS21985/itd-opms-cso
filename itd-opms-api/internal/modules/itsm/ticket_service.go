@@ -56,7 +56,8 @@ const ticketColumns = `
 	implementation_plan, rollback_plan, test_plan,
 	scheduled_start, scheduled_end, actual_start, actual_end,
 	cab_required, cab_meeting_id, cab_decision, cab_decision_date,
-	pir_required, pir_completed, pir_notes`
+	pir_required, pir_completed, pir_notes,
+	cab_notes, change_success`
 
 // ticketSelectColumns is the column list for SELECT queries with LEFT JOINs for user enrichment.
 const ticketSelectColumns = `
@@ -76,6 +77,7 @@ const ticketSelectColumns = `
 	t.scheduled_start, t.scheduled_end, t.actual_start, t.actual_end,
 	t.cab_required, t.cab_meeting_id, t.cab_decision, t.cab_decision_date,
 	t.pir_required, t.pir_completed, t.pir_notes,
+	t.cab_notes, t.change_success,
 	reporter.display_name AS reporter_name,
 	reporter.department AS reporter_department,
 	assignee.display_name AS assignee_name,
@@ -97,6 +99,7 @@ func scanTicketChangeFields(t *Ticket) []any {
 		&t.ScheduledStart, &t.ScheduledEnd, &t.ActualStart, &t.ActualEnd,
 		&t.CABRequired, &t.CABMeetingID, &t.CABDecision, &t.CABDecisionDate,
 		&t.PIRRequired, &t.PIRCompleted, &t.PIRNotes,
+		&t.CABNotes, &t.ChangeSuccess,
 	}
 }
 

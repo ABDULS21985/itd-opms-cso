@@ -117,6 +117,7 @@ export default function CABMeetingsPage() {
               </button>
             </div>
             <FormField
+              name="title"
               label="Title"
               required
               value={createForm.title}
@@ -124,12 +125,14 @@ export default function CABMeetingsPage() {
               placeholder="e.g., Weekly CAB Review"
             />
             <FormField
+              name="description"
               label="Description"
               type="textarea"
               value={createForm.description}
               onChange={(v) => setCreateForm((p) => ({ ...p, description: v }))}
             />
             <FormField
+              name="scheduledDate"
               label="Scheduled Date"
               required
               type="date"

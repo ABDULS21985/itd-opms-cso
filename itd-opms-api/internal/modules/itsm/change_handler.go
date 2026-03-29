@@ -37,6 +37,10 @@ func (h *ChangeHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/transition", h.TransitionChange)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/cab-decision", h.SubmitCABDecision)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/pir", h.CompletePIR)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/risk-assessment", h.SubmitRiskAssessment)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/implement", h.ImplementChange)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/complete", h.CompleteChange)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/rollback", h.RollbackChange)
 }
 
 // ──────────────────────────────────────────────
@@ -244,6 +248,129 @@ func (h *ChangeHandler) CompletePIR(w http.ResponseWriter, r *http.Request) {
 	}
 
 	change, err := h.svc.CompletePIR(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, change, nil)
+}
+
+// SubmitRiskAssessment handles POST /{id}/risk-assessment.
+func (h *ChangeHandler) SubmitRiskAssessment(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid change ID")
+		return
+	}
+
+	var req SubmitRiskAssessmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.RiskAssessment == nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "riskAssessment is required")
+		return
+	}
+
+	change, err := h.svc.SubmitRiskAssessment(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, change, nil)
+}
+
+// ImplementChange handles POST /{id}/implement.
+func (h *ChangeHandler) ImplementChange(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid change ID")
+		return
+	}
+
+	var req ImplementChangeRequest
+	json.NewDecoder(r.Body).Decode(&req) // body is optional
+
+	change, err := h.svc.ImplementChange(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, change, nil)
+}
+
+// CompleteChange handles POST /{id}/complete.
+func (h *ChangeHandler) CompleteChange(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid change ID")
+		return
+	}
+
+	var req CompleteChangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	change, err := h.svc.CompleteChange(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, change, nil)
+}
+
+// RollbackChange handles POST /{id}/rollback.
+func (h *ChangeHandler) RollbackChange(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid change ID")
+		return
+	}
+
+	var req RollbackChangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.Reason == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "reason is required")
+		return
+	}
+
+	change, err := h.svc.RollbackChange(r.Context(), id, req)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

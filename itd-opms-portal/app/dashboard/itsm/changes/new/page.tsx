@@ -35,10 +35,12 @@ const IMPACT_OPTIONS = [
 ];
 
 const STEPS = [
-  { id: "classification", label: "Classification" },
+  { id: "type", label: "Type Selection" },
   { id: "details", label: "Details" },
-  { id: "risk", label: "Risk & Planning" },
-  { id: "review", label: "Review" },
+  { id: "risk", label: "Risk Assessment" },
+  { id: "backout", label: "Backout Plan" },
+  { id: "implementation", label: "Implementation" },
+  { id: "schedule", label: "Schedule & Review" },
 ];
 
 export default function NewChangePage() {
@@ -54,6 +56,8 @@ export default function NewChangePage() {
     urgency: "medium",
     impact: "medium",
     riskLevel: "medium",
+    riskImpactDescription: "",
+    riskMitigation: "",
     implementationPlan: "",
     rollbackPlan: "",
     testPlan: "",
@@ -69,7 +73,9 @@ export default function NewChangePage() {
     if (step === 0) return !!form.classification;
     if (step === 1) return !!form.title && !!form.description && !!form.changeType && !!form.urgency && !!form.impact;
     if (step === 2) return !!form.riskLevel;
-    return true;
+    if (step === 3) return true; // backout plan optional
+    if (step === 4) return true; // implementation plan optional
+    return true; // schedule + review
   };
 
   const handleSubmit = async () => {
@@ -83,6 +89,12 @@ export default function NewChangePage() {
       riskLevel: form.riskLevel,
     };
 
+    if (form.riskImpactDescription || form.riskMitigation) {
+      body.riskAssessment = {
+        impactDescription: form.riskImpactDescription,
+        mitigation: form.riskMitigation,
+      };
+    }
     if (form.implementationPlan) body.implementationPlan = form.implementationPlan;
     if (form.rollbackPlan) body.rollbackPlan = form.rollbackPlan;
     if (form.testPlan) body.testPlan = form.testPlan;
@@ -190,8 +202,9 @@ export default function NewChangePage() {
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-white">Change Details</h2>
-              <FormField label="Title" required value={form.title} onChange={(v) => updateField("title", v)} />
+              <FormField name="title" label="Title" required value={form.title} onChange={(v) => updateField("title", v)} />
               <FormField
+                name="description"
                 label="Description"
                 required
                 type="textarea"
@@ -200,6 +213,7 @@ export default function NewChangePage() {
               />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
+                  name="changeType"
                   label="Change Type"
                   required
                   type="select"
@@ -208,6 +222,7 @@ export default function NewChangePage() {
                   options={[{ value: "", label: "Select type" }, ...CHANGE_TYPES.map((t) => ({ value: t.value, label: t.label }))]}
                 />
                 <FormField
+                  name="urgency"
                   label="Urgency"
                   required
                   type="select"
@@ -216,6 +231,7 @@ export default function NewChangePage() {
                   options={URGENCY_OPTIONS}
                 />
                 <FormField
+                  name="impact"
                   label="Impact"
                   required
                   type="select"
@@ -229,101 +245,152 @@ export default function NewChangePage() {
 
           {step === 2 && (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-white">Risk Assessment & Planning</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  label="Risk Level"
-                  required
-                  type="select"
-                  value={form.riskLevel}
-                  onChange={(v) => updateField("riskLevel", v)}
-                  options={RISK_LEVELS.map((r) => ({ value: r.value, label: r.label }))}
-                />
-              </div>
+              <h2 className="text-lg font-semibold text-white">Risk Assessment</h2>
+              <p className="text-sm text-white/50">Evaluate the risk profile for this change.</p>
               <FormField
-                label="Implementation Plan"
-                type="textarea"
-                value={form.implementationPlan}
-                onChange={(v) => updateField("implementationPlan", v)}
-                placeholder="Describe the steps to implement this change..."
+                name="riskLevel"
+                label="Risk Level"
+                required
+                type="select"
+                value={form.riskLevel}
+                onChange={(v) => updateField("riskLevel", v)}
+                options={RISK_LEVELS.map((r) => ({ value: r.value, label: r.label }))}
               />
               <FormField
-                label="Rollback Plan"
+                name="riskImpactDescription"
+                label="Impact Description"
                 type="textarea"
-                value={form.rollbackPlan}
-                onChange={(v) => updateField("rollbackPlan", v)}
-                placeholder="Describe how to rollback if the change fails..."
+                value={form.riskImpactDescription}
+                onChange={(v) => updateField("riskImpactDescription", v)}
+                placeholder="Describe the potential impact if this change fails..."
+                rows={3}
               />
               <FormField
-                label="Test Plan"
+                name="riskMitigation"
+                label="Mitigation Strategy"
                 type="textarea"
-                value={form.testPlan}
-                onChange={(v) => updateField("testPlan", v)}
-                placeholder="Describe how the change will be tested..."
+                value={form.riskMitigation}
+                onChange={(v) => updateField("riskMitigation", v)}
+                placeholder="How will the risks be mitigated..."
+                rows={3}
               />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  label="Scheduled Start"
-                  type="date"
-                  value={form.scheduledStart}
-                  onChange={(v) => updateField("scheduledStart", v)}
-                />
-                <FormField
-                  label="Scheduled End"
-                  type="date"
-                  value={form.scheduledEnd}
-                  onChange={(v) => updateField("scheduledEnd", v)}
-                />
-              </div>
             </div>
           )}
 
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-white">Review</h2>
-              <div className="rounded-xl border border-white/10 p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-white/40">Classification</span>
-                    <p className="text-white font-medium capitalize">{form.classification}</p>
-                  </div>
-                  <div>
-                    <span className="text-white/40">Change Type</span>
-                    <p className="text-white font-medium capitalize">{form.changeType}</p>
-                  </div>
-                  <div>
-                    <span className="text-white/40">Urgency</span>
-                    <p className="text-white font-medium capitalize">{form.urgency}</p>
-                  </div>
-                  <div>
-                    <span className="text-white/40">Impact</span>
-                    <p className="text-white font-medium capitalize">{form.impact}</p>
-                  </div>
-                  <div>
-                    <span className="text-white/40">Risk Level</span>
-                    <p className="text-white font-medium capitalize">{form.riskLevel}</p>
-                  </div>
-                  {form.scheduledStart && (
+              <h2 className="text-lg font-semibold text-white">Backout Plan</h2>
+              <p className="text-sm text-white/50">Define the steps to revert this change if it needs to be rolled back.</p>
+              <FormField
+                name="rollbackPlan"
+                label="Rollback / Backout Plan"
+                type="textarea"
+                value={form.rollbackPlan}
+                onChange={(v) => updateField("rollbackPlan", v)}
+                placeholder="Step-by-step plan for rolling back this change..."
+                rows={6}
+              />
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-white">Implementation Plan</h2>
+              <p className="text-sm text-white/50">Detail how this change will be implemented and tested.</p>
+              <FormField
+                name="implementationPlan"
+                label="Implementation Plan"
+                type="textarea"
+                value={form.implementationPlan}
+                onChange={(v) => updateField("implementationPlan", v)}
+                placeholder="Describe the steps to implement this change..."
+                rows={5}
+              />
+              <FormField
+                name="testPlan"
+                label="Test Plan"
+                type="textarea"
+                value={form.testPlan}
+                onChange={(v) => updateField("testPlan", v)}
+                placeholder="Describe how the change will be tested post-implementation..."
+                rows={4}
+              />
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-white">Schedule</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    name="scheduledStart"
+                    label="Scheduled Start"
+                    type="date"
+                    value={form.scheduledStart}
+                    onChange={(v) => updateField("scheduledStart", v)}
+                  />
+                  <FormField
+                    name="scheduledEnd"
+                    label="Scheduled End"
+                    type="date"
+                    value={form.scheduledEnd}
+                    onChange={(v) => updateField("scheduledEnd", v)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-white">Review Summary</h2>
+                <div className="rounded-xl border border-white/10 p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <span className="text-white/40">Schedule</span>
-                      <p className="text-white font-medium">{form.scheduledStart} &rarr; {form.scheduledEnd || "TBD"}</p>
+                      <span className="text-white/40">Classification</span>
+                      <p className="text-white font-medium capitalize">{form.classification}</p>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Change Type</span>
+                      <p className="text-white font-medium capitalize">{form.changeType}</p>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Urgency</span>
+                      <p className="text-white font-medium capitalize">{form.urgency}</p>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Impact</span>
+                      <p className="text-white font-medium capitalize">{form.impact}</p>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Risk Level</span>
+                      <p className="text-white font-medium capitalize">{form.riskLevel}</p>
+                    </div>
+                    {form.scheduledStart && (
+                      <div>
+                        <span className="text-white/40">Schedule</span>
+                        <p className="text-white font-medium">{form.scheduledStart} &rarr; {form.scheduledEnd || "TBD"}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-white/40 text-sm">Title</span>
+                    <p className="text-white font-medium">{form.title}</p>
+                  </div>
+                  <div>
+                    <span className="text-white/40 text-sm">Description</span>
+                    <p className="text-white/70 text-sm">{form.description}</p>
+                  </div>
+                  {form.rollbackPlan && (
+                    <div>
+                      <span className="text-white/40 text-sm">Backout Plan</span>
+                      <p className="text-white/70 text-sm whitespace-pre-wrap">{form.rollbackPlan}</p>
+                    </div>
+                  )}
+                  {form.implementationPlan && (
+                    <div>
+                      <span className="text-white/40 text-sm">Implementation Plan</span>
+                      <p className="text-white/70 text-sm whitespace-pre-wrap">{form.implementationPlan}</p>
                     </div>
                   )}
                 </div>
-                <div>
-                  <span className="text-white/40 text-sm">Title</span>
-                  <p className="text-white font-medium">{form.title}</p>
-                </div>
-                <div>
-                  <span className="text-white/40 text-sm">Description</span>
-                  <p className="text-white/70 text-sm">{form.description}</p>
-                </div>
-                {form.implementationPlan && (
-                  <div>
-                    <span className="text-white/40 text-sm">Implementation Plan</span>
-                    <p className="text-white/70 text-sm whitespace-pre-wrap">{form.implementationPlan}</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
