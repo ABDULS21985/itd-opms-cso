@@ -274,7 +274,7 @@ function InsightSkeleton({ index }: { index: number }) {
       transition={{ duration: 0.35, delay: 0.1 + index * 0.08 }}
       className="rounded-xl border overflow-hidden"
       style={{
-        background: "rgba(255, 255, 255, 0.6)",
+        background: "var(--surface-0)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
         borderColor: "var(--border)",
@@ -399,7 +399,7 @@ function InsightCard({
       transition={{ duration: 0.35, delay: baseDelay + index * 0.08 }}
       className="rounded-xl border overflow-hidden group"
       style={{
-        background: "rgba(255, 255, 255, 0.6)",
+        background: "var(--surface-0)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
         borderColor: "var(--border)",
@@ -575,7 +575,7 @@ export function InsightsEngine({ className, delay = 0.6 }: InsightsEngineProps) 
             <div
               className="rounded-xl border p-6 flex items-center gap-4 col-span-full"
               style={{
-                background: "rgba(255, 255, 255, 0.6)",
+                background: "var(--surface-0)",
                 backdropFilter: "blur(16px)",
                 borderColor: "var(--border)",
               }}

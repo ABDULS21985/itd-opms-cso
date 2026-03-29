@@ -9,24 +9,34 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 )
+
+// EmailSender is the interface satisfied by both msgraph.Client and sendgrid.Client.
+type EmailSender interface {
+	SendMail(ctx context.Context, to, subject, htmlBody string) error
+}
 
 // OutboxProcessor polls the notification_outbox table and delivers notifications.
 type OutboxProcessor struct {
-	pool     *pgxpool.Pool
-	graph    *msgraph.Client
-	pollRate time.Duration
+	pool      *pgxpool.Pool
+	email     EmailSender // Graph or SendGrid
+	teams     TeamsSender // Graph for Teams (may be nil)
+	pollRate  time.Duration
 	batchSize int
-	stopCh   chan struct{}
+	stopCh    chan struct{}
+}
+
+// TeamsSender is used for Microsoft Teams channel posts (Graph-only feature).
+type TeamsSender interface {
+	PostTeamsMessage(ctx context.Context, teamID, channelID, body string, adaptiveCard json.RawMessage) error
 }
 
 // NewOutboxProcessor creates a new outbox processor.
-func NewOutboxProcessor(pool *pgxpool.Pool, graph *msgraph.Client) *OutboxProcessor {
+func NewOutboxProcessor(pool *pgxpool.Pool, email EmailSender, teams TeamsSender) *OutboxProcessor {
 	return &OutboxProcessor{
 		pool:      pool,
-		graph:     graph,
+		email:     email,
+		teams:     teams,
 		pollRate:  5 * time.Second,
 		batchSize: 20,
 		stopCh:    make(chan struct{}),
@@ -145,10 +155,10 @@ func (p *OutboxProcessor) deliver(ctx context.Context, item outboxItem) error {
 	}
 }
 
-// deliverEmail sends an email via Microsoft Graph sendMail API.
+// deliverEmail sends an email via the configured email provider (SendGrid or Graph).
 func (p *OutboxProcessor) deliverEmail(ctx context.Context, item outboxItem) error {
-	if p.graph == nil {
-		return fmt.Errorf("graph client not available")
+	if p.email == nil {
+		return fmt.Errorf("email sender not configured (set SENDGRID_API_KEY or enable Graph API)")
 	}
 
 	recipientEmail := ""
@@ -181,8 +191,8 @@ func (p *OutboxProcessor) deliverEmail(ctx context.Context, item outboxItem) err
 		body = *item.RenderedBody
 	}
 
-	if err := p.graph.SendMail(ctx, recipientEmail, subject, body); err != nil {
-		return fmt.Errorf("graph sendMail: %w", err)
+	if err := p.email.SendMail(ctx, recipientEmail, subject, body); err != nil {
+		return fmt.Errorf("send email: %w", err)
 	}
 
 	slog.Info("email delivered",
@@ -195,8 +205,8 @@ func (p *OutboxProcessor) deliverEmail(ctx context.Context, item outboxItem) err
 
 // deliverTeams posts a message (potentially with Adaptive Card) to a Teams channel.
 func (p *OutboxProcessor) deliverTeams(ctx context.Context, item outboxItem) error {
-	if p.graph == nil {
-		return fmt.Errorf("graph client not available")
+	if p.teams == nil {
+		return fmt.Errorf("teams sender not configured (requires Graph API)")
 	}
 
 	// Look up Teams channel mapping for this tenant and notification type.
@@ -228,7 +238,7 @@ func (p *OutboxProcessor) deliverTeams(ctx context.Context, item outboxItem) err
 		}
 	}
 
-	if err := p.graph.PostTeamsMessage(ctx, teamID, channelID, body, adaptiveCard); err != nil {
+	if err := p.teams.PostTeamsMessage(ctx, teamID, channelID, body, adaptiveCard); err != nil {
 		return fmt.Errorf("post teams message: %w", err)
 	}
 

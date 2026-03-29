@@ -30,6 +30,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/people"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/ssa"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/vault"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/vendor"
@@ -41,6 +42,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/sendgrid"
 )
 
 // Server holds all dependencies and provides the HTTP server functionality.
@@ -94,7 +96,7 @@ func (s *Server) Setup() {
 	r.Use(middleware.TrustedRealIP)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:3004", "http://localhost:5173", "https://*.itd-opms.gov.ph"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Correlation-ID", "X-Tenant-ID"},
 		ExposedHeaders:   []string{"X-Correlation-ID"},
@@ -103,7 +105,8 @@ func (s *Server) Setup() {
 	}))
 
 	r.Use(middleware.SecurityHeaders)
-	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:5173"}))
+	r.Use(middleware.CSRFProtection([]string{"http://localhost:3000", "http://localhost:3004", "http://localhost:5173"}))
+	r.Use(middleware.MaxBodySize(10 << 20)) // 10 MB global request body limit
 	r.Use(metrics.MetricsMiddleware)
 
 	if s.redis != nil {
@@ -157,8 +160,22 @@ func (s *Server) Setup() {
 		slog.Info("directory sync service initialized")
 	}
 
+	// --- Email sender: prefer Graph API, fall back to SendGrid ---
+	var emailSender notification.EmailSender
+	var teamsSender notification.TeamsSender
+	if graphClient != nil {
+		emailSender = graphClient
+		teamsSender = graphClient
+		slog.Info("email provider: Microsoft Graph API")
+	} else if s.cfg.SendGrid.APIKey != "" {
+		emailSender = sendgrid.NewClient(s.cfg.SendGrid)
+		slog.Info("email provider: SendGrid")
+	} else {
+		slog.Warn("no email provider configured — email notifications will be skipped")
+	}
+
 	// --- Notification outbox processor ---
-	outboxProcessor := notification.NewOutboxProcessor(s.pool, graphClient)
+	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)
 	s.outboxProcessor = outboxProcessor
 
 	// --- Notification orchestrator (NATS event listener) ---
@@ -186,6 +203,7 @@ func (s *Server) Setup() {
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
 	vendorHandler := vendor.NewHandler(s.pool, auditService)
+	ssaHandler := ssa.NewHandler(s.pool, auditService)
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	s.maintenanceWorker = systemHandler.Maintenance
@@ -320,6 +338,7 @@ func (s *Server) Setup() {
 			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
 			r.Route("/vendors", func(r chi.Router) { vendorHandler.Routes(r) })
 			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
+			r.Route("/ssa", func(r chi.Router) { ssaHandler.Routes(r) })
 			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })

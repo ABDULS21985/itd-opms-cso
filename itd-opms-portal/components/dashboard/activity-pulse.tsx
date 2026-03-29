@@ -374,10 +374,10 @@ export function ActivityPulse({
       <div
         className={`rounded-2xl border flex flex-col ${className}`}
         style={{
-          background: "rgba(255, 255, 255, 0.6)",
+          background: "var(--surface-0)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          borderColor: "rgba(255, 255, 255, 0.18)",
+          borderColor: "var(--border)",
         }}
       >
         {/* ---- Header ---- */}

@@ -241,7 +241,7 @@ function LinkIncidentForm({
     e.preventDefault();
     if (!incidentId.trim()) return;
     linkMutation.mutate(
-      { problemId, incidentId: incidentId.trim() },
+      { problemId, ticketId: incidentId.trim() },
       { onSuccess: onClose },
     );
   }

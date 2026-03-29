@@ -305,7 +305,7 @@ func (s *TrainingService) GetExpiringCertifications(ctx context.Context, days in
 		FROM training_records
 		WHERE tenant_id = $1
 			AND expiry_date IS NOT NULL
-			AND expiry_date <= CURRENT_DATE + ($2 || ' days')::interval
+			AND expiry_date <= CURRENT_DATE + ($2::text || ' days')::interval
 			AND expiry_date >= CURRENT_DATE
 			AND status != 'expired'
 		ORDER BY expiry_date ASC`

@@ -788,15 +788,17 @@ export function useLeaveRecords(
   limit = 20,
   userId?: string,
   status?: string,
+  leaveType?: string,
 ) {
   return useQuery({
-    queryKey: ["leave-records", page, limit, userId, status],
+    queryKey: ["leave-records", page, limit, userId, status, leaveType],
     queryFn: () =>
       apiClient.get<PaginatedResponse<LeaveRecord>>("/people/leave", {
         page,
         limit,
         user_id: userId,
         status,
+        leave_type: leaveType,
       }),
   });
 }

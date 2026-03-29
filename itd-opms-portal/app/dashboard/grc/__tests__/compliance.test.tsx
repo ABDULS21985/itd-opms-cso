@@ -12,8 +12,22 @@ vi.mock("framer-motion", () => {
     {
       get:
         (_target: unknown, prop: string) =>
-        ({ children, ...rest }: Record<string, unknown>) =>
-          React.createElement(prop, rest, children),
+        ({ children, ...rest }: Record<string, unknown>) => {
+          const {
+            initial,
+            animate,
+            exit,
+            transition,
+            layout,
+            layoutId,
+            whileHover,
+            whileTap,
+            whileFocus,
+            variants,
+            ...safeRest
+          } = rest;
+          return React.createElement(prop, safeRest, children);
+        },
     },
   );
   return {
@@ -30,7 +44,8 @@ const mockUseComplianceControls = vi.fn();
 const mockUseComplianceStats = vi.fn();
 
 vi.mock("@/hooks/use-grc", () => ({
-  useComplianceControls: (...args: unknown[]) => mockUseComplianceControls(...args),
+  useComplianceControls: (...args: unknown[]) =>
+    mockUseComplianceControls(...args),
   useComplianceStats: (...args: unknown[]) => mockUseComplianceStats(...args),
 }));
 
@@ -54,7 +69,11 @@ vi.mock("@/components/shared/data-table", () => {
       columns: { header: string }[];
     }) => {
       if (loading) {
-        return React.createElement("div", { "data-testid": "loading-skeleton" }, "Loading...");
+        return React.createElement(
+          "div",
+          { "data-testid": "loading-skeleton" },
+          "Loading...",
+        );
       }
       if (data.length === 0) {
         return React.createElement(
@@ -168,7 +187,7 @@ describe("ComplianceDashboardPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the page header with title and description", { timeout: 15000 }, () => {
+  it("renders the upgraded compliance workspace", { timeout: 15000 }, () => {
     mockUseComplianceControls.mockReturnValue({
       data: { data: mockControls, meta: mockMeta },
       isLoading: false,
@@ -182,8 +201,15 @@ describe("ComplianceDashboardPage", () => {
 
     expect(screen.getByText("Compliance Dashboard")).toBeInTheDocument();
     expect(
-      screen.getByText("Framework mapping, control tracking, and compliance posture"),
+      screen.getByText(
+        /Framework mapping, control tracking, and compliance posture/,
+      ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Compliance pulse")).toBeInTheDocument();
+    expect(
+      screen.getByText("Live compliance control board"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Current board state")).toBeInTheDocument();
   });
 
   it("renders loading state while controls are being fetched", () => {
@@ -203,7 +229,10 @@ describe("ComplianceDashboardPage", () => {
 
   it("renders empty state when no compliance controls exist", () => {
     mockUseComplianceControls.mockReturnValue({
-      data: { data: [], meta: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } },
+      data: {
+        data: [],
+        meta: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
+      },
       isLoading: false,
     });
     mockUseComplianceStats.mockReturnValue({
@@ -214,9 +243,13 @@ describe("ComplianceDashboardPage", () => {
     render(<ComplianceDashboardPage />);
 
     expect(screen.getByTestId("empty-state")).toBeInTheDocument();
-    expect(screen.getByText("No compliance controls found")).toBeInTheDocument();
     expect(
-      screen.getByText("Add compliance controls to track your regulatory posture."),
+      screen.getByText("No compliance controls found"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add compliance controls to track your regulatory posture.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -233,11 +266,15 @@ describe("ComplianceDashboardPage", () => {
     render(<ComplianceDashboardPage />);
 
     expect(screen.getByTestId("data-table")).toBeInTheDocument();
-    expect(screen.getByText("Information Security Policy Set")).toBeInTheDocument();
-    expect(screen.getByText("Manage the IT Management Framework")).toBeInTheDocument();
+    expect(
+      screen.getByText("Information Security Policy Set"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Manage the IT Management Framework"),
+    ).toBeInTheDocument();
   });
 
-  it("renders framework stats cards when stats are available", () => {
+  it("renders framework coverage cards and summary metrics when stats are available", () => {
     mockUseComplianceControls.mockReturnValue({
       data: { data: mockControls, meta: mockMeta },
       isLoading: false,
@@ -253,11 +290,15 @@ describe("ComplianceDashboardPage", () => {
     expect(screen.getAllByText("ISO 27001").length).toBeGreaterThanOrEqual(1);
     // "COBIT" also appears in both stats card and framework tab
     expect(screen.getAllByText("COBIT").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("70%")).toBeInTheDocument(); // 14/20
-    expect(screen.getByText("53%")).toBeInTheDocument(); // 8/15
+    expect(screen.getAllByText("70%").length).toBeGreaterThanOrEqual(1); // 14/20
+    expect(screen.getAllByText("53%").length).toBeGreaterThanOrEqual(1); // 8/15
+    expect(
+      screen.getAllByText("Frameworks tracked").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Mapped controls")).toBeInTheDocument();
   });
 
-  it("shows the 'Add Control' and 'Filters' buttons", () => {
+  it("shows the primary compliance actions", () => {
     mockUseComplianceControls.mockReturnValue({
       data: { data: mockControls, meta: mockMeta },
       isLoading: false,
@@ -270,7 +311,8 @@ describe("ComplianceDashboardPage", () => {
     render(<ComplianceDashboardPage />);
 
     expect(screen.getByText("Add Control")).toBeInTheDocument();
-    expect(screen.getByText("Filters")).toBeInTheDocument();
+    expect(screen.getByText("Show Gaps")).toBeInTheDocument();
+    expect(screen.getByText("Reset filters")).toBeInTheDocument();
   });
 
   it("shows framework tab navigation", () => {

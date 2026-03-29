@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import DOMPurify from "dompurify";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -506,7 +507,7 @@ export default function TemplateEditorPage() {
               </div>
               <div
                 className="p-6 min-h-[300px] max-h-[600px] overflow-auto"
-                dangerouslySetInnerHTML={{ __html: previewHtml || livePreview }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml || livePreview) }}
               />
             </div>
 

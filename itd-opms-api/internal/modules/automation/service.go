@@ -100,11 +100,8 @@ func scanExecution(row pgx.Row) (AutomationExecution, error) {
 func scanExecutions(rows pgx.Rows) ([]AutomationExecution, error) {
 	var execs []AutomationExecution
 	for rows.Next() {
-		var e AutomationExecution
-		if err := rows.Scan(
-			&e.ID, &e.RuleID, &e.RuleName, &e.TenantID, &e.TriggerEvent, &e.EntityType, &e.EntityID,
-			&e.ActionsTaken, &e.Status, &e.ErrorMessage, &e.DurationMs, &e.ExecutedAt,
-		); err != nil {
+		e, err := scanExecution(rows)
+		if err != nil {
 			return nil, err
 		}
 		execs = append(execs, e)

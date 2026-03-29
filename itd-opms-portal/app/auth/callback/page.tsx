@@ -6,8 +6,7 @@ import { motion } from "framer-motion";
 import { Shield, AlertCircle, RefreshCw } from "lucide-react";
 import { setAuthenticatedFlag, setAuthMode } from "@/lib/auth";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
+import { API_BASE_URL } from "@/lib/api-client";
 
 type CallbackStatus = "processing" | "success" | "error";
 

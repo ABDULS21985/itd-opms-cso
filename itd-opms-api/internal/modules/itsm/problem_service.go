@@ -53,17 +53,22 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 			status, owner_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4,
-			'open', $5, $6, $7
+			$5, $6, $7, $8
 		)
 		RETURNING id, tenant_id, problem_number, title, description,
 			root_cause, status, linked_incident_ids, workaround,
 			permanent_fix, linked_change_id, owner_id,
 			created_at, updated_at`
 
+	status := req.Status
+	if status == "" {
+		status = "logged"
+	}
+
 	var p Problem
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description,
-		req.OwnerID, now, now,
+		status, req.OwnerID, now, now,
 	).Scan(
 		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
 		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,

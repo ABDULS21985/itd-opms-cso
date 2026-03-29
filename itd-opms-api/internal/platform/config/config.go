@@ -18,6 +18,7 @@ type Config struct {
 	JWT           JWTConfig
 	EntraID       EntraIDConfig
 	Graph         GraphConfig
+	SendGrid      SendGridConfig
 	Observability ObservabilityConfig
 	Log           LogConfig
 }
@@ -109,6 +110,12 @@ type GraphConfig struct {
 	ServiceAccountID string `mapstructure:"service_account_id"`
 }
 
+type SendGridConfig struct {
+	APIKey    string `mapstructure:"api_key"`
+	FromEmail string `mapstructure:"from_email"`
+	FromName  string `mapstructure:"from_name"`
+}
+
 type ObservabilityConfig struct {
 	OTLPEndpoint string `mapstructure:"otlp_endpoint"`
 	ServiceName  string `mapstructure:"service_name"`
@@ -169,6 +176,11 @@ func Load() (*Config, error) {
 
 	// Microsoft Graph
 	v.SetDefault("GRAPH_SERVICE_ACCOUNT_ID", "")
+
+	// SendGrid
+	v.SetDefault("SENDGRID_API_KEY", "")
+	v.SetDefault("SENDGRID_FROM_EMAIL", "noreply@cbn.gov.ng")
+	v.SetDefault("SENDGRID_FROM_NAME", "ITD-OPMS")
 
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
@@ -231,6 +243,11 @@ func Load() (*Config, error) {
 		},
 		Graph: GraphConfig{
 			ServiceAccountID: v.GetString("GRAPH_SERVICE_ACCOUNT_ID"),
+		},
+		SendGrid: SendGridConfig{
+			APIKey:    v.GetString("SENDGRID_API_KEY"),
+			FromEmail: v.GetString("SENDGRID_FROM_EMAIL"),
+			FromName:  v.GetString("SENDGRID_FROM_NAME"),
 		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),

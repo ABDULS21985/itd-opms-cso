@@ -325,7 +325,7 @@ func (s *RosterService) GetLeaveRecord(ctx context.Context, id uuid.UUID) (Leave
 }
 
 // ListLeaveRecords returns a filtered, paginated list of leave records.
-func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID, status *string, page, limit int) ([]LeaveRecord, int, error) {
+func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID, status *string, leaveType *string, page, limit int) ([]LeaveRecord, int, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -333,18 +333,18 @@ func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID,
 
 	offset := (page - 1) * limit
 
-	// Build org-scope filter. Next param index after $3 (status) is 4.
-	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 4)
+	// Build org-scope filter. Next param index after $4 (leave_type) is 5.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 5)
 
-	// Build args: tenant_id, userID, status [, orgParam]
-	countArgs := []interface{}{auth.TenantID, userID, status}
+	// Build args: tenant_id, userID, status, leaveType [, orgParam]
+	countArgs := []interface{}{auth.TenantID, userID, status, leaveType}
 	orgSQL := ""
-	nextIdx := 4
+	nextIdx := 5
 	if orgClause != "" {
 		orgSQL = " AND " + orgClause
 		if orgParam != nil {
 			countArgs = append(countArgs, orgParam)
-			nextIdx = 5
+			nextIdx = 6
 		}
 	}
 
@@ -353,7 +353,8 @@ func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID,
 		FROM leave_records
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR user_id = $2)
-			AND ($3::text IS NULL OR status = $3)%s`, orgSQL)
+			AND ($3::text IS NULL OR status = $3)
+			AND ($4::text IS NULL OR leave_type = $4)%s`, orgSQL)
 
 	var total int
 	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
@@ -367,7 +368,8 @@ func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID,
 		FROM leave_records
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR user_id = $2)
-			AND ($3::text IS NULL OR status = $3)%s
+			AND ($3::text IS NULL OR status = $3)
+			AND ($4::text IS NULL OR leave_type = $4)%s
 		ORDER BY start_date DESC
 		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
