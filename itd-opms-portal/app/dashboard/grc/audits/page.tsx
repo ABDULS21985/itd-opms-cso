@@ -17,6 +17,7 @@ import {
   Clock3,
   Search,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -119,6 +120,42 @@ function MetricCard({
       <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
         {helper}
       </p>
+    </div>
+  );
+}
+
+function SpotlightCard({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  accent,
+  className = "",
+}: {
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  description: string;
+  accent: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`rounded-[1.5rem] border border-white/12 bg-white/10 p-4 backdrop-blur-xl ${className}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/12"
+          style={{ backgroundColor: `${accent}20` }}
+        >
+          <Icon size={18} className="text-white" />
+        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/52">
+          {eyebrow}
+        </span>
+      </div>
+      <h2 className="mt-5 text-lg font-semibold leading-6 text-white">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-emerald-50/72">{description}</p>
     </div>
   );
 }
@@ -345,6 +382,9 @@ export default function GRCAuditsPage() {
 
   const audits = data?.data ?? [];
   const meta = data?.meta;
+  const selectedStatusLabel = STATUSES.find((option) => option.value === status)?.label ?? "All Statuses";
+  const selectedTypeLabel = AUDIT_TYPES.find((option) => option.value === auditType)?.label ?? "All Types";
+  const hasFilters = !!(search.trim() || status || auditType);
 
   // Filter by search text client-side
   const filtered = useMemo(() => {
@@ -373,6 +413,22 @@ export default function GRCAuditsPage() {
           : 0,
     };
   }, [audits, meta]);
+  const strongestAudit = useMemo(
+    () => [...audits].sort((a, b) => b.readinessScore - a.readinessScore)[0],
+    [audits],
+  );
+  const weakestAudit = useMemo(
+    () => [...audits].sort((a, b) => a.readinessScore - b.readinessScore)[0],
+    [audits],
+  );
+  const typeCounts = useMemo(
+    () => ({
+      internal: audits.filter((audit) => audit.auditType === AUDIT_TYPE.INTERNAL).length,
+      external: audits.filter((audit) => audit.auditType === AUDIT_TYPE.EXTERNAL).length,
+      regulatory: audits.filter((audit) => audit.auditType === AUDIT_TYPE.REGULATORY).length,
+    }),
+    [audits],
+  );
 
   const columns: Column<GRCAudit>[] = [
     {
@@ -478,116 +534,236 @@ export default function GRCAuditsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-8 pb-10">
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        transition={{ duration: 0.45 }}
+        className="relative overflow-hidden rounded-[2rem] border border-[rgba(59,130,246,0.14)] bg-[linear-gradient(135deg,_rgba(7,26,58,0.98),_rgba(17,65,128,0.94)_48%,_rgba(59,130,246,0.9))] p-6 shadow-[0_28px_72px_rgba(15,23,42,0.12)] sm:p-8"
       >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(59,130,246,0.1)]">
-            <ClipboardList size={20} style={{ color: "#3B82F6" }} />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.12),_transparent_24%),radial-gradient(circle_at_18%_18%,_rgba(255,255,255,0.08),_transparent_26%)]" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(59,130,246,0.32),_transparent_68%)] opacity-70" />
+        <div className="pointer-events-none absolute -bottom-12 left-0 h-36 w-36 rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.26),_transparent_68%)] opacity-60" />
+
+        <div className="relative grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/78 backdrop-blur-xl">
+              GRC audit operations
+            </div>
+
+            <div className="mt-6 flex items-start gap-4">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-[1.25rem] border border-white/12 bg-white/10 shadow-lg shadow-blue-500/10">
+                <ClipboardList className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold tracking-[-0.045em] text-white sm:text-[2.6rem]">
+                  Audit management with clearer readiness signals and tighter flow control.
+                </h1>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-white/78 sm:text-base">
+                  Schedule audits, understand readiness at a glance, and keep internal,
+                  external, and regulatory workstreams visible in one operational surface.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#1E3A8A] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <Plus size={16} />
+                Schedule Audit
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/grc/reports")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all duration-200 hover:border-white/28 hover:bg-white/14"
+              >
+                Open GRC analytics
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {[
+                `${stats.total} total audits`,
+                `${stats.active} active workstreams`,
+                `${stats.avgReadiness}% average readiness`,
+                selectedStatusLabel,
+                selectedTypeLabel,
+              ].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-full border border-white/10 bg-white/8 px-3.5 py-2 text-xs font-medium tracking-[0.08em] text-white/82"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              Audit Management
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Schedule, track, and manage audit activities across all frameworks
-            </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SpotlightCard
+              icon={ShieldCheck}
+              eyebrow="Strongest readiness"
+              accent="#10B981"
+              title={
+                strongestAudit
+                  ? `${strongestAudit.readinessScore}% ${strongestAudit.title}`
+                  : "No audits scheduled"
+              }
+              description={
+                strongestAudit
+                  ? "Highest readiness currently in the book. Use it as the benchmark for evidence quality."
+                  : "Schedule your first audit to start measuring readiness."
+              }
+            />
+            <SpotlightCard
+              icon={ShieldAlert}
+              eyebrow="Most at risk"
+              accent="#EF4444"
+              title={
+                weakestAudit
+                  ? `${weakestAudit.readinessScore}% ${weakestAudit.title}`
+                  : "No readiness gaps yet"
+              }
+              description={
+                weakestAudit
+                  ? "This audit has the lowest readiness score and should be prioritized for evidence follow-up."
+                  : "Once audits exist, the lowest-readiness item will surface here."
+              }
+            />
+            <SpotlightCard
+              icon={Target}
+              eyebrow="Type mix"
+              accent="#F59E0B"
+              className="sm:col-span-2"
+              title={`${typeCounts.internal} internal, ${typeCounts.external} external, ${typeCounts.regulatory} regulatory`}
+              description="Balance the audit portfolio across operating assurance, outside scrutiny, and regulatory oversight."
+            />
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          <Plus size={16} />
-          Schedule Audit
-        </button>
       </motion.div>
 
-      {/* Stats */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
       >
         <MetricCard
           label="Total Audits"
           value={stats.total}
-          helper="Across all statuses"
+          helper="Full audit inventory currently being tracked."
           color="#3B82F6"
           loading={isLoading}
         />
         <MetricCard
           label="Active"
           value={stats.active}
-          helper="In progress or review"
+          helper="Preparing, in progress, or currently in findings review."
           color="#F59E0B"
           loading={isLoading}
         />
         <MetricCard
           label="Completed"
           value={stats.completed}
-          helper="Successfully closed"
+          helper="Audits closed with the workflow fully completed."
           color="#10B981"
           loading={isLoading}
         />
         <MetricCard
           label="Avg Readiness"
           value={`${stats.avgReadiness}%`}
-          helper="Evidence completeness"
+          helper="Average evidence and readiness coverage across the active book."
           color={getReadinessColor(stats.avgReadiness)}
           loading={isLoading}
         />
       </motion.div>
 
-      {/* Filters */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="flex flex-wrap items-center gap-3"
+        className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-white/94 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
       >
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)]"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search audits..."
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-4 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-          />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]/70">
+              Audit Register
+            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-[-0.035em] text-[var(--text-primary)]">
+              Filter and review the active audit book
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
+              Narrow by lifecycle status and audit type, then open the exact record you need
+              for readiness work, scope updates, or evidence collection.
+            </p>
+          </div>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setStatus("");
+                setAuditType("");
+                setPage(1);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:border-[var(--primary)]/20 hover:bg-[var(--primary)]/6 hover:text-[var(--primary)]"
+            >
+              <X size={15} />
+              Clear filters
+            </button>
+          )}
         </div>
-        <select
-          value={status}
-          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
-        <select
-          value={auditType}
-          onChange={(e) => { setAuditType(e.target.value); setPage(1); }}
-          className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-        >
-          {AUDIT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
+
+        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative max-w-xl flex-1">
+            <Search
+              size={16}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)]"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by audit title, auditor, or audit body..."
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] py-3 pl-11 pr-4 text-sm text-[var(--text-primary)] shadow-sm outline-none transition-all placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+            />
+          </div>
+
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/10"
+          >
+            {STATUSES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={auditType}
+            onChange={(e) => {
+              setAuditType(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/10"
+          >
+            {AUDIT_TYPES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </motion.div>
 
-      {/* Table */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
