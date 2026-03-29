@@ -62,9 +62,19 @@ func (h *ProblemHandler) ListProblems(w http.ResponseWriter, r *http.Request) {
 		statusParam = &s
 	}
 
+	var assignedGroupID *uuid.UUID
+	if g := r.URL.Query().Get("assignedGroupId"); g != "" {
+		parsed, err := uuid.Parse(g)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid assignedGroupId")
+			return
+		}
+		assignedGroupID = &parsed
+	}
+
 	params := types.ParsePagination(r)
 
-	problems, total, err := h.svc.ListProblems(r.Context(), statusParam, params.Limit, params.Offset())
+	problems, total, err := h.svc.ListProblems(r.Context(), statusParam, assignedGroupID, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return

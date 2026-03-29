@@ -17,6 +17,7 @@ import {
   Loader2,
   Plus,
   RotateCcw,
+  Building2,
   Save,
   Search,
   Sparkles,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
-import { UserPicker } from "@/components/shared/pickers";
+import { UserPicker, OrgUnitPicker } from "@/components/shared/pickers";
 import {
   useCreateKnownError,
   useCreateProblem,
@@ -567,7 +568,17 @@ function ProblemCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
-        <span>Owner: {truncateId(problem.ownerId)}</span>
+        {problem.ownerName ? (
+          <span>Owner: {problem.ownerName}</span>
+        ) : problem.ownerId ? (
+          <span>Owner: {truncateId(problem.ownerId)}</span>
+        ) : null}
+        {problem.assignedGroupName && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2 py-0.5">
+            <Building2 size={11} />
+            {problem.assignedGroupName}
+          </span>
+        )}
         <span>Created {formatDate(problem.createdAt)}</span>
         <span>Updated {formatRelativeTime(problem.updatedAt)}</span>
         {problem.linkedChangeId && <span>Change {truncateId(problem.linkedChangeId)}</span>}
@@ -682,8 +693,10 @@ export default function ProblemsPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [groupFilterDisplay, setGroupFilterDisplay] = useState("");
 
-  const { data, isLoading } = useProblems(page, 12, status || undefined);
+  const { data, isLoading } = useProblems(page, 12, status || undefined, groupFilter || undefined);
   const { data: knownErrors, isLoading: knownErrorsLoading } =
     useKnownErrors();
   const createProblem = useCreateProblem();
@@ -696,6 +709,8 @@ export default function ProblemsPage() {
   const [newDescription, setNewDescription] = useState("");
   const [newOwnerId, setNewOwnerId] = useState("");
   const [ownerDisplay, setOwnerDisplay] = useState("");
+  const [newGroupId, setNewGroupId] = useState("");
+  const [groupDisplay, setGroupDisplay] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const unresolvedCount = problems.filter(
@@ -748,6 +763,8 @@ export default function ProblemsPage() {
     setNewDescription("");
     setNewOwnerId("");
     setOwnerDisplay("");
+    setNewGroupId("");
+    setGroupDisplay("");
     setFormErrors({});
   }
 
@@ -767,6 +784,7 @@ export default function ProblemsPage() {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
         ownerId: newOwnerId.trim() || undefined,
+        assignedGroupId: newGroupId.trim() || undefined,
       },
       {
         onSuccess: resetCreateForm,
@@ -946,28 +964,42 @@ export default function ProblemsPage() {
         </div>
       </motion.div>
 
-      <div className="flex flex-wrap gap-2">
-        {PROBLEM_STATUSES.map((option) => {
-          const active = option.value === status;
-          return (
-            <button
-              key={option.label}
-              type="button"
-              onClick={() => {
-                setStatus(option.value);
-                setPage(1);
-              }}
-              className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
-              style={{
-                borderColor: active ? option.accent : "var(--border)",
-                backgroundColor: active ? `${option.accent}14` : "var(--surface-0)",
-                color: active ? option.accent : "var(--text-secondary)",
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-2">
+          {PROBLEM_STATUSES.map((option) => {
+            const active = option.value === status;
+            return (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => {
+                  setStatus(option.value);
+                  setPage(1);
+                }}
+                className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                style={{
+                  borderColor: active ? option.accent : "var(--border)",
+                  backgroundColor: active ? `${option.accent}14` : "var(--surface-0)",
+                  color: active ? option.accent : "var(--text-secondary)",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="w-56">
+          <OrgUnitPicker
+            value={groupFilter || undefined}
+            displayValue={groupFilterDisplay}
+            onChange={(id, name) => {
+              setGroupFilter(id ?? "");
+              setGroupFilterDisplay(name);
+              setPage(1);
+            }}
+            placeholder="Filter by group"
+          />
+        </div>
       </div>
 
       <AnimatePresence>
@@ -1030,6 +1062,17 @@ export default function ProblemsPage() {
                   setOwnerDisplay(name);
                 }}
                 placeholder="Assign an investigation owner"
+              />
+
+              <OrgUnitPicker
+                label="Assigned Group"
+                value={newGroupId || undefined}
+                displayValue={groupDisplay}
+                onChange={(id, name) => {
+                  setNewGroupId(id ?? "");
+                  setGroupDisplay(name);
+                }}
+                placeholder="Route to a department or unit"
               />
 
               <div className="lg:col-span-2">

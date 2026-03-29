@@ -218,6 +218,26 @@ type Ticket struct {
 	CreatedAt               time.Time       `json:"createdAt"`
 	UpdatedAt               time.Time       `json:"updatedAt"`
 
+	// Change-specific fields (populated only when type = "change").
+	ChangeClassification *string         `json:"changeClassification,omitempty"`
+	ChangeType           *string         `json:"changeType,omitempty"`
+	RiskLevel            *string         `json:"riskLevel,omitempty"`
+	RiskAssessment       json.RawMessage `json:"riskAssessment,omitempty"`
+	ImplementationPlan   *string         `json:"implementationPlan,omitempty"`
+	RollbackPlan         *string         `json:"rollbackPlan,omitempty"`
+	TestPlan             *string         `json:"testPlan,omitempty"`
+	ScheduledStart       *time.Time      `json:"scheduledStart,omitempty"`
+	ScheduledEnd         *time.Time      `json:"scheduledEnd,omitempty"`
+	ActualStart          *time.Time      `json:"actualStart,omitempty"`
+	ActualEnd            *time.Time      `json:"actualEnd,omitempty"`
+	CABRequired          bool            `json:"cabRequired"`
+	CABMeetingID         *uuid.UUID      `json:"cabMeetingId,omitempty"`
+	CABDecision          *string         `json:"cabDecision,omitempty"`
+	CABDecisionDate      *time.Time      `json:"cabDecisionDate,omitempty"`
+	PIRRequired          bool            `json:"pirRequired"`
+	PIRCompleted         bool            `json:"pirCompleted"`
+	PIRNotes             *string         `json:"pirNotes,omitempty"`
+
 	// Enrichment fields (populated via JOINs on SELECT queries, not on INSERT/UPDATE RETURNING).
 	ReporterName       *string `json:"reporterName,omitempty"`
 	ReporterDepartment *string `json:"reporterDepartment,omitempty"`
@@ -312,8 +332,13 @@ type Problem struct {
 	PermanentFix      *string     `json:"permanentFix"`
 	LinkedChangeID    *uuid.UUID  `json:"linkedChangeId"`
 	OwnerID           *uuid.UUID  `json:"ownerId"`
+	AssignedGroupID   *uuid.UUID  `json:"assignedGroupId"`
 	CreatedAt         time.Time   `json:"createdAt"`
 	UpdatedAt         time.Time   `json:"updatedAt"`
+
+	// Enrichment fields (populated via LEFT JOINs on SELECT queries).
+	AssignedGroupName *string `json:"assignedGroupName,omitempty"`
+	OwnerName         *string `json:"ownerName,omitempty"`
 }
 
 // KnownError represents a documented known error with a workaround.
@@ -554,22 +579,24 @@ type UpdateEscalationRuleRequest struct {
 
 // CreateProblemRequest is the payload for creating a problem record.
 type CreateProblemRequest struct {
-	Title       string     `json:"title" validate:"required"`
-	Description *string    `json:"description"`
-	Status      string     `json:"status"`
-	OwnerID     *uuid.UUID `json:"ownerId"`
+	Title           string     `json:"title" validate:"required"`
+	Description     *string    `json:"description"`
+	Status          string     `json:"status"`
+	OwnerID         *uuid.UUID `json:"ownerId"`
+	AssignedGroupID *uuid.UUID `json:"assignedGroupId"`
 }
 
 // UpdateProblemRequest is the payload for updating a problem record.
 type UpdateProblemRequest struct {
-	Title          *string    `json:"title"`
-	Description    *string    `json:"description"`
-	RootCause      *string    `json:"rootCause"`
-	Status         *string    `json:"status"`
-	Workaround     *string    `json:"workaround"`
-	PermanentFix   *string    `json:"permanentFix"`
-	LinkedChangeID *uuid.UUID `json:"linkedChangeId"`
-	OwnerID        *uuid.UUID `json:"ownerId"`
+	Title           *string    `json:"title"`
+	Description     *string    `json:"description"`
+	RootCause       *string    `json:"rootCause"`
+	Status          *string    `json:"status"`
+	Workaround      *string    `json:"workaround"`
+	PermanentFix    *string    `json:"permanentFix"`
+	LinkedChangeID  *uuid.UUID `json:"linkedChangeId"`
+	OwnerID         *uuid.UUID `json:"ownerId"`
+	AssignedGroupID *uuid.UUID `json:"assignedGroupId"`
 }
 
 // TransitionProblemRequest is the payload for changing problem status.
@@ -698,3 +725,177 @@ func IsValidTicketTransition(from, to string) bool {
 }
 
 // Problem status transitions are enforced via workflow.ProblemStateMachine.
+// Change status transitions are enforced via workflow.ChangeStateMachine.
+
+// ──────────────────────────────────────────────
+// Change classification constants
+// ──────────────────────────────────────────────
+
+const (
+	ChangeClassificationEmergency = "emergency"
+	ChangeClassificationStandard  = "standard"
+	ChangeClassificationNormal    = "normal"
+)
+
+// ──────────────────────────────────────────────
+// Change type constants
+// ──────────────────────────────────────────────
+
+const (
+	ChangeTypeApplication    = "application"
+	ChangeTypeInfrastructure = "infrastructure"
+	ChangeTypeNetwork        = "network"
+	ChangeTypeSecurity       = "security"
+)
+
+// ──────────────────────────────────────────────
+// Risk level constants
+// ──────────────────────────────────────────────
+
+const (
+	RiskLevelLow      = "low"
+	RiskLevelMedium   = "medium"
+	RiskLevelHigh     = "high"
+	RiskLevelCritical = "critical"
+)
+
+// ──────────────────────────────────────────────
+// CAB decision constants
+// ──────────────────────────────────────────────
+
+const (
+	CABDecisionApproved              = "approved"
+	CABDecisionRejected              = "rejected"
+	CABDecisionDeferred              = "deferred"
+	CABDecisionConditionallyApproved = "conditionally_approved"
+)
+
+// ──────────────────────────────────────────────
+// Change domain types
+// ──────────────────────────────────────────────
+
+// CABMeeting represents a Change Advisory Board meeting.
+type CABMeeting struct {
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenantId"`
+	Title         string          `json:"title"`
+	Description   *string         `json:"description"`
+	ScheduledDate time.Time       `json:"scheduledDate"`
+	Status        string          `json:"status"`
+	ChairID       *uuid.UUID      `json:"chairId"`
+	Attendees     []uuid.UUID     `json:"attendees"`
+	Minutes       *string         `json:"minutes"`
+	Decisions     json.RawMessage `json:"decisions"`
+	CreatedBy     uuid.UUID       `json:"createdBy"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+}
+
+// ChangeFreezeCheck represents the result of a freeze period check.
+type ChangeFreezeCheck struct {
+	IsFrozen   bool       `json:"isFrozen"`
+	FreezeName *string    `json:"freezeName,omitempty"`
+	FreezeEnd  *time.Time `json:"freezeEnd,omitempty"`
+}
+
+// ChangeStats provides aggregate change statistics.
+type ChangeStats struct {
+	Total        int `json:"total"`
+	Emergency    int `json:"emergency"`
+	Standard     int `json:"standard"`
+	Normal       int `json:"normal"`
+	PendingCAB   int `json:"pendingCab"`
+	Implementing int `json:"implementing"`
+	PendingPIR   int `json:"pendingPir"`
+}
+
+// ChangeCalendarEvent represents a change or freeze period on the calendar.
+type ChangeCalendarEvent struct {
+	ID             uuid.UUID `json:"id"`
+	Title          string    `json:"title"`
+	EventType      string    `json:"eventType"` // "change", "freeze", "maintenance"
+	Classification *string   `json:"classification,omitempty"`
+	RiskLevel      *string   `json:"riskLevel,omitempty"`
+	Status         string    `json:"status"`
+	StartTime      time.Time `json:"startTime"`
+	EndTime        time.Time `json:"endTime"`
+}
+
+// ──────────────────────────────────────────────
+// Change request types
+// ──────────────────────────────────────────────
+
+// CreateChangeRequest is the payload for creating a change ticket.
+type CreateChangeRequest struct {
+	Title              string          `json:"title" validate:"required"`
+	Description        string          `json:"description" validate:"required"`
+	Classification     string          `json:"classification" validate:"required"`
+	ChangeType         string          `json:"changeType" validate:"required"`
+	Urgency            string          `json:"urgency" validate:"required"`
+	Impact             string          `json:"impact" validate:"required"`
+	RiskLevel          *string         `json:"riskLevel"`
+	RiskAssessment     json.RawMessage `json:"riskAssessment"`
+	ImplementationPlan *string         `json:"implementationPlan"`
+	RollbackPlan       *string         `json:"rollbackPlan"`
+	TestPlan           *string         `json:"testPlan"`
+	ScheduledStart     *time.Time      `json:"scheduledStart"`
+	ScheduledEnd       *time.Time      `json:"scheduledEnd"`
+	AssigneeID         *uuid.UUID      `json:"assigneeId"`
+	TeamQueueID        *uuid.UUID      `json:"teamQueueId"`
+	Category           *string         `json:"category"`
+	Tags               []string        `json:"tags"`
+}
+
+// UpdateChangeRequest is the payload for updating change-specific fields.
+type UpdateChangeRequest struct {
+	Title              *string         `json:"title"`
+	Description        *string         `json:"description"`
+	ChangeType         *string         `json:"changeType"`
+	RiskLevel          *string         `json:"riskLevel"`
+	RiskAssessment     json.RawMessage `json:"riskAssessment"`
+	ImplementationPlan *string         `json:"implementationPlan"`
+	RollbackPlan       *string         `json:"rollbackPlan"`
+	TestPlan           *string         `json:"testPlan"`
+	ScheduledStart     *time.Time      `json:"scheduledStart"`
+	ScheduledEnd       *time.Time      `json:"scheduledEnd"`
+	AssigneeID         *uuid.UUID      `json:"assigneeId"`
+	Category           *string         `json:"category"`
+	Tags               []string        `json:"tags"`
+}
+
+// TransitionChangeRequest is the payload for changing a change ticket's status.
+type TransitionChangeRequest struct {
+	TargetStatus string  `json:"targetStatus" validate:"required"`
+	Comment      *string `json:"comment"`
+}
+
+// SubmitCABDecisionRequest is the payload for recording a CAB decision on a change.
+type SubmitCABDecisionRequest struct {
+	Decision string  `json:"decision" validate:"required"`
+	Notes    *string `json:"notes"`
+}
+
+// CompletePIRRequest is the payload for completing a post-implementation review.
+type CompletePIRRequest struct {
+	PIRNotes string `json:"pirNotes" validate:"required"`
+}
+
+// CreateCABMeetingRequest is the payload for creating a CAB meeting.
+type CreateCABMeetingRequest struct {
+	Title         string      `json:"title" validate:"required"`
+	Description   *string     `json:"description"`
+	ScheduledDate time.Time   `json:"scheduledDate" validate:"required"`
+	ChairID       *uuid.UUID  `json:"chairId"`
+	Attendees     []uuid.UUID `json:"attendees"`
+}
+
+// UpdateCABMeetingRequest is the payload for updating a CAB meeting.
+type UpdateCABMeetingRequest struct {
+	Title         *string     `json:"title"`
+	Description   *string     `json:"description"`
+	ScheduledDate *time.Time  `json:"scheduledDate"`
+	ChairID       *uuid.UUID  `json:"chairId"`
+	Attendees     []uuid.UUID `json:"attendees"`
+	Minutes       *string     `json:"minutes"`
+	Status        *string     `json:"status"`
+}

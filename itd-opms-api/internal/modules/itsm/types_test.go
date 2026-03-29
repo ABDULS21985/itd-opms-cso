@@ -1131,3 +1131,233 @@ func TestTerminalStates_HaveNoTransitions(t *testing.T) {
 		}
 	}
 }
+
+// ──────────────────────────────────────────────
+// Change Management constant tests
+// ──────────────────────────────────────────────
+
+func TestChangeClassificationConstants(t *testing.T) {
+	expected := map[string]string{
+		"Emergency": "emergency",
+		"Standard":  "standard",
+		"Normal":    "normal",
+	}
+	actual := map[string]string{
+		"Emergency": ChangeClassificationEmergency,
+		"Standard":  ChangeClassificationStandard,
+		"Normal":    ChangeClassificationNormal,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("ChangeClassification%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+func TestChangeTypeConstants(t *testing.T) {
+	expected := map[string]string{
+		"Application":    "application",
+		"Infrastructure": "infrastructure",
+		"Network":        "network",
+		"Security":       "security",
+	}
+	actual := map[string]string{
+		"Application":    ChangeTypeApplication,
+		"Infrastructure": ChangeTypeInfrastructure,
+		"Network":        ChangeTypeNetwork,
+		"Security":       ChangeTypeSecurity,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("ChangeType%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+func TestRiskLevelConstants(t *testing.T) {
+	expected := map[string]string{
+		"Low":      "low",
+		"Medium":   "medium",
+		"High":     "high",
+		"Critical": "critical",
+	}
+	actual := map[string]string{
+		"Low":      RiskLevelLow,
+		"Medium":   RiskLevelMedium,
+		"High":     RiskLevelHigh,
+		"Critical": RiskLevelCritical,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("RiskLevel%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+func TestCABDecisionConstants(t *testing.T) {
+	expected := map[string]string{
+		"Approved":              "approved",
+		"Rejected":              "rejected",
+		"Deferred":              "deferred",
+		"ConditionallyApproved": "conditionally_approved",
+	}
+	actual := map[string]string{
+		"Approved":              CABDecisionApproved,
+		"Rejected":              CABDecisionRejected,
+		"Deferred":              CABDecisionDeferred,
+		"ConditionallyApproved": CABDecisionConditionallyApproved,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("CABDecision%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
+// ──────────────────────────────────────────────
+// Change Management JSON round-trip tests
+// ──────────────────────────────────────────────
+
+func TestCABMeetingJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+	tenantID := uuid.New()
+	chairID := uuid.New()
+	createdBy := uuid.New()
+	desc := "Weekly change review"
+	minutes := "Discussed 3 changes, approved 2"
+
+	original := CABMeeting{
+		ID:            id,
+		TenantID:      tenantID,
+		Title:         "Weekly CAB Review",
+		Description:   &desc,
+		ScheduledDate: now,
+		Status:        "completed",
+		ChairID:       &chairID,
+		Attendees:     []uuid.UUID{chairID, createdBy},
+		Minutes:       &minutes,
+		Decisions:     json.RawMessage(`[{"changeId":"` + uuid.New().String() + `","decision":"approved"}]`),
+		CreatedBy:     createdBy,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal CABMeeting: %v", err)
+	}
+
+	var decoded CABMeeting
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal CABMeeting: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if decoded.Title != original.Title {
+		t.Errorf("Title mismatch: got %q, want %q", decoded.Title, original.Title)
+	}
+	if decoded.Status != original.Status {
+		t.Errorf("Status mismatch: got %q, want %q", decoded.Status, original.Status)
+	}
+	if decoded.Description == nil || *decoded.Description != desc {
+		t.Errorf("Description mismatch")
+	}
+	if decoded.Minutes == nil || *decoded.Minutes != minutes {
+		t.Errorf("Minutes mismatch")
+	}
+	if decoded.ChairID == nil || *decoded.ChairID != chairID {
+		t.Errorf("ChairID mismatch")
+	}
+	if len(decoded.Attendees) != 2 {
+		t.Errorf("Attendees length mismatch: got %d, want 2", len(decoded.Attendees))
+	}
+}
+
+func TestChangeStatsJSON_RoundTrip(t *testing.T) {
+	original := ChangeStats{
+		Total:        50,
+		Emergency:    5,
+		Standard:     20,
+		Normal:       25,
+		PendingCAB:   3,
+		Implementing: 8,
+		PendingPIR:   2,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ChangeStats: %v", err)
+	}
+
+	var decoded ChangeStats
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ChangeStats: %v", err)
+	}
+
+	if decoded.Total != original.Total {
+		t.Errorf("Total mismatch: got %d, want %d", decoded.Total, original.Total)
+	}
+	if decoded.Emergency != original.Emergency {
+		t.Errorf("Emergency mismatch: got %d, want %d", decoded.Emergency, original.Emergency)
+	}
+	if decoded.Standard != original.Standard {
+		t.Errorf("Standard mismatch: got %d, want %d", decoded.Standard, original.Standard)
+	}
+	if decoded.Normal != original.Normal {
+		t.Errorf("Normal mismatch: got %d, want %d", decoded.Normal, original.Normal)
+	}
+	if decoded.PendingCAB != original.PendingCAB {
+		t.Errorf("PendingCAB mismatch: got %d, want %d", decoded.PendingCAB, original.PendingCAB)
+	}
+	if decoded.Implementing != original.Implementing {
+		t.Errorf("Implementing mismatch: got %d, want %d", decoded.Implementing, original.Implementing)
+	}
+	if decoded.PendingPIR != original.PendingPIR {
+		t.Errorf("PendingPIR mismatch: got %d, want %d", decoded.PendingPIR, original.PendingPIR)
+	}
+}
+
+func TestChangeCalendarEventJSON_RoundTrip(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond).UTC()
+	id := uuid.New()
+
+	original := ChangeCalendarEvent{
+		ID:             id,
+		Title:          "Server upgrade",
+		EventType:      "change",
+		Classification: strPtr("normal"),
+		RiskLevel:      strPtr("medium"),
+		Status:         "scheduled",
+		StartTime:      now,
+		EndTime:        now.Add(4 * time.Hour),
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal ChangeCalendarEvent: %v", err)
+	}
+
+	var decoded ChangeCalendarEvent
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal ChangeCalendarEvent: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch")
+	}
+	if decoded.Title != original.Title {
+		t.Errorf("Title mismatch: got %q, want %q", decoded.Title, original.Title)
+	}
+	if decoded.EventType != original.EventType {
+		t.Errorf("EventType mismatch: got %q, want %q", decoded.EventType, original.EventType)
+	}
+	if decoded.Classification == nil || *decoded.Classification != "normal" {
+		t.Errorf("Classification mismatch")
+	}
+	if decoded.RiskLevel == nil || *decoded.RiskLevel != "medium" {
+		t.Errorf("RiskLevel mismatch")
+	}
+}

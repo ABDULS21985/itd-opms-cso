@@ -51,7 +51,12 @@ const ticketColumns = `
 	is_major_incident, related_ticket_ids, linked_problem_id,
 	linked_asset_ids, org_unit_id, resolution_notes, resolved_at,
 	closed_at, first_response_at, satisfaction_score,
-	tags, custom_fields, created_at, updated_at`
+	tags, custom_fields, created_at, updated_at,
+	change_classification, change_type, risk_level, risk_assessment,
+	implementation_plan, rollback_plan, test_plan,
+	scheduled_start, scheduled_end, actual_start, actual_end,
+	cab_required, cab_meeting_id, cab_decision, cab_decision_date,
+	pir_required, pir_completed, pir_notes`
 
 // ticketSelectColumns is the column list for SELECT queries with LEFT JOINs for user enrichment.
 const ticketSelectColumns = `
@@ -66,6 +71,11 @@ const ticketSelectColumns = `
 	t.linked_asset_ids, t.org_unit_id, t.resolution_notes, t.resolved_at,
 	t.closed_at, t.first_response_at, t.satisfaction_score,
 	t.tags, t.custom_fields, t.created_at, t.updated_at,
+	t.change_classification, t.change_type, t.risk_level, t.risk_assessment,
+	t.implementation_plan, t.rollback_plan, t.test_plan,
+	t.scheduled_start, t.scheduled_end, t.actual_start, t.actual_end,
+	t.cab_required, t.cab_meeting_id, t.cab_decision, t.cab_decision_date,
+	t.pir_required, t.pir_completed, t.pir_notes,
 	reporter.display_name AS reporter_name,
 	reporter.department AS reporter_department,
 	assignee.display_name AS assignee_name,
@@ -79,10 +89,21 @@ const ticketFromJoins = `
 	LEFT JOIN users assignee ON assignee.id = t.assignee_id
 	LEFT JOIN support_queues sq ON sq.id = t.team_queue_id`
 
+// scanTicketChangeFields is the common change-field scan targets appended to every scan call.
+func scanTicketChangeFields(t *Ticket) []any {
+	return []any{
+		&t.ChangeClassification, &t.ChangeType, &t.RiskLevel, &t.RiskAssessment,
+		&t.ImplementationPlan, &t.RollbackPlan, &t.TestPlan,
+		&t.ScheduledStart, &t.ScheduledEnd, &t.ActualStart, &t.ActualEnd,
+		&t.CABRequired, &t.CABMeetingID, &t.CABDecision, &t.CABDecisionDate,
+		&t.PIRRequired, &t.PIRCompleted, &t.PIRNotes,
+	}
+}
+
 // scanTicket scans a single ticket row into a Ticket struct (base columns only, for RETURNING clauses).
 func scanTicket(row pgx.Row) (Ticket, error) {
 	var t Ticket
-	err := row.Scan(
+	dest := []any{
 		&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 		&t.Category, &t.Subcategory, &t.Title, &t.Description,
 		&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
@@ -94,14 +115,16 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
-	)
+	}
+	dest = append(dest, scanTicketChangeFields(&t)...)
+	err := row.Scan(dest...)
 	return t, err
 }
 
 // scanTicketEnriched scans a single ticket row with enrichment columns (reporter/assignee names).
 func scanTicketEnriched(row pgx.Row) (Ticket, error) {
 	var t Ticket
-	err := row.Scan(
+	dest := []any{
 		&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 		&t.Category, &t.Subcategory, &t.Title, &t.Description,
 		&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
@@ -113,10 +136,14 @@ func scanTicketEnriched(row pgx.Row) (Ticket, error) {
 		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+	}
+	dest = append(dest, scanTicketChangeFields(&t)...)
+	dest = append(dest,
 		&t.ReporterName, &t.ReporterDepartment,
 		&t.AssigneeName, &t.AssigneeDepartment,
 		&t.TeamQueueName,
 	)
+	err := row.Scan(dest...)
 	return t, err
 }
 
@@ -125,7 +152,7 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 	var tickets []Ticket
 	for rows.Next() {
 		var t Ticket
-		if err := rows.Scan(
+		dest := []any{
 			&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 			&t.Category, &t.Subcategory, &t.Title, &t.Description,
 			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
@@ -137,7 +164,9 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
+		}
+		dest = append(dest, scanTicketChangeFields(&t)...)
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		tickets = append(tickets, t)
@@ -156,7 +185,7 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 	var tickets []Ticket
 	for rows.Next() {
 		var t Ticket
-		if err := rows.Scan(
+		dest := []any{
 			&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 			&t.Category, &t.Subcategory, &t.Title, &t.Description,
 			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
@@ -168,10 +197,14 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+		}
+		dest = append(dest, scanTicketChangeFields(&t)...)
+		dest = append(dest,
 			&t.ReporterName, &t.ReporterDepartment,
 			&t.AssigneeName, &t.AssigneeDepartment,
 			&t.TeamQueueName,
-		); err != nil {
+		)
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		tickets = append(tickets, t)

@@ -299,6 +299,203 @@ func TestProblemStatusConstants(t *testing.T) {
 	}
 }
 
+// ──────────────────────────────────────────────
+// ChangeStateMachine — valid transitions
+// ──────────────────────────────────────────────
+
+func TestChangeStateMachine_ValidTransitions(t *testing.T) {
+	tests := []struct {
+		from string
+		to   string
+	}{
+		{ChangeDraft, ChangeSubmitted},
+		{ChangeSubmitted, ChangeAssessing},
+		{ChangeAssessing, ChangeCABReview},
+		{ChangeAssessing, ChangeApproved},
+		{ChangeAssessing, ChangeRejected},
+		{ChangeCABReview, ChangeApproved},
+		{ChangeCABReview, ChangeRejected},
+		{ChangeCABReview, ChangeDeferred},
+		{ChangeApproved, ChangeScheduled},
+		{ChangeDeferred, ChangeAssessing},
+		{ChangeScheduled, ChangeImplementing},
+		{ChangeImplementing, ChangeImplemented},
+		{ChangeImplementing, ChangeFailed},
+		{ChangeImplementing, ChangeRolledBack},
+		{ChangeImplemented, ChangePIRPending},
+		{ChangeImplemented, ChangeClosed},
+		{ChangeFailed, ChangeInvestigating},
+		{ChangeRolledBack, ChangeClosed},
+		{ChangePIRPending, ChangeClosed},
+		{ChangeInvestigating, ChangeScheduled},
+	}
+
+	for _, tt := range tests {
+		name := tt.from + " -> " + tt.to
+		t.Run(name, func(t *testing.T) {
+			if !ChangeStateMachine.IsValid(tt.from, tt.to) {
+				t.Errorf("expected valid transition from %q to %q", tt.from, tt.to)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// ChangeStateMachine — invalid transitions
+// ──────────────────────────────────────────────
+
+func TestChangeStateMachine_InvalidTransitions(t *testing.T) {
+	tests := []struct {
+		from string
+		to   string
+	}{
+		// Cannot skip steps.
+		{ChangeDraft, ChangeApproved},
+		{ChangeDraft, ChangeImplementing},
+		{ChangeSubmitted, ChangeApproved},
+		{ChangeSubmitted, ChangeScheduled},
+		// Cannot go backward.
+		{ChangeApproved, ChangeAssessing},
+		{ChangeScheduled, ChangeApproved},
+		{ChangeImplementing, ChangeScheduled},
+		// Terminal states have no transitions.
+		{ChangeRejected, ChangeDraft},
+		{ChangeRejected, ChangeAssessing},
+		{ChangeClosed, ChangeDraft},
+		{ChangeClosed, ChangeSubmitted},
+		// Self-transitions.
+		{ChangeDraft, ChangeDraft},
+		{ChangeAssessing, ChangeAssessing},
+		{ChangeImplementing, ChangeImplementing},
+		{ChangeClosed, ChangeClosed},
+	}
+
+	for _, tt := range tests {
+		name := tt.from + " -> " + tt.to
+		t.Run(name, func(t *testing.T) {
+			if ChangeStateMachine.IsValid(tt.from, tt.to) {
+				t.Errorf("expected invalid transition from %q to %q", tt.from, tt.to)
+			}
+		})
+	}
+}
+
+func TestChangeStateMachine_AllStatusesCovered(t *testing.T) {
+	allStatuses := []string{
+		ChangeDraft,
+		ChangeSubmitted,
+		ChangeAssessing,
+		ChangeCABReview,
+		ChangeApproved,
+		ChangeRejected,
+		ChangeDeferred,
+		ChangeScheduled,
+		ChangeImplementing,
+		ChangeImplemented,
+		ChangeFailed,
+		ChangeRolledBack,
+		ChangePIRPending,
+		ChangeClosed,
+		ChangeInvestigating,
+	}
+	for _, s := range allStatuses {
+		if ChangeStateMachine.AllowedFrom(s) == nil {
+			t.Errorf("status %q not in ChangeStateMachine", s)
+		}
+	}
+}
+
+func TestChangeStateMachine_TerminalStates(t *testing.T) {
+	for _, status := range []string{ChangeRejected, ChangeClosed} {
+		allowed := ChangeStateMachine.AllowedFrom(status)
+		if len(allowed) != 0 {
+			t.Errorf("terminal state %q should have no transitions, got %v", status, allowed)
+		}
+	}
+}
+
+func TestChangeStateMachine_EmergencyFastPath(t *testing.T) {
+	// Emergency changes go: approved → scheduled → implementing → implemented → pir_pending → closed
+	path := []string{ChangeApproved, ChangeScheduled, ChangeImplementing, ChangeImplemented, ChangePIRPending, ChangeClosed}
+	for i := 0; i < len(path)-1; i++ {
+		if !ChangeStateMachine.IsValid(path[i], path[i+1]) {
+			t.Errorf("emergency fast path broken: %q -> %q should be valid", path[i], path[i+1])
+		}
+	}
+}
+
+func TestChangeStateMachine_NormalFullPath(t *testing.T) {
+	// Normal changes: draft → submitted → assessing → cab_review → approved → scheduled → implementing → implemented → pir_pending → closed
+	path := []string{
+		ChangeDraft, ChangeSubmitted, ChangeAssessing, ChangeCABReview,
+		ChangeApproved, ChangeScheduled, ChangeImplementing, ChangeImplemented,
+		ChangePIRPending, ChangeClosed,
+	}
+	for i := 0; i < len(path)-1; i++ {
+		if !ChangeStateMachine.IsValid(path[i], path[i+1]) {
+			t.Errorf("normal full path broken: %q -> %q should be valid", path[i], path[i+1])
+		}
+	}
+}
+
+func TestChangeStateMachine_FailureRecovery(t *testing.T) {
+	// Failed → investigating → scheduled (retry)
+	if !ChangeStateMachine.IsValid(ChangeFailed, ChangeInvestigating) {
+		t.Error("failed → investigating should be valid")
+	}
+	if !ChangeStateMachine.IsValid(ChangeInvestigating, ChangeScheduled) {
+		t.Error("investigating → scheduled should be valid")
+	}
+}
+
+func TestChangeStateMachine_DeferredReturnToAssessing(t *testing.T) {
+	if !ChangeStateMachine.IsValid(ChangeDeferred, ChangeAssessing) {
+		t.Error("deferred → assessing should be valid")
+	}
+}
+
+func TestChangeStatusConstants(t *testing.T) {
+	expected := map[string]string{
+		"Draft":         "draft",
+		"Submitted":     "submitted",
+		"Assessing":     "assessing",
+		"CABReview":     "cab_review",
+		"Approved":      "approved",
+		"Rejected":      "rejected",
+		"Deferred":      "deferred",
+		"Scheduled":     "scheduled",
+		"Implementing":  "implementing",
+		"Implemented":   "implemented",
+		"Failed":        "failed",
+		"RolledBack":    "rolled_back",
+		"PIRPending":    "pir_pending",
+		"Closed":        "closed",
+		"Investigating": "investigating",
+	}
+	actual := map[string]string{
+		"Draft":         ChangeDraft,
+		"Submitted":     ChangeSubmitted,
+		"Assessing":     ChangeAssessing,
+		"CABReview":     ChangeCABReview,
+		"Approved":      ChangeApproved,
+		"Rejected":      ChangeRejected,
+		"Deferred":      ChangeDeferred,
+		"Scheduled":     ChangeScheduled,
+		"Implementing":  ChangeImplementing,
+		"Implemented":   ChangeImplemented,
+		"Failed":        ChangeFailed,
+		"RolledBack":    ChangeRolledBack,
+		"PIRPending":    ChangePIRPending,
+		"Closed":        ChangeClosed,
+		"Investigating": ChangeInvestigating,
+	}
+	for name, want := range expected {
+		if actual[name] != want {
+			t.Errorf("Change%s = %q, want %q", name, actual[name], want)
+		}
+	}
+}
+
 func TestTicketStatusConstants(t *testing.T) {
 	expected := map[string]string{
 		"Logged":          "logged",

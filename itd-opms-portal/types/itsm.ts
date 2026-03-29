@@ -71,6 +71,25 @@ export interface Ticket {
   customFields?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // Change-specific fields (populated only when type = "change")
+  changeClassification?: string;
+  changeType?: string;
+  riskLevel?: string;
+  riskAssessment?: Record<string, unknown>;
+  implementationPlan?: string;
+  rollbackPlan?: string;
+  testPlan?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  cabRequired: boolean;
+  cabMeetingId?: string;
+  cabDecision?: string;
+  cabDecisionDate?: string;
+  pirRequired: boolean;
+  pirCompleted: boolean;
+  pirNotes?: string;
   // Enrichment fields (from JOINs)
   reporterName?: string;
   reporterDepartment?: string;
@@ -171,8 +190,12 @@ export interface ITSMProblem {
   permanentFix?: string;
   linkedChangeId?: string;
   ownerId?: string;
+  assignedGroupId?: string;
   createdAt: string;
   updatedAt: string;
+  // Enrichment
+  assignedGroupName?: string;
+  ownerName?: string;
 }
 
 export interface KnownError {
@@ -212,3 +235,93 @@ export interface CSATStats {
   total: number;
   avgRating: number;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Change Management Types                                            */
+/* ------------------------------------------------------------------ */
+
+export interface CABMeeting {
+  id: string;
+  tenantId: string;
+  title: string;
+  description?: string;
+  scheduledDate: string;
+  status: string;
+  chairId?: string;
+  attendees: string[];
+  minutes?: string;
+  decisions: Record<string, unknown>[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChangeStats {
+  total: number;
+  emergency: number;
+  standard: number;
+  normal: number;
+  pendingCab: number;
+  implementing: number;
+  pendingPir: number;
+}
+
+export interface ChangeCalendarEvent {
+  id: string;
+  title: string;
+  eventType: "change" | "freeze" | "maintenance";
+  classification?: string;
+  riskLevel?: string;
+  status: string;
+  startTime: string;
+  endTime: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Change Management Constants                                        */
+/* ------------------------------------------------------------------ */
+
+export const CHANGE_CLASSIFICATIONS = [
+  { value: "emergency", label: "Emergency" },
+  { value: "standard", label: "Standard" },
+  { value: "normal", label: "Normal" },
+] as const;
+
+export const CHANGE_TYPES = [
+  { value: "application", label: "Application" },
+  { value: "infrastructure", label: "Infrastructure" },
+  { value: "network", label: "Network" },
+  { value: "security", label: "Security" },
+] as const;
+
+export const RISK_LEVELS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+] as const;
+
+export const CAB_DECISIONS = [
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "deferred", label: "Deferred" },
+  { value: "conditionally_approved", label: "Conditionally Approved" },
+] as const;
+
+export const CHANGE_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "assessing", label: "Assessing" },
+  { value: "cab_review", label: "CAB Review" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "deferred", label: "Deferred" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "implementing", label: "Implementing" },
+  { value: "implemented", label: "Implemented" },
+  { value: "failed", label: "Failed" },
+  { value: "rolled_back", label: "Rolled Back" },
+  { value: "pir_pending", label: "PIR Pending" },
+  { value: "closed", label: "Closed" },
+  { value: "investigating", label: "Investigating" },
+] as const;

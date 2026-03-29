@@ -18,6 +18,9 @@ import type {
   SupportQueue,
   CSATSurvey,
   CSATStats,
+  CABMeeting,
+  ChangeStats,
+  ChangeCalendarEvent,
   PaginatedResponse,
 } from "@/types";
 
@@ -891,14 +894,15 @@ export function useDeleteEscalationRule() {
 /**
  * GET /itsm/problems - paginated list of problems.
  */
-export function useProblems(page = 1, limit = 20, status?: string) {
+export function useProblems(page = 1, limit = 20, status?: string, assignedGroupId?: string) {
   return useQuery({
-    queryKey: ["itsm-problems", page, limit, status],
+    queryKey: ["itsm-problems", page, limit, status, assignedGroupId],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ITSMProblem>>("/itsm/problems", {
         page,
         limit,
         status,
+        assignedGroupId,
       }),
   });
 }
@@ -1415,6 +1419,251 @@ export function useCancelServiceRequest() {
     },
     onError: () => {
       toast.error("Failed to cancel request");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Change Management — Queries                                        */
+/* ================================================================== */
+
+/**
+ * GET /itsm/changes - list changes with optional filters.
+ */
+export function useChanges(params?: { classification?: string; status?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ["changes", params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Ticket>>("/itsm/changes", {
+        classification: params?.classification,
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /itsm/changes/{id} - single change.
+ */
+export function useChange(id: string | undefined) {
+  return useQuery({
+    queryKey: ["change", id],
+    queryFn: () => apiClient.get<Ticket>(`/itsm/changes/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /itsm/changes/stats - change statistics.
+ */
+export function useChangeStats() {
+  return useQuery({
+    queryKey: ["change-stats"],
+    queryFn: () => apiClient.get<ChangeStats>("/itsm/changes/stats"),
+  });
+}
+
+/**
+ * GET /itsm/changes/calendar - change calendar events.
+ */
+export function useChangeCalendar(start: string, end: string) {
+  return useQuery({
+    queryKey: ["change-calendar", start, end],
+    queryFn: () =>
+      apiClient.get<ChangeCalendarEvent[]>("/itsm/changes/calendar", { start, end }),
+    enabled: !!start && !!end,
+  });
+}
+
+/* ================================================================== */
+/*  Change Management — Mutations                                      */
+/* ================================================================== */
+
+/**
+ * POST /itsm/changes - create a change.
+ */
+export function useCreateChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<Ticket>("/itsm/changes", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create change");
+    },
+  });
+}
+
+/**
+ * PUT /itsm/changes/{id} - update a change.
+ */
+export function useUpdateChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.put<Ticket>(`/itsm/changes/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      toast.success("Change updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/transition - transition change status.
+ */
+export function useTransitionChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { targetStatus: string; comment?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/transition`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/cab-decision - submit CAB decision.
+ */
+export function useSubmitCABDecision(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { decision: string; notes?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/cab-decision`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("CAB decision submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit CAB decision");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/pir - complete post-implementation review.
+ */
+export function useCompletePIR(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { pirNotes: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/pir`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("PIR completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete PIR");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  CAB Meetings — Queries                                             */
+/* ================================================================== */
+
+/**
+ * GET /itsm/cab-meetings - list CAB meetings.
+ */
+export function useCABMeetings(params?: { status?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ["cab-meetings", params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<CABMeeting>>("/itsm/cab-meetings", {
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /itsm/cab-meetings/{id} - single CAB meeting.
+ */
+export function useCABMeeting(id: string | undefined) {
+  return useQuery({
+    queryKey: ["cab-meeting", id],
+    queryFn: () => apiClient.get<CABMeeting>(`/itsm/cab-meetings/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  CAB Meetings — Mutations                                           */
+/* ================================================================== */
+
+/**
+ * POST /itsm/cab-meetings - create a CAB meeting.
+ */
+export function useCreateCABMeeting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<CABMeeting>("/itsm/cab-meetings", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      toast.success("CAB meeting created");
+    },
+    onError: () => {
+      toast.error("Failed to create CAB meeting");
+    },
+  });
+}
+
+/**
+ * PUT /itsm/cab-meetings/{id} - update a CAB meeting.
+ */
+export function useUpdateCABMeeting(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.put<CABMeeting>(`/itsm/cab-meetings/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
+      toast.success("CAB meeting updated");
+    },
+    onError: () => {
+      toast.error("Failed to update CAB meeting");
+    },
+  });
+}
+
+/**
+ * POST /itsm/cab-meetings/{id}/complete - complete a CAB meeting.
+ */
+export function useCompleteCABMeeting(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post(`/itsm/cab-meetings/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
+      toast.success("CAB meeting completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete CAB meeting");
     },
   });
 }

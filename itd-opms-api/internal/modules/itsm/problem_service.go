@@ -38,6 +38,51 @@ func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats
 }
 
 // ──────────────────────────────────────────────
+// Problem column helpers
+// ──────────────────────────────────────────────
+
+// problemBaseColumns is used in RETURNING clauses (no JOINs available).
+const problemBaseColumns = `id, tenant_id, problem_number, title, description,
+	root_cause, status, linked_incident_ids, workaround,
+	permanent_fix, linked_change_id, owner_id, assigned_group_id,
+	created_at, updated_at`
+
+// problemSelectColumns includes enrichment via LEFT JOINs.
+const problemSelectColumns = `p.id, p.tenant_id, p.problem_number, p.title, p.description,
+	p.root_cause, p.status, p.linked_incident_ids, p.workaround,
+	p.permanent_fix, p.linked_change_id, p.owner_id, p.assigned_group_id,
+	p.created_at, p.updated_at,
+	ou.name AS assigned_group_name,
+	owner.display_name AS owner_name`
+
+const problemFromJoins = `FROM problems p
+	LEFT JOIN org_units ou ON ou.id = p.assigned_group_id
+	LEFT JOIN users owner ON owner.id = p.owner_id`
+
+func scanProblemBase(row pgx.Row) (Problem, error) {
+	var p Problem
+	err := row.Scan(
+		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
+		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	return p, err
+}
+
+func scanProblemEnriched(row pgx.Row) (Problem, error) {
+	var p Problem
+	err := row.Scan(
+		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
+		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
+		&p.CreatedAt, &p.UpdatedAt,
+		&p.AssignedGroupName, &p.OwnerName,
+	)
+	return p, err
+}
+
+// ──────────────────────────────────────────────
 // Problems
 // ──────────────────────────────────────────────
 
@@ -54,31 +99,22 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 	query := `
 		INSERT INTO problems (
 			id, tenant_id, title, description,
-			status, owner_id, created_at, updated_at
+			status, owner_id, assigned_group_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4,
-			$5, $6, $7, $8
+			$5, $6, $7, $8, $9
 		)
-		RETURNING id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at`
+		RETURNING ` + problemBaseColumns
 
 	status := req.Status
 	if status == "" {
 		status = "logged"
 	}
 
-	var p Problem
-	err := s.pool.QueryRow(ctx, query,
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description,
-		status, req.OwnerID, now, now,
-	).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+		status, req.OwnerID, req.AssignedGroupID, now, now,
+	))
 	if err != nil {
 		return Problem{}, apperrors.Internal("failed to create problem", err)
 	}
@@ -109,21 +145,10 @@ func (s *ProblemService) GetProblem(ctx context.Context, id uuid.UUID) (Problem,
 		return Problem{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at
-		FROM problems
-		WHERE id = $1 AND tenant_id = $2`
+	query := `SELECT ` + problemSelectColumns + ` ` + problemFromJoins + `
+		WHERE p.id = $1 AND p.tenant_id = $2`
 
-	var p Problem
-	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+	p, err := scanProblemEnriched(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Problem{}, apperrors.NotFound("Problem", id.String())
@@ -135,7 +160,7 @@ func (s *ProblemService) GetProblem(ctx context.Context, id uuid.UUID) (Problem,
 }
 
 // ListProblems returns a filtered, paginated list of problems.
-func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit, offset int) ([]Problem, int64, error) {
+func (s *ProblemService) ListProblems(ctx context.Context, status *string, assignedGroupID *uuid.UUID, limit, offset int) ([]Problem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -146,27 +171,24 @@ func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit
 		SELECT COUNT(*)
 		FROM problems
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)
+			AND ($3::uuid IS NULL OR assigned_group_id = $3)`
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status, assignedGroupID).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count problems", err)
 	}
 
-	// Fetch paginated results.
-	dataQuery := `
-		SELECT id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at
-		FROM problems
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+	// Fetch paginated results with enrichment.
+	dataQuery := `SELECT ` + problemSelectColumns + ` ` + problemFromJoins + `
+		WHERE p.tenant_id = $1
+			AND ($2::text IS NULL OR p.status = $2)
+			AND ($3::uuid IS NULL OR p.assigned_group_id = $3)
+		ORDER BY p.created_at DESC
+		LIMIT $4 OFFSET $5`
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, assignedGroupID, limit, offset)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list problems", err)
 	}
@@ -174,13 +196,8 @@ func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit
 
 	var problems []Problem
 	for rows.Next() {
-		var p Problem
-		if err := rows.Scan(
-			&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-			&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-			&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-			&p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
+		p, err := scanProblemEnriched(rows)
+		if err != nil {
 			return nil, 0, apperrors.Internal("failed to scan problem", err)
 		}
 		problems = append(problems, p)
@@ -222,25 +239,17 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 			permanent_fix = COALESCE($6, permanent_fix),
 			linked_change_id = COALESCE($7, linked_change_id),
 			owner_id = COALESCE($8, owner_id),
-			updated_at = $9
-		WHERE id = $10 AND tenant_id = $11
-		RETURNING id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at`
+			assigned_group_id = COALESCE($9, assigned_group_id),
+			updated_at = $10
+		WHERE id = $11 AND tenant_id = $12
+		RETURNING ` + problemBaseColumns
 
-	var p Problem
-	err = s.pool.QueryRow(ctx, updateQuery,
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.RootCause,
 		req.Status, req.Workaround, req.PermanentFix,
-		req.LinkedChangeID, req.OwnerID,
+		req.LinkedChangeID, req.OwnerID, req.AssignedGroupID,
 		now, id, auth.TenantID,
-	).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+	))
 	if err != nil {
 		return Problem{}, apperrors.Internal("failed to update problem", err)
 	}
@@ -362,18 +371,9 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 			status = $1,
 			updated_at = $2
 		WHERE id = $3 AND tenant_id = $4
-		RETURNING id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at`
+		RETURNING ` + problemBaseColumns
 
-	var p Problem
-	err = s.pool.QueryRow(ctx, query, req.TargetStatus, now, id, auth.TenantID).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, query, req.TargetStatus, now, id, auth.TenantID))
 	if err != nil {
 		return Problem{}, apperrors.Internal("failed to transition problem status", err)
 	}
@@ -424,8 +424,9 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 			"previousStatus": existing.Status,
 			"newStatus":      req.TargetStatus,
 			"comment":        req.Comment,
-			"actorId":        auth.UserID,
-			"ownerId":        p.OwnerID,
+			"actorId":         auth.UserID,
+			"ownerId":         p.OwnerID,
+			"assignedGroupId": p.AssignedGroupID,
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type":       "itsm.problem.transitioned",

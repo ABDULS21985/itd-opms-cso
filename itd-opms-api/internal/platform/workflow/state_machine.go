@@ -75,6 +75,44 @@ const (
 	TicketCancelled       = "cancelled"
 )
 
+// Change statuses.
+const (
+	ChangeDraft         = "draft"
+	ChangeSubmitted     = "submitted"
+	ChangeAssessing     = "assessing"
+	ChangeCABReview     = "cab_review"
+	ChangeApproved      = "approved"
+	ChangeRejected      = "rejected"
+	ChangeDeferred      = "deferred"
+	ChangeScheduled     = "scheduled"
+	ChangeImplementing  = "implementing"
+	ChangeImplemented   = "implemented"
+	ChangeFailed        = "failed"
+	ChangeRolledBack    = "rolled_back"
+	ChangePIRPending    = "pir_pending"
+	ChangeClosed        = "closed"
+	ChangeInvestigating = "investigating"
+)
+
+// ChangeStateMachine enforces the ITSM change management lifecycle.
+var ChangeStateMachine = NewStateMachine("change", map[string][]string{
+	ChangeDraft:         {ChangeSubmitted},
+	ChangeSubmitted:     {ChangeAssessing},
+	ChangeAssessing:     {ChangeCABReview, ChangeApproved, ChangeRejected},
+	ChangeCABReview:     {ChangeApproved, ChangeRejected, ChangeDeferred},
+	ChangeApproved:      {ChangeScheduled},
+	ChangeDeferred:      {ChangeAssessing},
+	ChangeScheduled:     {ChangeImplementing},
+	ChangeImplementing:  {ChangeImplemented, ChangeFailed, ChangeRolledBack},
+	ChangeImplemented:   {ChangePIRPending, ChangeClosed},
+	ChangeFailed:        {ChangeInvestigating},
+	ChangeRolledBack:    {ChangeClosed},
+	ChangePIRPending:    {ChangeClosed},
+	ChangeInvestigating: {ChangeScheduled},
+	ChangeRejected:      {},
+	ChangeClosed:        {},
+})
+
 // TicketStateMachine enforces the ITSM ticket lifecycle.
 var TicketStateMachine = NewStateMachine("ticket", map[string][]string{
 	TicketLogged:          {TicketClassified, TicketAssigned, TicketCancelled},

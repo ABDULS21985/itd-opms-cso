@@ -285,6 +285,16 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"in_app"},
 			Priority:      5,
 		},
+		"itsm.change.transitioned": {
+			EmailTemplate: "change_transition",
+			Channels:      []string{"in_app"},
+			Priority:      6,
+		},
+		"itsm.cab.decision": {
+			EmailTemplate: "cab_decision",
+			Channels:      []string{"email", "in_app"},
+			Priority:      7,
+		},
 	}
 
 	return configs[eventType]

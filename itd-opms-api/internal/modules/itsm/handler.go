@@ -19,6 +19,8 @@ type Handler struct {
 	problem       *ProblemHandler
 	queue         *QueueHandler
 	request       *RequestHandler
+	change        *ChangeHandler
+	cabMeeting    *CABMeetingHandler
 }
 
 // NewHandler creates a new ITSM Handler with all sub-handlers wired up.
@@ -30,6 +32,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 	problemSvc := NewProblemService(pool, auditSvc, js)
 	queueSvc := NewQueueService(pool, auditSvc)
 	requestSvc := NewRequestService(pool, auditSvc)
+	changeSvc := NewChangeService(pool, auditSvc, js)
 
 	return &Handler{
 		catalog:       NewCatalogHandler(catalogSvc),
@@ -39,6 +42,8 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 		problem:       NewProblemHandler(problemSvc),
 		queue:         NewQueueHandler(queueSvc),
 		request:       NewRequestHandler(requestSvc),
+		change:        NewChangeHandler(changeSvc),
+		cabMeeting:    NewCABMeetingHandler(changeSvc),
 	}
 }
 
@@ -75,5 +80,15 @@ func (h *Handler) Routes(r chi.Router) {
 	// Service requests — submission, approval workflow, cancellation
 	r.Route("/catalog/requests", func(r chi.Router) {
 		h.request.Routes(r)
+	})
+
+	// Change management (Emergency, Standard, Normal)
+	r.Route("/changes", func(r chi.Router) {
+		h.change.Routes(r)
+	})
+
+	// CAB meetings
+	r.Route("/cab-meetings", func(r chi.Router) {
+		h.cabMeeting.Routes(r)
 	})
 }
