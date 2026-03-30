@@ -4,7 +4,7 @@
 -- ──────────────────────────────────────────────
 -- 1. Parallel approval mode on catalog items
 -- ──────────────────────────────────────────────
-ALTER TABLE catalog_items ADD COLUMN IF NOT EXISTS
+ALTER TABLE service_catalog_items ADD COLUMN IF NOT EXISTS
     approval_mode TEXT DEFAULT 'sequential' CHECK (approval_mode IN ('sequential', 'parallel'));
 
 -- ──────────────────────────────────────────────
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_kb_articles_fts
     ON kb_articles USING GIN (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')));
 
 -- +goose Down
-ALTER TABLE catalog_items DROP COLUMN IF EXISTS approval_mode;
+ALTER TABLE service_catalog_items DROP COLUMN IF EXISTS approval_mode;
 ALTER TABLE assets DROP COLUMN IF EXISTS last_verified_at;
 DROP TABLE IF EXISTS asset_verifications;
 DROP INDEX IF EXISTS idx_kb_articles_fts;

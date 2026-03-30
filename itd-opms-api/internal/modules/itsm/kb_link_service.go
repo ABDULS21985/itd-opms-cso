@@ -97,9 +97,9 @@ func (s *KBLinkService) LinkArticle(ctx context.Context, ticketID uuid.UUID, req
 		// Auto-add a resolution comment to the ticket.
 		commentContent := fmt.Sprintf("Linked KB article as resolution: **%s** (`%s`)", articleTitle, link.ArticleSlug)
 		if _, err := s.pool.Exec(ctx,
-			`INSERT INTO ticket_comments (id, ticket_id, author_id, content, is_internal, attachments, created_at)
-			 VALUES ($1, $2, $3, $4, false, '{}', $5)`,
-			uuid.New(), ticketID, auth.UserID, commentContent, time.Now().UTC(),
+			`INSERT INTO ticket_comments (id, ticket_id, tenant_id, author_id, content, is_internal, attachments, created_at)
+			 VALUES ($1, $2, $3, $4, $5, false, '{}', $6)`,
+			uuid.New(), ticketID, auth.TenantID, auth.UserID, commentContent, time.Now().UTC(),
 		); err != nil {
 			slog.Warn("failed to add resolution comment", "ticket_id", ticketID, "error", err)
 		}
@@ -195,30 +195,37 @@ func (s *KBLinkService) SuggestArticles(ctx context.Context, ticketID uuid.UUID)
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	// Fetch the ticket's title and description for search terms.
-	var title, description string
+	// Fetch the ticket's title for search terms.
+	var title string
 	err := s.pool.QueryRow(ctx,
-		`SELECT title, COALESCE(description, '') FROM tickets WHERE id = $1 AND tenant_id = $2`,
+		`SELECT title FROM tickets WHERE id = $1 AND tenant_id = $2`,
 		ticketID, auth.TenantID,
-	).Scan(&title, &description)
+	).Scan(&title)
 	if err != nil {
 		return nil, apperrors.NotFound("ticket", ticketID.String())
 	}
 
-	searchText := title + " " + description
-
+	// Use OR-joined tsquery so articles matching ANY keyword are surfaced.
+	// plainto_tsquery uses AND which is too strict for suggestions.
 	rows, err := s.pool.Query(ctx,
-		`SELECT a.id, a.title, a.slug, a.type, a.status, a.view_count, a.helpful_count,
-		        ts_rank(to_tsvector('english', a.title || ' ' || a.content), q) AS rank
-		 FROM kb_articles a,
-		      plainto_tsquery('english', $1) q
+		`WITH q AS (
+		   SELECT to_tsquery('english',
+		     array_to_string(
+		       ARRAY(SELECT lexeme FROM unnest(to_tsvector('english', $1))),
+		       ' | '
+		     )
+		   ) AS tsq
+		 )
+		 SELECT a.id, a.title, a.slug, a.type, a.status, a.view_count, a.helpful_count,
+		        ts_rank(to_tsvector('english', a.title || ' ' || a.content), q.tsq) AS rank
+		 FROM kb_articles a, q
 		 WHERE a.tenant_id = $2
 		   AND a.status = 'published'
-		   AND to_tsvector('english', a.title || ' ' || a.content) @@ q
+		   AND to_tsvector('english', a.title || ' ' || a.content) @@ q.tsq
 		   AND a.id NOT IN (SELECT article_id FROM ticket_kb_links WHERE ticket_id = $3)
 		 ORDER BY rank DESC, a.helpful_count DESC
 		 LIMIT 10`,
-		searchText, auth.TenantID, ticketID,
+		title, auth.TenantID, ticketID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("suggest articles: %w", err)

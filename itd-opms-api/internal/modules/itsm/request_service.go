@@ -88,7 +88,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 	// Look up catalog item to check approval requirements.
 	itemQuery := `
 		SELECT id, approval_required, approval_chain_config, name, COALESCE(approval_mode, 'sequential')
-		FROM catalog_items
+		FROM service_catalog_items
 		WHERE id = $1 AND tenant_id = $2 AND status = 'active'`
 
 	var itemID uuid.UUID
@@ -266,7 +266,7 @@ func (s *RequestService) ListMyRequests(ctx context.Context, status *string, lim
 			sr.created_at, sr.updated_at,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.tenant_id = $1
 			AND sr.requester_id = $2
 			AND ($3::text IS NULL OR sr.status = $3)
@@ -324,7 +324,7 @@ func (s *RequestService) GetRequestDetail(ctx context.Context, id uuid.UUID) (Se
 			sr.created_at, sr.updated_at,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.id = $1 AND sr.tenant_id = $2`
 
 	var detail ServiceRequestDetail
@@ -451,7 +451,7 @@ func (s *RequestService) ListPendingApprovals(ctx context.Context, limit, offset
 			ci.name AS catalog_item_name
 		FROM service_requests sr
 		INNER JOIN approval_tasks at ON at.request_id = sr.id
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.tenant_id = $1
 			AND at.approver_id = $2
 			AND at.status = 'pending'
@@ -518,7 +518,7 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 	err = tx.QueryRow(ctx,
 		`SELECT sr.tenant_id, sr.status, COALESCE(ci.approval_mode, 'sequential')
 		 FROM service_requests sr
-		 JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		 JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		 WHERE sr.id = $1 AND sr.tenant_id = $2
 		 FOR UPDATE OF sr`,
 		requestID, auth.TenantID,
@@ -844,7 +844,7 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 			sr.created_at, sr.updated_at,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.id = $1 AND sr.tenant_id = $2`
 
 	var sr ServiceRequest
