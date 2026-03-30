@@ -316,6 +316,94 @@ export const CAB_DECISIONS = [
   { value: "conditionally_approved", label: "Conditionally Approved" },
 ] as const;
 
+/* ------------------------------------------------------------------ */
+/*  OLA / UC / Dependency Chain Types                                   */
+/* ------------------------------------------------------------------ */
+
+export interface OperationalLevelAgreement {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  supportTeamId?: string;
+  supportTeamName?: string;
+  serviceCatalogItemId?: string;
+  parentSlaId?: string;
+  parentSlaName?: string;
+  responseTargetMinutes: number;
+  resolutionTargetMinutes: number;
+  businessHoursCalendarId?: string;
+  escalationContactId?: string;
+  escalationContactName?: string;
+  status: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UnderpinningContract {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  vendorId?: string;
+  vendorName?: string;
+  contractId?: string;
+  contractTitle?: string;
+  parentSlaId?: string;
+  parentSlaName?: string;
+  responseTargetMinutes: number;
+  resolutionTargetMinutes: number;
+  penaltyClause?: string;
+  status: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SLADependencyChainEntry {
+  id: string;
+  slaPolicyId: string;
+  slaPolicyName?: string;
+  slaResponseMinutes?: number;
+  slaResolutionMinutes?: number;
+  olaId?: string;
+  olaName?: string;
+  olaResponseMinutes?: number;
+  olaResolutionMinutes?: number;
+  ucId?: string;
+  ucName?: string;
+  ucResponseMinutes?: number;
+  ucResolutionMinutes?: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ConsistencyViolation {
+  type: string;
+  entityId: string;
+  entityName: string;
+  parentSlaId: string;
+  field: string;
+  slaTargetMinutes: number;
+  entityTargetMinutes: number;
+}
+
+export interface ExpiringAgreements {
+  olas: OperationalLevelAgreement[];
+  ucs: UnderpinningContract[];
+  days: number;
+}
+
+export const OLA_UC_STATUSES = [
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "expired", label: "Expired" },
+  { value: "terminated", label: "Terminated" },
+] as const;
+
 export const CHANGE_STATUSES = [
   { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
@@ -333,3 +421,32 @@ export const CHANGE_STATUSES = [
   { value: "closed", label: "Closed" },
   { value: "investigating", label: "Investigating" },
 ] as const;
+
+/* ------------------------------------------------------------------ */
+/*  KB ↔ Ticket Link Types                                             */
+/* ------------------------------------------------------------------ */
+
+export interface TicketKBLink {
+  id: string;
+  ticketId: string;
+  articleId: string;
+  linkedBy: string;
+  linkType: "reference" | "resolution" | "workaround";
+  createdAt: string;
+  articleTitle: string;
+  articleSlug: string;
+  articleStatus: string;
+  articleType: string;
+  linkedByName: string;
+}
+
+export interface KBSuggestion {
+  id: string;
+  title: string;
+  slug: string;
+  type: string;
+  status: string;
+  viewCount: number;
+  helpfulCount: number;
+  rank: number;
+}

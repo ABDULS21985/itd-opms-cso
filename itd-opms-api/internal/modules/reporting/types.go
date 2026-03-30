@@ -289,3 +289,96 @@ type UpcomingEvent struct {
 	Date  string  `json:"date"`
 	Href  *string `json:"href,omitempty"`
 }
+
+// ──────────────────────────────────────────────
+// Query Builder types
+// ──────────────────────────────────────────────
+
+// SavedQuery represents a persisted ad-hoc query definition.
+type SavedQuery struct {
+	ID              uuid.UUID       `json:"id"`
+	TenantID        uuid.UUID       `json:"tenantId"`
+	Name            string          `json:"name"`
+	Description     *string         `json:"description"`
+	EntityType      string          `json:"entityType"`
+	Filters         json.RawMessage `json:"filters"`
+	Columns         []string        `json:"columns"`
+	SortBy          *string         `json:"sortBy"`
+	SortOrder       *string         `json:"sortOrder"`
+	GroupBy         *string         `json:"groupBy"`
+	ChartType       *string         `json:"chartType"`
+	IsShared        bool            `json:"isShared"`
+	Schedule        *string         `json:"schedule"`
+	EmailRecipients []string        `json:"emailRecipients"`
+	CreatedBy       uuid.UUID       `json:"createdBy"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+}
+
+// QueryFilter represents a single filter condition in the query builder.
+type QueryFilter struct {
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    any    `json:"value"`
+}
+
+// QueryResult represents the output of an executed query.
+type QueryResult struct {
+	Columns  []string         `json:"columns"`
+	Rows     []map[string]any `json:"rows"`
+	RowCount int              `json:"rowCount"`
+}
+
+// CreateSavedQueryRequest is the payload for creating a new saved query.
+type CreateSavedQueryRequest struct {
+	Name            string        `json:"name" validate:"required"`
+	Description     *string       `json:"description"`
+	EntityType      string        `json:"entityType" validate:"required"`
+	Filters         []QueryFilter `json:"filters"`
+	Columns         []string      `json:"columns" validate:"required"`
+	SortBy          *string       `json:"sortBy"`
+	SortOrder       *string       `json:"sortOrder"`
+	GroupBy         *string       `json:"groupBy"`
+	ChartType       *string       `json:"chartType"`
+	IsShared        bool          `json:"isShared"`
+	Schedule        *string       `json:"schedule"`
+	EmailRecipients []string      `json:"emailRecipients"`
+}
+
+// UpdateSavedQueryRequest is the payload for updating an existing saved query.
+type UpdateSavedQueryRequest struct {
+	Name            *string       `json:"name"`
+	Description     *string       `json:"description"`
+	EntityType      *string       `json:"entityType"`
+	Filters         []QueryFilter `json:"filters"`
+	Columns         []string      `json:"columns"`
+	SortBy          *string       `json:"sortBy"`
+	SortOrder       *string       `json:"sortOrder"`
+	GroupBy         *string       `json:"groupBy"`
+	ChartType       *string       `json:"chartType"`
+	IsShared        *bool         `json:"isShared"`
+	Schedule        *string       `json:"schedule"`
+	EmailRecipients []string      `json:"emailRecipients"`
+}
+
+// ExecuteQueryRequest is the payload for previewing or running an ad-hoc query.
+type ExecuteQueryRequest struct {
+	EntityType string        `json:"entityType" validate:"required"`
+	Columns    []string      `json:"columns" validate:"required"`
+	Filters    []QueryFilter `json:"filters"`
+	SortBy     *string       `json:"sortBy"`
+	SortOrder  *string       `json:"sortOrder"`
+	GroupBy    *string       `json:"groupBy"`
+}
+
+// EntityFieldInfo describes an allowed field for the query builder UI.
+type EntityFieldInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// EntitySchema describes the allowed fields for a given entity type.
+type EntitySchema struct {
+	EntityType string            `json:"entityType"`
+	Fields     []EntityFieldInfo `json:"fields"`
+}

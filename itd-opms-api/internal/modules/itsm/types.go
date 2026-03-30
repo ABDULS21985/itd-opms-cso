@@ -194,6 +194,9 @@ type Ticket struct {
 	Status                  string          `json:"status"`
 	Channel                 string          `json:"channel"`
 	ReporterID              uuid.UUID       `json:"reporterId"`
+	ReporterEmail           *string         `json:"reporterEmail,omitempty"`
+	EmailThreadID           *string         `json:"emailThreadId,omitempty"`
+	EmailMessageIDs         []string        `json:"emailMessageIds,omitempty"`
 	AssigneeID              *uuid.UUID      `json:"assigneeId"`
 	TeamQueueID             *uuid.UUID      `json:"teamQueueId"`
 	SLAPolicyID             *uuid.UUID      `json:"slaPolicyId"`
@@ -398,6 +401,88 @@ type SLAComplianceStats struct {
 	ResolutionMet int `json:"resolutionMet"`
 }
 
+// OperationalLevelAgreement (OLA) defines internal team agreements that support SLAs.
+type OperationalLevelAgreement struct {
+	ID                      uuid.UUID  `json:"id"`
+	TenantID                uuid.UUID  `json:"tenantId"`
+	Name                    string     `json:"name"`
+	Description             *string    `json:"description"`
+	SupportTeamID           *uuid.UUID `json:"supportTeamId"`
+	ServiceCatalogItemID    *uuid.UUID `json:"serviceCatalogItemId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   int        `json:"responseTargetMinutes"`
+	ResolutionTargetMinutes int        `json:"resolutionTargetMinutes"`
+	BusinessHoursCalendarID *uuid.UUID `json:"businessHoursCalendarId"`
+	EscalationContactID     *uuid.UUID `json:"escalationContactId"`
+	Status                  string     `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+	CreatedBy               uuid.UUID  `json:"createdBy"`
+	CreatedAt               time.Time  `json:"createdAt"`
+	UpdatedAt               time.Time  `json:"updatedAt"`
+	// Joined fields
+	SupportTeamName         *string `json:"supportTeamName,omitempty"`
+	ParentSLAName           *string `json:"parentSlaName,omitempty"`
+	EscalationContactName   *string `json:"escalationContactName,omitempty"`
+}
+
+// UnderpinningContract (UC) defines vendor contract terms that underpin SLAs.
+type UnderpinningContract struct {
+	ID                      uuid.UUID  `json:"id"`
+	TenantID                uuid.UUID  `json:"tenantId"`
+	Name                    string     `json:"name"`
+	VendorID                *uuid.UUID `json:"vendorId"`
+	ContractID              *uuid.UUID `json:"contractId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   int        `json:"responseTargetMinutes"`
+	ResolutionTargetMinutes int        `json:"resolutionTargetMinutes"`
+	PenaltyClause           *string    `json:"penaltyClause"`
+	Status                  string     `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+	CreatedBy               uuid.UUID  `json:"createdBy"`
+	CreatedAt               time.Time  `json:"createdAt"`
+	UpdatedAt               time.Time  `json:"updatedAt"`
+	// Joined fields
+	VendorName    *string `json:"vendorName,omitempty"`
+	ContractTitle *string `json:"contractTitle,omitempty"`
+	ParentSLAName *string `json:"parentSlaName,omitempty"`
+}
+
+// SLADependencyChainEntry represents a link in the SLA → OLA → UC chain.
+type SLADependencyChainEntry struct {
+	ID          uuid.UUID  `json:"id"`
+	SLAPolicyID uuid.UUID  `json:"slaPolicyId"`
+	OLAID       *uuid.UUID `json:"olaId"`
+	UCID        *uuid.UUID `json:"ucId"`
+	Notes       *string    `json:"notes"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	// Joined fields
+	SLAName                   *string `json:"slaName,omitempty"`
+	OLAName                   *string `json:"olaName,omitempty"`
+	UCName                    *string `json:"ucName,omitempty"`
+	SLAResponseMinutes        *int    `json:"slaResponseMinutes,omitempty"`
+	SLAResolutionMinutes      *int    `json:"slaResolutionMinutes,omitempty"`
+	OLAResponseMinutes        *int    `json:"olaResponseMinutes,omitempty"`
+	OLAResolutionMinutes      *int    `json:"olaResolutionMinutes,omitempty"`
+	UCResponseMinutes         *int    `json:"ucResponseMinutes,omitempty"`
+	UCResolutionMinutes       *int    `json:"ucResolutionMinutes,omitempty"`
+}
+
+// ConsistencyViolation represents an OLA/UC that exceeds its parent SLA target.
+type ConsistencyViolation struct {
+	Type                string `json:"type"` // "ola" or "uc"
+	EntityID            string `json:"entityId"`
+	EntityName          string `json:"entityName"`
+	ParentSLAID         string `json:"parentSlaId"`
+	ParentSLAName       string `json:"parentSlaName"`
+	Field               string `json:"field"` // "response" or "resolution"
+	SLATargetMinutes    int    `json:"slaTargetMinutes"`
+	EntityTargetMinutes int    `json:"entityTargetMinutes"`
+}
+
 // CSATStats provides aggregate customer satisfaction metrics.
 type CSATStats struct {
 	Total     int     `json:"total"`
@@ -525,6 +610,43 @@ type DeclareMajorIncidentRequest struct {
 	CommunicationPlan *string `json:"communicationPlan"`
 }
 
+// ──────────────────────────────────────────────
+// Ticket ↔ KB Article Links
+// ──────────────────────────────────────────────
+
+// TicketKBLink represents a link between a ticket and a KB article.
+type TicketKBLink struct {
+	ID            uuid.UUID `json:"id"`
+	TicketID      uuid.UUID `json:"ticketId"`
+	ArticleID     uuid.UUID `json:"articleId"`
+	LinkedBy      uuid.UUID `json:"linkedBy"`
+	LinkType      string    `json:"linkType"`
+	CreatedAt     time.Time `json:"createdAt"`
+	ArticleTitle  string    `json:"articleTitle"`
+	ArticleSlug   string    `json:"articleSlug"`
+	ArticleStatus string    `json:"articleStatus"`
+	ArticleType   string    `json:"articleType"`
+	LinkedByName  string    `json:"linkedByName"`
+}
+
+// LinkArticleRequest is the payload for linking an article to a ticket.
+type LinkArticleRequest struct {
+	ArticleID uuid.UUID `json:"articleId" validate:"required"`
+	LinkType  string    `json:"linkType"` // reference, resolution, workaround
+}
+
+// KBSuggestion is a lightweight KB article returned from auto-suggest.
+type KBSuggestion struct {
+	ID           uuid.UUID `json:"id"`
+	Title        string    `json:"title"`
+	Slug         string    `json:"slug"`
+	Type         string    `json:"type"`
+	Status       string    `json:"status"`
+	ViewCount    int       `json:"viewCount"`
+	HelpfulCount int       `json:"helpfulCount"`
+	Rank         float64   `json:"rank"`
+}
+
 // CreateSLAPolicyRequest is the payload for creating an SLA policy.
 type CreateSLAPolicyRequest struct {
 	Name                    string          `json:"name" validate:"required"`
@@ -577,6 +699,78 @@ type UpdateEscalationRuleRequest struct {
 	TriggerConfig   json.RawMessage `json:"triggerConfig"`
 	EscalationChain json.RawMessage `json:"escalationChain"`
 	IsActive        *bool           `json:"isActive"`
+}
+
+// CreateOLARequest is the payload for creating an Operational Level Agreement.
+type CreateOLARequest struct {
+	Name                    string     `json:"name" validate:"required"`
+	Description             *string    `json:"description"`
+	SupportTeamID           *uuid.UUID `json:"supportTeamId"`
+	ServiceCatalogItemID    *uuid.UUID `json:"serviceCatalogItemId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   int        `json:"responseTargetMinutes" validate:"required"`
+	ResolutionTargetMinutes int        `json:"resolutionTargetMinutes" validate:"required"`
+	BusinessHoursCalendarID *uuid.UUID `json:"businessHoursCalendarId"`
+	EscalationContactID     *uuid.UUID `json:"escalationContactId"`
+	Status                  *string    `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+}
+
+// UpdateOLARequest is the payload for updating an OLA.
+type UpdateOLARequest struct {
+	Name                    *string    `json:"name"`
+	Description             *string    `json:"description"`
+	SupportTeamID           *uuid.UUID `json:"supportTeamId"`
+	ServiceCatalogItemID    *uuid.UUID `json:"serviceCatalogItemId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   *int       `json:"responseTargetMinutes"`
+	ResolutionTargetMinutes *int       `json:"resolutionTargetMinutes"`
+	BusinessHoursCalendarID *uuid.UUID `json:"businessHoursCalendarId"`
+	EscalationContactID     *uuid.UUID `json:"escalationContactId"`
+	Status                  *string    `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+}
+
+// CreateUCRequest is the payload for creating an Underpinning Contract.
+type CreateUCRequest struct {
+	Name                    string     `json:"name" validate:"required"`
+	VendorID                *uuid.UUID `json:"vendorId"`
+	ContractID              *uuid.UUID `json:"contractId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   int        `json:"responseTargetMinutes" validate:"required"`
+	ResolutionTargetMinutes int        `json:"resolutionTargetMinutes" validate:"required"`
+	PenaltyClause           *string    `json:"penaltyClause"`
+	Status                  *string    `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+}
+
+// UpdateUCRequest is the payload for updating an Underpinning Contract.
+type UpdateUCRequest struct {
+	Name                    *string    `json:"name"`
+	VendorID                *uuid.UUID `json:"vendorId"`
+	ContractID              *uuid.UUID `json:"contractId"`
+	ParentSLAID             *uuid.UUID `json:"parentSlaId"`
+	ResponseTargetMinutes   *int       `json:"responseTargetMinutes"`
+	ResolutionTargetMinutes *int       `json:"resolutionTargetMinutes"`
+	PenaltyClause           *string    `json:"penaltyClause"`
+	Status                  *string    `json:"status"`
+	EffectiveFrom           *string    `json:"effectiveFrom"`
+	EffectiveTo             *string    `json:"effectiveTo"`
+	ReviewDate              *string    `json:"reviewDate"`
+}
+
+// CreateDependencyChainRequest links an SLA to an OLA and/or UC.
+type CreateDependencyChainRequest struct {
+	SLAPolicyID uuid.UUID  `json:"slaPolicyId" validate:"required"`
+	OLAID       *uuid.UUID `json:"olaId"`
+	UCID        *uuid.UUID `json:"ucId"`
+	Notes       *string    `json:"notes"`
 }
 
 // CreateProblemRequest is the payload for creating a problem record.

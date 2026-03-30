@@ -11,10 +11,11 @@ import (
 // It composes all sub-handlers for assets, CMDB configuration items,
 // licenses, warranties, and renewal alerts.
 type Handler struct {
-	asset    *AssetHandler
-	cmdb     *CMDBCIHandler
-	license  *LicenseHandler
-	warranty *WarrantyHandler
+	asset     *AssetHandler
+	cmdb      *CMDBCIHandler
+	license   *LicenseHandler
+	warranty  *WarrantyHandler
+	discovery *DiscoveryHandler
 }
 
 // NewHandler creates a new CMDB Handler with all sub-handlers wired up.
@@ -23,12 +24,14 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
 	cmdbSvc := NewCMDBService(pool, auditSvc)
 	licenseSvc := NewLicenseService(pool, auditSvc)
 	warrantySvc := NewWarrantyService(pool, auditSvc)
+	discoverySvc := NewDiscoveryService(pool, auditSvc)
 
 	return &Handler{
-		asset:    NewAssetHandler(assetSvc),
-		cmdb:     NewCMDBCIHandler(cmdbSvc),
-		license:  NewLicenseHandler(licenseSvc),
-		warranty: NewWarrantyHandler(warrantySvc),
+		asset:     NewAssetHandler(assetSvc),
+		cmdb:      NewCMDBCIHandler(cmdbSvc),
+		license:   NewLicenseHandler(licenseSvc),
+		warranty:  NewWarrantyHandler(warrantySvc),
+		discovery: NewDiscoveryHandler(discoverySvc),
 	}
 }
 
@@ -55,5 +58,10 @@ func (h *Handler) Routes(r chi.Router) {
 	// Renewal alerts (FR-E012)
 	r.Route("/renewal-alerts", func(r chi.Router) {
 		h.warranty.AlertRoutes(r)
+	})
+
+	// Discovery (automated CI discovery)
+	r.Route("/discovery", func(r chi.Router) {
+		h.discovery.Routes(r)
 	})
 }

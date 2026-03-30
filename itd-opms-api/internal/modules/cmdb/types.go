@@ -488,6 +488,108 @@ type CreateRenewalAlertRequest struct {
 }
 
 // ──────────────────────────────────────────────
+// Discovery types
+// ──────────────────────────────────────────────
+
+// DiscoveryProfile represents a scan configuration for automated CI discovery.
+type DiscoveryProfile struct {
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenantId"`
+	Name          string          `json:"name"`
+	Description   *string         `json:"description,omitempty"`
+	ScanType      string          `json:"scanType"`
+	Configuration json.RawMessage `json:"configuration"`
+	Schedule      *string         `json:"schedule,omitempty"`
+	IsActive      bool            `json:"isActive"`
+	LastRunAt     *time.Time      `json:"lastRunAt,omitempty"`
+	CreatedBy     uuid.UUID       `json:"createdBy"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	// Enrichment
+	CreatedByName *string `json:"createdByName,omitempty"`
+}
+
+// DiscoveryRun tracks execution of a discovery scan.
+type DiscoveryRun struct {
+	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenantId"`
+	ProfileID    uuid.UUID       `json:"profileId"`
+	Status       string          `json:"status"`
+	StartedAt    *time.Time      `json:"startedAt,omitempty"`
+	CompletedAt  *time.Time      `json:"completedAt,omitempty"`
+	DevicesFound int             `json:"devicesFound"`
+	NewCIs       int             `json:"newCis"`
+	UpdatedCIs   int             `json:"updatedCis"`
+	Errors       json.RawMessage `json:"errors"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	// Enrichment
+	ProfileName *string `json:"profileName,omitempty"`
+}
+
+// DiscoveredDevice represents a device found during a discovery scan.
+type DiscoveredDevice struct {
+	ID              uuid.UUID       `json:"id"`
+	RunID           uuid.UUID       `json:"runId"`
+	Hostname        *string         `json:"hostname,omitempty"`
+	IPAddress       *string         `json:"ipAddress,omitempty"`
+	MACAddress      *string         `json:"macAddress,omitempty"`
+	DeviceType      *string         `json:"deviceType,omitempty"`
+	OSName          *string         `json:"osName,omitempty"`
+	OSVersion       *string         `json:"osVersion,omitempty"`
+	Manufacturer    *string         `json:"manufacturer,omitempty"`
+	Model           *string         `json:"model,omitempty"`
+	SerialNumber    *string         `json:"serialNumber,omitempty"`
+	OpenPorts       []int32         `json:"openPorts"`
+	Attributes      json.RawMessage `json:"attributes"`
+	MatchedCIID     *uuid.UUID      `json:"matchedCiId,omitempty"`
+	MatchConfidence *float64        `json:"matchConfidence,omitempty"`
+	Action          *string         `json:"action,omitempty"`
+	CreatedAt       time.Time       `json:"createdAt"`
+}
+
+// DiscoveryRunWithDevices is the full run view with discovered devices.
+type DiscoveryRunWithDevices struct {
+	DiscoveryRun
+	Devices []DiscoveredDevice `json:"devices"`
+}
+
+// DiscoveryStats holds aggregate counts for the discovery dashboard.
+type DiscoveryStats struct {
+	TotalProfiles  int        `json:"totalProfiles"`
+	ActiveProfiles int        `json:"activeProfiles"`
+	TotalRuns      int        `json:"totalRuns"`
+	LastRunAt      *time.Time `json:"lastRunAt,omitempty"`
+}
+
+// ──────────────────────────────────────────────
+// Discovery request types
+// ──────────────────────────────────────────────
+
+// CreateDiscoveryProfileRequest is the payload for creating a discovery profile.
+type CreateDiscoveryProfileRequest struct {
+	Name          string          `json:"name" validate:"required"`
+	Description   *string         `json:"description"`
+	ScanType      string          `json:"scanType" validate:"required"`
+	Configuration json.RawMessage `json:"configuration"`
+	Schedule      *string         `json:"schedule"`
+}
+
+// UpdateDiscoveryProfileRequest is the payload for updating a discovery profile.
+type UpdateDiscoveryProfileRequest struct {
+	Name          *string          `json:"name"`
+	Description   *string          `json:"description"`
+	ScanType      *string          `json:"scanType"`
+	Configuration *json.RawMessage `json:"configuration"`
+	Schedule      *string          `json:"schedule"`
+	IsActive      *bool            `json:"isActive"`
+}
+
+// ReconcileDiscoveryRequest is the payload for applying discovery results to the CMDB.
+type ReconcileDiscoveryRequest struct {
+	DeviceIDs []uuid.UUID `json:"deviceIds" validate:"required"`
+}
+
+// ──────────────────────────────────────────────
 // Asset lifecycle state machine
 // ──────────────────────────────────────────────
 

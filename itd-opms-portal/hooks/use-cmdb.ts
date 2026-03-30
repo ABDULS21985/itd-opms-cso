@@ -14,6 +14,10 @@ import type {
   LicenseComplianceStats,
   Warranty,
   RenewalAlert,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoveredDevice,
+  DiscoveryStats,
   PaginatedResponse,
 } from "@/types";
 
@@ -871,6 +875,235 @@ export function useMarkAlertSent() {
     },
     onError: () => {
       toast.error("Failed to mark alert as sent");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Discovery — Queries & Mutations                                    */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/discovery/stats - discovery dashboard stats.
+ */
+export function useDiscoveryStats() {
+  return useQuery({
+    queryKey: ["discovery-stats"],
+    queryFn: () => apiClient.get<DiscoveryStats>("/cmdb/discovery/stats"),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/profiles - paginated list of discovery profiles.
+ */
+export function useDiscoveryProfiles(
+  page = 1,
+  limit = 20,
+  scanType?: string,
+  isActive?: boolean,
+) {
+  return useQuery({
+    queryKey: ["discovery-profiles", page, limit, scanType, isActive],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveryProfile>>(
+        "/cmdb/discovery/profiles",
+        { page, limit, scanType, isActive },
+      ),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/profiles/{id} - single profile detail.
+ */
+export function useDiscoveryProfile(id: string | undefined) {
+  return useQuery({
+    queryKey: ["discovery-profile", id],
+    queryFn: () =>
+      apiClient.get<DiscoveryProfile>(`/cmdb/discovery/profiles/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * POST /cmdb/discovery/profiles - create a new discovery profile.
+ */
+export function useCreateDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<DiscoveryProfile>) =>
+      apiClient.post<DiscoveryProfile>("/cmdb/discovery/profiles", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery profile created");
+    },
+    onError: () => {
+      toast.error("Failed to create discovery profile");
+    },
+  });
+}
+
+/**
+ * PUT /cmdb/discovery/profiles/{id} - update an existing profile.
+ */
+export function useUpdateDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: Partial<DiscoveryProfile> & { id: string }) =>
+      apiClient.put<DiscoveryProfile>(`/cmdb/discovery/profiles/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profile"] });
+      toast.success("Discovery profile updated");
+    },
+    onError: () => {
+      toast.error("Failed to update discovery profile");
+    },
+  });
+}
+
+/**
+ * DELETE /cmdb/discovery/profiles/{id} - delete a profile.
+ */
+export function useDeleteDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/cmdb/discovery/profiles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery profile deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete discovery profile");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/discovery/profiles/{id}/run - trigger a discovery run.
+ */
+export function useTriggerDiscoveryRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) =>
+      apiClient.post<DiscoveryRun>(
+        `/cmdb/discovery/profiles/${profileId}/run`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery run triggered");
+    },
+    onError: () => {
+      toast.error("Failed to trigger discovery run");
+    },
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs - paginated list of discovery runs.
+ */
+export function useDiscoveryRuns(
+  page = 1,
+  limit = 20,
+  profileId?: string,
+  status?: string,
+) {
+  return useQuery({
+    queryKey: ["discovery-runs", page, limit, profileId, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveryRun>>(
+        "/cmdb/discovery/runs",
+        { page, limit, profileId, status },
+      ),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs/{id} - single run detail.
+ */
+export function useDiscoveryRun(id: string | undefined) {
+  return useQuery({
+    queryKey: ["discovery-run", id],
+    queryFn: () =>
+      apiClient.get<DiscoveryRun>(`/cmdb/discovery/runs/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs/{id}/devices - discovered devices for a run.
+ */
+export function useDiscoveryRunDevices(
+  runId: string | undefined,
+  page = 1,
+  limit = 50,
+  action?: string,
+) {
+  return useQuery({
+    queryKey: ["discovery-run-devices", runId, page, limit, action],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveredDevice>>(
+        `/cmdb/discovery/runs/${runId}/devices`,
+        { page, limit, action },
+      ),
+    enabled: !!runId,
+  });
+}
+
+/**
+ * POST /cmdb/discovery/runs/{id}/reconcile - apply discovery to CMDB.
+ */
+export function useReconcileDiscoveryRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      runId,
+      deviceIds,
+    }: {
+      runId: string;
+      deviceIds: string[];
+    }) =>
+      apiClient.post<DiscoveryRun>(
+        `/cmdb/discovery/runs/${runId}/reconcile`,
+        { deviceIds },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-run"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-run-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
+      toast.success("Reconciliation completed");
+    },
+    onError: () => {
+      toast.error("Failed to reconcile discovery run");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/discovery/import-csv - upload CSV for bulk discovery import.
+ */
+export function useImportDiscoveryCSV() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<DiscoveryRun>("/cmdb/discovery/import-csv", formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      toast.success("CSV imported successfully");
+    },
+    onError: () => {
+      toast.error("Failed to import CSV");
     },
   });
 }

@@ -41,6 +41,10 @@ import {
   Calendar,
   BarChart3,
   Star,
+  BookOpen,
+  Search,
+  Trash2,
+  ThumbsUp,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
@@ -57,6 +61,11 @@ import {
   useResolveTicket,
   useCloseTicket,
   useDeclareMajorIncident,
+  useTicketKBLinks,
+  useTicketKBSuggestions,
+  useTicketKBSearch,
+  useLinkArticle,
+  useUnlinkArticle,
 } from "@/hooks/use-itsm";
 import type {
   TicketComment,
@@ -924,6 +933,12 @@ export default function TicketDetailPage({
   const closeTicket = useCloseTicket();
   const declareMajor = useDeclareMajorIncident();
 
+  /* ---- KB link hooks ---- */
+  const { data: kbLinks = [] } = useTicketKBLinks(id);
+  const { data: kbSuggestions = [] } = useTicketKBSuggestions(id);
+  const linkArticle = useLinkArticle(id);
+  const unlinkArticle = useUnlinkArticle(id);
+
   /* ---- User name resolution ---- */
   const { data: allUsers } = useSearchUsers("");
   const userMap = useMemo(() => {
@@ -956,7 +971,7 @@ export default function TicketDetailPage({
   };
 
   /* ---- Local state ---- */
-  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla">(
+  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla" | "knowledge">(
     "details",
   );
   const [commentText, setCommentText] = useState("");
@@ -973,6 +988,8 @@ export default function TicketDetailPage({
     links: true,
     tags: true,
   });
+  const [kbSearchQuery, setKbSearchQuery] = useState("");
+  const { data: kbSearchResults = [] } = useTicketKBSearch(id, kbSearchQuery);
 
   /* ---- Derived data ---- */
   const comments: TicketComment[] = commentsData ?? [];
@@ -1319,6 +1336,7 @@ export default function TicketDetailPage({
     { key: "details" as const, label: "Details", icon: Tag },
     { key: "timeline" as const, label: "Activity", icon: History, count: timeline.length },
     { key: "sla" as const, label: "SLA", icon: Shield },
+    { key: "knowledge" as const, label: "Knowledge", icon: BookOpen, count: kbLinks.length },
   ];
 
   return (
@@ -2194,6 +2212,257 @@ export default function TicketDetailPage({
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* =================== Knowledge Base Tab =================== */}
+              {activeTab === "knowledge" && (
+                <div className="space-y-4">
+                  {/* Search */}
+                  <div className={`${cardSurface} p-5`}>
+                    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                      <Search size={15} className="text-[var(--primary)]" />
+                      Search Knowledge Base
+                    </h2>
+                    <div className="relative">
+                      <Search
+                        size={14}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)]"
+                      />
+                      <input
+                        value={kbSearchQuery}
+                        onChange={(e) => setKbSearchQuery(e.target.value)}
+                        placeholder="Search articles by keyword..."
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] pl-9 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                      />
+                    </div>
+
+                    {/* Search Results */}
+                    {kbSearchQuery.length >= 2 && kbSearchResults.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-[10px] font-semibold text-[var(--neutral-gray)] uppercase tracking-wider">
+                          Search Results ({kbSearchResults.length})
+                        </p>
+                        {kbSearchResults.map((article) => {
+                          const alreadyLinked = kbLinks.some((l) => l.articleId === article.id);
+                          return (
+                            <div
+                              key={article.id}
+                              className={`flex items-center justify-between gap-3 rounded-xl border border-slate-200/60 p-3 transition-colors ${
+                                alreadyLinked ? "opacity-50" : "hover:bg-[var(--surface-1)]"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                  {article.title}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-semibold text-[var(--primary)] uppercase">
+                                    {article.type}
+                                  </span>
+                                  {article.helpfulCount > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-[var(--neutral-gray)]">
+                                      <ThumbsUp size={9} /> {article.helpfulCount}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {!alreadyLinked && (
+                                <button
+                                  type="button"
+                                  disabled={linkArticle.isPending}
+                                  onClick={() =>
+                                    linkArticle.mutate({
+                                      articleId: article.id,
+                                      linkType: "reference",
+                                    })
+                                  }
+                                  className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[var(--primary)] px-2.5 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                  <LinkIcon size={11} />
+                                  Link
+                                </button>
+                              )}
+                              {alreadyLinked && (
+                                <span className="text-[10px] font-semibold text-emerald-600">
+                                  Linked
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {kbSearchQuery.length >= 2 && kbSearchResults.length === 0 && (
+                      <p className="mt-3 text-xs text-[var(--neutral-gray)]">
+                        No articles found for &ldquo;{kbSearchQuery}&rdquo;
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Linked Articles */}
+                  <div className={`${cardSurface} p-5`}>
+                    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                      <BookOpen size={15} className="text-[var(--primary)]" />
+                      Linked Articles
+                      {kbLinks.length > 0 && (
+                        <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white">
+                          {kbLinks.length}
+                        </span>
+                      )}
+                    </h2>
+                    {kbLinks.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-8 text-center">
+                        <BookOpen size={28} className="text-[var(--neutral-gray)] mb-2 opacity-40" />
+                        <p className="text-sm font-medium text-[var(--text-secondary)]">
+                          No linked articles
+                        </p>
+                        <p className="text-xs text-[var(--neutral-gray)] mt-0.5">
+                          Use the search above or suggested articles below to link relevant KB articles.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {kbLinks.map((link) => (
+                          <div
+                            key={link.id}
+                            className={`flex items-center justify-between gap-3 p-3 ${softSurface}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                  {link.articleTitle}
+                                </p>
+                                <span
+                                  className="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold capitalize"
+                                  style={{
+                                    backgroundColor:
+                                      link.linkType === "resolution"
+                                        ? "rgba(16, 185, 129, 0.12)"
+                                        : link.linkType === "workaround"
+                                          ? "rgba(245, 158, 11, 0.12)"
+                                          : "rgba(59, 130, 246, 0.12)",
+                                    color:
+                                      link.linkType === "resolution"
+                                        ? "#059669"
+                                        : link.linkType === "workaround"
+                                          ? "#D97706"
+                                          : "#2563EB",
+                                  }}
+                                >
+                                  {link.linkType}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[var(--neutral-gray)] mt-0.5">
+                                Linked by {link.linkedByName} &middot;{" "}
+                                {new Date(link.createdAt).toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {link.linkType !== "resolution" && canManage && (
+                                <button
+                                  type="button"
+                                  disabled={linkArticle.isPending}
+                                  onClick={() =>
+                                    linkArticle.mutate({
+                                      articleId: link.articleId,
+                                      linkType: "resolution",
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1.5 text-[10px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                                  title="Mark as resolution article"
+                                >
+                                  <CheckCircle size={11} />
+                                  Resolution
+                                </button>
+                              )}
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  disabled={unlinkArticle.isPending}
+                                  onClick={() => unlinkArticle.mutate(link.id)}
+                                  className="inline-flex items-center justify-center rounded-lg border border-[var(--border)] p-1.5 text-[var(--error)] transition-colors hover:bg-red-50"
+                                  title="Unlink article"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Suggested Articles */}
+                  {kbSuggestions.length > 0 && (
+                    <div className={`${cardSurface} p-5`}>
+                      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                        <Zap size={15} className="text-amber-500" />
+                        Suggested Articles
+                        <span className="text-[10px] font-normal text-[var(--neutral-gray)]">
+                          Based on ticket content
+                        </span>
+                      </h2>
+                      <div className="space-y-2">
+                        {kbSuggestions.map((article) => {
+                          const alreadyLinked = kbLinks.some((l) => l.articleId === article.id);
+                          return (
+                            <div
+                              key={article.id}
+                              className={`flex items-center justify-between gap-3 rounded-xl border border-slate-200/60 p-3 transition-colors ${
+                                alreadyLinked ? "opacity-50" : "hover:bg-[var(--surface-1)]"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                  {article.title}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-semibold text-[var(--primary)] uppercase">
+                                    {article.type}
+                                  </span>
+                                  {article.helpfulCount > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-[var(--neutral-gray)]">
+                                      <ThumbsUp size={9} /> {article.helpfulCount}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-[var(--neutral-gray)]">
+                                    {article.viewCount} views
+                                  </span>
+                                </div>
+                              </div>
+                              {!alreadyLinked && canManage && (
+                                <button
+                                  type="button"
+                                  disabled={linkArticle.isPending}
+                                  onClick={() =>
+                                    linkArticle.mutate({
+                                      articleId: article.id,
+                                      linkType: "reference",
+                                    })
+                                  }
+                                  className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[var(--primary)] px-2.5 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                  <LinkIcon size={11} />
+                                  Link
+                                </button>
+                              )}
+                              {alreadyLinked && (
+                                <span className="text-[10px] font-semibold text-emerald-600">
+                                  Linked
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>

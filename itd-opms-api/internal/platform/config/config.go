@@ -192,7 +192,7 @@ func Load() (*Config, error) {
 
 	// Inbound Email (SendGrid Inbound Parse)
 	v.SetDefault("INBOUND_EMAIL_WEBHOOK_SECRET", "")
-	v.SetDefault("INBOUND_EMAIL_DOMAIN", "support.cbn.gov.ng")
+	v.SetDefault("INBOUND_EMAIL_DOMAIN", "itd.cbn.gov.ng")
 
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()

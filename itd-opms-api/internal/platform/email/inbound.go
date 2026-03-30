@@ -3,6 +3,7 @@ package email
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -54,6 +55,20 @@ func NewInboundHandler(
 // POST /api/v1/webhooks/email/inbound
 func (h *InboundHandler) HandleInbound(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Verify webhook secret if configured.
+	// SendGrid Inbound Parse supports basic-auth or a shared secret in a custom header / query param.
+	if h.emailCfg.WebhookSecret != "" {
+		provided := r.Header.Get("X-Webhook-Secret")
+		if provided == "" {
+			provided = r.URL.Query().Get("secret")
+		}
+		if !secureCompare(provided, h.emailCfg.WebhookSecret) {
+			slog.WarnContext(ctx, "inbound email: invalid webhook secret")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
 
 	// SendGrid sends multipart/form-data.
 	if err := r.ParseMultipartForm(25 << 20); err != nil { // 25 MB max
@@ -466,5 +481,10 @@ func stripHTML(s string) string {
 	s = strings.ReplaceAll(s, "&nbsp;", " ")
 
 	return strings.TrimSpace(s)
+}
+
+// secureCompare performs a constant-time comparison to prevent timing attacks.
+func secureCompare(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 

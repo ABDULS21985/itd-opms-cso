@@ -22,6 +22,13 @@ import type {
   ChangeStats,
   ChangeCalendarEvent,
   PaginatedResponse,
+  OperationalLevelAgreement,
+  UnderpinningContract,
+  SLADependencyChainEntry,
+  ConsistencyViolation,
+  ExpiringAgreements,
+  TicketKBLink,
+  KBSuggestion,
 } from "@/types";
 
 /* ================================================================== */
@@ -606,6 +613,101 @@ export function useTicketStatusHistory(ticketId: string | undefined) {
         `/itsm/tickets/${ticketId}/history`,
       ),
     enabled: !!ticketId,
+  });
+}
+
+/* ================================================================== */
+/*  Ticket ↔ KB Article Links                                           */
+/* ================================================================== */
+
+
+
+/** GET /itsm/tickets/{id}/kb-links */
+export function useTicketKBLinks(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-kb-links", ticketId],
+    queryFn: () =>
+      apiClient.get<TicketKBLink[]>(`/itsm/tickets/${ticketId}/kb-links`),
+    enabled: !!ticketId,
+  });
+}
+
+/** GET /itsm/tickets/{id}/kb-suggestions */
+export function useTicketKBSuggestions(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-kb-suggestions", ticketId],
+    queryFn: () =>
+      apiClient.get<KBSuggestion[]>(
+        `/itsm/tickets/${ticketId}/kb-suggestions`,
+      ),
+    enabled: !!ticketId,
+  });
+}
+
+/** GET /itsm/tickets/{id}/kb-search?q=... */
+export function useTicketKBSearch(
+  ticketId: string | undefined,
+  query: string,
+) {
+  return useQuery({
+    queryKey: ["ticket-kb-search", ticketId, query],
+    queryFn: () =>
+      apiClient.get<KBSuggestion[]>(
+        `/itsm/tickets/${ticketId}/kb-search`,
+        { q: query, limit: 10 },
+      ),
+    enabled: !!ticketId && query.length >= 2,
+  });
+}
+
+/** POST /itsm/tickets/{id}/kb-links */
+export function useLinkArticle(ticketId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { articleId: string; linkType: string }) =>
+      apiClient.post<TicketKBLink>(
+        `/itsm/tickets/${ticketId}/kb-links`,
+        body,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-links", ticketId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-suggestions", ticketId],
+      });
+      // Resolution links auto-add a comment, so refresh the timeline.
+      if (variables.linkType === "resolution") {
+        queryClient.invalidateQueries({
+          queryKey: ["ticket-comments", ticketId],
+        });
+      }
+      toast.success("Article linked");
+    },
+    onError: () => {
+      toast.error("Failed to link article");
+    },
+  });
+}
+
+/** DELETE /itsm/tickets/{id}/kb-links/{linkId} */
+export function useUnlinkArticle(ticketId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      apiClient.delete(`/itsm/tickets/${ticketId}/kb-links/${linkId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-links", ticketId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-suggestions", ticketId],
+      });
+      toast.success("Article unlinked");
+    },
+    onError: () => {
+      toast.error("Failed to unlink article");
+    },
   });
 }
 
@@ -1744,5 +1846,210 @@ export function useCompleteCABMeeting(id: string | undefined) {
     onError: () => {
       toast.error("Failed to complete CAB meeting");
     },
+  });
+}
+
+/* ================================================================== */
+/*  OLA (Operational Level Agreements) — Queries                       */
+/* ================================================================== */
+
+export function useOLAs(status?: string) {
+  return useQuery({
+    queryKey: ["olas", status],
+    queryFn: () =>
+      apiClient.get<OperationalLevelAgreement[]>("/itsm/olas", { status }),
+  });
+}
+
+export function useOLA(id: string | undefined) {
+  return useQuery({
+    queryKey: ["ola", id],
+    queryFn: () =>
+      apiClient.get<OperationalLevelAgreement>(`/itsm/olas/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  OLA — Mutations                                                    */
+/* ================================================================== */
+
+export function useCreateOLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<OperationalLevelAgreement>) =>
+      apiClient.post<OperationalLevelAgreement>("/itsm/olas", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      toast.success("OLA created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create OLA");
+    },
+  });
+}
+
+export function useUpdateOLA(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<OperationalLevelAgreement>) =>
+      apiClient.put<OperationalLevelAgreement>(`/itsm/olas/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      queryClient.invalidateQueries({ queryKey: ["ola", id] });
+      toast.success("OLA updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update OLA");
+    },
+  });
+}
+
+export function useDeleteOLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/olas/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      toast.success("OLA deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete OLA");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  UC (Underpinning Contracts) — Queries                              */
+/* ================================================================== */
+
+export function useUCs(status?: string) {
+  return useQuery({
+    queryKey: ["ucs", status],
+    queryFn: () =>
+      apiClient.get<UnderpinningContract[]>("/itsm/underpinning-contracts", { status }),
+  });
+}
+
+export function useUC(id: string | undefined) {
+  return useQuery({
+    queryKey: ["uc", id],
+    queryFn: () =>
+      apiClient.get<UnderpinningContract>(`/itsm/underpinning-contracts/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  UC — Mutations                                                     */
+/* ================================================================== */
+
+export function useCreateUC() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<UnderpinningContract>) =>
+      apiClient.post<UnderpinningContract>("/itsm/underpinning-contracts", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      toast.success("Underpinning contract created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create underpinning contract");
+    },
+  });
+}
+
+export function useUpdateUC(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<UnderpinningContract>) =>
+      apiClient.put<UnderpinningContract>(`/itsm/underpinning-contracts/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      queryClient.invalidateQueries({ queryKey: ["uc", id] });
+      toast.success("Underpinning contract updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update underpinning contract");
+    },
+  });
+}
+
+export function useDeleteUC() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/underpinning-contracts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      toast.success("Underpinning contract deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete underpinning contract");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  SLA Dependency Chain                                               */
+/* ================================================================== */
+
+export function useSLADependencyChain(slaId: string | undefined) {
+  return useQuery({
+    queryKey: ["sla-dependency-chain", slaId],
+    queryFn: () =>
+      apiClient.get<SLADependencyChainEntry[]>(`/itsm/sla/dependency-chain/${slaId}`),
+    enabled: !!slaId,
+  });
+}
+
+export function useCreateDependencyChainEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { slaPolicyId: string; olaId?: string; ucId?: string; notes?: string }) =>
+      apiClient.post("/itsm/sla/dependency-chain", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
+      toast.success("Dependency chain entry created");
+    },
+    onError: () => {
+      toast.error("Failed to create dependency chain entry");
+    },
+  });
+}
+
+export function useDeleteDependencyChainEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/sla/dependency-chain/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
+      toast.success("Dependency chain entry removed");
+    },
+    onError: () => {
+      toast.error("Failed to remove dependency chain entry");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  SLA Consistency Check & Expiring                                   */
+/* ================================================================== */
+
+export function useSLAConsistencyCheck() {
+  return useQuery({
+    queryKey: ["sla-consistency-check"],
+    queryFn: () =>
+      apiClient.get<ConsistencyViolation[]>("/itsm/sla/consistency-check"),
+  });
+}
+
+export function useExpiringAgreements(days = 30) {
+  return useQuery({
+    queryKey: ["sla-expiring", days],
+    queryFn: () =>
+      apiClient.get<ExpiringAgreements>("/itsm/sla/expiring", { days }),
   });
 }

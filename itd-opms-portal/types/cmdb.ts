@@ -157,3 +157,65 @@ export interface LicenseComplianceStats {
   overDeployed: number;
   underUtilized: number;
 }
+
+/* ====================================================================== */
+/*  Discovery Types                                                        */
+/* ====================================================================== */
+
+export interface DiscoveryProfile {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  scanType: string;
+  configuration: Record<string, unknown>;
+  schedule?: string;
+  isActive: boolean;
+  lastRunAt?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  tenantId: string;
+  profileId: string;
+  profileName?: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  devicesFound: number;
+  newCis: number;
+  updatedCis: number;
+  errors: unknown[];
+  createdAt: string;
+}
+
+export interface DiscoveredDevice {
+  id: string;
+  runId: string;
+  hostname?: string;
+  ipAddress?: string;
+  macAddress?: string;
+  deviceType?: string;
+  osName?: string;
+  osVersion?: string;
+  manufacturer?: string;
+  model?: string;
+  serialNumber?: string;
+  openPorts: number[];
+  attributes: Record<string, unknown>;
+  matchedCiId?: string;
+  matchConfidence?: number;
+  action?: string;
+  createdAt: string;
+}
+
+export interface DiscoveryStats {
+  totalProfiles: number;
+  activeProfiles: number;
+  totalRuns: number;
+  lastRunAt?: string;
+}

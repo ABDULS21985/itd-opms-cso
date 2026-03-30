@@ -62,6 +62,7 @@ type Server struct {
 	orchestrator          *notification.Orchestrator
 	dashboardRefresh      *reporting.DashboardRefresher
 	reportScheduler       *reporting.ReportScheduler
+	queryScheduler        *reporting.QueryScheduler
 	maintenanceWorker     *system.MaintenanceWorker
 	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
@@ -215,6 +216,7 @@ func (s *Server) Setup() {
 	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
+	s.queryScheduler = reportingHandler.QueryScheduler(emailSender, s.cfg.Server.FrontendURL, 1*time.Minute)
 
 	// --- Inbound email webhook handler ---
 	inboundEmailHandler := inboundemail.NewInboundHandler(
@@ -386,6 +388,9 @@ func (s *Server) Start() error {
 	}
 	if s.reportScheduler != nil {
 		s.reportScheduler.Start(ctx)
+	}
+	if s.queryScheduler != nil {
+		s.queryScheduler.Start(ctx)
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)

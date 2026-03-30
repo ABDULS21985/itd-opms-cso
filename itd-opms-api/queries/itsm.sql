@@ -101,17 +101,29 @@ INSERT INTO tickets (
     sla_response_met, sla_resolution_met, sla_paused_at, sla_paused_duration_minutes,
     is_major_incident, related_ticket_ids, linked_problem_id, linked_asset_ids,
     resolution_notes, resolved_at, closed_at, first_response_at,
-    satisfaction_score, tags, custom_fields
+    satisfaction_score, tags, custom_fields,
+    reporter_email, email_thread_id, email_message_ids
 )
 VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
     $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
-    $27, $28, $29, $30, $31, $32, $33
+    $27, $28, $29, $30, $31, $32, $33,
+    $34, $35, $36
 )
 RETURNING *;
 
 -- name: GetTicket :one
 SELECT * FROM tickets WHERE id = $1 AND tenant_id = $2;
+
+-- name: FindTicketByNumber :one
+SELECT * FROM tickets WHERE ticket_number = $1 AND tenant_id = $2;
+
+-- name: FindTicketByEmailThreadId :one
+SELECT * FROM tickets WHERE email_thread_id = $1 AND tenant_id = $2;
+
+-- name: AppendEmailMessageId :exec
+UPDATE tickets SET email_message_ids = array_append(email_message_ids, $1)
+WHERE id = $2;
 
 -- name: ListTickets :many
 SELECT * FROM tickets
@@ -558,3 +570,33 @@ JOIN tickets t ON cs.ticket_id = t.id
 WHERE t.tenant_id = $1
 ORDER BY cs.created_at DESC
 LIMIT $2 OFFSET $3;
+
+-- ──────────────────────────────────────────────
+-- Ticket ↔ KB Article Links
+-- ──────────────────────────────────────────────
+
+-- name: LinkArticleToTicket :one
+INSERT INTO ticket_kb_links (ticket_id, article_id, linked_by, link_type)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: UnlinkArticleFromTicket :exec
+DELETE FROM ticket_kb_links WHERE id = $1;
+
+-- name: GetTicketKBLinks :many
+SELECT l.id, l.ticket_id, l.article_id, l.linked_by, l.link_type, l.created_at,
+       a.title AS article_title, a.slug AS article_slug, a.status AS article_status, a.type AS article_type,
+       u.display_name AS linked_by_name
+FROM ticket_kb_links l
+JOIN kb_articles a ON a.id = l.article_id
+JOIN users u ON u.id = l.linked_by
+WHERE l.ticket_id = $1
+ORDER BY l.created_at DESC;
+
+-- name: GetArticleTicketLinks :many
+SELECT l.id, l.ticket_id, l.article_id, l.linked_by, l.link_type, l.created_at,
+       t.ticket_number, t.title AS ticket_title, t.status AS ticket_status, t.priority AS ticket_priority
+FROM ticket_kb_links l
+JOIN tickets t ON t.id = l.ticket_id
+WHERE l.article_id = $1
+ORDER BY l.created_at DESC;

@@ -40,6 +40,7 @@ import {
   PieChart,
   TrendingUp,
   ShieldAlert,
+  DatabaseZap,
   Milestone,
   AlertCircle,
   FileEdit,
@@ -55,6 +56,7 @@ import {
   Handshake,
   Package,
   Server,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
 
@@ -126,6 +128,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/analytics/collaboration",
         label: "Collaboration & Dependencies",
         icon: GitBranch,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/reports/query-builder",
+        label: "Query Builder",
+        icon: DatabaseZap,
         permission: "reporting.view",
       },
     ],
@@ -366,6 +374,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/cmdb/warranties",
         label: "Warranties",
         icon: ShieldCheck,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/discovery",
+        label: "Discovery",
+        icon: Radar,
         permission: "assets.view",
       },
       {
