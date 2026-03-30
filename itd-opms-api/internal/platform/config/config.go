@@ -19,6 +19,7 @@ type Config struct {
 	EntraID       EntraIDConfig
 	Graph         GraphConfig
 	SendGrid      SendGridConfig
+	InboundEmail  InboundEmailConfig
 	Observability ObservabilityConfig
 	Log           LogConfig
 }
@@ -117,6 +118,11 @@ type SendGridConfig struct {
 	FromName  string `mapstructure:"from_name"`
 }
 
+type InboundEmailConfig struct {
+	WebhookSecret string `mapstructure:"webhook_secret"`
+	Domain        string `mapstructure:"domain"`
+}
+
 type ObservabilityConfig struct {
 	OTLPEndpoint string `mapstructure:"otlp_endpoint"`
 	ServiceName  string `mapstructure:"service_name"`
@@ -183,6 +189,10 @@ func Load() (*Config, error) {
 	v.SetDefault("SENDGRID_API_KEY", "")
 	v.SetDefault("SENDGRID_FROM_EMAIL", "noreply@cbn.gov.ng")
 	v.SetDefault("SENDGRID_FROM_NAME", "ITD-OPMS")
+
+	// Inbound Email (SendGrid Inbound Parse)
+	v.SetDefault("INBOUND_EMAIL_WEBHOOK_SECRET", "")
+	v.SetDefault("INBOUND_EMAIL_DOMAIN", "support.cbn.gov.ng")
 
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
@@ -251,6 +261,10 @@ func Load() (*Config, error) {
 			APIKey:    v.GetString("SENDGRID_API_KEY"),
 			FromEmail: v.GetString("SENDGRID_FROM_EMAIL"),
 			FromName:  v.GetString("SENDGRID_FROM_NAME"),
+		},
+		InboundEmail: InboundEmailConfig{
+			WebhookSecret: v.GetString("INBOUND_EMAIL_WEBHOOK_SECRET"),
+			Domain:        v.GetString("INBOUND_EMAIL_DOMAIN"),
 		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),

@@ -113,6 +113,34 @@ var ChangeStateMachine = NewStateMachine("change", map[string][]string{
 	ChangeClosed:        {},
 })
 
+// Release statuses.
+const (
+	ReleasePlanning   = "planning"
+	ReleaseBuild      = "build"
+	ReleaseTesting    = "testing"
+	ReleaseApproved   = "approved"
+	ReleaseScheduled  = "scheduled"
+	ReleaseDeploying  = "deploying"
+	ReleaseDeployed   = "deployed"
+	ReleaseRolledBack = "rolled_back"
+	ReleaseClosed     = "closed"
+	ReleaseCancelled  = "cancelled"
+)
+
+// ReleaseStateMachine enforces the release management lifecycle (BRD §6.5).
+var ReleaseStateMachine = NewStateMachine("release", map[string][]string{
+	ReleasePlanning:   {ReleaseBuild, ReleaseCancelled},
+	ReleaseBuild:      {ReleaseTesting, ReleaseCancelled},
+	ReleaseTesting:    {ReleaseApproved, ReleaseBuild, ReleaseCancelled},
+	ReleaseApproved:   {ReleaseScheduled, ReleaseCancelled},
+	ReleaseScheduled:  {ReleaseDeploying, ReleaseCancelled},
+	ReleaseDeploying:  {ReleaseDeployed, ReleaseRolledBack},
+	ReleaseDeployed:   {ReleaseRolledBack, ReleaseClosed},
+	ReleaseRolledBack: {ReleasePlanning, ReleaseClosed},
+	ReleaseClosed:     {},
+	ReleaseCancelled:  {},
+})
+
 // TicketStateMachine enforces the ITSM ticket lifecycle.
 var TicketStateMachine = NewStateMachine("ticket", map[string][]string{
 	TicketLogged:          {TicketClassified, TicketAssigned, TicketCancelled},

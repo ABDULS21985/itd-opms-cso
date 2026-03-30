@@ -29,6 +29,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/knowledge"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/people"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/release"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/ssa"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
@@ -37,6 +38,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
+	inboundemail "github.com/itd-cbn/itd-opms-api/internal/platform/email"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/dirsync"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/metrics"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
@@ -208,10 +210,16 @@ func (s *Server) Setup() {
 	ssaHandler := ssa.NewHandler(s.pool, auditService)
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
+	releaseHandler := release.NewHandler(s.pool, auditService, s.js)
 	s.maintenanceWorker = systemHandler.Maintenance
 	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
+
+	// --- Inbound email webhook handler ---
+	inboundEmailHandler := inboundemail.NewInboundHandler(
+		s.pool, s.minio, s.cfg.MinIO, s.cfg.InboundEmail, auditService,
+	)
 
 	// --- Routes ---
 	r.Route("/api/v1", func(r chi.Router) {
@@ -219,6 +227,9 @@ func (s *Server) Setup() {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.PublicRoute)
 			healthHandler.Routes(r)
+
+			// SendGrid Inbound Parse webhook (public — verified by SendGrid signature).
+			r.Post("/webhooks/email/inbound", inboundEmailHandler.HandleInbound)
 		})
 
 		// Auth routes — mixed public/protected.
@@ -342,6 +353,7 @@ func (s *Server) Setup() {
 			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
 			r.Route("/ssa", func(r chi.Router) { ssaHandler.Routes(r) })
 			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
+			r.Route("/releases", func(r chi.Router) { releaseHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })

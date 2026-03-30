@@ -53,6 +53,7 @@ import {
   Zap,
   SlidersHorizontal,
   Handshake,
+  Package,
   Server,
   type LucideIcon,
 } from "lucide-react";
@@ -320,6 +321,23 @@ export const navGroups: NavGroup[] = [
         label: "SLA Dashboard",
         icon: Activity,
         permission: "itsm.view",
+      },
+    ],
+  },
+  {
+    label: "Release Mgmt",
+    items: [
+      {
+        href: "/dashboard/releases",
+        label: "Releases",
+        icon: Package,
+        permission: "release.view",
+      },
+      {
+        href: "/dashboard/releases/calendar",
+        label: "Release Calendar",
+        icon: CalendarDays,
+        permission: "release.view",
       },
     ],
   },

@@ -50,6 +50,7 @@ var eventSubjects = []struct {
 	{"notify.governance.>", "NOTIFY_GOVERNANCE"},
 	{"notify.cmdb.>", "NOTIFY_CMDB"},
 	{"notify.grc.>", "NOTIFY_GRC"},
+	{"notify.release.>", "NOTIFY_RELEASE"},
 }
 
 // Start subscribes to domain event subjects and begins processing.
@@ -293,6 +294,29 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 		"itsm.cab.decision": {
 			EmailTemplate: "cab_decision",
 			Channels:      []string{"email", "in_app"},
+			Priority:      7,
+		},
+		"release.created": {
+			EmailTemplate: "release_notification",
+			Channels:      []string{"in_app"},
+			Priority:      5,
+		},
+		"release.deployed": {
+			EmailTemplate: "release_deployed",
+			TeamsTemplate: "teams_release_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      7,
+		},
+		"release.rolled_back": {
+			EmailTemplate: "release_rolled_back",
+			TeamsTemplate: "teams_release_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      9,
+		},
+		"release.approval_needed": {
+			EmailTemplate: "release_approval_request",
+			TeamsTemplate: "teams_approval_card",
+			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      7,
 		},
 	}
