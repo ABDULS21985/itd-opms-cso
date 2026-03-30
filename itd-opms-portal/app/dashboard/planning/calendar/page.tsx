@@ -1,8 +1,17 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import {
+  forwardRef,
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type ElementType,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -16,6 +25,10 @@ import {
   Snowflake,
   PanelLeftClose,
   PanelLeftOpen,
+  Layers3,
+  Radar,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import {
   useCalendarEvents,
@@ -35,15 +48,15 @@ import {
 /* ================================================================== */
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  maintenance: "#3B82F6",
-  deployment: "#8B5CF6",
+  maintenance: "#2563EB",
+  deployment: "#1B7340",
   release: "#10B981",
   freeze: "#EF4444",
-  outage: "#F97316",
-  milestone: "#F59E0B",
-  change_request: "#6366F1",
-  ticket_change: "#EC4899",
-  project_deadline: "#14B8A6",
+  outage: "#D97706",
+  milestone: "#A8893D",
+  change_request: "#8B6F2E",
+  ticket_change: "#0F766E",
+  project_deadline: "#3B82F6",
 };
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -85,6 +98,21 @@ const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const HOUR_START = 7;
 const HOUR_END = 22;
+const PANEL_CLASS =
+  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+const SOFT_PANEL_CLASS =
+  "rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+const PRIMARY_BUTTON_STYLE = {
+  backgroundImage: "var(--gradient-primary)",
+  borderColor: "var(--primary-light)",
+  boxShadow: "var(--shadow-premium)",
+};
+const HERO_STYLE = {
+  backgroundImage:
+    "radial-gradient(circle at top right, rgba(255,255,255,0.16), transparent 36%), radial-gradient(circle at bottom left, rgba(139,111,46,0.18), transparent 32%), var(--gradient-primary)",
+  borderColor: "rgba(45,155,86,0.28)",
+  boxShadow: "var(--shadow-premium)",
+};
 
 /* ================================================================== */
 /*  Calendar Computation Helpers                                       */
@@ -98,7 +126,10 @@ function getMonthGrid(year: number, month: number): Date[][] {
   const firstDay = new Date(year, month, 1);
   const startDow = firstDay.getDay();
   const daysInMonth = getDaysInMonth(year, month);
-  const daysInPrevMonth = month === 0 ? getDaysInMonth(year - 1, 11) : getDaysInMonth(year, month - 1);
+  const daysInPrevMonth =
+    month === 0
+      ? getDaysInMonth(year - 1, 11)
+      : getDaysInMonth(year, month - 1);
 
   const cells: Date[] = [];
 
@@ -189,12 +220,20 @@ function formatTime(dateStr: string): string {
   });
 }
 
-function formatDateRange(start: string, end: string, isAllDay: boolean): string {
+function formatDateRange(
+  start: string,
+  end: string,
+  isAllDay: boolean,
+): string {
   const s = new Date(start);
   const e = new Date(end);
   if (isAllDay) {
     if (isSameDay(s, e) || isSameDay(s, new Date(e.getTime() - 1))) {
-      return s.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return s.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
     }
     return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${e.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   }
@@ -204,9 +243,10 @@ function formatDateRange(start: string, end: string, isAllDay: boolean): string 
   return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${formatTime(start)} - ${e.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${formatTime(end)}`;
 }
 
-function getEventTopAndHeight(
-  event: CalendarEvent,
-): { top: number; height: number } {
+function getEventTopAndHeight(event: CalendarEvent): {
+  top: number;
+  height: number;
+} {
   const evStart = new Date(event.startTime);
   const evEnd = new Date(event.endTime);
 
@@ -223,7 +263,10 @@ function getEventTopAndHeight(
   );
 
   const top = (startMinutes / totalMinutes) * 100;
-  const height = Math.max(((endMinutes - startMinutes) / totalMinutes) * 100, 2);
+  const height = Math.max(
+    ((endMinutes - startMinutes) / totalMinutes) * 100,
+    2,
+  );
 
   return { top, height };
 }
@@ -232,14 +275,124 @@ function getEventsForDay(events: CalendarEvent[], date: Date): CalendarEvent[] {
   return events.filter((ev) => {
     const evStart = new Date(ev.startTime);
     const evEnd = new Date(ev.endTime);
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayStart = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+    );
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
     return evStart < dayEnd && evEnd > dayStart;
   });
 }
 
 function getMonthName(month: number): string {
-  return new Date(2024, month, 1).toLocaleDateString("en-US", { month: "long" });
+  return new Date(2024, month, 1).toLocaleDateString("en-US", {
+    month: "long",
+  });
+}
+
+function formatRangeLabel(start: string, end: string): string {
+  const startDate = new Date(start);
+  const endDate = new Date(new Date(end).getTime() - 24 * 60 * 60 * 1000);
+
+  if (isSameDay(startDate, endDate)) {
+    return startDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  return `${startDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} - ${endDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+}
+
+function CalendarSignalCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  inverted = false,
+}: {
+  icon: ElementType;
+  label: string;
+  value: string;
+  helper: string;
+  inverted?: boolean;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-[1.5rem] p-4"
+      style={{
+        border: inverted
+          ? "1px solid rgba(255,255,255,0.12)"
+          : "1px solid rgba(148,163,184,0.18)",
+        background: inverted
+          ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.07))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))",
+        boxShadow: inverted
+          ? "0 18px 40px rgba(2, 6, 23, 0.12)"
+          : "0 18px 40px rgba(15, 23, 42, 0.06)",
+        backdropFilter: "blur(18px)",
+      }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-80"
+        style={{
+          backgroundImage: inverted
+            ? "radial-gradient(circle at 100% 0%, rgba(255,255,255,0.18), transparent 36%)"
+            : "radial-gradient(circle at 100% 0%, rgba(27,115,64,0.12), transparent 36%)",
+        }}
+      />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-2xl"
+            style={{
+              backgroundColor: inverted
+                ? "rgba(255,255,255,0.12)"
+                : "rgba(27,115,64,0.08)",
+              border: inverted
+                ? "1px solid rgba(255,255,255,0.08)"
+                : "1px solid rgba(255,255,255,0.7)",
+            }}
+          >
+            <Icon
+              size={18}
+              style={{ color: inverted ? "#fff" : "var(--primary)" }}
+            />
+          </div>
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${
+              inverted ? "text-white/58" : "text-[var(--text-secondary)]"
+            }`}
+          >
+            {label}
+          </p>
+        </div>
+        <p
+          className={`mt-5 text-lg font-semibold leading-6 ${
+            inverted ? "text-white" : "text-[var(--text-primary)]"
+          }`}
+        >
+          {value}
+        </p>
+        <p
+          className={`mt-2 text-sm leading-6 ${
+            inverted ? "text-white/72" : "text-[var(--text-secondary)]"
+          }`}
+        >
+          {helper}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 /* ================================================================== */
@@ -251,8 +404,12 @@ type CalendarView = "month" | "week" | "day";
 export default function CalendarPage() {
   const [view, setView] = useState<CalendarView>("month");
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [popoverPos, setPopoverPos] = useState<{ x: number; y: number } | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
+    null,
+  );
+  const [popoverPos, setPopoverPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [showFreezeModal, setShowFreezeModal] = useState(false);
@@ -280,23 +437,34 @@ export default function CalendarPage() {
       const weekDates = getWeekDates(selectedDate);
       return {
         queryStart: formatDate(weekDates[0]),
-        queryEnd: formatDate(new Date(weekDates[6].getTime() + 24 * 60 * 60 * 1000)),
+        queryEnd: formatDate(
+          new Date(weekDates[6].getTime() + 24 * 60 * 60 * 1000),
+        ),
       };
     }
 
     // day
     return {
       queryStart: formatDate(selectedDate),
-      queryEnd: formatDate(new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000)),
+      queryEnd: formatDate(
+        new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000),
+      ),
     };
   }, [selectedDate, view]);
 
   const activeTypeFilters = useMemo(
-    () => (filterTypes.size === Object.keys(EVENT_TYPE_COLORS).length ? undefined : Array.from(filterTypes)),
+    () =>
+      filterTypes.size === Object.keys(EVENT_TYPE_COLORS).length
+        ? undefined
+        : Array.from(filterTypes),
     [filterTypes],
   );
 
-  const { data: events = [], isLoading } = useCalendarEvents(queryStart, queryEnd, activeTypeFilters);
+  const { data: events = [], isLoading } = useCalendarEvents(
+    queryStart,
+    queryEnd,
+    activeTypeFilters,
+  );
 
   // Filter events client-side too in case the backend does not filter by type
   const filteredEvents = useMemo(
@@ -307,7 +475,10 @@ export default function CalendarPage() {
   // Close popover on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node)
+      ) {
         setSelectedEvent(null);
         setPopoverPos(null);
       }
@@ -396,250 +567,482 @@ export default function CalendarPage() {
     });
   }, [selectedDate, view]);
 
+  const selectedRangeLabel = useMemo(
+    () => formatRangeLabel(queryStart, queryEnd),
+    [queryStart, queryEnd],
+  );
+  const eventTypeCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.keys(EVENT_TYPE_COLORS).map((type) => [
+          type,
+          events.filter((event) => event.eventType === type).length,
+        ]),
+      ) as Record<string, number>,
+    [events],
+  );
+  const freezeCount = useMemo(
+    () => filteredEvents.filter((event) => event.eventType === "freeze").length,
+    [filteredEvents],
+  );
+  const highImpactCount = useMemo(
+    () =>
+      filteredEvents.filter((event) =>
+        ["high", "critical"].includes(event.impactLevel),
+      ).length,
+    [filteredEvents],
+  );
+  const allDayCount = useMemo(
+    () => filteredEvents.filter((event) => event.isAllDay).length,
+    [filteredEvents],
+  );
+  const todayLoad = useMemo(
+    () => getEventsForDay(filteredEvents, new Date()).length,
+    [filteredEvents],
+  );
+  const selectedDayLoad = useMemo(
+    () => getEventsForDay(filteredEvents, selectedDate).length,
+    [filteredEvents, selectedDate],
+  );
+  const filterSummary =
+    filterTypes.size === Object.keys(EVENT_TYPE_COLORS).length
+      ? "All event streams active"
+      : `${filterTypes.size} event stream${filterTypes.size === 1 ? "" : "s"} active`;
+
   /* ================================================================ */
   /*  Render                                                           */
   /* ================================================================ */
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden">
-      {/* Left Sidebar */}
-      <AnimatePresence mode="wait">
-        {sidebarOpen && (
-          <motion.aside
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="flex-shrink-0 overflow-y-auto border-r"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <div className="p-4 space-y-6">
-              {/* Mini Month Navigator */}
-              <MiniMonthNavigator
-                selectedDate={selectedDate}
-                onDateSelect={(d) => {
-                  setSelectedDate(d);
-                  if (view !== "day") setView("day");
-                }}
-              />
-
-              {/* Event Type Filters */}
-              <div>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  Event Types
-                </h3>
-                <div className="space-y-1.5">
-                  {Object.entries(EVENT_TYPE_LABELS).map(([type, label]) => (
-                    <label
-                      key={type}
-                      className="flex items-center gap-2.5 cursor-pointer py-1 px-2 rounded-md transition-colors hover:bg-[var(--surface-1)]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filterTypes.has(type)}
-                        onChange={() => toggleFilterType(type)}
-                        className="sr-only"
-                      />
-                      <span
-                        className="w-3 h-3 rounded-sm flex-shrink-0 transition-opacity"
-                        style={{
-                          backgroundColor: EVENT_TYPE_COLORS[type],
-                          opacity: filterTypes.has(type) ? 1 : 0.25,
-                        }}
-                      />
-                      <span
-                        className="text-sm"
-                        style={{
-                          color: filterTypes.has(type)
-                            ? "var(--text-primary)"
-                            : "var(--text-tertiary)",
-                        }}
-                      >
-                        {label}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Color Legend */}
-              <div>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  Impact Levels
-                </h3>
-                <div className="space-y-1.5">
-                  {Object.entries(IMPACT_COLORS).map(([level, color]) => (
-                    <div key={level} className="flex items-center gap-2.5 py-0.5 px-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: color }}
-                      />
-                      <span
-                        className="text-xs capitalize"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        {level}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Create Freeze Period */}
-              <button
-                onClick={() => setShowFreezeModal(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: "rgba(239, 68, 68, 0.1)",
-                  color: "#EF4444",
-                }}
-              >
-                <Snowflake className="w-4 h-4" />
-                New Freeze Period
-              </button>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      {/* Main Calendar Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Toolbar */}
+    <div className="flex h-full min-h-0 flex-col gap-5 pb-2">
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-[2.2rem] border px-6 py-7 text-white"
+        style={HERO_STYLE}
+      >
+        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
         <div
-          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="p-1.5 rounded-md transition-colors hover:bg-[var(--surface-1)]"
-              title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="w-4 h-4" style={{ color: "var(--text-secondary)" }} />
-              ) : (
-                <PanelLeftOpen className="w-4 h-4" style={{ color: "var(--text-secondary)" }} />
-              )}
-            </button>
+          className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full blur-3xl"
+          style={{ backgroundColor: "rgba(139,111,46,0.16)" }}
+        />
 
-            <button
-              onClick={goToday}
-              className="px-3 py-1.5 text-sm font-medium rounded-md border transition-colors hover:bg-[var(--surface-1)]"
-              style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
-            >
-              Today
-            </button>
-
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goPrev}
-                className="p-1.5 rounded-md transition-colors hover:bg-[var(--surface-1)]"
-              >
-                <ChevronLeft className="w-4 h-4" style={{ color: "var(--text-secondary)" }} />
-              </button>
-              <button
-                onClick={goNext}
-                className="p-1.5 rounded-md transition-colors hover:bg-[var(--surface-1)]"
-              >
-                <ChevronRight className="w-4 h-4" style={{ color: "var(--text-secondary)" }} />
-              </button>
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/82 backdrop-blur-xl">
+              <Sparkles size={14} />
+              Planning Calendar Studio
             </div>
 
-            <h2
-              className="text-lg font-semibold"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {dateLabel}
-            </h2>
+            <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-start">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[1.35rem] border border-white/16 bg-white/14 shadow-[0_16px_40px_rgba(15,23,42,0.15)] backdrop-blur-xl">
+                <CalendarIcon size={28} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight sm:text-[2.2rem]">
+                  Planning Calendar
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/84 sm:text-[15px]">
+                  Coordinate maintenance, releases, freezes, and delivery
+                  milestones through one operational calendar with faster
+                  visibility into schedule pressure.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/10 px-3.5 py-2 text-sm text-white/90 backdrop-blur-xl">
+                    <Layers3 size={14} />
+                    {filteredEvents.length} visible events
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/10 px-3.5 py-2 text-sm text-white/90 backdrop-blur-xl">
+                    <Radar size={14} />
+                    {filterSummary}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/10 px-3.5 py-2 text-sm text-white/90 backdrop-blur-xl">
+                    <Clock size={14} />
+                    {selectedRangeLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* View Toggle */}
-            <div
-              className="flex rounded-lg border overflow-hidden"
-              style={{ borderColor: "var(--border)" }}
-            >
-              {(["month", "week", "day"] as CalendarView[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className="px-3 py-1.5 text-sm font-medium capitalize transition-colors"
-                  style={{
-                    backgroundColor: view === v ? "var(--primary)" : "transparent",
-                    color: view === v ? "white" : "var(--text-secondary)",
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            {/* New Window Button */}
-            <button
-              onClick={() => {
-                setEditingEvent(null);
-                setShowCreateModal(true);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "var(--primary)" }}
-            >
-              <Plus className="w-4 h-4" />
-              New Window
-            </button>
+          <div className="grid gap-3 sm:grid-cols-2 xl:w-[500px]">
+            <CalendarSignalCard
+              icon={Activity}
+              label="Today Load"
+              value={String(todayLoad)}
+              helper="Events intersecting today across the active lens."
+              inverted
+            />
+            <CalendarSignalCard
+              icon={Snowflake}
+              label="Freeze Pressure"
+              value={String(freezeCount)}
+              helper="Freeze periods visible in the current range."
+              inverted
+            />
+            <CalendarSignalCard
+              icon={AlertTriangle}
+              label="High Impact"
+              value={String(highImpactCount)}
+              helper="High and critical events needing tighter coordination."
+              inverted
+            />
+            <CalendarSignalCard
+              icon={ShieldCheck}
+              label="All-Day Blocks"
+              value={String(allDayCount)}
+              helper="Extended windows and milestones spanning full days."
+              inverted
+            />
           </div>
         </div>
+      </motion.section>
 
-        {/* Calendar Body */}
-        <div className="flex-1 overflow-auto relative">
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center z-10 bg-[var(--surface-0)]/50">
-              <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm">Loading events...</span>
+      <div className={`${PANEL_CLASS} flex min-h-0 flex-1 overflow-hidden`}>
+        <AnimatePresence mode="wait">
+          {sidebarOpen && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex-shrink-0 overflow-y-auto border-r bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.84))]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <div className="space-y-5 p-4">
+                <div className={`${SOFT_PANEL_CLASS} p-4`}>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                        Date Navigator
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        Jump straight into a specific day or week focus.
+                      </p>
+                    </div>
+                    <CalendarIcon size={18} className="text-[var(--primary)]" />
+                  </div>
+                  <MiniMonthNavigator
+                    selectedDate={selectedDate}
+                    onDateSelect={(d) => {
+                      setSelectedDate(d);
+                      if (view !== "day") setView("day");
+                    }}
+                  />
+                </div>
+
+                <div className={`${SOFT_PANEL_CLASS} p-4`}>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                        Event Streams
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        Toggle the schedule layers you want to see.
+                      </p>
+                    </div>
+                    <Layers3 size={18} className="text-[var(--gold)]" />
+                  </div>
+
+                  <div className="space-y-2">
+                    {Object.entries(EVENT_TYPE_LABELS).map(([type, label]) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => toggleFilterType(type)}
+                        className="flex w-full items-center justify-between gap-3 rounded-[1rem] border px-3 py-2.5 text-left transition-all hover:-translate-y-0.5"
+                        style={{
+                          borderColor: filterTypes.has(type)
+                            ? `${EVENT_TYPE_COLORS[type]}33`
+                            : "rgba(226,232,240,0.88)",
+                          background: filterTypes.has(type)
+                            ? `linear-gradient(180deg, rgba(255,255,255,0.98), ${EVENT_TYPE_COLORS[type]}14)`
+                            : "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,252,0.86))",
+                        }}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className="h-3 w-3 rounded-sm"
+                            style={{
+                              backgroundColor: EVENT_TYPE_COLORS[type],
+                              opacity: filterTypes.has(type) ? 1 : 0.35,
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <p
+                              className="truncate text-sm font-medium"
+                              style={{
+                                color: filterTypes.has(type)
+                                  ? "var(--text-primary)"
+                                  : "var(--text-secondary)",
+                              }}
+                            >
+                              {label}
+                            </p>
+                            <p className="text-[11px] text-[var(--text-tertiary)]">
+                              {eventTypeCounts[type] ?? 0} in range
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className="rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                          style={{
+                            backgroundColor: filterTypes.has(type)
+                              ? `${EVENT_TYPE_COLORS[type]}18`
+                              : "rgba(148,163,184,0.12)",
+                            color: filterTypes.has(type)
+                              ? EVENT_TYPE_COLORS[type]
+                              : "var(--text-muted)",
+                          }}
+                        >
+                          {filterTypes.has(type) ? "On" : "Off"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`${SOFT_PANEL_CLASS} p-4`}>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                        Impact Radar
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        Severity weighting across the active timeline.
+                      </p>
+                    </div>
+                    <AlertTriangle
+                      size={18}
+                      className="text-[var(--warning-dark)]"
+                    />
+                  </div>
+                  <div className="space-y-2.5">
+                    {Object.entries(IMPACT_COLORS).map(([level, color]) => (
+                      <div
+                        key={level}
+                        className="flex items-center justify-between gap-3 rounded-[1rem] border border-slate-200/70 bg-white/82 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="text-sm capitalize text-[var(--text-secondary)]">
+                            {level}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+                          {
+                            filteredEvents.filter(
+                              (event) => event.impactLevel === level,
+                            ).length
+                          }
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowFreezeModal(true)}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5"
+                  style={{
+                    backgroundColor: "var(--error-light)",
+                    color: "var(--error-dark)",
+                    borderColor: "rgba(239,68,68,0.22)",
+                  }}
+                >
+                  <Snowflake className="h-4 w-4" />
+                  New Freeze Period
+                </button>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div
+            className="flex flex-wrap items-center justify-between gap-4 border-b px-4 py-4"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen((v) => !v)}
+                className="rounded-xl border border-slate-200/80 bg-white/86 p-2.5 transition-all hover:-translate-y-0.5 hover:bg-white"
+                title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+              >
+                {sidebarOpen ? (
+                  <PanelLeftClose
+                    className="h-4 w-4"
+                    style={{ color: "var(--text-secondary)" }}
+                  />
+                ) : (
+                  <PanelLeftOpen
+                    className="h-4 w-4"
+                    style={{ color: "var(--text-secondary)" }}
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={goToday}
+                className="rounded-xl border border-slate-200/80 bg-white/86 px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-all hover:-translate-y-0.5 hover:bg-white"
+              >
+                Today
+              </button>
+
+              <div className="flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/86 p-1">
+                <button
+                  onClick={goPrev}
+                  className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <ChevronLeft
+                    className="h-4 w-4"
+                    style={{ color: "var(--text-secondary)" }}
+                  />
+                </button>
+                <button
+                  onClick={goNext}
+                  className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <ChevronRight
+                    className="h-4 w-4"
+                    style={{ color: "var(--text-secondary)" }}
+                  />
+                </button>
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                  {dateLabel}
+                </h2>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  {selectedRangeLabel} · {selectedDayLoad} event
+                  {selectedDayLoad === 1 ? "" : "s"} touching the selected day
+                </p>
               </div>
             </div>
-          )}
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${view}-${selectedDate.toISOString()}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.15 }}
-              className="h-full"
-            >
-              {view === "month" && (
-                <MonthView
-                  date={selectedDate}
-                  events={filteredEvents}
-                  onDayClick={handleDayClick}
-                  onEventClick={handleEventClick}
-                />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex overflow-hidden rounded-xl border border-slate-200/80 bg-white/86 p-1">
+                {(["month", "week", "day"] as CalendarView[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className="rounded-lg px-4 py-2 text-sm font-semibold capitalize transition-all"
+                    style={{
+                      backgroundColor:
+                        view === v ? "var(--success-light)" : "transparent",
+                      color:
+                        view === v ? "var(--primary)" : "var(--text-secondary)",
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  setEditingEvent(null);
+                  setShowCreateModal(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5"
+                style={PRIMARY_BUTTON_STYLE}
+              >
+                <Plus className="h-4 w-4" />
+                New Window
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4">
+            <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+              <div className={`${SOFT_PANEL_CLASS} p-4`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                      Schedule Focus
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      Active view: {view}. The canvas below is constrained to
+                      the current date range and event stream filters.
+                    </p>
+                  </div>
+                  <CalendarIcon size={18} className="text-[var(--primary)]" />
+                </div>
+              </div>
+
+              <div className={`${SOFT_PANEL_CLASS} p-4`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                      Risk Snapshot
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      {highImpactCount > 0
+                        ? `${highImpactCount} high-pressure item${highImpactCount === 1 ? "" : "s"} need coordination in this lens.`
+                        : "No high-impact pressure in the active lens right now."}
+                    </p>
+                  </div>
+                  <AlertTriangle
+                    size={18}
+                    className="text-[var(--warning-dark)]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="relative min-h-[42rem] overflow-hidden rounded-[1.6rem] border border-slate-200/70 bg-white">
+              {isLoading && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/72 backdrop-blur-sm">
+                  <div
+                    className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 py-2 text-sm"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <span>Loading events...</span>
+                  </div>
+                </div>
               )}
-              {view === "week" && (
-                <WeekView
-                  date={selectedDate}
-                  events={filteredEvents}
-                  onEventClick={handleEventClick}
-                  onDayClick={handleDayClick}
-                />
-              )}
-              {view === "day" && (
-                <DayView
-                  date={selectedDate}
-                  events={filteredEvents}
-                  onEventClick={handleEventClick}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`${view}-${selectedDate.toISOString()}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.15 }}
+                  className="h-full"
+                >
+                  {view === "month" && (
+                    <MonthView
+                      date={selectedDate}
+                      events={filteredEvents}
+                      onDayClick={handleDayClick}
+                      onEventClick={handleEventClick}
+                    />
+                  )}
+                  {view === "week" && (
+                    <WeekView
+                      date={selectedDate}
+                      events={filteredEvents}
+                      onEventClick={handleEventClick}
+                      onDayClick={handleDayClick}
+                    />
+                  )}
+                  {view === "day" && (
+                    <DayView
+                      date={selectedDate}
+                      events={filteredEvents}
+                      onEventClick={handleEventClick}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -714,7 +1117,10 @@ function MiniMonthNavigator({
           }
           className="p-1 rounded hover:bg-[var(--surface-1)]"
         >
-          <ChevronLeft className="w-3.5 h-3.5" style={{ color: "var(--text-secondary)" }} />
+          <ChevronLeft
+            className="w-3.5 h-3.5"
+            style={{ color: "var(--text-secondary)" }}
+          />
         </button>
         <span
           className="text-sm font-medium"
@@ -728,7 +1134,10 @@ function MiniMonthNavigator({
           }
           className="p-1 rounded hover:bg-[var(--surface-1)]"
         >
-          <ChevronRight className="w-3.5 h-3.5" style={{ color: "var(--text-secondary)" }} />
+          <ChevronRight
+            className="w-3.5 h-3.5"
+            style={{ color: "var(--text-secondary)" }}
+          />
         </button>
       </div>
 
@@ -816,7 +1225,10 @@ function MonthView({
       </div>
 
       {/* Grid rows */}
-      <div className="flex-1 grid" style={{ gridTemplateRows: `repeat(${grid.length}, 1fr)` }}>
+      <div
+        className="flex-1 grid"
+        style={{ gridTemplateRows: `repeat(${grid.length}, 1fr)` }}
+      >
         {grid.map((row, ri) => (
           <div
             key={ri}
@@ -827,8 +1239,12 @@ function MonthView({
               const isCurrentMonth = cellDate.getMonth() === date.getMonth();
               const isTodayDate = isToday(cellDate);
               const dayEvents = getEventsForDay(events, cellDate);
-              const freezeEvents = dayEvents.filter((e) => e.eventType === "freeze");
-              const regularEvents = dayEvents.filter((e) => e.eventType !== "freeze");
+              const freezeEvents = dayEvents.filter(
+                (e) => e.eventType === "freeze",
+              );
+              const regularEvents = dayEvents.filter(
+                (e) => e.eventType !== "freeze",
+              );
               const hasOverflow = regularEvents.length > MAX_VISIBLE_EVENTS;
               const visibleEvents = regularEvents.slice(0, MAX_VISIBLE_EVENTS);
               const overflowCount = regularEvents.length - MAX_VISIBLE_EVENTS;
@@ -840,13 +1256,18 @@ function MonthView({
                   className="relative border-r px-1 py-1 cursor-pointer transition-colors hover:bg-[var(--surface-1)] min-h-0 overflow-hidden"
                   style={{
                     borderColor: "var(--border)",
-                    backgroundColor: freezeEvents.length > 0 ? "rgba(239, 68, 68, 0.05)" : undefined,
+                    backgroundColor:
+                      freezeEvents.length > 0
+                        ? "rgba(239, 68, 68, 0.05)"
+                        : undefined,
                   }}
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span
                       className={`text-xs font-medium leading-none ${
-                        isTodayDate ? "bg-[var(--primary)] text-white rounded-full w-6 h-6 flex items-center justify-center" : ""
+                        isTodayDate
+                          ? "bg-[var(--primary)] text-white rounded-full w-6 h-6 flex items-center justify-center"
+                          : ""
                       }`}
                       style={{
                         color: isTodayDate
@@ -992,7 +1413,10 @@ function WeekView({
         >
           <div
             className="text-[10px] font-medium px-2 py-1 border-r flex items-start"
-            style={{ color: "var(--text-tertiary)", borderColor: "var(--border)" }}
+            style={{
+              color: "var(--text-tertiary)",
+              borderColor: "var(--border)",
+            }}
           >
             All day
           </div>
@@ -1000,7 +1424,11 @@ function WeekView({
             const dayAllDayEvents = allDayEvents.filter((ev) => {
               const evStart = new Date(ev.startTime);
               const evEnd = new Date(ev.endTime);
-              const dayStart = new Date(wd.getFullYear(), wd.getMonth(), wd.getDate());
+              const dayStart = new Date(
+                wd.getFullYear(),
+                wd.getMonth(),
+                wd.getDate(),
+              );
               const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
               return evStart < dayEnd && evEnd > dayStart;
             });
@@ -1011,7 +1439,9 @@ function WeekView({
                 className="border-r p-0.5 space-y-0.5"
                 style={{
                   borderColor: "var(--border)",
-                  backgroundColor: dayAllDayEvents.some((e) => e.eventType === "freeze")
+                  backgroundColor: dayAllDayEvents.some(
+                    (e) => e.eventType === "freeze",
+                  )
                     ? "rgba(239, 68, 68, 0.05)"
                     : undefined,
                 }}
@@ -1095,8 +1525,14 @@ function WeekView({
                   if (ev.eventType !== "freeze") return false;
                   const evStart = new Date(ev.startTime);
                   const evEnd = new Date(ev.endTime);
-                  const dayStart = new Date(wd.getFullYear(), wd.getMonth(), wd.getDate());
-                  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                  const dayStart = new Date(
+                    wd.getFullYear(),
+                    wd.getMonth(),
+                    wd.getDate(),
+                  );
+                  const dayEnd = new Date(
+                    dayStart.getTime() + 24 * 60 * 60 * 1000,
+                  );
                   return evStart < dayEnd && evEnd > dayStart;
                 })
                 .map((ev) => (
@@ -1112,8 +1548,14 @@ function WeekView({
                 .filter((ev) => {
                   const evStart = new Date(ev.startTime);
                   const evEnd = new Date(ev.endTime);
-                  const dayStart = new Date(wd.getFullYear(), wd.getMonth(), wd.getDate());
-                  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                  const dayStart = new Date(
+                    wd.getFullYear(),
+                    wd.getMonth(),
+                    wd.getDate(),
+                  );
+                  const dayEnd = new Date(
+                    dayStart.getTime() + 24 * 60 * 60 * 1000,
+                  );
                   return evStart < dayEnd && evEnd > dayStart;
                 })
                 .map((ev) => {
@@ -1164,7 +1606,10 @@ function DayView({
   onEventClick: (ev: CalendarEvent, e: React.MouseEvent) => void;
 }) {
   const hourSlots = useMemo(() => getHourSlots(), []);
-  const dayEvents = useMemo(() => getEventsForDay(events, date), [events, date]);
+  const dayEvents = useMemo(
+    () => getEventsForDay(events, date),
+    [events, date],
+  );
 
   const allDayEvents = useMemo(
     () =>
@@ -1200,7 +1645,10 @@ function DayView({
         >
           <div
             className="w-16 flex-shrink-0 text-[10px] font-medium px-2 py-2 border-r"
-            style={{ color: "var(--text-tertiary)", borderColor: "var(--border)" }}
+            style={{
+              color: "var(--text-tertiary)",
+              borderColor: "var(--border)",
+            }}
           >
             All day
           </div>
@@ -1240,7 +1688,10 @@ function DayView({
 
       {/* Timed Slots */}
       <div className="flex-1 overflow-y-auto">
-        <div className="flex relative" style={{ minHeight: `${hourSlots.length * 80}px` }}>
+        <div
+          className="flex relative"
+          style={{ minHeight: `${hourSlots.length * 80}px` }}
+        >
           {/* Time column */}
           <div className="w-16 flex-shrink-0">
             {hourSlots.map((label, i) => (
@@ -1334,8 +1785,6 @@ function DayView({
 /*  Event Detail Popover                                               */
 /* ================================================================== */
 
-import { forwardRef } from "react";
-
 const EventDetailPopover = forwardRef<
   HTMLDivElement,
   {
@@ -1345,13 +1794,17 @@ const EventDetailPopover = forwardRef<
     onEdit: () => void;
     onDelete: () => void;
   }
->(function EventDetailPopover({ event, position, onClose, onEdit, onDelete }, ref) {
+>(function EventDetailPopover(
+  { event, position, onClose, onEdit, onDelete },
+  ref,
+) {
   const deleteMutation = useDeleteMaintenanceWindow();
 
   const canEdit = event.source === "calendar" && event.eventType !== "freeze";
 
   const handleDelete = () => {
-    if (!confirm("Are you sure you want to delete this maintenance window?")) return;
+    if (!confirm("Are you sure you want to delete this maintenance window?"))
+      return;
     deleteMutation.mutate(event.sourceId, {
       onSuccess: () => onDelete(),
     });
@@ -1494,7 +1947,9 @@ function MaintenanceWindowModal({
 
   const [title, setTitle] = useState(event?.title ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
-  const [windowType, setWindowType] = useState(event?.eventType ?? "maintenance");
+  const [windowType, setWindowType] = useState(
+    event?.eventType ?? "maintenance",
+  );
   const [impactLevel, setImpactLevel] = useState(event?.impactLevel ?? "none");
   const [isAllDay, setIsAllDay] = useState(event?.isAllDay ?? false);
   const [startTime, setStartTime] = useState(() => {
@@ -1513,13 +1968,16 @@ function MaintenanceWindowModal({
   });
   const [affectedServices, setAffectedServices] = useState("");
 
-  const conflictStart = startTime ? new Date(startTime).toISOString() : undefined;
+  const conflictStart = startTime
+    ? new Date(startTime).toISOString()
+    : undefined;
   const conflictEnd = endTime ? new Date(endTime).toISOString() : undefined;
   const { data: conflicts } = useConflictCheck(conflictStart, conflictEnd);
 
   const hasConflicts =
     conflicts &&
-    (conflicts.overlappingEvents.length > 0 || conflicts.freezePeriods.length > 0);
+    (conflicts.overlappingEvents.length > 0 ||
+      conflicts.freezePeriods.length > 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1560,10 +2018,7 @@ function MaintenanceWindowModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -1583,12 +2038,18 @@ function MaintenanceWindowModal({
           >
             {isEditing ? "Edit Maintenance Window" : "New Maintenance Window"}
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--surface-1)]">
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[var(--surface-1)]"
+          >
             <X className="w-4 h-4" style={{ color: "var(--text-tertiary)" }} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <form
+          onSubmit={handleSubmit}
+          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
+        >
           {/* Title */}
           <div>
             <label
@@ -1693,7 +2154,9 @@ function MaintenanceWindowModal({
               onClick={() => setIsAllDay(!isAllDay)}
               className="relative w-10 h-5 rounded-full transition-colors"
               style={{
-                backgroundColor: isAllDay ? "var(--primary)" : "var(--surface-2)",
+                backgroundColor: isAllDay
+                  ? "var(--primary)"
+                  : "var(--surface-2)",
               }}
             >
               <span
@@ -1723,7 +2186,11 @@ function MaintenanceWindowModal({
               <input
                 type={isAllDay ? "date" : "datetime-local"}
                 value={isAllDay ? startTime.slice(0, 10) : startTime}
-                onChange={(e) => setStartTime(isAllDay ? e.target.value + "T00:00" : e.target.value)}
+                onChange={(e) =>
+                  setStartTime(
+                    isAllDay ? e.target.value + "T00:00" : e.target.value,
+                  )
+                }
                 required
                 className="w-full px-3 py-2 rounded-lg border text-sm outline-none transition-colors focus:ring-2 focus:ring-[var(--primary)]/30"
                 style={{
@@ -1743,7 +2210,11 @@ function MaintenanceWindowModal({
               <input
                 type={isAllDay ? "date" : "datetime-local"}
                 value={isAllDay ? endTime.slice(0, 10) : endTime}
-                onChange={(e) => setEndTime(isAllDay ? e.target.value + "T23:59" : e.target.value)}
+                onChange={(e) =>
+                  setEndTime(
+                    isAllDay ? e.target.value + "T23:59" : e.target.value,
+                  )
+                }
                 required
                 className="w-full px-3 py-2 rounded-lg border text-sm outline-none transition-colors focus:ring-2 focus:ring-[var(--primary)]/30"
                 style={{
@@ -1793,7 +2264,10 @@ function MaintenanceWindowModal({
               }}
             >
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4" style={{ color: "#F59E0B" }} />
+                <AlertTriangle
+                  className="w-4 h-4"
+                  style={{ color: "#F59E0B" }}
+                />
                 <span
                   className="text-sm font-medium"
                   style={{ color: "#F59E0B" }}
@@ -1866,7 +2340,11 @@ function MaintenanceWindowModal({
               className="px-4 py-2 text-sm font-medium rounded-lg text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: "var(--primary)" }}
             >
-              {isPending ? "Saving..." : isEditing ? "Update Window" : "Create Window"}
+              {isPending
+                ? "Saving..."
+                : isEditing
+                  ? "Update Window"
+                  : "Create Window"}
             </button>
           </div>
         </form>
@@ -1930,7 +2408,10 @@ function FreezePeriodModal({ onClose }: { onClose: () => void }) {
               New Change Freeze Period
             </h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--surface-1)]">
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[var(--surface-1)]"
+          >
             <X className="w-4 h-4" style={{ color: "var(--text-tertiary)" }} />
           </button>
         </div>
@@ -2029,7 +2510,9 @@ function FreezePeriodModal({ onClose }: { onClose: () => void }) {
               color: "#EF4444",
             }}
           >
-            During a freeze period, all maintenance windows and deployments will show a conflict warning. No automated changes will be blocked, but schedulers will see prominent warnings.
+            During a freeze period, all maintenance windows and deployments will
+            show a conflict warning. No automated changes will be blocked, but
+            schedulers will see prominent warnings.
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
@@ -2050,7 +2533,9 @@ function FreezePeriodModal({ onClose }: { onClose: () => void }) {
               className="px-4 py-2 text-sm font-medium rounded-lg text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: "#EF4444" }}
             >
-              {createMutation.isPending ? "Creating..." : "Create Freeze Period"}
+              {createMutation.isPending
+                ? "Creating..."
+                : "Create Freeze Period"}
             </button>
           </div>
         </form>
