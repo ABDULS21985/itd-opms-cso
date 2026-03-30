@@ -23,6 +23,8 @@ import type {
   EmailTemplate,
   LicenseUtilization,
   SIEMStatus,
+  WebhookEndpoint,
+  WebhookLog,
   PaginatedResponse,
 } from "@/types";
 
@@ -1204,5 +1206,169 @@ export function useSIEMStatus() {
     queryKey: ["system-siem-status"],
     queryFn: () => apiClient.get<SIEMStatus>("/system/siem-status"),
     refetchInterval: 60_000,
+  });
+}
+
+/* ================================================================== */
+/*  Webhooks — Queries                                                  */
+/* ================================================================== */
+
+/**
+ * GET /system/webhooks - paginated list of webhook endpoints.
+ */
+export function useWebhookEndpoints(page = 1, pageSize = 20) {
+  return useQuery({
+    queryKey: ["system-webhooks", page, pageSize],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<WebhookEndpoint>>("/system/webhooks", {
+        page,
+        limit: pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /system/webhooks/{id} - single webhook endpoint with secret.
+ */
+export function useWebhookEndpoint(id: string | undefined) {
+  return useQuery({
+    queryKey: ["system-webhook", id],
+    queryFn: () =>
+      apiClient.get<WebhookEndpoint>(`/system/webhooks/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /system/webhooks/{id}/logs - paginated webhook invocation logs.
+ */
+export function useWebhookLogs(
+  id: string | undefined,
+  page = 1,
+  pageSize = 20,
+) {
+  return useQuery({
+    queryKey: ["system-webhook-logs", id, page, pageSize],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<WebhookLog>>(
+        `/system/webhooks/${id}/logs`,
+        { page, limit: pageSize },
+      ),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  Webhooks — Mutations                                                */
+/* ================================================================== */
+
+/**
+ * POST /system/webhooks - create a new webhook endpoint.
+ */
+export function useCreateWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      slug: string;
+      description?: string;
+      targetAction: string;
+      payloadTransform?: Record<string, unknown>;
+    }) => apiClient.post<WebhookEndpoint>("/system/webhooks", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      toast.success("Webhook endpoint created");
+    },
+    onError: () => {
+      toast.error("Failed to create webhook endpoint");
+    },
+  });
+}
+
+/**
+ * PUT /system/webhooks/{id} - update a webhook endpoint.
+ */
+export function useUpdateWebhookEndpoint(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name?: string;
+      description?: string;
+      isActive?: boolean;
+      targetAction?: string;
+      payloadTransform?: Record<string, unknown>;
+    }) => apiClient.put<WebhookEndpoint>(`/system/webhooks/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      queryClient.invalidateQueries({ queryKey: ["system-webhook", id] });
+      toast.success("Webhook endpoint updated");
+    },
+    onError: () => {
+      toast.error("Failed to update webhook endpoint");
+    },
+  });
+}
+
+/**
+ * DELETE /system/webhooks/{id} - delete a webhook endpoint.
+ */
+export function useDeleteWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/system/webhooks/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      toast.success("Webhook endpoint deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete webhook endpoint");
+    },
+  });
+}
+
+/**
+ * POST /system/webhooks/{id}/regenerate-secret - regenerate HMAC secret.
+ */
+export function useRegenerateWebhookSecret(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<{ secret: string }>(
+        `/system/webhooks/${id}/regenerate-secret`,
+        {},
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhook", id] });
+      toast.success("Webhook secret regenerated");
+    },
+    onError: () => {
+      toast.error("Failed to regenerate secret");
+    },
+  });
+}
+
+/**
+ * POST /system/webhooks/{id}/test - send a test payload.
+ */
+export function useTestWebhook(id: string | undefined) {
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiClient.post<{
+        status: string;
+        action: string;
+        result: Record<string, unknown>;
+        error?: string;
+      }>(`/system/webhooks/${id}/test`, { payload }),
+    onSuccess: (data) => {
+      if (data.status === "error") {
+        toast.error(`Test failed: ${data.error}`);
+      } else {
+        toast.success("Test webhook executed successfully");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to execute test webhook");
+    },
   });
 }

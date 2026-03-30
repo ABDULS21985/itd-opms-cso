@@ -61,7 +61,7 @@ func scanUserDetail(row pgx.Row) (UserDetail, error) {
 		&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 		&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
-		&u.OrgUnitID, &u.OrgUnitName,
+		&u.OrgUnitID, &u.OrgUnitName, &u.MFAEnabled,
 	)
 	return u, err
 }
@@ -75,7 +75,7 @@ func scanUserDetails(rows pgx.Rows) ([]UserDetail, error) {
 			&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 			&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 			&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
-			&u.OrgUnitID, &u.OrgUnitName,
+			&u.OrgUnitID, &u.OrgUnitName, &u.MFAEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -192,7 +192,8 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
 		       u.metadata, u.created_at, u.updated_at,
-		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
+		       COALESCE(u.mfa_enabled, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
 		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
@@ -302,7 +303,8 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
 		       u.metadata, u.created_at, u.updated_at,
-		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
+		       COALESCE(u.mfa_enabled, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
 		LEFT JOIN org_units ou ON ou.id = u.org_unit_id

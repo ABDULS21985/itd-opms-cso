@@ -44,6 +44,7 @@ type UserDetail struct {
 	UpdatedAt   time.Time       `json:"updatedAt"`
 	OrgUnitID   *uuid.UUID      `json:"orgUnitId"`
 	OrgUnitName string          `json:"orgUnitName,omitempty"`
+	MFAEnabled  bool            `json:"mfaEnabled"`
 	Roles       []RoleBinding   `json:"roles"`
 	Delegations []Delegation    `json:"delegations"`
 }

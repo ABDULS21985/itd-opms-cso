@@ -140,7 +140,7 @@ export default function LoginPage() {
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithEntraID, isEntraIDEnabled, isLoading: authLoading } = useAuth();
+  const { login, verifyMFA, loginWithEntraID, isEntraIDEnabled, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -148,6 +148,13 @@ function LoginPageContent() {
   const [isSSOLoading, setIsSSOLoading] = useState(false);
   const [error, setError] = useState("");
   const [infoBanner, setInfoBanner] = useState<{ message: string; icon: typeof Clock } | null>(null);
+
+  // MFA state
+  const [loginStep, setLoginStep] = useState<"credentials" | "mfa">("credentials");
+  const [mfaChallenge, setMfaChallenge] = useState<{ challengeId: string; methods: string[] } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "backup_codes">("totp");
+  const [isMfaLoading, setIsMfaLoading] = useState(false);
 
   // Detect redirect reasons (e.g., session timeout, password reset success)
   useEffect(() => {
@@ -177,6 +184,16 @@ function LoginPageContent() {
 
     try {
       const result = await login(email, password);
+
+      // MFA required — show MFA form
+      if (result?.mfaRequired && result.challengeId) {
+        setMfaChallenge({ challengeId: result.challengeId, methods: result.methods ?? [] });
+        setMfaMethod(result.methods?.includes("totp") ? "totp" : "backup_codes");
+        setLoginStep("mfa");
+        setIsLoading(false);
+        return;
+      }
+
       if (result?.passwordChangeRequired) {
         toast.warning("Password change required", {
           description: "You must change your default password before continuing.",
@@ -198,6 +215,45 @@ function LoginPageContent() {
       toast.error(friendly.title, { description: friendly.description, duration: 5000 });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMFASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallenge || !mfaCode.trim()) return;
+    setError("");
+    setIsMfaLoading(true);
+
+    try {
+      await verifyMFA(mfaChallenge.challengeId, mfaMethod, mfaCode.trim());
+      toast.success("Welcome back!", {
+        description: "You have been signed in successfully.",
+      });
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid verification code";
+      setError(message);
+      setMfaCode("");
+      if (message.toLowerCase().includes("locked") || message.toLowerCase().includes("too many")) {
+        toast.error("Account Locked", {
+          description: "Too many failed attempts. Please try again in 15 minutes.",
+          duration: 6000,
+        });
+      } else if (message.toLowerCase().includes("expired")) {
+        toast.error("Challenge Expired", {
+          description: "Please sign in again.",
+          duration: 5000,
+        });
+        setLoginStep("credentials");
+        setMfaChallenge(null);
+      } else {
+        toast.error("Invalid Code", {
+          description: "Please check your code and try again.",
+          duration: 4000,
+        });
+      }
+    } finally {
+      setIsMfaLoading(false);
     }
   };
 
@@ -566,6 +622,7 @@ function LoginPageContent() {
                     </motion.div>
                   )}
 
+                  {loginStep === "credentials" ? (
                   <form onSubmit={handleSubmit} className="space-y-5">
                     <motion.div
                       initial={{ opacity: 0, y: 15 }}
@@ -672,6 +729,124 @@ function LoginPageContent() {
                       </button>
                     </motion.div>
                   </form>
+                  ) : (
+                  <form onSubmit={handleMFASubmit} className="space-y-5">
+                    <motion.div
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35 }}
+                    >
+                      <div className="mb-4 flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
+                        <Shield size={20} className="text-[var(--primary)] shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--foreground)]">
+                            Two-Factor Authentication
+                          </p>
+                          <p className="text-xs text-[var(--neutral-gray)]">
+                            Enter the code from your authenticator app to continue
+                          </p>
+                        </div>
+                      </div>
+
+                      {mfaChallenge?.methods.includes("backup_codes") && (
+                        <div className="mb-4 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setMfaMethod("totp"); setMfaCode(""); setError(""); }}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                              mfaMethod === "totp"
+                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                                : "border-[var(--border)] text-[var(--neutral-gray)] hover:border-[var(--primary)]/40"
+                            }`}
+                          >
+                            Authenticator Code
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setMfaMethod("backup_codes"); setMfaCode(""); setError(""); }}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                              mfaMethod === "backup_codes"
+                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                                : "border-[var(--border)] text-[var(--neutral-gray)] hover:border-[var(--primary)]/40"
+                            }`}
+                          >
+                            Backup Code
+                          </button>
+                        </div>
+                      )}
+
+                      <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+                        {mfaMethod === "totp" ? "6-Digit Code" : "Backup Code"}
+                      </label>
+                      <div className="login-input-glow login-input-shell">
+                        <Shield
+                          size={18}
+                          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
+                        />
+                        <input
+                          type="text"
+                          required
+                          autoComplete="one-time-code"
+                          inputMode={mfaMethod === "totp" ? "numeric" : "text"}
+                          maxLength={mfaMethod === "totp" ? 6 : 8}
+                          value={mfaCode}
+                          onChange={(e) => {
+                            const val = mfaMethod === "totp"
+                              ? e.target.value.replace(/\D/g, "").slice(0, 6)
+                              : e.target.value.toUpperCase().slice(0, 8);
+                            setMfaCode(val);
+                            if (error) setError("");
+                          }}
+                          placeholder={mfaMethod === "totp" ? "000000" : "ABCD1234"}
+                          className="login-input-field w-full pl-11 pr-4 tracking-[0.3em] text-center text-lg font-mono"
+                          autoFocus
+                        />
+                      </div>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35, delay: 0.1 }}
+                      className="pt-1"
+                    >
+                      <button
+                        type="submit"
+                        disabled={isMfaLoading || (mfaMethod === "totp" ? mfaCode.length < 6 : mfaCode.length < 4)}
+                        className="login-btn-shine login-submit-button"
+                      >
+                        {isMfaLoading ? (
+                          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                        ) : (
+                          <>
+                            <Shield size={16} />
+                            Verify &amp; Sign In
+                          </>
+                        )}
+                      </button>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.35, delay: 0.2 }}
+                      className="text-center"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginStep("credentials");
+                          setMfaChallenge(null);
+                          setMfaCode("");
+                          setError("");
+                        }}
+                        className="text-xs font-medium text-[var(--neutral-gray)] transition-colors hover:text-[var(--foreground)]"
+                      >
+                        Back to sign in
+                      </button>
+                    </motion.div>
+                  </form>
+                  )}
 
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}

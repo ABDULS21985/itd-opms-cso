@@ -594,3 +594,38 @@ export interface SIEMStatus {
   lastExportAt: string;
   errorCount: number;
 }
+
+/* =============================================================================
+   Webhook Endpoint Types
+   ============================================================================= */
+
+export interface WebhookEndpoint {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  secret?: string;
+  isActive: boolean;
+  payloadTransform: Record<string, unknown>;
+  targetAction: string;
+  lastReceivedAt?: string;
+  totalReceived: number;
+  totalErrors: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookLog {
+  id: string;
+  endpointId: string;
+  receivedAt: string;
+  sourceIp?: string;
+  headers?: Record<string, string>;
+  payload?: Record<string, unknown>;
+  signatureValid?: boolean;
+  actionTaken?: string;
+  actionResult?: Record<string, unknown>;
+  error?: string;
+}

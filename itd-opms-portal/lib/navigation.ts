@@ -57,6 +57,7 @@ import {
   Package,
   Server,
   Radar,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -591,6 +592,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/system/email-templates",
         label: "Email Templates",
         icon: Mail,
+        permission: "system.manage",
+      },
+      {
+        href: "/dashboard/system/webhooks",
+        label: "Webhooks",
+        icon: Webhook,
         permission: "system.manage",
       },
       {
