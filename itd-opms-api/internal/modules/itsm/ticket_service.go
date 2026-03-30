@@ -50,7 +50,7 @@ const ticketColumns = `
 	sla_response_met, sla_resolution_met,
 	sla_paused_at, sla_paused_duration_minutes,
 	is_major_incident, related_ticket_ids, linked_problem_id,
-	linked_asset_ids, org_unit_id, resolution_notes, resolved_at,
+	linked_asset_ids, org_unit_id, parent_ticket_id, resolution_notes, resolved_at,
 	closed_at, first_response_at, satisfaction_score,
 	tags, custom_fields, created_at, updated_at,
 	change_classification, change_type, risk_level, risk_assessment,
@@ -71,7 +71,7 @@ const ticketSelectColumns = `
 	t.sla_response_met, t.sla_resolution_met,
 	t.sla_paused_at, t.sla_paused_duration_minutes,
 	t.is_major_incident, t.related_ticket_ids, t.linked_problem_id,
-	t.linked_asset_ids, t.org_unit_id, t.resolution_notes, t.resolved_at,
+	t.linked_asset_ids, t.org_unit_id, t.parent_ticket_id, t.resolution_notes, t.resolved_at,
 	t.closed_at, t.first_response_at, t.satisfaction_score,
 	t.tags, t.custom_fields, t.created_at, t.updated_at,
 	t.change_classification, t.change_type, t.risk_level, t.risk_assessment,
@@ -84,14 +84,21 @@ const ticketSelectColumns = `
 	reporter.department AS reporter_department,
 	assignee.display_name AS assignee_name,
 	assignee.department AS assignee_department,
-	sq.name AS team_queue_name`
+	sq.name AS team_queue_name,
+	mir.id AS major_incident_record_id,
+	mir.status AS major_incident_status,
+	mir.severity AS major_incident_severity,
+	(SELECT COUNT(*) FROM tickets sub WHERE sub.parent_ticket_id = t.id) AS subtask_count,
+	ptkt.ticket_number AS parent_ticket_number`
 
 // ticketFromJoins is the FROM clause with LEFT JOINs for user enrichment.
 const ticketFromJoins = `
 	FROM tickets t
 	LEFT JOIN users reporter ON reporter.id = t.reporter_id
 	LEFT JOIN users assignee ON assignee.id = t.assignee_id
-	LEFT JOIN support_queues sq ON sq.id = t.team_queue_id`
+	LEFT JOIN support_queues sq ON sq.id = t.team_queue_id
+	LEFT JOIN major_incident_records mir ON mir.ticket_id = t.id
+	LEFT JOIN tickets ptkt ON ptkt.id = t.parent_ticket_id`
 
 // scanTicketChangeFields is the common change-field scan targets appended to every scan call.
 func scanTicketChangeFields(t *Ticket) []any {
@@ -118,7 +125,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 	}
@@ -140,7 +147,7 @@ func scanTicketEnriched(row pgx.Row) (Ticket, error) {
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 	}
@@ -149,6 +156,8 @@ func scanTicketEnriched(row pgx.Row) (Ticket, error) {
 		&t.ReporterName, &t.ReporterDepartment,
 		&t.AssigneeName, &t.AssigneeDepartment,
 		&t.TeamQueueName,
+		&t.MajorIncidentRecordID, &t.MajorIncidentStatus, &t.MajorIncidentSeverity,
+		&t.SubtaskCount, &t.ParentTicketNumber,
 	)
 	err := row.Scan(dest...)
 	return t, err
@@ -164,12 +173,12 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 			&t.Category, &t.Subcategory, &t.Title, &t.Description,
 			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
 			&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
-		&t.AssigneeID, &t.TeamQueueID,
+			&t.AssigneeID, &t.TeamQueueID,
 			&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 		}
@@ -198,12 +207,12 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 			&t.Category, &t.Subcategory, &t.Title, &t.Description,
 			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
 			&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
-		&t.AssigneeID, &t.TeamQueueID,
+			&t.AssigneeID, &t.TeamQueueID,
 			&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 		}
@@ -212,6 +221,8 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 			&t.ReporterName, &t.ReporterDepartment,
 			&t.AssigneeName, &t.AssigneeDepartment,
 			&t.TeamQueueName,
+			&t.MajorIncidentRecordID, &t.MajorIncidentStatus, &t.MajorIncidentSeverity,
+			&t.SubtaskCount, &t.ParentTicketNumber,
 		)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
@@ -278,7 +289,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			reporter_id, assignee_id, team_queue_id,
 			sla_policy_id,
 			is_major_incident, related_ticket_ids,
-			linked_asset_ids, org_unit_id, tags, custom_fields,
+			linked_asset_ids, org_unit_id, parent_ticket_id, tags, custom_fields,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3,
@@ -287,8 +298,8 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			$12, $13, $14,
 			$15,
 			false, '{}',
-			'{}', $16, $17, $18,
-			$19, $20
+			'{}', $16, $17, $18, $19,
+			$20, $21
 		)
 		RETURNING ` + ticketColumns
 
@@ -298,7 +309,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		priority, req.Urgency, req.Impact, channel,
 		auth.UserID, req.AssigneeID, req.TeamQueueID,
 		req.SLAPolicyID,
-		orgUnitID, tags, customFields,
+		orgUnitID, req.ParentTicketID, tags, customFields,
 		now, now,
 	))
 	if err != nil {
@@ -1104,7 +1115,12 @@ func (s *TicketService) GetTicketStats(ctx context.Context) (TicketStats, error)
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE status NOT IN ('closed', 'cancelled', 'resolved')) AS open_count,
 			COUNT(*) FILTER (WHERE (sla_response_met = false OR sla_resolution_met = false)) AS sla_breached_count,
-			COUNT(*) FILTER (WHERE is_major_incident = true AND status NOT IN ('closed', 'cancelled')) AS major_incidents
+			COALESCE((
+				SELECT COUNT(*)
+				FROM major_incident_records mir
+				WHERE mir.tenant_id = $1
+				  AND mir.status <> 'closed'
+			), 0) AS major_incidents
 		FROM tickets
 		WHERE tenant_id = $1`
 

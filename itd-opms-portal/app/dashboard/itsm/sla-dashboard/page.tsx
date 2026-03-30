@@ -44,6 +44,7 @@ import {
   useSLADependencyChain,
   useCreateDependencyChainEntry,
   useDeleteDependencyChainEntry,
+  useServiceRequestSLACompliance,
 } from "@/hooks/use-itsm";
 import type {
   SLAPolicy,
@@ -144,6 +145,7 @@ export default function SLADashboardPage() {
   const { data: ticketStats, isLoading: ticketStatsLoading } =
     useTicketStats();
   const { data: csatStats } = useCSATStats();
+  const { data: srSLA } = useServiceRequestSLACompliance();
 
   const [activeTab, setActiveTab] = useState<TabKey>("sla");
   const [expandedPolicy, setExpandedPolicy] = useState<string | null>(null);
@@ -582,6 +584,56 @@ export default function SLADashboardPage() {
             showLegend
           />
         </ChartCard>
+      )}
+
+      {/* ── Service Request SLA ── */}
+      {srSLA && srSLA.withSla > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-6"
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Service Request SLA
+            </h2>
+            <Link
+              href="/dashboard/itsm/service-catalog/my-requests"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:underline"
+            >
+              View Requests <ArrowRight size={12} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-center">
+              <p className="text-2xl font-bold text-[var(--text-primary)]">{srSLA.withSla}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">With SLA Policy</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-center">
+              <p className="text-2xl font-bold" style={{ color: "#22C55E" }}>
+                {(() => {
+                  const met = srSLA.resolutionMet + srSLA.fulfillmentMet;
+                  const total = met + srSLA.resolutionBreached + srSLA.fulfillmentBreached;
+                  return total > 0 ? `${Math.round((met / total) * 100)}%` : "--";
+                })()}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Compliance Rate</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-center">
+              <p className="text-2xl font-bold" style={{ color: srSLA.resolutionBreached + srSLA.fulfillmentBreached > 0 ? "#EF4444" : "#22C55E" }}>
+                {srSLA.resolutionBreached + srSLA.fulfillmentBreached}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Breached</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-center">
+              <p className="text-2xl font-bold" style={{ color: srSLA.activeAtRisk > 0 ? "#F59E0B" : "var(--text-primary)" }}>
+                {srSLA.activeAtRisk}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">At Risk</p>
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* ── Tab Navigation ── */}

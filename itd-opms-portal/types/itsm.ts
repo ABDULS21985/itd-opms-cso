@@ -98,6 +98,9 @@ export interface Ticket {
   assigneeName?: string;
   assigneeDepartment?: string;
   teamQueueName?: string;
+  majorIncidentRecordId?: string;
+  majorIncidentStatus?: string;
+  majorIncidentSeverity?: string;
 }
 
 export interface TicketComment {
@@ -125,6 +128,107 @@ export interface TicketStats {
   openCount: number;
   slaBreachedCount: number;
   majorIncidents: number;
+}
+
+export interface MajorIncidentCommunicationPlan {
+  internalStakeholders: string[];
+  externalStakeholders: string[];
+  updateFrequencyMinutes: number;
+  channels: string[];
+}
+
+export interface MajorIncidentStakeholderUpdate {
+  timestamp: string;
+  authorId: string;
+  authorName?: string;
+  authorPhotoUrl?: string;
+  message: string;
+  type: "status_update" | "comms" | "technical";
+}
+
+export interface MajorIncidentPerson {
+  id: string;
+  displayName: string;
+  email?: string;
+  phone?: string;
+  photoUrl?: string;
+  department?: string;
+  jobTitle?: string;
+}
+
+export interface MajorIncidentTicketSummary {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  status: string;
+  priority: string;
+  reporterId: string;
+  reporterName?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  linkedProblemId?: string;
+}
+
+export interface MajorIncidentTimelineEntry {
+  id: string;
+  action: string;
+  label: string;
+  description?: string;
+  actorId?: string;
+  actorName?: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MajorIncidentRecord {
+  id: string;
+  tenantId: string;
+  ticketId: string;
+  severity: "sev1" | "sev2" | "sev3";
+  incidentCommanderId?: string;
+  communicationLeadId?: string;
+  bridgeUrl?: string;
+  bridgePhone?: string;
+  affectedServices: string[];
+  affectedCiIds: string[];
+  estimatedAffectedUsers: number;
+  businessImpact?: "critical" | "high" | "medium" | "low";
+  status:
+    | "declared"
+    | "investigating"
+    | "mitigating"
+    | "mitigated"
+    | "monitoring"
+    | "resolved"
+    | "pir_pending"
+    | "closed";
+  stakeholderUpdates: MajorIncidentStakeholderUpdate[];
+  resolutionSummary?: string;
+  rootCauseSummary?: string;
+  pirScheduledDate?: string;
+  pirCompletedDate?: string;
+  pirReport?: Record<string, unknown>;
+  communicationPlan: MajorIncidentCommunicationPlan;
+  declaredAt: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  totalDurationMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+  lastUpdateAt?: string;
+  lastUpdateMessage?: string;
+  ticket?: MajorIncidentTicketSummary;
+  incidentCommander?: MajorIncidentPerson;
+  communicationLead?: MajorIncidentPerson;
+  timeline?: MajorIncidentTimelineEntry[];
+}
+
+export interface MajorIncidentStats {
+  total: number;
+  active: number;
+  avgDurationMinutes: number;
+  byStatus: Record<string, number>;
+  bySeverity: Record<string, number>;
 }
 
 export interface SLAPolicy {

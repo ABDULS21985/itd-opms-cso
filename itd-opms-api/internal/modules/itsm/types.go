@@ -160,66 +160,67 @@ type CatalogCategory struct {
 
 // CatalogItem represents a requestable service in the catalog.
 type CatalogItem struct {
-	ID                     uuid.UUID       `json:"id"`
-	TenantID               uuid.UUID       `json:"tenantId"`
-	CategoryID             *uuid.UUID      `json:"categoryId"`
-	Name                   string          `json:"name"`
-	Description            *string         `json:"description"`
-	FulfillmentWorkflowID  *uuid.UUID      `json:"fulfillmentWorkflowId"`
-	ApprovalRequired       bool            `json:"approvalRequired"`
-	ApprovalChainConfig    json.RawMessage `json:"approvalChainConfig"`
-	SLAPolicyID            *uuid.UUID      `json:"slaPolicyId"`
-	FormSchema             json.RawMessage `json:"formSchema"`
-	EntitlementRoles       []string        `json:"entitlementRoles"`
-	EstimatedDelivery      *string         `json:"estimatedDelivery"`
-	Status                 string          `json:"status"`
-	Version                int             `json:"version"`
-	CreatedAt              time.Time       `json:"createdAt"`
-	UpdatedAt              time.Time       `json:"updatedAt"`
+	ID                    uuid.UUID       `json:"id"`
+	TenantID              uuid.UUID       `json:"tenantId"`
+	CategoryID            *uuid.UUID      `json:"categoryId"`
+	Name                  string          `json:"name"`
+	Description           *string         `json:"description"`
+	FulfillmentWorkflowID *uuid.UUID      `json:"fulfillmentWorkflowId"`
+	ApprovalRequired      bool            `json:"approvalRequired"`
+	ApprovalChainConfig   json.RawMessage `json:"approvalChainConfig"`
+	SLAPolicyID           *uuid.UUID      `json:"slaPolicyId"`
+	FormSchema            json.RawMessage `json:"formSchema"`
+	EntitlementRoles      []string        `json:"entitlementRoles"`
+	EstimatedDelivery     *string         `json:"estimatedDelivery"`
+	Status                string          `json:"status"`
+	Version               int             `json:"version"`
+	CreatedAt             time.Time       `json:"createdAt"`
+	UpdatedAt             time.Time       `json:"updatedAt"`
 }
 
 // Ticket represents an ITSM ticket (incident, service request, problem, or change).
 type Ticket struct {
-	ID                      uuid.UUID       `json:"id"`
-	TenantID                uuid.UUID       `json:"tenantId"`
-	TicketNumber            string          `json:"ticketNumber"`
-	Type                    string          `json:"type"`
-	Category                *string         `json:"category"`
-	Subcategory             *string         `json:"subcategory"`
-	Title                   string          `json:"title"`
-	Description             string          `json:"description"`
-	Priority                string          `json:"priority"`
-	Urgency                 string          `json:"urgency"`
-	Impact                  string          `json:"impact"`
-	Status                  string          `json:"status"`
-	Channel                 string          `json:"channel"`
-	ReporterID              uuid.UUID       `json:"reporterId"`
-	ReporterEmail           *string         `json:"reporterEmail,omitempty"`
-	EmailThreadID           *string         `json:"emailThreadId,omitempty"`
-	EmailMessageIDs         []string        `json:"emailMessageIds,omitempty"`
-	AssigneeID              *uuid.UUID      `json:"assigneeId"`
-	TeamQueueID             *uuid.UUID      `json:"teamQueueId"`
-	SLAPolicyID             *uuid.UUID      `json:"slaPolicyId"`
-	SLAResponseTarget       *time.Time      `json:"slaResponseTarget"`
-	SLAResolutionTarget     *time.Time      `json:"slaResolutionTarget"`
-	SLAResponseMet          *bool           `json:"slaResponseMet"`
-	SLAResolutionMet        *bool           `json:"slaResolutionMet"`
-	SLAPausedAt             *time.Time      `json:"slaPausedAt"`
-	SLAPausedDurationMinutes int            `json:"slaPausedDurationMinutes"`
-	IsMajorIncident         bool            `json:"isMajorIncident"`
-	RelatedTicketIDs        []uuid.UUID     `json:"relatedTicketIds"`
-	LinkedProblemID         *uuid.UUID      `json:"linkedProblemId"`
-	LinkedAssetIDs          []uuid.UUID     `json:"linkedAssetIds"`
-	OrgUnitID               *uuid.UUID      `json:"orgUnitId"`
-	ResolutionNotes         *string         `json:"resolutionNotes"`
-	ResolvedAt              *time.Time      `json:"resolvedAt"`
-	ClosedAt                *time.Time      `json:"closedAt"`
-	FirstResponseAt         *time.Time      `json:"firstResponseAt"`
-	SatisfactionScore       *int            `json:"satisfactionScore"`
-	Tags                    []string        `json:"tags"`
-	CustomFields            json.RawMessage `json:"customFields"`
-	CreatedAt               time.Time       `json:"createdAt"`
-	UpdatedAt               time.Time       `json:"updatedAt"`
+	ID                       uuid.UUID       `json:"id"`
+	TenantID                 uuid.UUID       `json:"tenantId"`
+	TicketNumber             string          `json:"ticketNumber"`
+	Type                     string          `json:"type"`
+	Category                 *string         `json:"category"`
+	Subcategory              *string         `json:"subcategory"`
+	Title                    string          `json:"title"`
+	Description              string          `json:"description"`
+	Priority                 string          `json:"priority"`
+	Urgency                  string          `json:"urgency"`
+	Impact                   string          `json:"impact"`
+	Status                   string          `json:"status"`
+	Channel                  string          `json:"channel"`
+	ReporterID               uuid.UUID       `json:"reporterId"`
+	ReporterEmail            *string         `json:"reporterEmail,omitempty"`
+	EmailThreadID            *string         `json:"emailThreadId,omitempty"`
+	EmailMessageIDs          []string        `json:"emailMessageIds,omitempty"`
+	AssigneeID               *uuid.UUID      `json:"assigneeId"`
+	TeamQueueID              *uuid.UUID      `json:"teamQueueId"`
+	SLAPolicyID              *uuid.UUID      `json:"slaPolicyId"`
+	SLAResponseTarget        *time.Time      `json:"slaResponseTarget"`
+	SLAResolutionTarget      *time.Time      `json:"slaResolutionTarget"`
+	SLAResponseMet           *bool           `json:"slaResponseMet"`
+	SLAResolutionMet         *bool           `json:"slaResolutionMet"`
+	SLAPausedAt              *time.Time      `json:"slaPausedAt"`
+	SLAPausedDurationMinutes int             `json:"slaPausedDurationMinutes"`
+	IsMajorIncident          bool            `json:"isMajorIncident"`
+	RelatedTicketIDs         []uuid.UUID     `json:"relatedTicketIds"`
+	LinkedProblemID          *uuid.UUID      `json:"linkedProblemId"`
+	LinkedAssetIDs           []uuid.UUID     `json:"linkedAssetIds"`
+	OrgUnitID                *uuid.UUID      `json:"orgUnitId"`
+	ParentTicketID           *uuid.UUID      `json:"parentTicketId"`
+	ResolutionNotes          *string         `json:"resolutionNotes"`
+	ResolvedAt               *time.Time      `json:"resolvedAt"`
+	ClosedAt                 *time.Time      `json:"closedAt"`
+	FirstResponseAt          *time.Time      `json:"firstResponseAt"`
+	SatisfactionScore        *int            `json:"satisfactionScore"`
+	Tags                     []string        `json:"tags"`
+	CustomFields             json.RawMessage `json:"customFields"`
+	CreatedAt                time.Time       `json:"createdAt"`
+	UpdatedAt                time.Time       `json:"updatedAt"`
 
 	// Change-specific fields (populated only when type = "change").
 	ChangeClassification *string         `json:"changeClassification,omitempty"`
@@ -244,11 +245,16 @@ type Ticket struct {
 	ChangeSuccess        *bool           `json:"changeSuccess,omitempty"`
 
 	// Enrichment fields (populated via JOINs on SELECT queries, not on INSERT/UPDATE RETURNING).
-	ReporterName       *string `json:"reporterName,omitempty"`
-	ReporterDepartment *string `json:"reporterDepartment,omitempty"`
-	AssigneeName       *string `json:"assigneeName,omitempty"`
-	AssigneeDepartment *string `json:"assigneeDepartment,omitempty"`
-	TeamQueueName      *string `json:"teamQueueName,omitempty"`
+	ReporterName          *string    `json:"reporterName,omitempty"`
+	ReporterDepartment    *string    `json:"reporterDepartment,omitempty"`
+	AssigneeName          *string    `json:"assigneeName,omitempty"`
+	AssigneeDepartment    *string    `json:"assigneeDepartment,omitempty"`
+	TeamQueueName         *string    `json:"teamQueueName,omitempty"`
+	MajorIncidentRecordID *uuid.UUID `json:"majorIncidentRecordId,omitempty"`
+	MajorIncidentStatus   *string    `json:"majorIncidentStatus,omitempty"`
+	MajorIncidentSeverity *string    `json:"majorIncidentSeverity,omitempty"`
+	SubtaskCount          *int       `json:"subtaskCount,omitempty"`
+	ParentTicketNumber    *string    `json:"parentTicketNumber,omitempty"`
 }
 
 // TicketComment represents a comment or note on a ticket.
@@ -348,28 +354,28 @@ type Problem struct {
 
 // KnownError represents a documented known error with a workaround.
 type KnownError struct {
-	ID            uuid.UUID  `json:"id"`
-	ProblemID     uuid.UUID  `json:"problemId"`
-	Title         string     `json:"title"`
-	Description   *string    `json:"description"`
-	Workaround    *string    `json:"workaround"`
-	KBArticleID   *uuid.UUID `json:"kbArticleId"`
-	Status        string     `json:"status"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	ID          uuid.UUID  `json:"id"`
+	ProblemID   uuid.UUID  `json:"problemId"`
+	Title       string     `json:"title"`
+	Description *string    `json:"description"`
+	Workaround  *string    `json:"workaround"`
+	KBArticleID *uuid.UUID `json:"kbArticleId"`
+	Status      string     `json:"status"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
 // SupportQueue represents a team-based queue for ticket routing.
 type SupportQueue struct {
-	ID             uuid.UUID `json:"id"`
-	TenantID       uuid.UUID `json:"tenantId"`
-	Name           string    `json:"name"`
+	ID             uuid.UUID  `json:"id"`
+	TenantID       uuid.UUID  `json:"tenantId"`
+	Name           string     `json:"name"`
 	TeamID         *uuid.UUID `json:"teamId"`
-	PriorityFilter []string  `json:"priorityFilter"`
-	AutoAssignRule string    `json:"autoAssignRule"`
-	IsActive       bool      `json:"isActive"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	PriorityFilter []string   `json:"priorityFilter"`
+	AutoAssignRule string     `json:"autoAssignRule"`
+	IsActive       bool       `json:"isActive"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // CSATSurvey represents a customer satisfaction survey response.
@@ -388,10 +394,10 @@ type CSATSurvey struct {
 
 // TicketStats provides aggregate ticket statistics for a tenant dashboard.
 type TicketStats struct {
-	Total           int `json:"total"`
-	OpenCount       int `json:"openCount"`
+	Total            int `json:"total"`
+	OpenCount        int `json:"openCount"`
 	SLABreachedCount int `json:"slaBreachedCount"`
-	MajorIncidents  int `json:"majorIncidents"`
+	MajorIncidents   int `json:"majorIncidents"`
 }
 
 // SLAComplianceStats provides SLA compliance metrics.
@@ -399,6 +405,17 @@ type SLAComplianceStats struct {
 	TotalTickets  int `json:"totalTickets"`
 	ResponseMet   int `json:"responseMet"`
 	ResolutionMet int `json:"resolutionMet"`
+}
+
+// ServiceRequestSLACompliance provides SLA compliance metrics for service requests.
+type ServiceRequestSLACompliance struct {
+	TotalRequests       int `json:"totalRequests"`
+	WithSLA             int `json:"withSla"`
+	ResolutionMet       int `json:"resolutionMet"`
+	ResolutionBreached  int `json:"resolutionBreached"`
+	FulfillmentMet      int `json:"fulfillmentMet"`
+	FulfillmentBreached int `json:"fulfillmentBreached"`
+	ActiveAtRisk        int `json:"activeAtRisk"`
 }
 
 // OperationalLevelAgreement (OLA) defines internal team agreements that support SLAs.
@@ -422,9 +439,9 @@ type OperationalLevelAgreement struct {
 	CreatedAt               time.Time  `json:"createdAt"`
 	UpdatedAt               time.Time  `json:"updatedAt"`
 	// Joined fields
-	SupportTeamName         *string `json:"supportTeamName,omitempty"`
-	ParentSLAName           *string `json:"parentSlaName,omitempty"`
-	EscalationContactName   *string `json:"escalationContactName,omitempty"`
+	SupportTeamName       *string `json:"supportTeamName,omitempty"`
+	ParentSLAName         *string `json:"parentSlaName,omitempty"`
+	EscalationContactName *string `json:"escalationContactName,omitempty"`
 }
 
 // UnderpinningContract (UC) defines vendor contract terms that underpin SLAs.
@@ -460,15 +477,15 @@ type SLADependencyChainEntry struct {
 	Notes       *string    `json:"notes"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	// Joined fields
-	SLAName                   *string `json:"slaName,omitempty"`
-	OLAName                   *string `json:"olaName,omitempty"`
-	UCName                    *string `json:"ucName,omitempty"`
-	SLAResponseMinutes        *int    `json:"slaResponseMinutes,omitempty"`
-	SLAResolutionMinutes      *int    `json:"slaResolutionMinutes,omitempty"`
-	OLAResponseMinutes        *int    `json:"olaResponseMinutes,omitempty"`
-	OLAResolutionMinutes      *int    `json:"olaResolutionMinutes,omitempty"`
-	UCResponseMinutes         *int    `json:"ucResponseMinutes,omitempty"`
-	UCResolutionMinutes       *int    `json:"ucResolutionMinutes,omitempty"`
+	SLAName              *string `json:"slaName,omitempty"`
+	OLAName              *string `json:"olaName,omitempty"`
+	UCName               *string `json:"ucName,omitempty"`
+	SLAResponseMinutes   *int    `json:"slaResponseMinutes,omitempty"`
+	SLAResolutionMinutes *int    `json:"slaResolutionMinutes,omitempty"`
+	OLAResponseMinutes   *int    `json:"olaResponseMinutes,omitempty"`
+	OLAResolutionMinutes *int    `json:"olaResolutionMinutes,omitempty"`
+	UCResponseMinutes    *int    `json:"ucResponseMinutes,omitempty"`
+	UCResolutionMinutes  *int    `json:"ucResolutionMinutes,omitempty"`
 }
 
 // ConsistencyViolation represents an OLA/UC that exceeds its parent SLA target.
@@ -550,30 +567,65 @@ type UpdateCatalogItemRequest struct {
 
 // CreateTicketRequest is the payload for creating a new ITSM ticket.
 type CreateTicketRequest struct {
-	Type        string          `json:"type" validate:"required"`
-	Category    *string         `json:"category"`
-	Subcategory *string         `json:"subcategory"`
-	Title       string          `json:"title" validate:"required"`
-	Description string          `json:"description" validate:"required"`
-	Priority    *string         `json:"priority"`
-	Urgency     string          `json:"urgency" validate:"required"`
-	Impact      string          `json:"impact" validate:"required"`
-	Channel     *string         `json:"channel"`
-	AssigneeID  *uuid.UUID      `json:"assigneeId"`
-	TeamQueueID *uuid.UUID      `json:"teamQueueId"`
-	SLAPolicyID *uuid.UUID      `json:"slaPolicyId"`
-	Tags        []string        `json:"tags"`
-	CustomFields json.RawMessage `json:"customFields"`
+	Type           string          `json:"type" validate:"required"`
+	Category       *string         `json:"category"`
+	Subcategory    *string         `json:"subcategory"`
+	Title          string          `json:"title" validate:"required"`
+	Description    string          `json:"description" validate:"required"`
+	Priority       *string         `json:"priority"`
+	Urgency        string          `json:"urgency" validate:"required"`
+	Impact         string          `json:"impact" validate:"required"`
+	Channel        *string         `json:"channel"`
+	AssigneeID     *uuid.UUID      `json:"assigneeId"`
+	TeamQueueID    *uuid.UUID      `json:"teamQueueId"`
+	SLAPolicyID    *uuid.UUID      `json:"slaPolicyId"`
+	Tags           []string        `json:"tags"`
+	CustomFields   json.RawMessage `json:"customFields"`
+	ParentTicketID *uuid.UUID      `json:"parentTicketId,omitempty"` // set internally for subtask creation
+}
+
+// SubtaskSummary is a compact representation of a child ticket.
+type SubtaskSummary struct {
+	ID           uuid.UUID  `json:"id"`
+	TicketNumber string     `json:"ticketNumber"`
+	Title        string     `json:"title"`
+	Type         string     `json:"type"`
+	Status       string     `json:"status"`
+	Priority     string     `json:"priority"`
+	AssigneeID   *uuid.UUID `json:"assigneeId"`
+	AssigneeName *string    `json:"assigneeName,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+}
+
+// SubtaskProgress tracks completion stats for a parent ticket's children.
+type SubtaskProgress struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+	Cancelled int `json:"cancelled"`
+}
+
+// SubtasksResponse is returned by GET /{id}/subtasks.
+type SubtasksResponse struct {
+	Subtasks []SubtaskSummary `json:"subtasks"`
+	Progress SubtaskProgress  `json:"progress"`
+}
+
+// CreateSubtaskRequest is the payload for creating a subtask under a parent.
+type CreateSubtaskRequest struct {
+	Title       string     `json:"title" validate:"required"`
+	Description string     `json:"description" validate:"required"`
+	Priority    *string    `json:"priority"`
+	AssigneeID  *uuid.UUID `json:"assigneeId"`
 }
 
 // UpdateTicketRequest is the payload for updating ticket metadata.
 type UpdateTicketRequest struct {
-	Category    *string         `json:"category"`
-	Subcategory *string         `json:"subcategory"`
-	Title       *string         `json:"title"`
-	Description *string         `json:"description"`
-	Priority    *string         `json:"priority"`
-	Tags        []string        `json:"tags"`
+	Category     *string         `json:"category"`
+	Subcategory  *string         `json:"subcategory"`
+	Title        *string         `json:"title"`
+	Description  *string         `json:"description"`
+	Priority     *string         `json:"priority"`
+	Tags         []string        `json:"tags"`
 	CustomFields json.RawMessage `json:"customFields"`
 }
 
@@ -972,15 +1024,15 @@ const (
 
 // CABMeeting represents a Change Advisory Board meeting.
 type CABMeeting struct {
-	ID            uuid.UUID       `json:"id"`
-	TenantID      uuid.UUID       `json:"tenantId"`
-	Title         string          `json:"title"`
-	Description   *string         `json:"description"`
-	ScheduledDate time.Time       `json:"scheduledDate"`
-	Status        string          `json:"status"`
-	ChairID       *uuid.UUID      `json:"chairId"`
-	Attendees     []uuid.UUID     `json:"attendees"`
-	Minutes       *string         `json:"minutes"`
+	ID              uuid.UUID       `json:"id"`
+	TenantID        uuid.UUID       `json:"tenantId"`
+	Title           string          `json:"title"`
+	Description     *string         `json:"description"`
+	ScheduledDate   time.Time       `json:"scheduledDate"`
+	Status          string          `json:"status"`
+	ChairID         *uuid.UUID      `json:"chairId"`
+	Attendees       []uuid.UUID     `json:"attendees"`
+	Minutes         *string         `json:"minutes"`
 	Decisions       json.RawMessage `json:"decisions"`
 	DurationMinutes *int            `json:"durationMinutes,omitempty"`
 	Location        *string         `json:"location,omitempty"`
@@ -989,8 +1041,8 @@ type CABMeeting struct {
 	Agenda          json.RawMessage `json:"agenda"`
 	ChangeTicketIDs []uuid.UUID     `json:"changeTicketIds"`
 	CreatedBy       uuid.UUID       `json:"createdBy"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	UpdatedAt     time.Time       `json:"updatedAt"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
 }
 
 // ChangeFreezeCheck represents the result of a freeze period check.

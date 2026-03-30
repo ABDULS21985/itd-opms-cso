@@ -8,6 +8,9 @@ import type {
   TicketComment,
   TicketStatusHistory,
   TicketStats,
+  MajorIncidentCommunicationPlan,
+  MajorIncidentRecord,
+  MajorIncidentStats,
   SLAPolicy,
   BusinessHoursCalendar,
   SLABreachEntry,
@@ -314,6 +317,70 @@ export function useTicketStats() {
   });
 }
 
+export interface DeclareMajorIncidentPayload {
+  ticketId: string;
+  severity?: "sev1" | "sev2" | "sev3";
+  incidentCommanderId?: string;
+  communicationLeadId?: string;
+  bridgeUrl?: string;
+  bridgePhone?: string;
+  affectedServices?: string[];
+  affectedCiIds?: string[];
+  estimatedAffectedUsers?: number;
+  businessImpact?: "critical" | "high" | "medium" | "low";
+  communicationPlan?: MajorIncidentCommunicationPlan;
+}
+
+export interface MajorIncidentFilterParams {
+  status?: string;
+  severity?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  ticketId?: string;
+}
+
+export function useMajorIncidents(
+  page = 1,
+  limit = 20,
+  filters?: MajorIncidentFilterParams,
+) {
+  return useQuery({
+    queryKey: ["major-incidents", page, limit, filters],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<MajorIncidentRecord>>("/itsm/major-incidents", {
+        page,
+        limit,
+        status: filters?.status,
+        severity: filters?.severity,
+        dateFrom: filters?.dateFrom,
+        dateTo: filters?.dateTo,
+        ticketId: filters?.ticketId,
+      }),
+  });
+}
+
+export function useActiveMajorIncidents() {
+  return useQuery({
+    queryKey: ["major-incidents-active"],
+    queryFn: () => apiClient.get<MajorIncidentRecord[]>("/itsm/major-incidents/active"),
+  });
+}
+
+export function useMajorIncident(id: string | undefined) {
+  return useQuery({
+    queryKey: ["major-incident", id],
+    queryFn: () => apiClient.get<MajorIncidentRecord>(`/itsm/major-incidents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useMajorIncidentStats() {
+  return useQuery({
+    queryKey: ["major-incident-stats"],
+    queryFn: () => apiClient.get<MajorIncidentStats>("/itsm/major-incidents/stats"),
+  });
+}
+
 /**
  * GET /itsm/tickets/my-queue - tickets assigned to the current user.
  */
@@ -516,16 +583,165 @@ export function useCloseTicket() {
 export function useDeclareMajorIncident() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post(`/itsm/tickets/${id}/major-incident`),
-    onSuccess: (_data, id) => {
+    mutationFn: (payload: string | DeclareMajorIncidentPayload) => {
+      if (typeof payload === "string") {
+        return apiClient.post(`/itsm/tickets/${payload}/major-incident`);
+      }
+      return apiClient.post<MajorIncidentRecord>("/itsm/major-incidents", {
+        ticketId: payload.ticketId,
+        severity: payload.severity,
+        incidentCommanderId: payload.incidentCommanderId,
+        communicationLeadId: payload.communicationLeadId,
+        bridgeUrl: payload.bridgeUrl,
+        bridgePhone: payload.bridgePhone,
+        affectedServices: payload.affectedServices,
+        affectedCiIds: payload.affectedCiIds,
+        estimatedAffectedUsers: payload.estimatedAffectedUsers,
+        businessImpact: payload.businessImpact,
+        communicationPlan: payload.communicationPlan,
+      });
+    },
+    onSuccess: (_data, payload) => {
+      const ticketId = typeof payload === "string" ? payload : payload.ticketId;
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
       toast.success("Major incident declared");
     },
     onError: () => {
       toast.error("Failed to declare major incident");
+    },
+  });
+}
+
+export function useTransitionMajorIncident() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, targetStatus }: { id: string; targetStatus: string }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/transition`, {
+        targetStatus,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("Major incident status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition major incident");
+    },
+  });
+}
+
+export function usePostMajorIncidentUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      message,
+      updateType,
+    }: {
+      id: string;
+      message: string;
+      updateType: "status_update" | "comms" | "technical";
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/update`, {
+        message,
+        updateType,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      toast.success("Stakeholder update posted");
+    },
+    onError: () => {
+      toast.error("Failed to post stakeholder update");
+    },
+  });
+}
+
+export function useResolveMajorIncident() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      resolutionSummary,
+      rootCause,
+    }: {
+      id: string;
+      resolutionSummary: string;
+      rootCause: string;
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/resolve`, {
+        resolutionSummary,
+        rootCause,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("Major incident resolved");
+    },
+    onError: () => {
+      toast.error("Failed to resolve major incident");
+    },
+  });
+}
+
+export function useSubmitMajorIncidentPIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      pirReport,
+    }: {
+      id: string;
+      pirReport: Record<string, unknown>;
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/pir`, {
+        pirReport,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("PIR submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit PIR");
+    },
+  });
+}
+
+export function useUpdateMajorIncidentCommunicationPlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      communicationPlan,
+    }: {
+      id: string;
+      communicationPlan: MajorIncidentCommunicationPlan;
+    }) =>
+      apiClient.put<MajorIncidentRecord>(`/itsm/major-incidents/${id}/communication-plan`, {
+        communicationPlan,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      toast.success("Communication plan updated");
+    },
+    onError: () => {
+      toast.error("Failed to update communication plan");
     },
   });
 }
@@ -825,6 +1041,29 @@ export function useSLAComplianceStats(priority?: string) {
       apiClient.get<SLAComplianceStats>("/itsm/sla-compliance", {
         priority,
       }),
+  });
+}
+
+/**
+ * GET /itsm/sla-compliance/service-requests - SLA compliance stats for service requests.
+ */
+export interface ServiceRequestSLACompliance {
+  totalRequests: number;
+  withSla: number;
+  resolutionMet: number;
+  resolutionBreached: number;
+  fulfillmentMet: number;
+  fulfillmentBreached: number;
+  activeAtRisk: number;
+}
+
+export function useServiceRequestSLACompliance() {
+  return useQuery({
+    queryKey: ["sla-compliance-service-requests"],
+    queryFn: () =>
+      apiClient.get<ServiceRequestSLACompliance>(
+        "/itsm/sla-compliance/service-requests",
+      ),
   });
 }
 
@@ -1364,6 +1603,14 @@ export interface ServiceRequest {
   createdAt: string;
   updatedAt: string;
   catalogItemName?: string;
+  // SLA fields
+  slaPolicyId?: string;
+  slaResolutionTarget?: string;
+  slaResolutionMet?: boolean;
+  slaFulfillmentTarget?: string;
+  slaFulfillmentMet?: boolean;
+  slaPausedAt?: string;
+  slaPausedDurationMinutes?: number;
 }
 
 export interface ApprovalTask {

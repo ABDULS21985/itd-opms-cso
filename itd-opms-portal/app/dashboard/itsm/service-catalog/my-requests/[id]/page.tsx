@@ -28,6 +28,7 @@ import {
   type ApprovalTask,
   type RequestTimelineEntry,
 } from "@/hooks/use-itsm";
+import { SLAGauge } from "@/app/dashboard/itsm/tickets/[id]/page";
 import { useAuth } from "@/providers/auth-provider";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
@@ -791,6 +792,38 @@ export default function ServiceRequestDetailPage({
               )}
             </dl>
           </motion.div>
+
+          {/* SLA Tracking */}
+          {request.slaPolicyId && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.12 }}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+            >
+              <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+                SLA Tracking
+              </h2>
+              <div className="flex justify-around">
+                <SLAGauge
+                  label="Approval"
+                  target={request.slaResolutionTarget}
+                  met={request.slaResolutionMet}
+                  isPaused={false}
+                  createdAt={request.createdAt}
+                  slaPausedDurationMinutes={0}
+                />
+                <SLAGauge
+                  label="Fulfillment"
+                  target={request.slaFulfillmentTarget}
+                  met={request.slaFulfillmentMet}
+                  isPaused={!!request.slaPausedAt}
+                  createdAt={request.createdAt}
+                  slaPausedDurationMinutes={request.slaPausedDurationMinutes ?? 0}
+                />
+              </div>
+            </motion.div>
+          )}
 
           {/* Action buttons */}
           {(isApprover || canCancel) && (

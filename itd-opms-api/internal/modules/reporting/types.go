@@ -59,18 +59,20 @@ type ReportDefinition struct {
 
 // ReportRun represents an individual report generation run.
 type ReportRun struct {
-	ID            uuid.UUID       `json:"id"`
-	DefinitionID  uuid.UUID       `json:"definitionId"`
-	TenantID      uuid.UUID       `json:"tenantId"`
-	Status        string          `json:"status"`
-	TriggerSource string          `json:"triggerSource"`
-	ScheduledFor  *time.Time      `json:"scheduledFor"`
-	GeneratedAt   *time.Time      `json:"generatedAt"`
-	CompletedAt   *time.Time      `json:"completedAt"`
-	DocumentID    *uuid.UUID      `json:"documentId"`
-	DataSnapshot  json.RawMessage `json:"dataSnapshot"`
-	ErrorMessage  *string         `json:"errorMessage"`
-	CreatedAt     time.Time       `json:"createdAt"`
+	ID               uuid.UUID       `json:"id"`
+	DefinitionID     uuid.UUID       `json:"definitionId"`
+	TenantID         uuid.UUID       `json:"tenantId"`
+	Status           string          `json:"status"`
+	TriggerSource    string          `json:"triggerSource"`
+	ScheduledFor     *time.Time      `json:"scheduledFor"`
+	GeneratedAt      *time.Time      `json:"generatedAt"`
+	CompletedAt      *time.Time      `json:"completedAt"`
+	DocumentID       *uuid.UUID      `json:"documentId"`
+	DataSnapshot     json.RawMessage `json:"dataSnapshot"`
+	ErrorMessage     *string         `json:"errorMessage"`
+	EmailDeliveredAt *time.Time      `json:"emailDeliveredAt"`
+	EmailError       *string         `json:"emailError"`
+	CreatedAt        time.Time       `json:"createdAt"`
 }
 
 // DashboardCache represents cached dashboard aggregation data.

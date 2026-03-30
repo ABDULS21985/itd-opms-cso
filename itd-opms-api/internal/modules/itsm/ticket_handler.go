@@ -2,7 +2,9 @@ package itsm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,9 +12,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/export"
-	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -22,12 +24,17 @@ import (
 
 // TicketHandler handles HTTP requests for ITSM tickets.
 type TicketHandler struct {
-	svc *TicketService
+	svc      *TicketService
+	majorSvc *MajorIncidentService
 }
 
 // NewTicketHandler creates a new TicketHandler.
-func NewTicketHandler(svc *TicketService) *TicketHandler {
-	return &TicketHandler{svc: svc}
+func NewTicketHandler(svc *TicketService, majorSvc ...*MajorIncidentService) *TicketHandler {
+	var workflowSvc *MajorIncidentService
+	if len(majorSvc) > 0 {
+		workflowSvc = majorSvc[0]
+	}
+	return &TicketHandler{svc: svc, majorSvc: workflowSvc}
 }
 
 // Routes mounts ticket endpoints on the given router.
@@ -496,6 +503,23 @@ func (h *TicketHandler) DeclareMajorIncident(w http.ResponseWriter, r *http.Requ
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid ticket ID")
+		return
+	}
+
+	if h.majorSvc != nil {
+		var req DeclareMajorIncidentWorkflowRequest
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+				return
+			}
+		}
+		req.TicketID = id
+		if _, err := h.majorSvc.DeclareMajorIncident(r.Context(), req); err != nil {
+			writeAppError(w, r, err)
+			return
+		}
+		types.NoContent(w)
 		return
 	}
 

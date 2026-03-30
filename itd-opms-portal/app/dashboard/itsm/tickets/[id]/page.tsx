@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -60,7 +61,6 @@ import {
   useAssignTicket,
   useResolveTicket,
   useCloseTicket,
-  useDeclareMajorIncident,
   useTicketKBLinks,
   useTicketKBSuggestions,
   useTicketKBSearch,
@@ -931,7 +931,6 @@ export default function TicketDetailPage({
   const assignTicket = useAssignTicket();
   const resolveTicket = useResolveTicket();
   const closeTicket = useCloseTicket();
-  const declareMajor = useDeclareMajorIncident();
 
   /* ---- KB link hooks ---- */
   const { data: kbLinks = [] } = useTicketKBLinks(id);
@@ -1065,8 +1064,7 @@ export default function TicketDetailPage({
     transitionTicket.isPending ||
     assignTicket.isPending ||
     resolveTicket.isPending ||
-    closeTicket.isPending ||
-    declareMajor.isPending;
+    closeTicket.isPending;
 
   /* ---- Copy ticket ID ---- */
   function copyTicketNumber() {
@@ -1317,13 +1315,7 @@ export default function TicketDetailPage({
   }
 
   function handleDeclareMajor() {
-    if (
-      !confirm(
-        "Declare this ticket as a Major Incident? This will trigger escalation notifications.",
-      )
-    )
-      return;
-    declareMajor.mutate(id);
+    router.push(`/dashboard/itsm/major-incidents?declare=1&ticketId=${id}`);
   }
 
   function toggleSection(key: string) {
@@ -1407,6 +1399,15 @@ export default function TicketDetailPage({
                       Major Incident
                     </motion.span>
                   )}
+                  {ticket.majorIncidentStatus && (
+                    <StatusBadge
+                      status={ticket.majorIncidentStatus}
+                      className="border-white/12 bg-white/10 text-white"
+                      dot={false}
+                    >
+                      MI: {ticket.majorIncidentStatus.replace(/_/g, " ")}
+                    </StatusBadge>
+                  )}
                 </div>
 
                 <h1 className="mt-4 text-3xl font-bold tracking-[-0.045em] text-white sm:text-[2.7rem]">
@@ -1432,6 +1433,29 @@ export default function TicketDetailPage({
                 );
               })}
             </div>
+
+            {ticket.isMajorIncident && ticket.majorIncidentRecordId && (
+              <Link
+                href={`/dashboard/itsm/major-incidents/${ticket.majorIncidentRecordId}`}
+                className="mt-6 flex items-center justify-between gap-3 rounded-[24px] border border-red-300/25 bg-red-500/12 px-5 py-4 text-sm text-white/90 transition-colors hover:bg-red-500/16"
+              >
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-100/80">
+                    Major Incident Workflow
+                  </p>
+                  <p className="font-semibold text-white">
+                    Linked major incident is {ticket.majorIncidentStatus?.replace(/_/g, " ") ?? "active"}.
+                  </p>
+                  <p className="text-xs text-red-50/80">
+                    Open the workflow workspace for stakeholder updates, bridge coordination, and PIR tracking.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white">
+                  Open workflow
+                  <ExternalLink size={14} />
+                </span>
+              </Link>
+            )}
 
             {canManage && (
               <div className="mt-7 flex flex-wrap items-center gap-2.5">

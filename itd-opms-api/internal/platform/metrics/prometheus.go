@@ -38,6 +38,22 @@ var (
 		Help: "Total number of SLA breaches detected",
 	})
 
+	MajorIncidentsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "major_incidents_active",
+		Help: "Current number of active major incidents",
+	})
+
+	MajorIncidentsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "major_incidents_total",
+		Help: "Total number of declared major incidents",
+	}, []string{"severity"})
+
+	MajorIncidentDurationMinutes = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "major_incident_duration_minutes",
+		Help:    "Duration of resolved major incidents in minutes",
+		Buckets: []float64{5, 15, 30, 60, 120, 240, 480, 720, 1440, 2880},
+	})
+
 	NATSMessagesPublished = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "nats_messages_published_total",
 		Help: "Total NATS messages published",

@@ -15,6 +15,7 @@ type Handler struct {
 	catalog       *CatalogHandler
 	catalogSearch *CatalogSearchHandler
 	ticket        *TicketHandler
+	majorIncident *MajorIncidentHandler
 	kbLink        *KBLinkHandler
 	sla           *SLAHandler
 	problem       *ProblemHandler
@@ -30,6 +31,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 	catalogSvc := NewCatalogService(pool, auditSvc)
 	catalogSearchSvc := NewCatalogSearchService(pool)
 	ticketSvc := NewTicketService(pool, auditSvc)
+	majorIncidentSvc := NewMajorIncidentService(pool, auditSvc, js)
 	kbLinkSvc := NewKBLinkService(pool, auditSvc)
 	slaSvc := NewSLAService(pool, auditSvc)
 	problemSvc := NewProblemService(pool, auditSvc, js)
@@ -41,7 +43,8 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 	return &Handler{
 		catalog:       NewCatalogHandler(catalogSvc),
 		catalogSearch: NewCatalogSearchHandler(catalogSearchSvc),
-		ticket:        NewTicketHandler(ticketSvc),
+		ticket:        NewTicketHandler(ticketSvc, majorIncidentSvc),
+		majorIncident: NewMajorIncidentHandler(majorIncidentSvc),
 		kbLink:        NewKBLinkHandler(kbLinkSvc),
 		sla:           NewSLAHandler(slaSvc),
 		problem:       NewProblemHandler(problemSvc),
@@ -70,6 +73,11 @@ func (h *Handler) Routes(r chi.Router) {
 		h.ticket.Routes(r)
 		// KB article links and suggestions (ESM BRD)
 		h.kbLink.Routes(r)
+	})
+
+	// Major incident workflow (ESM BRD §6.3)
+	r.Route("/major-incidents", func(r chi.Router) {
+		h.majorIncident.Routes(r)
 	})
 
 	// SLA policies, business hours, escalation rules (FR-D021 to FR-D027)

@@ -29,6 +29,14 @@ type ServiceRequest struct {
 	CancelledAt      *time.Time      `json:"cancelledAt"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
+	// SLA fields
+	SLAPolicyID              *uuid.UUID `json:"slaPolicyId"`
+	SLAResolutionTarget      *time.Time `json:"slaResolutionTarget"`
+	SLAResolutionMet         *bool      `json:"slaResolutionMet"`
+	SLAFulfillmentTarget     *time.Time `json:"slaFulfillmentTarget"`
+	SLAFulfillmentMet        *bool      `json:"slaFulfillmentMet"`
+	SLAPausedAt              *time.Time `json:"slaPausedAt"`
+	SLAPausedDurationMinutes int        `json:"slaPausedDurationMinutes"`
 	// Joined fields (populated in some queries)
 	CatalogItemName *string `json:"catalogItemName,omitempty"`
 }

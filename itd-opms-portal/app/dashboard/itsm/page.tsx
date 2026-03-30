@@ -27,6 +27,7 @@ import {
   useMyServiceRequests,
   usePendingApprovals,
   useProblems,
+  useActiveMajorIncidents,
   useSLAComplianceStats,
   useSupportQueues,
   useTicketStats,
@@ -573,6 +574,7 @@ export default function ITSMHubPage() {
   const { user } = useAuth();
 
   const { data: ticketStats, isLoading: ticketStatsLoading } = useTicketStats();
+  const { data: activeMajorIncidentData } = useActiveMajorIncidents();
   const { data: csatStats, isLoading: csatLoading } = useCSATStats();
   const { data: compliance, isLoading: complianceLoading } =
     useSLAComplianceStats();
@@ -593,7 +595,8 @@ export default function ITSMHubPage() {
   const totalTickets = ticketStats?.total ?? 0;
   const openTickets = ticketStats?.openCount ?? 0;
   const breachedTickets = ticketStats?.slaBreachedCount ?? 0;
-  const majorIncidents = ticketStats?.majorIncidents ?? 0;
+  const majorIncidents =
+    activeMajorIncidentData?.length ?? ticketStats?.majorIncidents ?? 0;
   const resolvedTickets = Math.max(totalTickets - openTickets, 0);
   const healthyOpenTickets = Math.max(openTickets - breachedTickets, 0);
 
@@ -657,7 +660,7 @@ export default function ITSMHubPage() {
         majorIncidents > 0
           ? "Stabilize the bridge first, then protect downstream queues."
           : "No declared major incident is burning right now.",
-      href: "/dashboard/itsm/tickets?type=incident&major=true",
+      href: "/dashboard/itsm/major-incidents",
       icon: AlertTriangle,
       accent: "#DC2626",
       progress: majorIncidents > 0 ? Math.min(100, majorIncidents * 25) : 0,
@@ -798,6 +801,19 @@ export default function ITSMHubPage() {
 
   return (
     <div className="space-y-8 pb-10">
+      {majorIncidents > 0 && (
+        <Link
+          href="/dashboard/itsm/major-incidents"
+          className="flex items-center justify-between gap-3 rounded-[24px] border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-500/12 dark:text-red-300"
+        >
+          <span>⚠️ {majorIncidents} Active Major Incident(s)</span>
+          <span className="inline-flex items-center gap-2">
+            View Details
+            <ArrowRight size={15} />
+          </span>
+        </Link>
+      )}
+
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
