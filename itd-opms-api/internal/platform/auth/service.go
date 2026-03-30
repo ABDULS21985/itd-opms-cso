@@ -68,9 +68,9 @@ type LoginResponse struct {
 
 // MFALoginResponse is returned when MFA is required after password validation.
 type MFALoginResponse struct {
-	MFARequired bool     `json:"mfaRequired"`
-	ChallengeID string   `json:"challengeId,omitempty"`
-	Methods     []string `json:"methods"`
+	MFARequired bool      `json:"mfaRequired"`
+	ChallengeID string    `json:"challengeId,omitempty"`
+	Methods     []string  `json:"methods"`
 	UserID      uuid.UUID `json:"-"` // internal use only
 }
 
@@ -118,7 +118,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.id, u.tenant_id, t.name, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
 		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at,
-		        COALESCE(u.mfa_enabled, false)
+		        COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false)
 		 FROM users u
 		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id

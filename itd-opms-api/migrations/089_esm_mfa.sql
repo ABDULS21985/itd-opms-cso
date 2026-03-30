@@ -1,3 +1,4 @@
+-- +goose Up
 -- 089_esm_mfa.sql  –  Native MFA support (TOTP + backup codes)
 
 CREATE TABLE IF NOT EXISTS user_mfa_methods (
@@ -35,3 +36,15 @@ ON CONFLICT DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_mfa_methods_user ON user_mfa_methods(user_id);
 CREATE INDEX IF NOT EXISTS idx_mfa_challenges_user ON mfa_challenges(user_id, expires_at);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_mfa_challenges_user;
+DROP INDEX IF EXISTS idx_mfa_methods_user;
+DELETE FROM system_settings
+WHERE tenant_id = '00000000-0000-0000-0000-000000000001'
+  AND category = 'security'
+  AND key = 'mfa_required';
+ALTER TABLE users DROP COLUMN IF EXISTS mfa_enforced_at;
+ALTER TABLE users DROP COLUMN IF EXISTS mfa_enabled;
+DROP TABLE IF EXISTS mfa_challenges;
+DROP TABLE IF EXISTS user_mfa_methods;

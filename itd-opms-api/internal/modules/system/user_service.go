@@ -193,7 +193,7 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
 		       u.metadata, u.created_at, u.updated_at,
 		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
-		       COALESCE(u.mfa_enabled, false) AS mfa_enabled
+		       COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
 		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
@@ -304,7 +304,7 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
 		       u.metadata, u.created_at, u.updated_at,
 		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
-		       COALESCE(u.mfa_enabled, false) AS mfa_enabled
+		       COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
 		LEFT JOIN org_units ou ON ou.id = u.org_unit_id

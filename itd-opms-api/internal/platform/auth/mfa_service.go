@@ -439,7 +439,7 @@ func (s *MFAService) RemoveMethod(ctx context.Context, userID, methodID uuid.UUI
 func (s *MFAService) GetUserMFAStatus(ctx context.Context, userID uuid.UUID) (bool, []string, error) {
 	var mfaEnabled bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT COALESCE(mfa_enabled, false) FROM users WHERE id = $1`, userID,
+		`SELECT COALESCE((to_jsonb(users)->>'mfa_enabled')::boolean, false) FROM users WHERE id = $1`, userID,
 	).Scan(&mfaEnabled)
 	if err != nil {
 		return false, nil, err
@@ -548,4 +548,3 @@ func generateRandomCode(length int) (string, error) {
 	}
 	return string(b), nil
 }
-
