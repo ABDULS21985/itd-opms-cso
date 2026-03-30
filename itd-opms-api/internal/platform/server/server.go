@@ -201,8 +201,12 @@ func (s *Server) Setup() {
 		s.escalationWorker = sla.NewEscalationWorker(s.pool, s.js, 60*time.Second)
 	}
 
+	// --- MFA service ---
+	mfaService := auth.NewMFAService(s.pool, s.cfg.MFA.EncryptionKey)
+
 	// --- Auth handler (needs email sender for password resets) ---
-	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL, licenseEnforcer)
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL, licenseEnforcer, mfaService)
+	mfaHandler := auth.NewMFAHandler(mfaService, authService, auditService, licenseEnforcer)
 
 	// --- Notification outbox processor ---
 	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)
@@ -228,7 +232,7 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO, licenseEnforcer, siemExporter)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO, licenseEnforcer, siemExporter, s.js)
 	approvalHandler := approval.NewHandler(s.pool, auditService)
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
@@ -257,6 +261,9 @@ func (s *Server) Setup() {
 
 			// SendGrid Inbound Parse webhook (public — verified by SendGrid signature).
 			r.Post("/webhooks/email/inbound", inboundEmailHandler.HandleInbound)
+
+			// Generic webhook receiver (public — verified by HMAC-SHA256).
+			r.Post("/webhooks/custom/{slug}", systemHandler.WebhookReceiver().HandleIncoming)
 		})
 
 		// Auth routes — mixed public/protected.
@@ -266,11 +273,12 @@ func (s *Server) Setup() {
 				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
 			}
 
-			// Public: login, refresh, forgot/reset password, OIDC config.
+			// Public: login, refresh, forgot/reset password, MFA verify, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/forgot-password", authHandler.ForgotPassword)
 			r.Post("/reset-password", authHandler.ResetPassword)
+			r.Post("/mfa/verify", mfaHandler.VerifyMFAChallenge)
 
 			// OIDC routes (public, used by frontend PKCE flow).
 			if oidcHandler != nil {
@@ -298,6 +306,13 @@ func (s *Server) Setup() {
 				r.Patch("/profile", authHandler.UpdateProfile)
 				r.Post("/profile/photo", authHandler.UploadProfilePhoto)
 				r.Delete("/profile/photo", authHandler.DeleteProfilePhoto)
+
+				// MFA setup & management (requires authentication).
+				r.Post("/mfa/setup/totp", mfaHandler.SetupTOTP)
+				r.Post("/mfa/setup/totp/verify", mfaHandler.VerifyTOTPSetup)
+				r.Post("/mfa/setup/backup-codes", mfaHandler.GenerateBackupCodes)
+				r.Get("/mfa/methods", mfaHandler.ListMethods)
+				r.Delete("/mfa/methods/{id}", mfaHandler.RemoveMethod)
 			})
 		})
 

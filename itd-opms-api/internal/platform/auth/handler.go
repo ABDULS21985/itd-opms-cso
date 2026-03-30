@@ -34,11 +34,12 @@ type AuthHandler struct {
 	emailSender       EmailSender
 	frontendURL       string
 	enforcer          *LicenseEnforcer
+	mfaSvc            *MFAService
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService, emailSender EmailSender, frontendURL string, enforcer *LicenseEnforcer) *AuthHandler {
-	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService, emailSender: emailSender, frontendURL: frontendURL, enforcer: enforcer}
+func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService, emailSender EmailSender, frontendURL string, enforcer *LicenseEnforcer, mfaSvc *MFAService) *AuthHandler {
+	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService, emailSender: emailSender, frontendURL: frontendURL, enforcer: enforcer, mfaSvc: mfaSvc}
 }
 
 // Routes is intentionally unused — all auth routes are registered directly in
@@ -99,7 +100,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.Login(r.Context(), req.Email, req.Password)
+	resp, mfaResp, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		// Log failed authentication attempt for security monitoring.
 		slog.Warn("login attempt failed",
@@ -126,6 +127,35 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 
 		writeAppError(w, r, err)
+		return
+	}
+
+	// MFA required — create challenge and return (no tokens issued).
+	if mfaResp != nil {
+		challengeID, err := h.mfaSvc.CreateChallenge(r.Context(), mfaResp.UserID)
+		if err != nil {
+			writeAppError(w, r, err)
+			return
+		}
+		mfaResp.ChallengeID = challengeID.String()
+
+		// Audit log for MFA challenge
+		mfaChanges, _ := json.Marshal(map[string]string{
+			"email":  req.Email,
+			"action": "mfa_challenge_created",
+		})
+		_ = h.auditService.Log(r.Context(), audit.AuditEntry{
+			ActorID:       mfaResp.UserID,
+			Action:        "auth.mfa_required",
+			EntityType:    "session",
+			EntityID:      mfaResp.UserID,
+			Changes:       mfaChanges,
+			IPAddress:     realIP(r),
+			UserAgent:     r.UserAgent(),
+			CorrelationID: types.GetCorrelationID(r.Context()),
+		})
+
+		types.OK(w, mfaResp, nil)
 		return
 	}
 

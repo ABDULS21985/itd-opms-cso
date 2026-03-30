@@ -46,7 +46,7 @@ const assetColumns = `
 	owner_id, custodian_id,
 	purchase_date, purchase_cost, currency,
 	classification, attributes, tags,
-	last_verified_at,
+	last_verified_at, last_verified_by, verification_status,
 	created_at, updated_at`
 
 // scanAsset scans a single asset row into an Asset struct.
@@ -59,7 +59,7 @@ func scanAsset(row pgx.Row) (Asset, error) {
 		&a.OwnerID, &a.CustodianID,
 		&a.PurchaseDate, &a.PurchaseCost, &a.Currency,
 		&a.Classification, &a.Attributes, &a.Tags,
-		&a.LastVerifiedAt,
+		&a.LastVerifiedAt, &a.LastVerifiedBy, &a.VerificationStatus,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
 	return a, err
@@ -77,7 +77,7 @@ func scanAssets(rows pgx.Rows) ([]Asset, error) {
 			&a.OwnerID, &a.CustodianID,
 			&a.PurchaseDate, &a.PurchaseCost, &a.Currency,
 			&a.Classification, &a.Attributes, &a.Tags,
-			&a.LastVerifiedAt,
+			&a.LastVerifiedAt, &a.LastVerifiedBy, &a.VerificationStatus,
 			&a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, err

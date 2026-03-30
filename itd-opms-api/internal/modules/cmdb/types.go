@@ -156,9 +156,11 @@ type Asset struct {
 	Classification *string         `json:"classification"`
 	Attributes     json.RawMessage `json:"attributes"`
 	Tags           []string        `json:"tags"`
-	LastVerifiedAt *time.Time      `json:"lastVerifiedAt"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
+	LastVerifiedAt     *time.Time      `json:"lastVerifiedAt"`
+	LastVerifiedBy     *uuid.UUID      `json:"lastVerifiedBy"`
+	VerificationStatus string          `json:"verificationStatus"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
 }
 
 // AssetLifecycleEvent records a lifecycle transition for an asset.

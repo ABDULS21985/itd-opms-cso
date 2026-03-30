@@ -29,6 +29,8 @@ type Handler struct {
 	auditExp *AuditExplorerHandler
 	session  *SessionHandler
 	template *EmailTemplateHandler
+	webhook  *WebhookHandler
+	receiver *WebhookReceiverHandler
 
 	// Maintenance exposes the background worker for lifecycle management.
 	Maintenance *MaintenanceWorker
@@ -48,6 +50,7 @@ func NewHandler(
 	minioCfg config.MinIOConfig,
 	licenseEnforcer *auth.LicenseEnforcer,
 	siemExporter *audit.SIEMExporter,
+	js nats.JetStreamContext,
 ) *Handler {
 	userSvc := NewUserService(pool, auditSvc, minioClient, minioCfg)
 	roleSvc := NewRoleService(pool, auditSvc)
@@ -58,6 +61,8 @@ func NewHandler(
 	auditExpSvc := NewAuditExplorerService(pool, auditSvc)
 	sessionSvc := NewSessionService(pool, auditSvc)
 	templateSvc := NewEmailTemplateService(pool, auditSvc)
+	webhookSvc := NewWebhookService(pool, auditSvc)
+	webhookReceiver := NewWebhookReceiverHandler(pool, auditSvc, webhookSvc, js)
 
 	return &Handler{
 		user:        NewUserHandler(userSvc),
@@ -69,11 +74,16 @@ func NewHandler(
 		auditExp:    NewAuditExplorerHandler(auditExpSvc),
 		session:     NewSessionHandler(sessionSvc),
 		template:    NewEmailTemplateHandler(templateSvc),
+		webhook:     NewWebhookHandler(webhookSvc, webhookReceiver),
+		receiver:    webhookReceiver,
 		Maintenance:     NewMaintenanceWorker(pool),
 		licenseEnforcer: licenseEnforcer,
 		siemExporter:    siemExporter,
 	}
 }
+
+// WebhookReceiver exposes the public webhook receiver for server.go routing.
+func (h *Handler) WebhookReceiver() *WebhookReceiverHandler { return h.receiver }
 
 // Routes mounts all System sub-routes on the given router, split into
 // read-only (system.view) and admin (system.manage) permission groups.
@@ -124,6 +134,9 @@ func (h *Handler) Routes(r chi.Router) {
 
 		// Email templates
 		r.Route("/email-templates", func(r chi.Router) { h.template.Routes(r) })
+
+		// Webhook endpoint management
+		r.Route("/webhooks", func(r chi.Router) { h.webhook.Routes(r) })
 	})
 }
 

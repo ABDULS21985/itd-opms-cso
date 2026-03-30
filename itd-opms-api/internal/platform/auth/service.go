@@ -66,6 +66,14 @@ type LoginResponse struct {
 	PasswordChangeRequired bool        `json:"passwordChangeRequired,omitempty"`
 }
 
+// MFALoginResponse is returned when MFA is required after password validation.
+type MFALoginResponse struct {
+	MFARequired bool     `json:"mfaRequired"`
+	ChallengeID string   `json:"challengeId,omitempty"`
+	Methods     []string `json:"methods"`
+	UserID      uuid.UUID `json:"-"` // internal use only
+}
+
 // AuthService handles authentication logic: login, token refresh, and logout.
 type AuthService struct {
 	pool     *pgxpool.Pool
@@ -84,9 +92,9 @@ func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig, minioClient *mi
 	}
 }
 
-// Login authenticates a user by email and password, returning a token pair
-// and user profile on success. Uses raw pgx queries.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, error) {
+// Login authenticates a user by email and password. If MFA is enabled,
+// returns (nil, &MFALoginResponse, nil). Otherwise returns (*LoginResponse, nil, nil).
+func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, *MFALoginResponse, error) {
 	// Find the user by email.
 	var (
 		userID       uuid.UUID
@@ -104,30 +112,32 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		orgLevel     *string
 		lastLoginAt  *time.Time
 		createdAt    *time.Time
+		mfaEnabled   bool
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.id, u.tenant_id, t.name, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at,
+		        COALESCE(u.mfa_enabled, false)
 		 FROM users u
 		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
+	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt, &mfaEnabled)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, apperrors.Unauthorized("Invalid email or password")
+			return nil, nil, apperrors.Unauthorized("Invalid email or password")
 		}
-		return nil, apperrors.Internal("Failed to query user", err)
+		return nil, nil, apperrors.Internal("Failed to query user", err)
 	}
 
 	// Verify password.
 	if passwordHash == nil || *passwordHash == "" {
-		return nil, apperrors.Unauthorized("Invalid email or password")
+		return nil, nil, apperrors.Unauthorized("Invalid email or password")
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(password)); err != nil {
-		return nil, apperrors.Unauthorized("Invalid email or password")
+		return nil, nil, apperrors.Unauthorized("Invalid email or password")
 	}
 
 	// Check if user must change their password.
@@ -137,16 +147,49 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		userID,
 	).Scan(&forceChange)
 
+	// If MFA is enabled, return MFA challenge response (no tokens issued yet).
+	if mfaEnabled {
+		// Fetch configured MFA method types
+		rows, err := s.pool.Query(ctx,
+			`SELECT DISTINCT method_type FROM user_mfa_methods
+			 WHERE user_id = $1 AND is_verified = true`,
+			userID,
+		)
+		if err != nil {
+			return nil, nil, apperrors.Internal("Failed to fetch MFA methods", err)
+		}
+		defer rows.Close()
+
+		var methods []string
+		for rows.Next() {
+			var m string
+			if err := rows.Scan(&m); err == nil {
+				methods = append(methods, m)
+			}
+		}
+		if len(methods) == 0 {
+			// MFA flag is on but no methods configured — allow login (shouldn't happen)
+			mfaEnabled = false
+		} else {
+			return nil, &MFALoginResponse{
+				MFARequired: true,
+				Methods:     methods,
+				UserID:      userID,
+			}, nil
+		}
+	}
+
+	// No MFA — issue tokens directly.
 	// Fetch roles and aggregate permissions.
 	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
 	if err != nil {
-		return nil, apperrors.Internal("Failed to fetch user roles", err)
+		return nil, nil, apperrors.Internal("Failed to fetch user roles", err)
 	}
 
 	// Generate tokens.
 	accessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
 	if err != nil {
-		return nil, apperrors.Internal("Failed to generate access token", err)
+		return nil, nil, apperrors.Internal("Failed to generate access token", err)
 	}
 
 	refreshToken := GenerateRefreshToken()
@@ -161,7 +204,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	)
 	if err != nil {
 		slog.Error("failed to save refresh token", "error", err.Error(), "user_id", userID)
-		return nil, apperrors.Internal("Failed to create session", err)
+		return nil, nil, apperrors.Internal("Failed to create session", err)
 	}
 
 	// Update last login timestamp.
@@ -195,6 +238,91 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		RefreshToken:           refreshToken,
 		User:                   profile,
 		PasswordChangeRequired: forceChange,
+	}, nil, nil
+}
+
+// GenerateLoginTokens creates a full LoginResponse for a user (used after MFA verification).
+func (s *AuthService) GenerateLoginTokens(ctx context.Context, userID uuid.UUID) (*LoginResponse, error) {
+	var (
+		email       string
+		tenantID    uuid.UUID
+		tenantName  string
+		displayName string
+		jobTitle    *string
+		department  *string
+		office      *string
+		unit        *string
+		phone       *string
+		photoURL    *string
+		orgUnitID   *uuid.UUID
+		orgLevel    *string
+		createdAt   *time.Time
+	)
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT u.email, u.tenant_id, t.name, u.display_name, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.created_at
+		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.id = $1`,
+		userID,
+	).Scan(&email, &tenantID, &tenantName, &displayName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &createdAt)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user for token generation", err)
+	}
+
+	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user roles", err)
+	}
+
+	accessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to generate access token", err)
+	}
+
+	refreshToken := GenerateRefreshToken()
+	tokenHash := helpers.SHA256Checksum([]byte(refreshToken))
+	expiresAt := time.Now().Add(s.jwtCfg.RefreshExpiry)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, tokenHash, expiresAt,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to create session", err)
+	}
+
+	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
+
+	now := time.Now()
+	profile := UserProfile{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		TenantID:    tenantID,
+		TenantName:  tenantName,
+		JobTitle:    jobTitle,
+		Department:  department,
+		Office:      office,
+		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
+		Roles:       roles,
+		Permissions: permissions,
+		OrgUnitID:   orgUnitID,
+		LastLoginAt: &now,
+		CreatedAt:   createdAt,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
+	return &LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         profile,
 	}, nil
 }
 

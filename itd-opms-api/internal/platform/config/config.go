@@ -25,6 +25,7 @@ type Config struct {
 	SIEM          SIEMConfig
 	License       LicenseConfig
 	Discovery     DiscoveryConfig
+	MFA           MFAConfig
 }
 
 type ServerConfig struct {
@@ -151,6 +152,10 @@ type LicenseConfig struct {
 	SyncInterval  time.Duration `mapstructure:"sync_interval"`
 }
 
+type MFAConfig struct {
+	EncryptionKey string `mapstructure:"encryption_key"`
+}
+
 type DiscoveryConfig struct {
 	ADEnabled      bool          `mapstructure:"ad_enabled"`
 	ADTenantID     string        `mapstructure:"ad_tenant_id"`
@@ -249,6 +254,9 @@ func Load() (*Config, error) {
 	v.SetDefault("SCCM_API_KEY", "")
 	v.SetDefault("SCCM_USERNAME", "")
 	v.SetDefault("SCCM_PASSWORD", "")
+
+	// MFA
+	v.SetDefault("MFA_ENCRYPTION_KEY", "")
 
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
@@ -362,6 +370,9 @@ func Load() (*Config, error) {
 		License: LicenseConfig{
 			MaxConcurrent: v.GetInt("MAX_CONCURRENT_LICENSES"),
 			SyncInterval:  licenseSync,
+		},
+		MFA: MFAConfig{
+			EncryptionKey: v.GetString("MFA_ENCRYPTION_KEY"),
 		},
 		Discovery: DiscoveryConfig{
 			ADEnabled:      v.GetBool("DISCOVERY_AD_ENABLED"),
