@@ -45,6 +45,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/sendgrid"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/sla"
 )
 
 // Server holds all dependencies and provides the HTTP server functionality.
@@ -68,6 +69,7 @@ type Server struct {
 	actionReminderService *governance.ActionReminderService
 	siemExporter          *audit.SIEMExporter
 	licenseEnforcer       *auth.LicenseEnforcer
+	escalationWorker      *sla.EscalationWorker
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -186,6 +188,11 @@ func (s *Server) Setup() {
 	siemExporter := audit.NewSIEMExporter(s.pool, s.cfg.SIEM)
 	s.siemExporter = siemExporter
 
+	// --- Escalation worker (ESM automated SLA escalation) ---
+	if s.js != nil {
+		s.escalationWorker = sla.NewEscalationWorker(s.pool, s.js, 60*time.Second)
+	}
+
 	// --- Auth handler (needs email sender for password resets) ---
 	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL, licenseEnforcer)
 
@@ -213,7 +220,7 @@ func (s *Server) Setup() {
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO, licenseEnforcer, siemExporter)
 	approvalHandler := approval.NewHandler(s.pool, auditService)
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
@@ -408,6 +415,15 @@ func (s *Server) Start() error {
 	if s.vaultWorker != nil {
 		s.vaultWorker.Start(ctx)
 	}
+	if s.licenseEnforcer != nil {
+		s.licenseEnforcer.Start(ctx)
+	}
+	if s.siemExporter != nil {
+		s.siemExporter.Start(ctx)
+	}
+	if s.escalationWorker != nil {
+		s.escalationWorker.Start(ctx)
+	}
 
 	// Start action reminder cron (every hour).
 	if s.actionReminderService != nil {
@@ -469,6 +485,15 @@ func (s *Server) Start() error {
 	}
 	if s.vaultWorker != nil {
 		s.vaultWorker.Stop()
+	}
+	if s.licenseEnforcer != nil {
+		s.licenseEnforcer.Stop()
+	}
+	if s.siemExporter != nil {
+		s.siemExporter.Stop()
+	}
+	if s.escalationWorker != nil {
+		s.escalationWorker.Stop()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

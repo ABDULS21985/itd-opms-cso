@@ -16,6 +16,8 @@ import {
   Clock,
   Layers,
   ArrowDownCircle,
+  Shield,
+  Users,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -24,6 +26,8 @@ import {
   usePlatformHealth,
   useSystemStats,
   useDirectorySyncStatus,
+  useLicenseUtilization,
+  useSIEMStatus,
 } from "@/hooks/use-system";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -222,6 +226,8 @@ export default function HealthPage() {
   const [syncPage] = useState(1);
   const { data: syncData, refetch: refetchSync } = useDirectorySyncStatus(syncPage, 10);
   const [triggeringSync, setTriggeringSync] = useState(false);
+  const { data: licenseData } = useLicenseUtilization();
+  const { data: siemData } = useSIEMStatus();
 
   // Auto-refresh
   useEffect(() => {
@@ -394,6 +400,96 @@ export default function HealthPage() {
         ) : (
           <p className="text-sm text-[var(--neutral-gray)]">Unable to load statistics</p>
         )}
+      </motion.div>
+
+      {/* License & SIEM Compliance */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.12 }}
+      >
+        <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+          <Shield size={14} />
+          ESM Compliance
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* License Utilization Card */}
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}>
+                <Users size={18} style={{ color: "#3B82F6" }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">License Utilization</h3>
+                <p className="text-xs text-[var(--neutral-gray)]">Concurrent named-user sessions</p>
+              </div>
+            </div>
+            {licenseData ? (() => {
+              const pct = Math.round((licenseData.ratio ?? 0) * 100);
+              const color = pct >= 95 ? "#EF4444" : pct >= 80 ? "#F59E0B" : "#10B981";
+              return (
+                <div>
+                  <div className="flex items-end gap-2 mb-2">
+                    <span className="text-3xl font-bold text-[var(--text-primary)] tabular-nums">{licenseData.current}</span>
+                    <span className="text-sm text-[var(--neutral-gray)] mb-1">/ {licenseData.max}</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-[var(--surface-2)] mb-2">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: color }} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium tabular-nums" style={{ color }}>{pct}% utilized</span>
+                    {licenseData.lastSyncedAt && (
+                      <span className="text-xs text-[var(--neutral-gray)]">Synced {formatDate(licenseData.lastSyncedAt)}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="h-20 animate-pulse rounded-lg bg-[var(--surface-1)]" />
+            )}
+          </div>
+
+          {/* SIEM Export Status Card */}
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(139, 92, 246, 0.1)" }}>
+                <Shield size={18} style={{ color: "#8B5CF6" }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">SIEM Export</h3>
+                <p className="text-xs text-[var(--neutral-gray)]">Audit event export to SOC</p>
+              </div>
+            </div>
+            {siemData ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: siemData.enabled ? "#10B981" : "#6B7280" }} />
+                  <span className="text-sm font-medium text-[var(--text-primary)]">{siemData.enabled ? "Active" : "Disabled"}</span>
+                  {siemData.enabled && (
+                    <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--neutral-gray)]">{siemData.mode}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-[var(--neutral-gray)]">Events Exported</p>
+                    <p className="text-lg font-bold text-[var(--text-primary)] tabular-nums">{siemData.lastExportedId.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--neutral-gray)]">Errors</p>
+                    <p className="text-lg font-bold tabular-nums" style={{ color: siemData.errorCount > 0 ? "#EF4444" : "var(--text-primary)" }}>
+                      {siemData.errorCount}
+                    </p>
+                  </div>
+                </div>
+                {siemData.lastExportAt && (
+                  <p className="text-xs text-[var(--neutral-gray)]">Last export: {formatDate(siemData.lastExportAt)}</p>
+                )}
+              </div>
+            ) : (
+              <div className="h-20 animate-pulse rounded-lg bg-[var(--surface-1)]" />
+            )}
+          </div>
+        </div>
       </motion.div>
 
       {/* Directory Sync */}

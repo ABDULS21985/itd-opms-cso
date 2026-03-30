@@ -575,3 +575,22 @@ export interface CustomFieldOption {
   value: string;
   label: string;
 }
+
+/* =============================================================================
+   ESM: License & SIEM Types
+   ============================================================================= */
+
+export interface LicenseUtilization {
+  current: number;
+  max: number;
+  ratio: number;
+  lastSyncedAt: string;
+}
+
+export interface SIEMStatus {
+  enabled: boolean;
+  mode: string;
+  lastExportedId: number;
+  lastExportAt: string;
+  errorCount: number;
+}

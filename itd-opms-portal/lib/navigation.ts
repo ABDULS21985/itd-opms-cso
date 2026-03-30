@@ -319,6 +319,12 @@ export const navGroups: NavGroup[] = [
         permission: "itsm.view",
       },
       {
+        href: "/dashboard/itsm/major-incidents",
+        label: "Major Incidents",
+        icon: ShieldAlert,
+        permission: "itsm.view",
+      },
+      {
         href: "/dashboard/itsm/problems",
         label: "Problems",
         icon: Bug,
@@ -386,6 +392,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/cmdb/reconciliation",
         label: "Reconciliation",
         icon: Layers,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/integrations",
+        label: "Integrations",
+        icon: Zap,
         permission: "assets.view",
       },
       {

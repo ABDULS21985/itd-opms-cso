@@ -21,6 +21,8 @@ import type {
   SystemStats,
   DirectorySyncStatus,
   EmailTemplate,
+  LicenseUtilization,
+  SIEMStatus,
   PaginatedResponse,
 } from "@/types";
 
@@ -1175,5 +1177,32 @@ export function usePreviewTemplate(id: string | undefined) {
     onError: () => {
       toast.error("Failed to preview template");
     },
+  });
+}
+
+/* ================================================================== */
+/*  ESM: License Utilization & SIEM Status                             */
+/* ================================================================== */
+
+/**
+ * GET /system/license-utilization - current license usage.
+ */
+export function useLicenseUtilization() {
+  return useQuery({
+    queryKey: ["system-license-utilization"],
+    queryFn: () =>
+      apiClient.get<LicenseUtilization>("/system/license-utilization"),
+    refetchInterval: 30_000,
+  });
+}
+
+/**
+ * GET /system/siem-status - SIEM exporter state.
+ */
+export function useSIEMStatus() {
+  return useQuery({
+    queryKey: ["system-siem-status"],
+    queryFn: () => apiClient.get<SIEMStatus>("/system/siem-status"),
+    refetchInterval: 60_000,
   });
 }

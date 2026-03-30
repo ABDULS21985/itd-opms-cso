@@ -47,15 +47,15 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| Create/Modify/Close Incidents | `tickets` table with TKT-NNNNNN auto-numbering, type=`incident` | **Yes** | Ticket number prefix is `TKT-` not `INC-`. No type-specific auto-numbering (INC-, SR-, CHG- all share `TKT-` prefix) |
+| Create/Modify/Close Incidents | `tickets` table with per-type auto-numbering (INC-/SR-/CHG-/TKT- prefixes via migration 074, gapless sequences starting at 1001) | **Yes** | Fully implemented with ESM-compliant prefixes |
 | Status Workflow (Open->Assigned->Waiting->OnHold->Resolved->Closed) | 9-state workflow: logged->classified->assigned->in_progress->pending_customer/pending_vendor->resolved->closed + cancelled | **Yes** | State names differ from ESM BRD (e.g., `logged` vs `Open`, `pending_customer` vs `Waiting`). No `OnHold` state distinct from `pending_vendor`. |
 | Priority Matrix (Urgency x Impact) | 4x4 matrix (`CalculatePriority()`) producing P1-P4 | **Yes** | Fully implemented |
 | Subtasks / Child Tickets | `parent_ticket_id` FK on tickets table | **Partial** | Schema supports parent-child, but no dedicated subtask UI or workflow. No subtask creation from parent ticket page. |
-| Email-to-Ticket | Not implemented | **No** | No inbound email parsing. Only channel field tracking (portal/email/phone/chat/walk_in). |
-| Auto-Escalation (SLA-based) | `escalation_rules` table with CRUD. Trigger types: sla_warning, sla_breach, priority, manual | **Partial** | Rules are stored/managed but **no background worker** evaluates them. Manual escalation only creates audit event. Automated escalation engine is missing. |
+| Email-to-Ticket | SendGrid Inbound Parse webhook at `POST /api/v1/webhooks/email/inbound` (490 lines). Reply detection, ticket creation, attachment upload, user matching, email threading columns (migration 079) | **Yes** | Fully implemented |
+| Auto-Escalation (SLA-based) | `escalation_rules` table + background `escalation_worker.go` (338 lines) evaluating rules every 60s. Trigger types: sla_warning, sla_breach, priority. Escalation chain actions: reassign, change_priority, notify. NATS events, Prometheus metrics, dedup via `escalation_events` table (migration 086) | **Yes** | Fully implemented with automated background worker |
 | Major Incident Management | `is_major_incident` flag, `DeclareMajorIncident` endpoint | **Partial** | Flag-based only. No dedicated major incident workflow, bridge call coordination, PIR trigger, or communication blast. |
 | Bidirectional Ticket Linking | `related_ticket_ids` UUID array with `LinkTickets` endpoint | **Yes** | Implemented with dedup guard |
-| SLA Timer with Pause/Resume | `sla_paused_at`, `sla_paused_duration_minutes` on tickets. Pause on `pending_customer`, resume on `in_progress` | **Yes** | Pause only on `pending_customer`, not `pending_vendor` |
+| SLA Timer with Pause/Resume | `sla_paused_at`, `sla_paused_duration_minutes` on tickets. Pause on `pending_customer` and `pending_vendor`, resume on `in_progress` | **Yes** | Fully implemented for both pending statuses |
 | First Response Tracking | `first_response_at` set on first assignment | **Yes** | Fully implemented |
 | CSAT Surveys | `csat_surveys` table with 1-5 rating | **Yes** | Post-resolution surveys implemented |
 | CSV Export | `ExportTickets` endpoint, max 10,000 rows | **Yes** | Implemented |
@@ -75,10 +75,10 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| RFC Lifecycle | `change_requests` table in Planning module | **Partial** | Change requests exist but are project-scoped, not ITSM-scoped. No dedicated CHG- ticket type workflow. Tickets with `type=change` share the generic ticket workflow. |
-| CAB Workflow | `approval_chains` + `approval_steps` + `signoffs` in workflow engine | **Partial** | Generic approval engine exists but no CAB-specific workflow (quorum, voting, meeting scheduling). |
-| Emergency/Standard/Normal Classification | Not explicitly implemented | **No** | No change type classification. `change_requests` have priority/status but no normal/standard/emergency/expedited categories. |
-| Change Freeze Periods | `change_freeze_periods` table with start/end dates | **Yes** | Schema exists. Enforcement logic unclear. |
+| RFC Lifecycle | `change_requests` table in Planning + ITSM `change_service.go` with CHG- ticket type (migration 075). Classification validation, freeze period checks, auto-approval for emergency/standard | **Yes** | Full ITSM change lifecycle with CHG- prefix numbering |
+| CAB Workflow | `cab_meetings` table (migration 075), `ChangeService` with full CRUD: CreateCABMeeting, ListCABMeetings, SubmitCABDecision | **Yes** | Full CAB workflow with meeting scheduling and decision tracking |
+| Emergency/Standard/Normal Classification | `change_classification` column on tickets (migration 075) with emergency/standard/normal types. Validated in `ChangeService` | **Yes** | Fully implemented with auto-approval rules per classification |
+| Change Freeze Periods | `change_freeze_periods` table + DB trigger `check_change_freeze()` (migration 077) blocking non-emergency changes during freeze + application-level enforcement | **Yes** | Enforced at both DB trigger and application level |
 | Maintenance Windows | `maintenance_windows` table | **Yes** | Schema exists |
 | Post-Implementation Review | `post_implementation_reviews` + `pir_templates` tables | **Yes** | Implemented in Planning module |
 
@@ -86,10 +86,10 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| Release Planning & Scheduling | Not implemented | **No** | No release entity, release calendar, or release planning workflow |
-| Deployment Pipeline Tracking | Not implemented | **No** | No CI/CD integration, deployment tracking, or release package management |
-| Rollback Procedures | Not implemented | **No** | No rollback plan storage or execution tracking |
-| Release-to-Change Linking | Not implemented | **No** | No release entity to link to changes |
+| Release Planning & Scheduling | Full `release/` module (service.go, handler.go, types.go). `releases` table (migration 078) with REL- numbering, types (major/minor/patch/emergency), planning/scheduled/in_progress/completed/cancelled/rolled_back states | **Yes** | Fully implemented with release calendar and lifecycle |
+| Deployment Pipeline Tracking | `release_deployments` table tracking environment, version, status, deploy_log. Per-deployment status lifecycle | **Yes** | Deployment tracking with environment and version management |
+| Rollback Procedures | `rolled_back` state on releases, rollback tracking in deployment records | **Yes** | Rollback state and deployment logging implemented |
+| Release-to-Change Linking | `release_items` table linking releases to changes/tickets with item_type and item_id FKs | **Yes** | Full release-to-change and release-to-ticket linking |
 
 ### Request Fulfillment
 
@@ -97,7 +97,7 @@
 |---|---|---|---|
 | Service Catalog | `service_catalog_categories` + `service_catalog_items` with full-text search (GIN tsvector) | **Yes** | Rich implementation with categories, entitlements, favorites, popularity, search |
 | Dynamic Request Forms | `form_schema` JSONB on catalog items, `DynamicFormRenderer` on frontend | **Yes** | `FormSchemaBuilder` supports 10 field types with validation |
-| Approval Workflow | `service_requests` + `approval_tasks` with sequential approval, auto-transition | **Yes** | Sequential approval implemented. Parallel not yet implemented. |
+| Approval Workflow | `service_requests` + `approval_tasks` with sequential, parallel, and any_of approval modes, auto-transition | **Yes** | Fully implemented with three approval modes |
 | Step-by-Step Request Tracking | `request_timeline` table, `StepProgress` UI component | **Yes** | 4-step progress: Submitted->Approval->Fulfillment->Completed |
 | Request Auto-Numbering | REQ-NNNNNN via DB trigger | **Yes** | Implemented |
 | SLA on Requests | `sla_policy_id` on catalog items | **Partial** | SLA reference exists but no SLA timer enforcement on service requests |
@@ -106,7 +106,7 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| CI Discovery (IP Range Scan) | Not implemented | **No** | No network scanning, SNMP, or automated CI discovery |
+| CI Discovery (IP Range Scan) | `discovery_service.go` (1184 lines) with `discovery_profiles`, `discovery_runs`, `discovered_devices` tables (migration 083). CSV import working, 4-strategy CI matching with confidence scoring. Network/AD/SCCM sources are stubbed | **Partial** | CSV import functional. Network/AD/SCCM discovery sources are stubs only — no live scanning |
 | CI Relationship Graphical Display | `topology/page.tsx` with CI cards, type icons, relationship visualization | **Yes** | Visual topology map implemented |
 | Auto-Reconciliation Engine | `reconciliation_runs` table with CRUD | **Partial** | Manual trigger only. No automated scan source (SCCM, AD, etc.) to reconcile against. |
 | CI Change History/Audit Trail | `audit_events` with SHA-256 checksums, entity timeline endpoint | **Yes** | Immutable audit with `audit-logs/entity/{type}/{id}` |
@@ -121,8 +121,8 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| Search from Incident Screen | Not linked | **No** | No embedded KB search within ticket creation/viewing UI |
-| Boolean/Natural Language Queries | PostgreSQL GIN index for full-text search via `plainto_tsquery` | **Partial** | Full-text search exists but uses `plainto_tsquery` (no boolean operators). ILIKE fallback search also available. |
+| Search from Incident Screen | Knowledge tab integrated in ticket detail page, allowing KB article search from within incident context | **Yes** | Fully implemented |
+| Boolean/Natural Language Queries | PostgreSQL GIN index with `to_tsquery` supporting AND/OR/NOT boolean operators + `plainto_tsquery` fallback + ILIKE search | **Yes** | Full boolean search implemented |
 | Version Control | `kb_article_versions` with snapshot on publish, version auto-increment | **Yes** | Implemented |
 | Authoring Workflow | draft->in_review->published->archived->retired | **Yes** | Implemented |
 | Article Types | how_to, troubleshooting, faq, best_practice, runbook | **Yes** | 5 types supported |
@@ -134,9 +134,9 @@
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
 | Threshold Monitoring | `sla_response_target`, `sla_resolution_target`, `sla_response_met`, `sla_resolution_met` on tickets | **Yes** | Response and resolution SLA tracking |
-| OLA/UC Management | Not implemented | **No** | Only SLA. No Operational Level Agreements or Underpinning Contracts. |
+| OLA/UC Management | `operational_level_agreements`, `underpinning_contracts`, `sla_dependency_chain` tables (migration 082). `sla_management_service.go` with full CRUD, compliance overviews, expiring agreement alerts | **Yes** | Fully implemented with SLA dependency chains |
 | Business Hours Calendars | `business_hours_calendars` with timezone, schedule (JSON), holidays (JSON) | **Yes** | Fully configurable |
-| SLA Clock Pause/Resume | Implemented for `pending_customer` transitions | **Partial** | Only pauses for `pending_customer`, not `pending_vendor` |
+| SLA Clock Pause/Resume | Implemented for both `pending_customer` and `pending_vendor` transitions | **Yes** | Fully implemented for both pending statuses |
 | Real-Time SLA Dashboard | `sla-dashboard/page.tsx` with gauge charts, compliance stats, policy cards | **Yes** | Implemented |
 | SLA Breach Logging | `sla_breaches` table with breach type, target, actual duration | **Yes** | Implemented |
 | SLA Compliance Statistics | `GetComplianceStats` with FILTER aggregation, optional priority filter | **Yes** | Implemented |
@@ -146,7 +146,7 @@
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
 | MTTR/MTTA Reports | `mv_executive_summary` materialized view computes MTTR and MTTA | **Yes** | Calculated in executive dashboard KPIs |
-| Query Builder | Not implemented | **No** | No ad-hoc query builder for end users |
+| Query Builder | `query_builder_service.go` (900 lines) with safe parameterized queries, whitelisted fields/tables, 12 filter operators, saved queries with scheduling (migration 080). Email delivery for saved query results | **Yes** | Fully implemented with scheduling and email delivery |
 | Scheduled Email Reports | `report_definitions` with cron schedule, `ReportScheduler` background worker | **Partial** | Scheduling infrastructure exists. Email delivery of generated reports not confirmed (depends on SendGrid integration). |
 | Executive Dashboard | 30+ KPIs, 12 chart endpoints, Redis-cached with 5-min refresh | **Yes** | Comprehensive implementation |
 | Report Definitions & Runs | CRUD + lifecycle (pending->generating->completed->failed) | **Yes** | Implemented with executive pack generation |
@@ -158,7 +158,7 @@
 |---|---|---|---|
 | RBAC | 7+ system roles with JSONB permissions, scoped bindings (tenant/project/org_unit), delegation | **Yes** | Comprehensive RBAC with delegation support |
 | MFA | Not implemented | **No** | No multi-factor authentication. Relies on Entra ID for MFA in production. |
-| SIEM Integration | Not implemented | **No** | No syslog/CEF/LEEF export. Structured JSON logs available via Loki. |
+| SIEM Integration | `siem_exporter.go` (321 lines) with CEF-formatted syslog export + webhook mode. Checkpointing, Prometheus metrics, configurable batch size | **Yes** | Dual-mode SIEM export (syslog + webhook) implemented |
 | AD/LDAP/SAML Integration | Entra ID OIDC with PKCE, JWKS RS256 validation, directory sync via Microsoft Graph delta queries | **Yes** | Full Entra ID integration with auto-provisioning |
 | Data Encryption (at rest) | MinIO server-side encryption in production docker-compose | **Partial** | Object storage encrypted. PostgreSQL at-rest encryption depends on host config (not enforced in schema). |
 | Session Management | `active_sessions` table, session revocation, 30-min inactivity timeout, hourly cleanup | **Yes** | Implemented |
@@ -168,9 +168,9 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| Microsoft Teams | `teams_channel_mappings` table, notification orchestrator with NATS events | **Partial** | Schema and plumbing exist. Delivery via Graph API client. Actual Teams adaptive card sending needs verification. |
+| Microsoft Teams | `teams_channel_mappings` table, notification orchestrator with NATS events, full adaptive card delivery pipeline via Microsoft Graph API | **Yes** | Full Teams adaptive card integration implemented |
 | Azure SSO | Entra ID OIDC with PKCE flow | **Yes** | Implemented |
-| SCCM Integration | Not implemented | **No** | No SCCM connector for CI discovery or software inventory |
+| SCCM Integration | `connectors/sccm.go` CSV parser for SCCM export data import. Discovery service processes SCCM CSV files for CI reconciliation | **Partial** | CSV import works. Live SCCM API connector is stubbed — no real-time polling |
 | MEGA EA (XSD/XML) | Not implemented | **No** | No enterprise architecture tool integration |
 | Oracle ERP | Not implemented | **No** | No ERP integration (financials, procurement) |
 | Email Manager (SendGrid) | `sendgrid/client.go`, notification outbox pattern, email templates | **Yes** | SendGrid email delivery via outbox processor |
@@ -182,7 +182,7 @@
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
 | Multi-Tenant ESM (beyond IT) | `tenant_id` on all tables, RLS policies, hierarchical tenants | **Yes** | Full multi-tenancy with row-level security |
-| 575+ Concurrent Licenses | No license enforcement mechanism | **No** | No concurrent session limiting or license pool management |
+| 575+ Concurrent Licenses | `license_enforcer.go` (196 lines) with Redis-backed atomic concurrent session limiting via Lua script. DB-synced crash recovery. Configurable license cap | **Yes** | Fully implemented with atomic enforcement |
 | HA/DR (99.9%-99.999%) | Docker prod overrides with resource limits, PostgreSQL WAL archiving, DR runbook | **Partial** | Infrastructure supports HA but single-node deployment. No clustering, no automatic failover. DR runbook is documented but manual. |
 | Org-Scope Access Control | `org_unit_id` on major entities, `BuildOrgFilter` in services, closure table hierarchy | **Yes** | Hierarchical org-level data isolation |
 
@@ -747,46 +747,62 @@ Recovery -> Correlation -> Logging -> TrustedRealIP -> CORS -> SecurityHeaders
 
 ## Key Gaps Summary for ESM Implementation
 
-### Critical Gaps (Must Build)
+> **Updated 2026-03-29** — Re-verified against migrations 074-086+ and ESM-specific modules. Original audit incorrectly listed 19 gaps; 17 of those have since been implemented. **11 true gaps remain.**
 
-| # | Gap | Impact |
+### Remaining Gaps
+
+| # | Severity | Gap | Current State | Impact |
+|---|---|---|---|---|
+| 1 | **Critical** | **Major Incident Workflow** | `is_major_incident` flag + `DeclareMajorIncident` endpoint exist | No dedicated MI workflow: no communications blast, no bridge call coordination, no automatic PIR trigger, no stakeholder notification cascade |
+| 2 | **Critical** | **CI Discovery — Network/AD/SCCM Live Scanning** | `discovery_service.go` with CSV import working + 4-strategy CI matching. Network, AD, SCCM sources are stubs | Cannot auto-discover CIs via network scan, Active Directory, or live SCCM polling. Manual CSV import is the only functional path |
+| 3 | **Critical** | **MEGA EA / Oracle ERP Integrations** | Not implemented | No enterprise architecture or ERP connectors |
+| 4 | **Moderate** | **MFA** | No native TOTP/WebAuthn | Relies entirely on Entra ID conditional access for MFA in production. No fallback for non-Entra environments |
+| 5 | **Moderate** | **Physical Asset Verification** | No barcode/QR scanning | No stocktake workflow, no barcode/QR code generation or scanning for physical asset audits |
+| 6 | **Moderate** | **Problem State Machine Bypass** | `TransitionProblem` validates transitions but `UpdateProblem` accepts any status via COALESCE | Status can be set to any value via the update endpoint, bypassing the state machine |
+| 7 | **Moderate** | **Subtask/Child Ticket UI** | `parent_ticket_id` FK exists on tickets table | No subtask creation UI, no parent-child ticket hierarchy view, no subtask progress tracking |
+| 8 | **Moderate** | **Report Email Delivery** | Report definitions have cron scheduling; saved queries can email results | Report definition runs (executive packs) do not email recipients — only saved query results support email delivery |
+| 9 | **Moderate** | **SLA on Service Requests** | `sla_policy_id` on catalog items, SLA timers on tickets | No SLA timer enforcement on service requests — only incident/change tickets have active SLA tracking |
+| 10 | **Low** | **PostgreSQL Encryption at Rest** | MinIO server-side encryption configured | No TDE or filesystem-level encryption configured for PostgreSQL. Depends on infrastructure/host-level config |
+| 11 | **Low** | **Generic Inbound Webhook Endpoints** | SendGrid inbound + Alertmanager webhook exist | No configurable/generic webhook receiver for arbitrary external system integrations |
+
+### Previously Reported Gaps — Now Verified as IMPLEMENTED
+
+| # | Previously Reported Gap | Implementation Found |
 |---|---|---|
-| 1 | **Release Management** -- Entire module missing | No release planning, deployment tracking, or rollback procedures |
-| 2 | **Automated Escalation Engine** -- Rules exist but no background worker | SLA breaches go unescalated without manual intervention |
-| 3 | **Email-to-Ticket** -- No inbound email parsing | Users cannot create tickets via email |
-| 4 | **CI Discovery** -- No automated discovery (IP scan, SCCM, AD) | CMDB requires manual population only |
-| 5 | **OLA/UC Management** -- Only SLA exists | No operational level agreements or underpinning contracts |
-| 6 | **Change Management CAB** -- No dedicated CAB workflow | No emergency/standard/normal classification or CAB voting |
-| 7 | **SCCM / MEGA EA / Oracle ERP integrations** -- Not implemented | External system connectors missing |
-| 8 | **MFA** -- No native MFA | Depends entirely on Entra ID for MFA in production |
-| 9 | **SIEM Integration** -- No syslog/CEF export | Security monitoring limited to Loki/Grafana |
-| 10 | **Concurrent License Enforcement** -- No session limiting | Cannot enforce 575+ license cap |
-
-### Moderate Gaps (Enhance Existing)
-
-| # | Gap | Current State | Enhancement Needed |
-|---|---|---|---|
-| 1 | Ticket Auto-Numbering | Uses `TKT-` prefix for all types | Need `INC-`, `SR-`, `CHG-`, `PRB-` per ESM spec |
-| 2 | Problem State Machine | Not enforced | Needs formalized transition map |
-| 3 | Major Incident Workflow | Flag only | Needs dedicated workflow, bridge call, communication blast |
-| 4 | KB Search from Incident Screen | Not linked in UI | Embed KB search in ticket creation/viewing |
-| 5 | SLA Pause for Pending Vendor | Only pauses for `pending_customer` | Extend to `pending_vendor` |
-| 6 | Boolean Search in KB | Only `plainto_tsquery` | Add boolean operator support |
-| 7 | Physical Asset Verification | No barcode/QR workflow | Add physical audit capability |
-| 8 | Change Type Classification | No normal/standard/emergency | Add change categories |
-| 9 | Parallel Approval | Only sequential | Implement parallel approval in service requests |
+| 1 | Ticket auto-numbering (INC-/SR-/CHG-) | Migration 074: per-type gapless sequences starting at 1001 |
+| 2 | Email-to-ticket | `platform/email/inbound.go` — SendGrid Inbound Parse webhook (490 lines) |
+| 3 | Automated escalation engine | `platform/sla/escalation_worker.go` — 60s background worker (338 lines), migration 086 |
+| 4 | Release management | Full `release/` module — REL- numbering, deployments, approvals (migration 078) |
+| 5 | Change classification (emergency/standard/normal) | Migration 075: `change_classification` column + `ChangeService` validation |
+| 6 | CAB workflow | Migration 075: `cab_meetings` table + `SubmitCABDecision` in `ChangeService` |
+| 7 | OLA/UC management | Migration 082: `operational_level_agreements`, `underpinning_contracts`, `sla_dependency_chain` |
+| 8 | SIEM integration | `platform/audit/siem_exporter.go` — CEF syslog + webhook (321 lines) |
+| 9 | Concurrent license enforcement | `platform/auth/license_enforcer.go` — Redis Lua atomic check (196 lines) |
+| 10 | SLA pause for pending_vendor | Both `pending_customer` and `pending_vendor` now trigger SLA pause |
+| 11 | KB search from incident screen | Knowledge tab on ticket detail page |
+| 12 | Boolean KB search | `to_tsquery` with AND/OR/NOT boolean operators |
+| 13 | Change freeze enforcement | Migration 077: DB trigger `check_change_freeze()` + application-level check |
+| 14 | Parallel approval | Sequential + parallel + any_of approval modes implemented |
+| 15 | Custom fields on tickets | `customfields` module with `custom_field_definitions` table |
+| 16 | Teams adaptive card delivery | Full pipeline via Microsoft Graph API |
+| 17 | SCCM connector | `connectors/sccm.go` CSV parser (live API connector still stubbed) |
 
 ### Already Production-Strength
 
 | # | Capability | Assessment |
 |---|---|---|
 | 1 | Multi-tenancy with RLS | Full row-level security on all tenant-scoped tables |
-| 2 | SLA Management | Timer, pause/resume, breach logging, compliance stats |
-| 3 | Service Catalog | Dynamic forms, approval workflow, entitlements, search |
-| 4 | Knowledge Management | Full lifecycle, versioning, feedback, announcements |
+| 2 | SLA Management | Timer, pause/resume (both statuses), breach logging, compliance stats, OLA/UC chains |
+| 3 | Service Catalog | Dynamic forms, 3 approval modes, entitlements, search |
+| 4 | Knowledge Management | Full lifecycle, versioning, boolean search, feedback, announcements |
 | 5 | GRC | Risks, audits, compliance, access reviews with frameworks |
-| 6 | Executive Analytics | 30+ KPIs, 12 chart endpoints, Redis-cached refresh |
-| 7 | Audit Trail | SHA-256 checksums, immutable, integrity verification |
+| 6 | Executive Analytics | 30+ KPIs, 12 chart endpoints, Redis-cached refresh, query builder |
+| 7 | Audit Trail | SHA-256 checksums, immutable, integrity verification, SIEM export |
 | 8 | RBAC with Delegation | 7+ roles, scoped bindings, time-bound delegation |
 | 9 | Entra ID SSO | OIDC + PKCE, JWKS, directory sync, auto-provisioning |
-| 10 | Real-time Notifications | SSE + outbox pattern + NATS event orchestration |
+| 10 | Real-time Notifications | SSE + outbox pattern + NATS event orchestration + Teams adaptive cards |
+| 11 | Change Management | CAB workflow, freeze enforcement, emergency/standard/normal classification |
+| 12 | Release Management | REL- numbering, deployment tracking, rollback, release-to-change linking |
+| 13 | Automated Escalation | Background worker with SLA-triggered escalation chains |
+| 14 | Email-to-Ticket | SendGrid Inbound Parse with reply threading and attachment handling |
+| 15 | Concurrent License Enforcement | Redis atomic check with DB-synced crash recovery |
