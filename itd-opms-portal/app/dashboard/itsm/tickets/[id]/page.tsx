@@ -1206,6 +1206,14 @@ export default function TicketDetailPage({
     "rounded-[1.7rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
   const softSurface =
     "rounded-[1.35rem] border border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  const heroSecondaryButtonClass =
+    "inline-flex items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-white/78 px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md disabled:opacity-50";
+  const heroPrimaryButtonClass =
+    "inline-flex items-center gap-1.5 rounded-2xl bg-[#1B7340] px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:opacity-95 hover:shadow-md disabled:opacity-50";
+  const heroSuccessButtonClass =
+    "inline-flex items-center gap-1.5 rounded-2xl bg-[#10B981] px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:opacity-95 hover:shadow-md disabled:opacity-50";
+  const heroDangerButtonClass =
+    "inline-flex items-center gap-1.5 rounded-2xl border border-red-200 bg-red-50/92 px-4 py-3 text-sm font-semibold text-red-700 transition-all hover:-translate-y-0.5 hover:bg-red-100 disabled:opacity-50";
   const heroSummary =
     ticket.description.length > 230
       ? `${ticket.description.slice(0, 227)}...`
@@ -1377,40 +1385,52 @@ export default function TicketDetailPage({
 
   return (
     <div className="relative mx-auto max-w-[96rem] space-y-6 pb-10">
-      <div className="pointer-events-none absolute inset-x-10 top-4 h-72 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.14),_transparent_64%)] blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-56 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.12),_transparent_68%)] blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-10 top-4 h-72 rounded-full bg-[radial-gradient(circle,_rgba(27,115,64,0.16),_transparent_64%)] blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-56 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.14),_transparent_68%)] blur-3xl" />
 
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="relative overflow-hidden rounded-[2.2rem] border border-[rgba(15,23,42,0.08)] bg-[linear-gradient(135deg,rgba(3,29,59,0.98),rgba(14,60,130,0.94)_48%,rgba(37,99,235,0.86))] p-6 shadow-[0_32px_90px_rgba(15,23,42,0.14)] sm:p-8"
+        className="relative overflow-hidden rounded-[2.2rem] border p-6 shadow-[0_32px_90px_-58px_rgba(27,115,64,0.24)] sm:p-8"
+        style={{
+          backgroundColor: "var(--surface-0)",
+          borderColor: "rgba(27, 115, 64, 0.14)",
+          backgroundImage:
+            "radial-gradient(circle at 12% 18%, rgba(27,115,64,0.16), transparent 32%), radial-gradient(circle at 88% 16%, rgba(37,99,235,0.12), transparent 28%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+        }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.14),_transparent_22%),radial-gradient(circle_at_16%_18%,_rgba(255,255,255,0.08),_transparent_24%)]" />
-        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(96,165,250,0.28),_transparent_68%)]" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.2),_transparent_68%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(27,115,64,0.08),_transparent_24%),radial-gradient(circle_at_16%_18%,_rgba(37,99,235,0.08),_transparent_24%)]" />
+        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.12),_transparent_68%)]" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(27,115,64,0.12),_transparent_68%)]" />
 
         <div className="relative grid gap-8 xl:grid-cols-[1.12fr_0.88fr]">
           <div className="max-w-3xl">
             <button
               type="button"
               onClick={() => router.push("/dashboard/itsm/tickets")}
-              className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/78 backdrop-blur-xl transition-all hover:border-white/22 hover:bg-white/14"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white/78 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white"
             >
               <ArrowLeft size={13} />
               All tickets
             </button>
 
             <div className="mt-6 flex items-start gap-4">
-              <div className={`flex h-16 w-16 items-center justify-center rounded-[1.35rem] border border-white/12 bg-white/10 shadow-lg shadow-blue-950/20 ring-1 ${priorityInfo.ring}`}>
-                <Radio className="h-7 w-7 text-white" />
+              <div
+                className={`flex h-16 w-16 items-center justify-center rounded-[1.35rem] border shadow-lg shadow-[rgba(27,115,64,0.12)] ring-1 ${priorityInfo.ring}`}
+                style={{
+                  borderColor: "rgba(27, 115, 64, 0.14)",
+                  backgroundColor: "rgba(255, 255, 255, 0.82)",
+                }}
+              >
+                <Radio className="h-7 w-7 text-[#1B7340]" />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={copyTicketNumber}
-                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 font-mono text-xs text-white/82 transition-colors hover:text-white"
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white/78 px-3 py-1.5 font-mono text-xs text-[var(--text-secondary)] transition-colors hover:bg-white hover:text-[var(--text-primary)]"
                     title="Copy ticket number"
                   >
                     <Hash size={12} />
@@ -1430,12 +1450,12 @@ export default function TicketDetailPage({
                   >
                     {priorityInfo.label}
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-white/14 bg-white/10 px-3 py-1 text-[11px] font-semibold capitalize text-white/88">
+                  <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-white/78 px-3 py-1 text-[11px] font-semibold capitalize text-[var(--text-primary)]">
                     {ticket.status.replace(/_/g, " ")}
                   </span>
                   {ticket.isMajorIncident && (
                     <motion.span
-                      className="inline-flex items-center gap-1 rounded-full border border-red-300/25 bg-red-500/15 px-3 py-1 text-[11px] font-bold uppercase text-red-100"
+                      className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-bold uppercase text-red-700"
                       animate={{ scale: [1, 1.03, 1] }}
                       transition={{ repeat: Infinity, duration: 2 }}
                     >
@@ -1446,14 +1466,14 @@ export default function TicketDetailPage({
                   {ticket.majorIncidentStatus && (
                     <StatusBadge
                       status={ticket.majorIncidentStatus}
-                      className="border-white/12 bg-white/10 text-white"
+                      className="border-[var(--border)] bg-white/78 text-[var(--text-primary)]"
                       dot={false}
                     >
                       MI: {ticket.majorIncidentStatus.replace(/_/g, " ")}
                     </StatusBadge>
                   )}
                   {(ticket.subtaskCount ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-white/14 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/88">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white/78 px-3 py-1 text-[11px] font-semibold text-[var(--text-primary)]">
                       <ListTree size={11} />
                       {ticket.subtaskCount} subtask{ticket.subtaskCount !== 1 ? "s" : ""}
                     </span>
@@ -1461,7 +1481,7 @@ export default function TicketDetailPage({
                   {ticket.parentTicketNumber && (
                     <Link
                       href={`/dashboard/itsm/tickets/${ticket.parentTicketId}`}
-                      className="inline-flex items-center gap-1 rounded-full border border-amber-300/25 bg-amber-500/12 px-3 py-1 text-[11px] font-semibold text-amber-100 transition-colors hover:bg-amber-500/18"
+                      className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100"
                     >
                       <ListTree size={11} />
                       Subtask of {ticket.parentTicketNumber}
@@ -1469,10 +1489,10 @@ export default function TicketDetailPage({
                   )}
                 </div>
 
-                <h1 className="mt-4 text-3xl font-bold tracking-[-0.045em] text-white sm:text-[2.7rem]">
+                <h1 className="mt-4 text-3xl font-bold tracking-[-0.045em] text-[var(--text-primary)] sm:text-[2.7rem]">
                   {ticket.title}
                 </h1>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-100/78 sm:text-base">
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--text-secondary)] sm:text-base">
                   {heroSummary}
                 </p>
               </div>
@@ -1484,9 +1504,9 @@ export default function TicketDetailPage({
                 return (
                   <div
                     key={`${item.label}`}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3.5 py-2 text-xs font-medium tracking-[0.08em] text-white/82"
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white/78 px-3.5 py-2 text-xs font-medium tracking-[0.08em] text-[var(--text-secondary)]"
                   >
-                    <Icon size={13} />
+                    <Icon size={13} className="text-[#1B7340]" />
                     {item.label}
                   </div>
                 );
@@ -1496,20 +1516,20 @@ export default function TicketDetailPage({
             {ticket.isMajorIncident && ticket.majorIncidentRecordId && (
               <Link
                 href={`/dashboard/itsm/major-incidents/${ticket.majorIncidentRecordId}`}
-                className="mt-6 flex items-center justify-between gap-3 rounded-[24px] border border-red-300/25 bg-red-500/12 px-5 py-4 text-sm text-white/90 transition-colors hover:bg-red-500/16"
+                className="mt-6 flex items-center justify-between gap-3 rounded-[24px] border border-red-200 bg-red-50/92 px-5 py-4 text-sm text-red-900 transition-colors hover:bg-red-100"
               >
                 <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-100/80">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-600">
                     Major Incident Workflow
                   </p>
-                  <p className="font-semibold text-white">
+                  <p className="font-semibold text-red-950">
                     Linked major incident is {ticket.majorIncidentStatus?.replace(/_/g, " ") ?? "active"}.
                   </p>
-                  <p className="text-xs text-red-50/80">
+                  <p className="text-xs text-red-700/90">
                     Open the workflow workspace for stakeholder updates, bridge coordination, and PIR tracking.
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-red-700 shadow-sm">
                   Open workflow
                   <ExternalLink size={14} />
                 </span>
@@ -1520,19 +1540,15 @@ export default function TicketDetailPage({
               <div className="mt-7 flex flex-wrap items-center gap-2.5">
                 {transitions.map((t) => {
                   const TIcon = t.icon;
-                  let btnClass =
-                    "inline-flex items-center gap-1.5 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all hover:border-white/28 hover:bg-white/14 disabled:opacity-50";
+                  let btnClass = heroSecondaryButtonClass;
                   if (t.variant === "primary") {
-                    btnClass =
-                      "inline-flex items-center gap-1.5 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#14386e] transition-all hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50";
+                    btnClass = heroPrimaryButtonClass;
                   }
                   if (t.variant === "success") {
-                    btnClass =
-                      "inline-flex items-center gap-1.5 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50";
+                    btnClass = heroSuccessButtonClass;
                   }
                   if (t.variant === "danger") {
-                    btnClass =
-                      "inline-flex items-center gap-1.5 rounded-2xl border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm font-semibold text-red-50 transition-all hover:bg-red-500/18 disabled:opacity-50";
+                    btnClass = heroDangerButtonClass;
                   }
 
                   return (
@@ -1553,7 +1569,7 @@ export default function TicketDetailPage({
                   type="button"
                   disabled={isActing}
                   onClick={() => setShowAssignForm((f) => !f)}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-white/14 bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl transition-all hover:border-white/28 hover:bg-white/14 disabled:opacity-50"
+                  className={heroSecondaryButtonClass}
                 >
                   <UserPlus size={16} />
                   Assign
@@ -1567,7 +1583,7 @@ export default function TicketDetailPage({
                       type="button"
                       disabled={isActing}
                       onClick={handleDeclareMajor}
-                      className="inline-flex items-center gap-1.5 rounded-2xl border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm font-semibold text-red-50 transition-all hover:bg-red-500/18 disabled:opacity-50"
+                      className={heroDangerButtonClass}
                     >
                       <AlertTriangle size={16} />
                       Declare Major
@@ -1584,7 +1600,6 @@ export default function TicketDetailPage({
               value={responseSignal.label}
               helper={responseSignal.helper}
               accent={responseSignal.color}
-              inverted
             />
             <MetricTile
               icon={Gauge}
@@ -1592,7 +1607,6 @@ export default function TicketDetailPage({
               value={resolutionSignal.label}
               helper={resolutionSignal.helper}
               accent={resolutionSignal.color}
-              inverted
             />
             <MetricTile
               icon={Users}
@@ -1600,7 +1614,6 @@ export default function TicketDetailPage({
               value={currentOwnerName}
               helper={currentOwnerMeta || "No current assignee on this ticket."}
               accent="#60A5FA"
-              inverted
             />
             <MetricTile
               icon={TrendingUp}
@@ -1608,22 +1621,21 @@ export default function TicketDetailPage({
               value={latestActivityActor}
               helper={latestActivityMeta || `${timeline.length} activity events recorded.`}
               accent="#34D399"
-              inverted
             />
           </div>
         </div>
 
-        <div className="relative mt-8 rounded-[1.7rem] border border-white/14 bg-white/10 p-5 backdrop-blur-xl">
+        <div className={`relative mt-8 ${softSurface} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
                 Lifecycle progress
               </p>
-              <p className="mt-2 text-sm leading-6 text-white/78">
+              <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
                 Move from intake to closure with a single operational view of where the ticket sits right now.
               </p>
             </div>
-            <div className="inline-flex items-center rounded-full border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/82">
+            <div className="inline-flex items-center rounded-full border border-[var(--border)] bg-white/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-primary)]">
               {ticket.status.replace(/_/g, " ")}
             </div>
           </div>

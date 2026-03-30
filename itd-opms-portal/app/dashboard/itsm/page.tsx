@@ -10,6 +10,7 @@ import {
   Bug,
   ClipboardList,
   Gauge,
+  GitBranch,
   Headphones,
   Plus,
   ShoppingCart,
@@ -23,6 +24,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import {
   useCSATStats,
+  useCABMeetings,
+  useChangeStats,
   useMyQueue,
   useMyServiceRequests,
   usePendingApprovals,
@@ -584,6 +587,9 @@ export default function ITSMHubPage() {
   const { data: requestsData, isLoading: requestsLoading } =
     useMyServiceRequests(1, 4);
   const { data: approvalsData } = usePendingApprovals(1, 1);
+  const { data: changeStats, isLoading: changeStatsLoading } = useChangeStats();
+  const { data: cabMeetingsData, isLoading: cabMeetingsLoading } =
+    useCABMeetings({ page: 1, pageSize: 1 });
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -618,6 +624,10 @@ export default function ITSMHubPage() {
     approvalsData?.meta.totalItems ?? approvalsData?.data.length ?? 0;
   const problemCount =
     problemsData?.meta.totalItems ?? problemsData?.data.length ?? 0;
+  const changeCount = changeStats?.total ?? 0;
+  const pendingCabCount = changeStats?.pendingCab ?? 0;
+  const cabMeetingCount =
+    cabMeetingsData?.meta.totalItems ?? cabMeetingsData?.data.length ?? 0;
   const avgRating = csatStats?.avgRating ?? 0;
   const posture = getPosture(
     overallCompliance,
@@ -722,6 +732,30 @@ export default function ITSMHubPage() {
       loading: problemsLoading,
     },
     {
+      title: "Change control",
+      value: pendingCabCount,
+      description:
+        pendingCabCount > 0
+          ? `${pendingCabCount} change waiting for CAB review or formal decision.`
+          : "No CAB bottleneck is visible in the current change flow.",
+      href: "/dashboard/itsm/changes",
+      icon: GitBranch,
+      accent: "#7C3AED",
+      loading: changeStatsLoading,
+    },
+    {
+      title: "CAB cadence",
+      value: cabMeetingCount,
+      description:
+        cabMeetingCount > 0
+          ? "CAB meetings are scheduled and ready for governance follow-through."
+          : "No CAB meetings are currently visible from this slice.",
+      href: "/dashboard/itsm/cab-meetings",
+      icon: ClipboardList,
+      accent: "#D97706",
+      loading: cabMeetingsLoading,
+    },
+    {
       title: "Queue coverage",
       value: queueCount,
       description:
@@ -781,6 +815,24 @@ export default function ITSMHubPage() {
       icon: Workflow,
       accent: "#DC2626",
       metric: `${problemCount || 0} active`,
+    },
+    {
+      title: "Changes",
+      description:
+        "Run standard, normal, and emergency changes with clearer execution and governance checkpoints.",
+      href: "/dashboard/itsm/changes",
+      icon: GitBranch,
+      accent: "#7C3AED",
+      metric: `${changeCount || 0} tracked`,
+    },
+    {
+      title: "CAB Meetings",
+      description:
+        "Surface the advisory board schedule, decisions, and meeting flow around changes.",
+      href: "/dashboard/itsm/cab-meetings",
+      icon: ClipboardList,
+      accent: "#D97706",
+      metric: `${cabMeetingCount || 0} meetings`,
     },
   ];
 
@@ -890,6 +942,16 @@ export default function ITSMHubPage() {
                 href="/dashboard/itsm/sla-dashboard"
                 icon={Gauge}
                 label="Inspect SLA Pulse"
+              />
+              <ActionLink
+                href="/dashboard/itsm/changes"
+                icon={GitBranch}
+                label="Open Changes"
+              />
+              <ActionLink
+                href="/dashboard/itsm/cab-meetings"
+                icon={ClipboardList}
+                label="View CAB Meetings"
               />
             </div>
 

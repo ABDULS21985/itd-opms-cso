@@ -1664,17 +1664,6 @@ export function useBulkUpdateTickets() {
 /*  Service Requests — Types                                           */
 /* ================================================================== */
 
-export interface ConsistencyViolation {
-  type: string;
-  entityId: string;
-  entityName: string;
-  parentSlaId: string;
-  parentSlaName: string;
-  field: string;
-  slaTargetMinutes: number;
-  entityTargetMinutes: number;
-}
-
 export interface ServiceRequest {
   id: string;
   tenantId: string;
@@ -1714,16 +1703,6 @@ export interface ApprovalTask {
   comment?: string;
   delegatedTo?: string;
   createdAt: string;
-}
-
-export interface SLADependencyChainEntry {
-  id: string;
-  slaPolicyId: string;
-  /** Backend serializes as "slaName" */
-  slaName?: string;
-  /** @deprecated use slaName — kept for backwards compat */
-  slaPolicyName?: string;
-  slaResponseMinutes?: number;
 }
 
 export interface RequestTimelineEntry {

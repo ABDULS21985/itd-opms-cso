@@ -332,6 +332,18 @@ export const navGroups: NavGroup[] = [
         permission: "itsm.view",
       },
       {
+        href: "/dashboard/itsm/changes",
+        label: "Changes",
+        icon: GitBranch,
+        permission: "itsm.view",
+      },
+      {
+        href: "/dashboard/itsm/cab-meetings",
+        label: "CAB Meetings",
+        icon: ClipboardList,
+        permission: "itsm.view",
+      },
+      {
         href: "/dashboard/itsm/sla-dashboard",
         label: "SLA Dashboard",
         icon: Activity,
