@@ -66,6 +66,8 @@ type Server struct {
 	maintenanceWorker     *system.MaintenanceWorker
 	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
+	siemExporter          *audit.SIEMExporter
+	licenseEnforcer       *auth.LicenseEnforcer
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -176,8 +178,16 @@ func (s *Server) Setup() {
 		slog.Warn("no email provider configured — email notifications will be skipped")
 	}
 
+	// --- License enforcer (ESM concurrent license cap) ---
+	licenseEnforcer := auth.NewLicenseEnforcer(s.pool, s.redis, s.cfg.License)
+	s.licenseEnforcer = licenseEnforcer
+
+	// --- SIEM exporter (ESM audit event export) ---
+	siemExporter := audit.NewSIEMExporter(s.pool, s.cfg.SIEM)
+	s.siemExporter = siemExporter
+
 	// --- Auth handler (needs email sender for password resets) ---
-	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL)
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL, licenseEnforcer)
 
 	// --- Notification outbox processor ---
 	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)

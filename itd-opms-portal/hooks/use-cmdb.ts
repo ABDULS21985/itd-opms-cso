@@ -6,6 +6,7 @@ import type {
   AssetLifecycleEvent,
   AssetDisposal,
   AssetStats,
+  AssetVerification,
   CMDBItem,
   CMDBRelationship,
   ReconciliationRun,
@@ -222,6 +223,60 @@ export function useCreateLifecycleEvent() {
     },
     onError: () => {
       toast.error("Failed to record lifecycle event");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Asset Verification — Queries & Mutations                            */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/assets/{id}/verifications - verification history for an asset.
+ */
+export function useAssetVerifications(assetId: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-verifications", assetId],
+    queryFn: () =>
+      apiClient.get<AssetVerification[]>(
+        `/cmdb/assets/${assetId}/verifications`,
+      ),
+    enabled: !!assetId,
+  });
+}
+
+/**
+ * POST /cmdb/assets/{id}/verify - verify an asset.
+ */
+export function useVerifyAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      assetId,
+      ...body
+    }: {
+      assetId: string;
+      locationConfirmed?: boolean;
+      condition?: string;
+      notes?: string;
+      photoEvidenceIds?: string[];
+    }) =>
+      apiClient.post<AssetVerification>(
+        `/cmdb/assets/${assetId}/verify`,
+        body,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["asset-verifications", variables.assetId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["asset", variables.assetId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      toast.success("Asset verified successfully");
+    },
+    onError: () => {
+      toast.error("Failed to verify asset");
     },
   });
 }

@@ -22,6 +22,8 @@ type Config struct {
 	InboundEmail  InboundEmailConfig
 	Observability ObservabilityConfig
 	Log           LogConfig
+	SIEM          SIEMConfig
+	License       LicenseConfig
 }
 
 type ServerConfig struct {
@@ -133,6 +135,21 @@ type LogConfig struct {
 	Format string `mapstructure:"format"`
 }
 
+type SIEMConfig struct {
+	Enabled      bool          `mapstructure:"enabled"`
+	Mode         string        `mapstructure:"mode"`
+	SyslogAddr   string        `mapstructure:"syslog_addr"`
+	SyslogProto  string        `mapstructure:"syslog_proto"`
+	WebhookURL   string        `mapstructure:"webhook_url"`
+	BatchSize    int           `mapstructure:"batch_size"`
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+}
+
+type LicenseConfig struct {
+	MaxConcurrent int           `mapstructure:"max_concurrent"`
+	SyncInterval  time.Duration `mapstructure:"sync_interval"`
+}
+
 // Load reads configuration from .env file and environment variables.
 func Load() (*Config, error) {
 	v := viper.New()
@@ -194,6 +211,19 @@ func Load() (*Config, error) {
 	v.SetDefault("INBOUND_EMAIL_WEBHOOK_SECRET", "")
 	v.SetDefault("INBOUND_EMAIL_DOMAIN", "itd.cbn.gov.ng")
 
+	// SIEM export
+	v.SetDefault("SIEM_ENABLED", false)
+	v.SetDefault("SIEM_MODE", "syslog")
+	v.SetDefault("SIEM_SYSLOG_ADDR", "localhost:514")
+	v.SetDefault("SIEM_SYSLOG_PROTO", "udp")
+	v.SetDefault("SIEM_WEBHOOK_URL", "")
+	v.SetDefault("SIEM_BATCH_SIZE", 100)
+	v.SetDefault("SIEM_POLL_INTERVAL", "10s")
+
+	// License enforcement
+	v.SetDefault("MAX_CONCURRENT_LICENSES", 575)
+	v.SetDefault("LICENSE_SYNC_INTERVAL", "5m")
+
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
 
@@ -205,6 +235,16 @@ func Load() (*Config, error) {
 	refreshExpiry, err := time.ParseDuration(v.GetString("JWT_REFRESH_EXPIRY"))
 	if err != nil {
 		refreshExpiry = 7 * 24 * time.Hour
+	}
+
+	siemPoll, err := time.ParseDuration(v.GetString("SIEM_POLL_INTERVAL"))
+	if err != nil {
+		siemPoll = 10 * time.Second
+	}
+
+	licenseSync, err := time.ParseDuration(v.GetString("LICENSE_SYNC_INTERVAL"))
+	if err != nil {
+		licenseSync = 5 * time.Minute
 	}
 
 	cfg := &Config{
@@ -273,6 +313,19 @@ func Load() (*Config, error) {
 		Log: LogConfig{
 			Level:  v.GetString("LOG_LEVEL"),
 			Format: v.GetString("LOG_FORMAT"),
+		},
+		SIEM: SIEMConfig{
+			Enabled:      v.GetBool("SIEM_ENABLED"),
+			Mode:         v.GetString("SIEM_MODE"),
+			SyslogAddr:   v.GetString("SIEM_SYSLOG_ADDR"),
+			SyslogProto:  v.GetString("SIEM_SYSLOG_PROTO"),
+			WebhookURL:   v.GetString("SIEM_WEBHOOK_URL"),
+			BatchSize:    v.GetInt("SIEM_BATCH_SIZE"),
+			PollInterval: siemPoll,
+		},
+		License: LicenseConfig{
+			MaxConcurrent: v.GetInt("MAX_CONCURRENT_LICENSES"),
+			SyncInterval:  licenseSync,
 		},
 	}
 

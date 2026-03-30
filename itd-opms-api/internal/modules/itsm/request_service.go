@@ -87,7 +87,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 
 	// Look up catalog item to check approval requirements.
 	itemQuery := `
-		SELECT id, approval_required, approval_chain_config, name
+		SELECT id, approval_required, approval_chain_config, name, COALESCE(approval_mode, 'sequential')
 		FROM catalog_items
 		WHERE id = $1 AND tenant_id = $2 AND status = 'active'`
 
@@ -95,8 +95,9 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 	var approvalRequired bool
 	var chainConfigRaw json.RawMessage
 	var itemName string
+	var approvalMode string
 	err := s.pool.QueryRow(ctx, itemQuery, req.CatalogItemID, auth.TenantID).Scan(
-		&itemID, &approvalRequired, &chainConfigRaw, &itemName,
+		&itemID, &approvalRequired, &chainConfigRaw, &itemName, &approvalMode,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -170,12 +171,21 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 			return ServiceRequest{}, apperrors.Internal("failed to parse approval chain config", err)
 		}
 
-		for _, approver := range chainCfg.Approvers {
+		// Use the catalog item's approval_mode (overrides legacy chain config type).
+		effectiveMode := approvalMode
+
+		for i, approver := range chainCfg.Approvers {
 			taskID := uuid.New()
 
-			// For parallel chains, all tasks start as pending.
-			// For sequential chains, only order 1 (or the lowest) starts as pending;
-			// subsequent ones start as pending too but will be checked in sequence.
+			// For parallel mode: all tasks start as "pending" (all approvers notified at once).
+			// For sequential mode: only the first task starts as "pending"; rest as "pending"
+			// but ApproveRequest will enforce sequence order.
+			taskStatus := ApprovalTaskStatusPending
+			order := approver.Order
+			if order == 0 {
+				order = i + 1
+			}
+
 			taskQuery := `
 				INSERT INTO approval_tasks (
 					id, tenant_id, request_id, approver_id,
@@ -184,7 +194,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 
 			_, err := tx.Exec(ctx, taskQuery,
 				taskID, auth.TenantID, id, approver.UserID,
-				approver.Order, ApprovalTaskStatusPending, now,
+				order, taskStatus, now,
 			)
 			if err != nil {
 				return ServiceRequest{}, apperrors.Internal("failed to create approval task", err)
@@ -192,7 +202,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 		}
 
 		// Add "approval_requested" timeline entry.
-		approvalDesc := fmt.Sprintf("Approval requested (%s chain with %d approver(s))", chainCfg.Type, len(chainCfg.Approvers))
+		approvalDesc := fmt.Sprintf("Approval requested (%s mode with %d approver(s))", effectiveMode, len(chainCfg.Approvers))
 		if err := s.addTimelineEntry(ctx, tx, id, auth.UserID, "approval_requested", &approvalDesc, nil); err != nil {
 			return ServiceRequest{}, apperrors.Internal("failed to add approval timeline entry", err)
 		}
@@ -501,13 +511,18 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 	}
 	defer tx.Rollback(ctx)
 
-	// Verify the request exists and is pending approval.
+	// Verify the request exists and is pending approval; also look up the catalog item's approval_mode.
 	var currentStatus string
 	var tenantID uuid.UUID
+	var reqApprovalMode string
 	err = tx.QueryRow(ctx,
-		`SELECT tenant_id, status FROM service_requests WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		`SELECT sr.tenant_id, sr.status, COALESCE(ci.approval_mode, 'sequential')
+		 FROM service_requests sr
+		 JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		 WHERE sr.id = $1 AND sr.tenant_id = $2
+		 FOR UPDATE OF sr`,
 		requestID, auth.TenantID,
-	).Scan(&tenantID, &currentStatus)
+	).Scan(&tenantID, &currentStatus, &reqApprovalMode)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return ServiceRequest{}, apperrors.NotFound("ServiceRequest", requestID.String())
@@ -532,6 +547,22 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 			return ServiceRequest{}, apperrors.Validation("approver", "no pending approval task found for this user")
 		}
 		return ServiceRequest{}, apperrors.Internal("failed to find approval task", err)
+	}
+
+	// For sequential mode, ensure all tasks with a lower sequence_order are already approved.
+	if reqApprovalMode == "sequential" {
+		var blockedCount int
+		err = tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM approval_tasks
+			 WHERE request_id = $1 AND sequence_order < $2 AND status NOT IN ('approved', 'skipped')`,
+			requestID, sequenceOrder,
+		).Scan(&blockedCount)
+		if err != nil {
+			return ServiceRequest{}, apperrors.Internal("failed to check sequential order", err)
+		}
+		if blockedCount > 0 {
+			return ServiceRequest{}, apperrors.Validation("sequence", "earlier approval steps must be completed first")
+		}
 	}
 
 	// Mark the task as approved.

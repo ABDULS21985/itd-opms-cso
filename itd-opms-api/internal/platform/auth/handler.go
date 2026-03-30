@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -32,11 +33,12 @@ type AuthHandler struct {
 	revocationService *RevocationService
 	emailSender       EmailSender
 	frontendURL       string
+	enforcer          *LicenseEnforcer
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService, emailSender EmailSender, frontendURL string) *AuthHandler {
-	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService, emailSender: emailSender, frontendURL: frontendURL}
+func NewAuthHandler(service *AuthService, auditService *audit.AuditService, revocationService *RevocationService, emailSender EmailSender, frontendURL string, enforcer *LicenseEnforcer) *AuthHandler {
+	return &AuthHandler{service: service, auditService: auditService, revocationService: revocationService, emailSender: emailSender, frontendURL: frontendURL, enforcer: enforcer}
 }
 
 // Routes is intentionally unused — all auth routes are registered directly in
@@ -144,6 +146,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: types.GetCorrelationID(r.Context()),
 	})
 
+	// Enforce concurrent license limit.
+	if h.enforcer != nil {
+		if err := h.enforcer.CheckAndIncrement(r.Context()); err != nil {
+			if errors.Is(err, ErrLicenseCapacityReached) {
+				slog.Warn("license capacity reached",
+					"email", req.Email,
+					"ip", realIP(r),
+				)
+				types.ErrorMessage(w, http.StatusTooManyRequests,
+					"LICENSE_LIMIT", "Maximum concurrent license limit reached. Please try again later.",
+				)
+				return
+			}
+			// Non-fatal: log and continue (fail-open).
+			slog.ErrorContext(r.Context(), "license check failed", "error", err)
+		}
+	}
+
 	// Create session record for tracking.
 	tokenHash := helpers.SHA256Checksum([]byte(resp.AccessToken))
 	expiresAt := time.Now().Add(h.service.jwtCfg.RefreshExpiry)
@@ -230,6 +250,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	//    Both dev-mode and OIDC sessions are tracked by hash(access_token).
 	if tokenString != "" {
 		h.service.RevokeSessionByTokenHash(r.Context(), tokenString)
+	}
+
+	// Decrement the license counter.
+	if h.enforcer != nil {
+		h.enforcer.Decrement(r.Context())
 	}
 
 	// 3. Revoke the platform refresh token (dev mode only — no-op if absent).

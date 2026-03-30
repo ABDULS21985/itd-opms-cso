@@ -156,6 +156,7 @@ type Asset struct {
 	Classification *string          `json:"classification"`
 	Attributes     json.RawMessage  `json:"attributes"`
 	Tags           []string         `json:"tags"`
+	LastVerifiedAt *time.Time       `json:"lastVerifiedAt"`
 	CreatedAt      time.Time        `json:"createdAt"`
 	UpdatedAt      time.Time        `json:"updatedAt"`
 }
@@ -188,6 +189,32 @@ type AssetDisposal struct {
 	Status                   string      `json:"status"`
 	CreatedAt                time.Time   `json:"createdAt"`
 	UpdatedAt                time.Time   `json:"updatedAt"`
+}
+
+// AssetVerification records a physical verification of an asset.
+type AssetVerification struct {
+	ID                uuid.UUID   `json:"id"`
+	TenantID          uuid.UUID   `json:"tenantId"`
+	AssetID           uuid.UUID   `json:"assetId"`
+	VerifierID        uuid.UUID   `json:"verifierId"`
+	VerifiedAt        time.Time   `json:"verifiedAt"`
+	LocationConfirmed *bool       `json:"locationConfirmed"`
+	Condition         *string     `json:"condition"`
+	Notes             *string     `json:"notes"`
+	PhotoEvidenceIDs  []uuid.UUID `json:"photoEvidenceIds"`
+}
+
+// VerifyAssetRequest is the payload for POST /assets/{id}/verify.
+type VerifyAssetRequest struct {
+	LocationConfirmed *bool       `json:"locationConfirmed"`
+	Condition         *string     `json:"condition"`
+	Notes             *string     `json:"notes"`
+	PhotoEvidenceIDs  []uuid.UUID `json:"photoEvidenceIds"`
+}
+
+// AssetVerificationConditions are the valid condition values.
+var AssetVerificationConditions = map[string]bool{
+	"good": true, "fair": true, "poor": true, "damaged": true, "missing": true,
 }
 
 // CMDBItem represents a configuration item in the CMDB.

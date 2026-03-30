@@ -47,6 +47,28 @@ var (
 		Name: "nats_messages_consumed_total",
 		Help: "Total NATS messages consumed",
 	}, []string{"subject"})
+
+	// License enforcement metrics
+	LicenseActiveSessions = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "license_active_sessions",
+		Help: "Current number of active licensed sessions",
+	})
+
+	LicenseUtilizationRatio = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "license_utilization_ratio",
+		Help: "Ratio of active sessions to max licensed sessions (0.0-1.0)",
+	})
+
+	// SIEM export metrics
+	SIEMEventsExportedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "siem_events_exported_total",
+		Help: "Total number of audit events exported to SIEM",
+	})
+
+	SIEMExportErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "siem_export_errors_total",
+		Help: "Total number of SIEM export errors",
+	})
 )
 
 // Handler returns the Prometheus metrics HTTP handler.

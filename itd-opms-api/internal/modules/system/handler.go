@@ -1,6 +1,8 @@
 package system
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
@@ -8,8 +10,10 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // Handler is the top-level HTTP handler for the System module.
@@ -28,6 +32,10 @@ type Handler struct {
 
 	// Maintenance exposes the background worker for lifecycle management.
 	Maintenance *MaintenanceWorker
+
+	// External dependencies for ESM compliance endpoints.
+	licenseEnforcer *auth.LicenseEnforcer
+	siemExporter    *audit.SIEMExporter
 }
 
 // NewHandler creates a new System Handler with all sub-handlers wired up.
@@ -38,6 +46,8 @@ func NewHandler(
 	natsConn *nats.Conn,
 	minioClient *minio.Client,
 	minioCfg config.MinIOConfig,
+	licenseEnforcer *auth.LicenseEnforcer,
+	siemExporter *audit.SIEMExporter,
 ) *Handler {
 	userSvc := NewUserService(pool, auditSvc, minioClient, minioCfg)
 	roleSvc := NewRoleService(pool, auditSvc)
@@ -59,7 +69,9 @@ func NewHandler(
 		auditExp:    NewAuditExplorerHandler(auditExpSvc),
 		session:     NewSessionHandler(sessionSvc),
 		template:    NewEmailTemplateHandler(templateSvc),
-		Maintenance: NewMaintenanceWorker(pool),
+		Maintenance:     NewMaintenanceWorker(pool),
+		licenseEnforcer: licenseEnforcer,
+		siemExporter:    siemExporter,
 	}
 }
 
@@ -82,6 +94,10 @@ func (h *Handler) Routes(r chi.Router) {
 
 		// Permission catalog
 		r.Get("/permissions", h.role.GetPermissionCatalog)
+
+		// ESM: License utilization & SIEM export status
+		r.Get("/license-utilization", h.getLicenseUtilization)
+		r.Get("/siem-status", h.getSIEMStatus)
 	})
 
 	// Admin endpoints — requires system.manage (SR-004)
@@ -109,4 +125,29 @@ func (h *Handler) Routes(r chi.Router) {
 		// Email templates
 		r.Route("/email-templates", func(r chi.Router) { h.template.Routes(r) })
 	})
+}
+
+// getLicenseUtilization returns the current license usage for the health dashboard.
+func (h *Handler) getLicenseUtilization(w http.ResponseWriter, r *http.Request) {
+	if h.licenseEnforcer == nil {
+		types.OK(w, map[string]any{
+			"current": 0, "max": 0, "ratio": 0.0, "lastSyncedAt": nil,
+		}, nil)
+		return
+	}
+	util, err := h.licenseEnforcer.Utilization(r.Context())
+	if err != nil {
+		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	types.OK(w, util, nil)
+}
+
+// getSIEMStatus returns the current SIEM exporter state.
+func (h *Handler) getSIEMStatus(w http.ResponseWriter, r *http.Request) {
+	if h.siemExporter == nil {
+		types.OK(w, audit.SIEMStatus{}, nil)
+		return
+	}
+	types.OK(w, h.siemExporter.Status(), nil)
 }

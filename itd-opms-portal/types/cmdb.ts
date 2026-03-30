@@ -26,8 +26,21 @@ export interface Asset {
   classification?: string;
   attributes?: Record<string, unknown>;
   tags: string[];
+  lastVerifiedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssetVerification {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  verifierId: string;
+  verifiedAt: string;
+  locationConfirmed?: boolean;
+  condition?: string;
+  notes?: string;
+  photoEvidenceIds: string[];
 }
 
 export interface AssetLifecycleEvent {

@@ -169,6 +169,7 @@ function CategoryLaneCard({
 export default function KnowledgeSearchPage() {
   const [inputValue, setInputValue] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"plain" | "boolean">("plain");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const limit = 20;
 
@@ -192,6 +193,7 @@ export default function KnowledgeSearchPage() {
     debouncedQuery,
     1,
     limit,
+    searchMode,
   );
   const { data: categoriesData, isLoading: categoriesLoading } =
     useKBCategories();
@@ -423,6 +425,37 @@ export default function KnowledgeSearchPage() {
               size={18}
               className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-[var(--primary)]"
             />
+          )}
+        </div>
+
+        {/* Search mode toggle */}
+        <div className="mt-3 flex items-center gap-3">
+          <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-0.5">
+            <button
+              onClick={() => setSearchMode("plain")}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: searchMode === "plain" ? "var(--primary)" : "transparent",
+                color: searchMode === "plain" ? "#fff" : "var(--text-secondary)",
+              }}
+            >
+              Simple Search
+            </button>
+            <button
+              onClick={() => setSearchMode("boolean")}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: searchMode === "boolean" ? "var(--primary)" : "transparent",
+                color: searchMode === "boolean" ? "#fff" : "var(--text-secondary)",
+              }}
+            >
+              Advanced (Boolean)
+            </button>
+          </div>
+          {searchMode === "boolean" && (
+            <span className="text-xs text-[var(--text-tertiary)]">
+              Use AND, OR, NOT operators. Example: &quot;network AND (timeout OR latency)&quot;
+            </span>
           )}
         </div>
 

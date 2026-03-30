@@ -22,10 +22,14 @@ import {
   UserX,
   Activity,
   ChevronRight,
+  CheckCircle,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   useAsset,
   useAssetLifecycleEvents,
+  useAssetVerifications,
+  useVerifyAsset,
   useUpdateAsset,
   useDeleteAsset,
   useAssetTransition,
@@ -90,9 +94,11 @@ export default function AssetDetailPage({
   /* ---- Data hooks ---- */
   const { data: asset, isLoading } = useAsset(id);
   const { data: lifecycleEvents } = useAssetLifecycleEvents(id);
+  const { data: verifications } = useAssetVerifications(id);
   const updateAsset = useUpdateAsset(id);
   const deleteAsset = useDeleteAsset();
   const transitionAsset = useAssetTransition(id);
+  const verifyAsset = useVerifyAsset();
 
   /* ---- User resolution ---- */
   const { data: allUsers } = useSearchUsers("");
@@ -110,8 +116,13 @@ export default function AssetDetailPage({
   const [pickerOwnerName, setPickerOwnerName] = useState("");
   const [pickerCustodianId, setPickerCustodianId] = useState<string | undefined>(undefined);
   const [pickerCustodianName, setPickerCustodianName] = useState("");
+  const [showVerifyForm, setShowVerifyForm] = useState(false);
+  const [verifyCondition, setVerifyCondition] = useState("good");
+  const [verifyLocationConfirmed, setVerifyLocationConfirmed] = useState(true);
+  const [verifyNotes, setVerifyNotes] = useState("");
 
   const events = lifecycleEvents ?? [];
+  const verificationList = verifications ?? [];
 
   /* ---- Handlers ---- */
   const handleDelete = useCallback(() => {
@@ -173,6 +184,23 @@ export default function AssetDetailPage({
       { onSuccess: () => setEditingCustodian(false) },
     );
   }, [updateAsset]);
+
+  const handleVerify = useCallback(() => {
+    verifyAsset.mutate(
+      {
+        assetId: id,
+        condition: verifyCondition,
+        locationConfirmed: verifyLocationConfirmed,
+        notes: verifyNotes || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowVerifyForm(false);
+          setVerifyNotes("");
+        },
+      },
+    );
+  }, [verifyAsset, id, verifyCondition, verifyLocationConfirmed, verifyNotes]);
 
   /* ---- Loading ---- */
 
@@ -359,6 +387,194 @@ export default function AssetDetailPage({
           </div>
         </motion.div>
       )}
+
+      {/* ================================================================ */}
+      {/*  2b. Verification Badge & Quick Verify                            */}
+      {/* ================================================================ */}
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.09 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck size={16} className="text-[var(--primary)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Physical Verification
+            </h2>
+          </div>
+          {!showVerifyForm && (
+            <button
+              type="button"
+              onClick={() => setShowVerifyForm(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            >
+              <CheckCircle size={14} />
+              Verify Now
+            </button>
+          )}
+        </div>
+
+        {/* Verification status badge */}
+        <div className="flex items-center gap-3 mb-3">
+          {asset.lastVerifiedAt ? (
+            <>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.1)]">
+                <CheckCircle size={16} className="text-[#10B981]" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  Last verified{" "}
+                  <span className="tabular-nums">
+                    {new Date(asset.lastVerifiedAt).toLocaleDateString()}
+                  </span>
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {(() => {
+                    const days = Math.floor(
+                      (Date.now() - new Date(asset.lastVerifiedAt).getTime()) /
+                        (1000 * 60 * 60 * 24),
+                    );
+                    if (days === 0) return "Verified today";
+                    if (days === 1) return "1 day ago";
+                    return `${days} days ago`;
+                  })()}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(245,158,11,0.1)]">
+                <AlertTriangle size={16} className="text-[#F59E0B]" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  Never verified
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  This asset has not been physically verified yet
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Quick verify form */}
+        {showVerifyForm && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-4 space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] mb-1 block">
+                  Condition
+                </label>
+                <select
+                  value={verifyCondition}
+                  onChange={(e) => setVerifyCondition(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="good">Good</option>
+                  <option value="fair">Fair</option>
+                  <option value="poor">Poor</option>
+                  <option value="damaged">Damaged</option>
+                  <option value="missing">Missing</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={verifyLocationConfirmed}
+                    onChange={(e) => setVerifyLocationConfirmed(e.target.checked)}
+                    className="rounded border-[var(--border)]"
+                  />
+                  Location confirmed
+                </label>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[var(--text-secondary)] mb-1 block">
+                Notes (optional)
+              </label>
+              <textarea
+                value={verifyNotes}
+                onChange={(e) => setVerifyNotes(e.target.value)}
+                placeholder="Any observations..."
+                rows={2}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleVerify}
+                disabled={verifyAsset.isPending}
+                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {verifyAsset.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <CheckCircle size={14} />
+                )}
+                {verifyAsset.isPending ? "Verifying..." : "Submit Verification"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowVerifyForm(false)}
+                className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-0)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent verifications */}
+        {verificationList.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-3">
+            <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
+              Recent Verifications
+            </p>
+            <div className="space-y-2">
+              {verificationList.slice(0, 3).map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between rounded-lg bg-[var(--surface-1)] px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold capitalize"
+                      style={{
+                        backgroundColor:
+                          v.condition === "good"
+                            ? "rgba(16, 185, 129, 0.1)"
+                            : v.condition === "fair"
+                              ? "rgba(245, 158, 11, 0.1)"
+                              : "rgba(239, 68, 68, 0.1)",
+                        color:
+                          v.condition === "good"
+                            ? "#10B981"
+                            : v.condition === "fair"
+                              ? "#F59E0B"
+                              : "#EF4444",
+                      }}
+                    >
+                      {v.condition ?? "N/A"}
+                    </span>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      by {userMap.get(v.verifierId) ?? v.verifierId.slice(0, 8) + "..."}
+                    </span>
+                  </div>
+                  <span className="text-[10px] tabular-nums text-[var(--text-secondary)]">
+                    {new Date(v.verifiedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </motion.div>
 
       {/* ================================================================ */}
       {/*  3. Dashboard Cards (4-column grid)                               */}
