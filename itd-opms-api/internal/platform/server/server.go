@@ -387,7 +387,11 @@ func (s *Server) Setup() {
 			r.Route("/knowledge", func(r chi.Router) { knowledgeHandler.Routes(r) })
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
-			r.Route("/system", func(r chi.Router) { systemHandler.Routes(r) })
+			r.Route("/system", func(r chi.Router) {
+				systemHandler.Routes(r)
+				// Admin MFA reset (uses auth MFA service, registered here).
+				r.With(middleware.RequirePermission("system.manage")).Post("/users/{id}/reset-mfa", mfaHandler.AdminResetMFA)
+			})
 			r.Route("/approvals", func(r chi.Router) { approvalHandler.Routes(r) })
 			r.Route("/calendar", func(r chi.Router) { calendarHandler.Routes(r) })
 			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
