@@ -154,6 +154,13 @@ func (h *ProblemHandler) UpdateProblem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Status must only be changed via the TransitionProblem endpoint.
+	if req.Status != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"Status cannot be changed via update. Use POST /problems/{id}/transition instead.")
+		return
+	}
+
 	problem, err := h.svc.UpdateProblem(r.Context(), id, req)
 	if err != nil {
 		writeAppError(w, r, err)

@@ -379,6 +379,57 @@ func TestProblemHandler_UpdateKnownError_MalformedJSON(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
+// UpdateProblem — status field rejection
+// ──────────────────────────────────────────────
+
+func TestProblemHandler_UpdateProblem_RejectsStatusField(t *testing.T) {
+	h := newTestProblemHandler()
+	validUUID := uuid.New().String()
+	body := `{"title":"Updated Title","status":"resolved"}`
+	req := httptest.NewRequest(http.MethodPut, "/problems/"+validUUID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validUUID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.UpdateProblem(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 when status field is present, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Status cannot be changed via update") {
+		t.Errorf("expected status rejection message, got %q", w.Body.String())
+	}
+}
+
+func TestProblemHandler_UpdateProblem_AllowsWithoutStatus(t *testing.T) {
+	h := newTestProblemHandler()
+	validUUID := uuid.New().String()
+	// Body without status field — should pass validation (will fail later at DB layer since pool is nil)
+	body := `{"title":"Updated Title","description":"New desc"}`
+	req := httptest.NewRequest(http.MethodPut, "/problems/"+validUUID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validUUID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.UpdateProblem(w, req)
+
+	// Should NOT be 400 with status rejection message — it will be 500 (nil pool) which
+	// is expected since no DB is available in tests. The key assertion is it's NOT rejected
+	// with "Status cannot be changed" message.
+	if w.Code == http.StatusBadRequest && strings.Contains(w.Body.String(), "Status cannot be changed") {
+		t.Error("should not reject when status field is absent")
+	}
+}
+
+// ──────────────────────────────────────────────
 // TransitionProblem handler tests
 // ──────────────────────────────────────────────
 

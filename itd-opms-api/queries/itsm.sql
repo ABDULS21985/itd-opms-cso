@@ -456,15 +456,15 @@ WHERE tenant_id = $1
   AND ($2::text IS NULL OR status = $2);
 
 -- name: UpdateProblem :one
+-- NOTE: status is intentionally excluded — use TransitionProblem endpoint instead.
 UPDATE problems
 SET title = COALESCE($3, title),
     description = COALESCE($4, description),
     root_cause = COALESCE($5, root_cause),
-    status = COALESCE($6, status),
-    workaround = COALESCE($7, workaround),
-    permanent_fix = COALESCE($8, permanent_fix),
-    linked_change_id = COALESCE($9, linked_change_id),
-    owner_id = COALESCE($10, owner_id)
+    workaround = COALESCE($6, workaround),
+    permanent_fix = COALESCE($7, permanent_fix),
+    linked_change_id = COALESCE($8, linked_change_id),
+    owner_id = COALESCE($9, owner_id)
 WHERE id = $1 AND tenant_id = $2
 RETURNING *;
 

@@ -24,7 +24,7 @@
 
 | Module | DB Tables | API Endpoints | Frontend Pages | Handlers | Services | Maturity |
 |--------|-----------|---------------|----------------|----------|----------|----------|
-| **ITSM** | tickets, ticket_comments, ticket_status_history, sla_policies, business_hours_calendars, escalation_rules, sla_breach_log, sla_breaches, problems, known_errors, csat_surveys, service_catalog_categories, service_catalog_items, service_catalog_favorites, service_requests, approval_tasks, request_timeline, support_queues, mv_catalog_item_popularity (19) | 82 endpoints | 13 pages | 8 handlers | 7 services | **High** |
+| **ITSM** | tickets, ticket_comments, ticket_status_history, ticket_kb_links, sla_policies, business_hours_calendars, escalation_rules, sla_breach_log, sla_breaches, problems, known_errors, csat_surveys, service_catalog_categories, service_catalog_items, service_catalog_favorites, service_requests, approval_tasks, request_timeline, support_queues, mv_catalog_item_popularity (20) | 87 endpoints | 13 pages | 9 handlers | 8 services | **High** |
 | **CMDB** | assets, asset_lifecycle_events, asset_disposals, cmdb_items, cmdb_relationships, reconciliation_runs, licenses, license_assignments, warranties, renewal_alerts (10) | 42 endpoints | 14 pages | 4 handlers | 4 services | **High** |
 | **Knowledge** | kb_categories, kb_articles, kb_article_versions, kb_article_feedback, announcements (5) | 20 endpoints | 7 pages | 3 handlers | 3 services | **High** |
 | **GRC** | risks, risk_assessments, grc_audits, audit_findings, evidence_collections, access_review_campaigns, access_review_entries, compliance_controls (8) | 29 endpoints | 10 pages | 4 handlers | 4 services | **High** |
@@ -37,7 +37,7 @@
 | **SSA** | ssa_requests, ssa_service_impacts, ssa_approvals, ssa_asd_assessments, ssa_qcmd_analyses, ssa_san_provisionings, ssa_dco_servers, ssa_audit_logs, ssa_delegations (9) | ~25 endpoints | dedicated pages | ~4 handlers | ~4 services | **High** |
 | **Platform** | audit_events, workflow_definitions, approval_chains, approval_steps, signoffs, documents, evidence_items, notification_templates, notification_outbox, notification_dlq, notifications, user_notification_preferences, teams_channel_mappings, directory_sync_runs, automation_rules, automation_executions, custom_field_definitions, document_folders, document_access_log, document_shares, document_comments, document_lifecycle_log, approval_delegations, approval_notifications, maintenance_windows, change_freeze_periods, cost_categories, project_cost_entries, budget_snapshots, password_reset_tokens (30) | shared middleware | shared components | N/A | auth, audit, notification, middleware | **High** |
 
-**Totals**: ~139 tables, 2 materialized views, 545 SQLC queries, ~430+ API endpoints, 109+ frontend pages, 28 hook files, 17+ shared components
+**Totals**: ~140 tables, 2 materialized views, 549 SQLC queries, ~435+ API endpoints, 109+ frontend pages, 28 hook files, 17+ shared components
 
 ---
 
@@ -121,7 +121,7 @@
 
 | ESM Requirement Area | OPMS Current State | Exists? | Gap Description |
 |---|---|---|---|
-| Search from Incident Screen | Knowledge tab integrated in ticket detail page, allowing KB article search from within incident context | **Yes** | Fully implemented |
+| Search from Incident Screen | `ticket_kb_links` table (migration 081) with link types (reference/resolution/workaround). Knowledge tab on ticket detail page with KB search, auto-suggestions (OR-joined FTS), linked articles with type badges, "Mark as Resolution" action (auto-adds comment + increments helpful_count). Ticket creation wizard shows "Suggested Solutions" panel based on title | **Yes** | Fully implemented with link/unlink, FTS suggestions, resolution tracking, and auto-comments |
 | Boolean/Natural Language Queries | PostgreSQL GIN index with `to_tsquery` supporting AND/OR/NOT boolean operators + `plainto_tsquery` fallback + ILIKE search | **Yes** | Full boolean search implemented |
 | Version Control | `kb_article_versions` with snapshot on publish, version auto-increment | **Yes** | Implemented |
 | Authoring Workflow | draft->in_review->published->archived->retired | **Yes** | Implemented |
@@ -201,6 +201,7 @@
 | `tickets` | ITSM | id, tenant_id, ticket_number, type, title, priority, urgency, impact, status, reporter_id, assignee_id, queue_id, sla_* fields, is_major_incident, parent_ticket_id, related_asset_id, related_ci_id | tenant, assignee, status | tenants, users, queues, sla_policies, assets, cmdb_items | YES |
 | `ticket_comments` | ITSM | id, tenant_id, ticket_id, author_id, content, is_internal, attachments | ticket | tickets, users | YES |
 | `ticket_status_history` | ITSM | id, tenant_id, ticket_id, from_status, to_status, changed_by, reason | ticket | tickets, users | YES |
+| `ticket_kb_links` | ITSM | id, ticket_id, article_id, linked_by, link_type (reference/resolution/workaround), created_at | ticket_id, article_id, UNIQUE(ticket_id, article_id) | tickets(CASCADE), kb_articles(CASCADE), users | NO |
 | `problems` | ITSM | id, tenant_id, problem_number, title, status, root_cause, workaround, linked_incident_ids UUID[], owner_id | tenant | tenants, users | YES |
 | `known_errors` | ITSM | id, problem_id, title, description, workaround, status, kb_article_id | tenant | problems, kb_articles | YES |
 | `sla_policies` | ITSM | id, tenant_id, name, priority_targets JSONB, business_hours_calendar_id, is_default | tenant | tenants, calendars | YES |
@@ -299,6 +300,11 @@
 | GET | `/api/v1/itsm/tickets/{id}/comments` | itsm.view |
 | POST | `/api/v1/itsm/tickets/{id}/comments` | itsm.manage |
 | GET | `/api/v1/itsm/tickets/{id}/history` | itsm.view |
+| GET | `/api/v1/itsm/tickets/{id}/kb-links` | itsm.view |
+| POST | `/api/v1/itsm/tickets/{id}/kb-links` | itsm.manage |
+| DELETE | `/api/v1/itsm/tickets/{id}/kb-links/{linkId}` | itsm.manage |
+| GET | `/api/v1/itsm/tickets/{id}/kb-suggestions` | itsm.view |
+| GET | `/api/v1/itsm/tickets/{id}/kb-search?q=&limit=` | itsm.view |
 | GET/POST | `/api/v1/itsm/problems` | itsm.view/manage |
 | GET/PUT/DELETE | `/api/v1/itsm/problems/{id}` | itsm.view/manage |
 | POST | `/api/v1/itsm/problems/{id}/link-incident` | itsm.manage |
@@ -747,7 +753,7 @@ Recovery -> Correlation -> Logging -> TrustedRealIP -> CORS -> SecurityHeaders
 
 ## Key Gaps Summary for ESM Implementation
 
-> **Updated 2026-03-29** — Re-verified against migrations 074-086+ and ESM-specific modules. Original audit incorrectly listed 19 gaps; 17 of those have since been implemented. **11 true gaps remain.**
+> **Updated 2026-03-30** — Re-verified against migrations 074-086+ and ESM-specific modules (including migration 081: ticket_kb_links). Original audit incorrectly listed 19 gaps; 17 of those have since been implemented. **11 true gaps remain.**
 
 ### Remaining Gaps
 
@@ -779,7 +785,7 @@ Recovery -> Correlation -> Logging -> TrustedRealIP -> CORS -> SecurityHeaders
 | 8 | SIEM integration | `platform/audit/siem_exporter.go` — CEF syslog + webhook (321 lines) |
 | 9 | Concurrent license enforcement | `platform/auth/license_enforcer.go` — Redis Lua atomic check (196 lines) |
 | 10 | SLA pause for pending_vendor | Both `pending_customer` and `pending_vendor` now trigger SLA pause |
-| 11 | KB search from incident screen | Knowledge tab on ticket detail page |
+| 11 | KB search from incident screen | Migration 081: `ticket_kb_links` table. `KBLinkService` + `KBLinkHandler` with 5 endpoints. Knowledge tab on ticket detail page with search, auto-suggestions (OR-joined FTS), linked articles with type badges, resolution action (auto-comment + helpful_count increment). Ticket creation wizard "Suggested Solutions" panel |
 | 12 | Boolean KB search | `to_tsquery` with AND/OR/NOT boolean operators |
 | 13 | Change freeze enforcement | Migration 077: DB trigger `check_change_freeze()` + application-level check |
 | 14 | Parallel approval | Sequential + parallel + any_of approval modes implemented |

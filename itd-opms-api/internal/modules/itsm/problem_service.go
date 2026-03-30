@@ -229,24 +229,24 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 
 	now := time.Now().UTC()
 
+	// NOTE: status is intentionally excluded — use TransitionProblem instead.
 	updateQuery := `
 		UPDATE problems SET
 			title = COALESCE($1, title),
 			description = COALESCE($2, description),
 			root_cause = COALESCE($3, root_cause),
-			status = COALESCE($4, status),
-			workaround = COALESCE($5, workaround),
-			permanent_fix = COALESCE($6, permanent_fix),
-			linked_change_id = COALESCE($7, linked_change_id),
-			owner_id = COALESCE($8, owner_id),
-			assigned_group_id = COALESCE($9, assigned_group_id),
-			updated_at = $10
-		WHERE id = $11 AND tenant_id = $12
+			workaround = COALESCE($4, workaround),
+			permanent_fix = COALESCE($5, permanent_fix),
+			linked_change_id = COALESCE($6, linked_change_id),
+			owner_id = COALESCE($7, owner_id),
+			assigned_group_id = COALESCE($8, assigned_group_id),
+			updated_at = $9
+		WHERE id = $10 AND tenant_id = $11
 		RETURNING ` + problemBaseColumns
 
 	p, err := scanProblemBase(s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.RootCause,
-		req.Status, req.Workaround, req.PermanentFix,
+		req.Workaround, req.PermanentFix,
 		req.LinkedChangeID, req.OwnerID, req.AssignedGroupID,
 		now, id, auth.TenantID,
 	))
