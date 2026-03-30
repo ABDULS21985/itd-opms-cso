@@ -3,6 +3,7 @@ package audit
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 
@@ -167,12 +168,10 @@ func clientIP(r *http.Request) string {
 	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
 		return xrip
 	}
-	// RemoteAddr may include port; strip it.
-	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
-	return addr
+	return r.RemoteAddr
 }
 
 // init registers json.RawMessage as a known type (prevents import cycle issues).
