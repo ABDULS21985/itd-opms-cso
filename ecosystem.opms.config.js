@@ -46,8 +46,8 @@ module.exports = {
     {
       name: 'opms-portal',
       cwd: './itd-opms-portal',
-      script: 'node_modules/.bin/next',
-      args: 'dev --port 3004',
+      script: 'npm',
+      args: 'run dev -- --port 3004',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
