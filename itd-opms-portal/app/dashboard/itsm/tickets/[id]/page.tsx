@@ -46,6 +46,9 @@ import {
   Search,
   Trash2,
   ThumbsUp,
+  ListTree,
+  Plus,
+  Unlink,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
@@ -66,11 +69,15 @@ import {
   useTicketKBSearch,
   useLinkArticle,
   useUnlinkArticle,
+  useSubtasks,
+  useCreateSubtask,
+  useUnlinkSubtask,
 } from "@/hooks/use-itsm";
 import type {
   TicketComment,
   TicketStatusHistory,
   SLABreachEntry,
+  SubtaskSummary,
 } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -938,6 +945,11 @@ export default function TicketDetailPage({
   const linkArticle = useLinkArticle(id);
   const unlinkArticle = useUnlinkArticle(id);
 
+  /* ---- Subtask hooks ---- */
+  const { data: subtasksData } = useSubtasks(id);
+  const createSubtask = useCreateSubtask(id);
+  const unlinkSubtask = useUnlinkSubtask(id);
+
   /* ---- User name resolution ---- */
   const { data: allUsers } = useSearchUsers("");
   const userMap = useMemo(() => {
@@ -970,7 +982,7 @@ export default function TicketDetailPage({
   };
 
   /* ---- Local state ---- */
-  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla" | "knowledge">(
+  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "sla" | "knowledge" | "subtasks">(
     "details",
   );
   const [commentText, setCommentText] = useState("");
@@ -989,6 +1001,12 @@ export default function TicketDetailPage({
   });
   const [kbSearchQuery, setKbSearchQuery] = useState("");
   const { data: kbSearchResults = [] } = useTicketKBSearch(id, kbSearchQuery);
+  const [showCreateSubtask, setShowCreateSubtask] = useState(false);
+  const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [subtaskDescription, setSubtaskDescription] = useState("");
+  const [subtaskPriority, setSubtaskPriority] = useState("medium");
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState("");
+  const [subtaskAssigneeDisplay, setSubtaskAssigneeDisplay] = useState("");
 
   /* ---- Derived data ---- */
   const comments: TicketComment[] = commentsData ?? [];
@@ -1324,10 +1342,36 @@ export default function TicketDetailPage({
 
   /* ---- Tab defs ---- */
 
+  const subtasks: SubtaskSummary[] = subtasksData?.subtasks ?? [];
+  const subtaskProgress = subtasksData?.progress ?? { total: 0, completed: 0, cancelled: 0 };
+
+  function handleCreateSubtask() {
+    if (!subtaskTitle.trim() || !subtaskDescription.trim()) return;
+    createSubtask.mutate(
+      {
+        title: subtaskTitle.trim(),
+        description: subtaskDescription.trim(),
+        priority: subtaskPriority,
+        assigneeId: subtaskAssigneeId || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowCreateSubtask(false);
+          setSubtaskTitle("");
+          setSubtaskDescription("");
+          setSubtaskPriority("medium");
+          setSubtaskAssigneeId("");
+          setSubtaskAssigneeDisplay("");
+        },
+      },
+    );
+  }
+
   const TABS = [
     { key: "details" as const, label: "Details", icon: Tag },
     { key: "timeline" as const, label: "Activity", icon: History, count: timeline.length },
     { key: "sla" as const, label: "SLA", icon: Shield },
+    { key: "subtasks" as const, label: "Subtasks", icon: ListTree, count: subtaskProgress.total },
     { key: "knowledge" as const, label: "Knowledge", icon: BookOpen, count: kbLinks.length },
   ];
 
@@ -1407,6 +1451,21 @@ export default function TicketDetailPage({
                     >
                       MI: {ticket.majorIncidentStatus.replace(/_/g, " ")}
                     </StatusBadge>
+                  )}
+                  {(ticket.subtaskCount ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/14 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/88">
+                      <ListTree size={11} />
+                      {ticket.subtaskCount} subtask{ticket.subtaskCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {ticket.parentTicketNumber && (
+                    <Link
+                      href={`/dashboard/itsm/tickets/${ticket.parentTicketId}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-amber-300/25 bg-amber-500/12 px-3 py-1 text-[11px] font-semibold text-amber-100 transition-colors hover:bg-amber-500/18"
+                    >
+                      <ListTree size={11} />
+                      Subtask of {ticket.parentTicketNumber}
+                    </Link>
                   )}
                 </div>
 
@@ -2236,6 +2295,213 @@ export default function TicketDetailPage({
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* =================== Subtasks Tab =================== */}
+              {activeTab === "subtasks" && (
+                <div className="space-y-4">
+                  {/* Progress */}
+                  {subtaskProgress.total > 0 && (
+                    <div className={`${cardSurface} p-5`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                          <TrendingUp size={15} className="text-[var(--primary)]" />
+                          Progress
+                        </h2>
+                        <span className="text-xs font-bold text-[var(--text-secondary)] tabular-nums">
+                          {subtaskProgress.completed}/{subtaskProgress.total} completed
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-[var(--surface-2)]">
+                        <div
+                          className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                          style={{
+                            width: `${subtaskProgress.total > 0 ? (subtaskProgress.completed / subtaskProgress.total) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                      {subtaskProgress.cancelled > 0 && (
+                        <p className="mt-1.5 text-[10px] text-[var(--neutral-gray)]">
+                          {subtaskProgress.cancelled} cancelled
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Create Subtask */}
+                  {canManage && !ticket.parentTicketId && (
+                    <div className={`${cardSurface} p-5`}>
+                      {!showCreateSubtask ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateSubtask(true)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                        >
+                          <Plus size={15} />
+                          Create Subtask
+                        </button>
+                      ) : (
+                        <div className="space-y-3">
+                          <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                            <Plus size={15} className="text-[var(--primary)]" />
+                            New Subtask
+                          </h2>
+                          <input
+                            value={subtaskTitle}
+                            onChange={(e) => setSubtaskTitle(e.target.value)}
+                            placeholder="Subtask title..."
+                            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                          />
+                          <textarea
+                            value={subtaskDescription}
+                            onChange={(e) => setSubtaskDescription(e.target.value)}
+                            placeholder="Subtask description..."
+                            rows={3}
+                            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 resize-none"
+                          />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
+                                Priority
+                              </label>
+                              <select
+                                value={subtaskPriority}
+                                onChange={(e) => setSubtaskPriority(e.target.value)}
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
+                              >
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
+                                Assignee
+                              </label>
+                              <UserPicker
+                                value={subtaskAssigneeId || undefined}
+                                displayValue={subtaskAssigneeDisplay}
+                                onChange={(id, name) => {
+                                  setSubtaskAssigneeId(id ?? "");
+                                  setSubtaskAssigneeDisplay(name ?? "");
+                                }}
+                                placeholder="Search assignee..."
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={!subtaskTitle.trim() || !subtaskDescription.trim() || createSubtask.isPending}
+                              onClick={handleCreateSubtask}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                            >
+                              {createSubtask.isPending && <Loader2 size={14} className="animate-spin" />}
+                              Create
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowCreateSubtask(false);
+                                setSubtaskTitle("");
+                                setSubtaskDescription("");
+                                setSubtaskPriority("medium");
+                                setSubtaskAssigneeId("");
+                                setSubtaskAssigneeDisplay("");
+                              }}
+                              className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtask List */}
+                  {subtasks.length > 0 ? (
+                    <div className={`${cardSurface} overflow-hidden`}>
+                      <div className="px-5 py-3.5 border-b border-[var(--border)]">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                          <ListTree size={15} className="text-[var(--primary)]" />
+                          Subtasks
+                          <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--surface-2)] px-1.5 text-[10px] font-bold text-[var(--neutral-gray)]">
+                            {subtasks.length}
+                          </span>
+                        </h2>
+                      </div>
+                      <div className="divide-y divide-[var(--border)]">
+                        {subtasks.map((st) => {
+                          const stPriority = PRIORITY_META[st.priority] ?? PRIORITY_META.medium;
+                          return (
+                            <div
+                              key={st.id}
+                              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--surface-1)]"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Link
+                                    href={`/dashboard/itsm/tickets/${st.id}`}
+                                    className="text-sm font-medium text-[var(--primary)] hover:underline truncate"
+                                  >
+                                    {st.ticketNumber}
+                                  </Link>
+                                  <StatusBadge status={st.status} />
+                                  <span
+                                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                    style={{
+                                      backgroundColor: stPriority.bg,
+                                      color: stPriority.text,
+                                    }}
+                                  >
+                                    {stPriority.label}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-sm text-[var(--text-secondary)] truncate">
+                                  {st.title}
+                                </p>
+                                <div className="mt-1 flex items-center gap-3 text-[10px] text-[var(--neutral-gray)]">
+                                  {st.assigneeName && (
+                                    <span className="flex items-center gap-1">
+                                      <Users size={10} />
+                                      {st.assigneeName}
+                                    </span>
+                                  )}
+                                  <span className="tabular-nums">
+                                    {new Date(st.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  disabled={unlinkSubtask.isPending}
+                                  onClick={() => unlinkSubtask.mutate(st.id)}
+                                  className="shrink-0 inline-flex items-center justify-center rounded-lg border border-[var(--border)] p-2 text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--error)]"
+                                  title="Unlink subtask"
+                                >
+                                  <Unlink size={13} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`${cardSurface} p-8 text-center`}>
+                      <ListTree size={32} className="mx-auto text-[var(--neutral-gray)] opacity-40" />
+                      <p className="mt-3 text-sm font-medium text-[var(--text-secondary)]">
+                        No subtasks yet
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--neutral-gray)]">
+                        Create subtasks to break this ticket into smaller work items.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

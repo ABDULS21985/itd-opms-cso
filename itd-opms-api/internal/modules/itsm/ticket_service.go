@@ -359,7 +359,7 @@ func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (Ticket, er
 }
 
 // ListTickets returns a filtered, paginated list of tickets.
-func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticketType *string, assigneeID, reporterID, teamQueueID *uuid.UUID, limit, offset int) ([]Ticket, int64, error) {
+func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticketType *string, assigneeID, reporterID, teamQueueID *uuid.UUID, hideSubtasks *bool, limit, offset int) ([]Ticket, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -368,6 +368,13 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 	// Build org-scope filter clauses (one for count query, one for data query with t. prefix).
 	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 8)
 	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 8)
+
+	subtaskClause := ""
+	subtaskClauseT := ""
+	if hideSubtasks != nil && *hideSubtasks {
+		subtaskClause = " AND parent_ticket_id IS NULL"
+		subtaskClauseT = " AND t.parent_ticket_id IS NULL"
+	}
 
 	// Count total matching records.
 	countQuery := `
@@ -379,7 +386,7 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 			AND ($4::text IS NULL OR type = $4)
 			AND ($5::uuid IS NULL OR assignee_id = $5)
 			AND ($6::uuid IS NULL OR reporter_id = $6)
-			AND ($7::uuid IS NULL OR team_queue_id = $7)`
+			AND ($7::uuid IS NULL OR team_queue_id = $7)` + subtaskClause
 
 	countArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
@@ -411,7 +418,7 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 			AND ($4::text IS NULL OR t.type = $4)
 			AND ($5::uuid IS NULL OR t.assignee_id = $5)
 			AND ($6::uuid IS NULL OR t.reporter_id = $6)
-			AND ($7::uuid IS NULL OR t.team_queue_id = $7)%s
+			AND ($7::uuid IS NULL OR t.team_queue_id = $7)%s%s
 		ORDER BY t.created_at DESC
 		LIMIT $%d OFFSET $%d`,
 		func() string {
@@ -419,7 +426,7 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 				return " AND " + orgClauseT
 			}
 			return ""
-		}(), nextIdx, nextIdx+1)
+		}(), subtaskClauseT, nextIdx, nextIdx+1)
 
 	dataArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
@@ -1546,6 +1553,152 @@ func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priori
 	}
 
 	return tickets, nil
+}
+
+// ──────────────────────────────────────────────
+// Subtask (Parent-Child) Operations
+// ──────────────────────────────────────────────
+
+// ListSubtasks returns child tickets and completion progress for a parent ticket.
+func (s *TicketService) ListSubtasks(ctx context.Context, parentID uuid.UUID) (SubtasksResponse, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return SubtasksResponse{}, apperrors.Unauthorized("authentication required")
+	}
+
+	// Fetch child tickets.
+	query := `
+		SELECT t.id, t.ticket_number, t.title, t.type, t.status, t.priority,
+		       t.assignee_id, u.display_name AS assignee_name, t.created_at
+		FROM tickets t
+		LEFT JOIN users u ON u.id = t.assignee_id
+		WHERE t.parent_ticket_id = $1 AND t.tenant_id = $2
+		ORDER BY t.created_at ASC`
+
+	rows, err := s.pool.Query(ctx, query, parentID, auth.TenantID)
+	if err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to list subtasks", err)
+	}
+	defer rows.Close()
+
+	var subtasks []SubtaskSummary
+	for rows.Next() {
+		var st SubtaskSummary
+		if err := rows.Scan(
+			&st.ID, &st.TicketNumber, &st.Title, &st.Type, &st.Status, &st.Priority,
+			&st.AssigneeID, &st.AssigneeName, &st.CreatedAt,
+		); err != nil {
+			return SubtasksResponse{}, apperrors.Internal("failed to scan subtask", err)
+		}
+		subtasks = append(subtasks, st)
+	}
+	if err := rows.Err(); err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to iterate subtasks", err)
+	}
+	if subtasks == nil {
+		subtasks = []SubtaskSummary{}
+	}
+
+	// Fetch progress.
+	var progress SubtaskProgress
+	progressQuery := `
+		SELECT
+			COUNT(*)::int,
+			COUNT(*) FILTER (WHERE status IN ('resolved', 'closed'))::int,
+			COUNT(*) FILTER (WHERE status = 'cancelled')::int
+		FROM tickets
+		WHERE parent_ticket_id = $1 AND tenant_id = $2`
+	if err := s.pool.QueryRow(ctx, progressQuery, parentID, auth.TenantID).Scan(
+		&progress.Total, &progress.Completed, &progress.Cancelled,
+	); err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to get subtask progress", err)
+	}
+
+	return SubtasksResponse{Subtasks: subtasks, Progress: progress}, nil
+}
+
+// CreateSubtask creates a child ticket under the given parent.
+func (s *TicketService) CreateSubtask(ctx context.Context, parentID uuid.UUID, req CreateSubtaskRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	// Fetch parent ticket.
+	parent, err := s.GetTicket(ctx, parentID)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	// A subtask cannot itself have subtasks (max 1 level of nesting).
+	if parent.ParentTicketID != nil {
+		return Ticket{}, apperrors.BadRequest("a subtask cannot have its own subtasks")
+	}
+
+	// Build a CreateTicketRequest inheriting parent properties.
+	urgency := parent.Urgency
+	impact := parent.Impact
+	createReq := CreateTicketRequest{
+		Type:           parent.Type,
+		Title:          req.Title,
+		Description:    req.Description,
+		Priority:       req.Priority,
+		Urgency:        urgency,
+		Impact:         impact,
+		AssigneeID:     req.AssigneeID,
+		TeamQueueID:    parent.TeamQueueID,
+		ParentTicketID: &parentID,
+	}
+
+	return s.CreateTicket(ctx, createReq)
+}
+
+// UnlinkSubtask removes the parent-child relationship (does NOT delete the child).
+func (s *TicketService) UnlinkSubtask(ctx context.Context, parentID, childID uuid.UUID) error {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return apperrors.Unauthorized("authentication required")
+	}
+
+	// Verify the child ticket actually belongs to this parent.
+	var actualParent *uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT parent_ticket_id FROM tickets WHERE id = $1 AND tenant_id = $2`,
+		childID, auth.TenantID,
+	).Scan(&actualParent)
+	if err != nil {
+		return apperrors.NotFound("Ticket", childID.String())
+	}
+	if actualParent == nil || *actualParent != parentID {
+		return apperrors.BadRequest("ticket is not a subtask of this parent")
+	}
+
+	_, err = s.pool.Exec(ctx,
+		`UPDATE tickets SET parent_ticket_id = NULL, updated_at = now() WHERE id = $1 AND tenant_id = $2`,
+		childID, auth.TenantID,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to unlink subtask", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(map[string]any{
+		"action":   "unlink_subtask",
+		"parentId": parentID.String(),
+		"childId":  childID.String(),
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "unlink:subtask",
+		EntityType: "ticket",
+		EntityID:   childID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return nil
 }
 
 // joinStrings joins a slice of strings with a separator.

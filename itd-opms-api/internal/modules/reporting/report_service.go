@@ -312,7 +312,8 @@ func (s *ReportService) DeleteDefinition(ctx context.Context, id uuid.UUID) erro
 // Report Runs
 // ──────────────────────────────────────────────
 
-// TriggerReportRun creates a new report run with pending status and captures a data snapshot.
+// TriggerReportRun creates a new report run, auto-completes it (data snapshot is captured at
+// creation), and enqueues email delivery to configured recipients.
 func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.UUID) (ReportRun, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -329,10 +330,22 @@ func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.
 		return ReportRun{}, err
 	}
 
+	// Auto-complete the run (data snapshot captured at creation).
+	now := time.Now().UTC()
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE report_runs SET status = $1, completed_at = $2 WHERE id = $3`,
+		RunStatusCompleted, now, rr.ID,
+	); err != nil {
+		slog.ErrorContext(ctx, "failed to auto-complete manual run", "run_id", rr.ID, "error", err)
+	} else {
+		rr.Status = RunStatusCompleted
+		rr.CompletedAt = &now
+	}
+
 	// Log audit event.
 	changes, _ := json.Marshal(map[string]any{
 		"definition_id": definitionID,
-		"status":        RunStatusPending,
+		"status":        RunStatusCompleted,
 		"triggerSource": RunTriggerManual,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
@@ -345,6 +358,9 @@ func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	// Enqueue email delivery to configured recipients.
+	s.enqueueReportEmails(ctx, rr.ID, auth.TenantID, definitionID)
 
 	return rr, nil
 }

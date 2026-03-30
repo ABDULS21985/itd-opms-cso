@@ -74,7 +74,7 @@ func TestGetTicket_Unauthorized(t *testing.T) {
 
 func TestListTickets_Unauthorized(t *testing.T) {
 	svc := NewTicketService(nil, nil)
-	_, _, err := svc.ListTickets(context.Background(), nil, nil, nil, nil, nil, nil, 10, 0)
+	_, _, err := svc.ListTickets(context.Background(), nil, nil, nil, nil, nil, nil, nil, 10, 0)
 	if err == nil {
 		t.Fatal("expected error for unauthenticated context")
 	}
@@ -989,7 +989,7 @@ func TestAllServiceMethods_RequireAuth(t *testing.T) {
 			return err
 		}},
 		{"ListTickets", func() error {
-			_, _, err := svc.ListTickets(ctx, nil, nil, nil, nil, nil, nil, 10, 0)
+			_, _, err := svc.ListTickets(ctx, nil, nil, nil, nil, nil, nil, nil, 10, 0)
 			return err
 		}},
 		{"UpdateTicket", func() error {

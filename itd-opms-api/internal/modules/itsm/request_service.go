@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -130,12 +131,27 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 	var slaFulfillmentTarget *time.Time // fulfillment deadline
 	if catalogSLAPolicyID != nil {
 		var priorityTargetsRaw json.RawMessage
+		var calendarID *uuid.UUID
 		err := s.pool.QueryRow(ctx,
-			`SELECT priority_targets FROM sla_policies
+			`SELECT priority_targets, business_hours_calendar_id FROM sla_policies
 			 WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
 			*catalogSLAPolicyID, auth.TenantID,
-		).Scan(&priorityTargetsRaw)
+		).Scan(&priorityTargetsRaw, &calendarID)
 		if err == nil {
+			// Load business hours calendar if referenced.
+			var calendar *BusinessHoursCalendar
+			if calendarID != nil {
+				var cal BusinessHoursCalendar
+				calErr := s.pool.QueryRow(ctx,
+					`SELECT id, tenant_id, name, timezone, schedule, holidays, created_at, updated_at
+					 FROM business_hours_calendars WHERE id = $1 AND tenant_id = $2`,
+					*calendarID, auth.TenantID,
+				).Scan(&cal.ID, &cal.TenantID, &cal.Name, &cal.Timezone, &cal.Schedule, &cal.Holidays, &cal.CreatedAt, &cal.UpdatedAt)
+				if calErr == nil {
+					calendar = &cal
+				}
+			}
+
 			// Parse priority_targets JSONB: {"P3_medium": {"response_minutes": 60, "resolution_minutes": 480}, ...}
 			var targets map[string]struct {
 				ResponseMinutes   int `json:"response_minutes"`
@@ -145,11 +161,11 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 				if t, ok := targets[requestPriority]; ok {
 					slaPolicyID = catalogSLAPolicyID
 					if t.ResponseMinutes > 0 {
-						rt := now.Add(time.Duration(t.ResponseMinutes) * time.Minute)
+						rt := advanceByBusinessMinutes(now, t.ResponseMinutes, calendar)
 						slaResolutionTarget = &rt
 					}
 					if t.ResolutionMinutes > 0 {
-						ft := now.Add(time.Duration(t.ResolutionMinutes) * time.Minute)
+						ft := advanceByBusinessMinutes(now, t.ResolutionMinutes, calendar)
 						slaFulfillmentTarget = &ft
 					}
 				}
@@ -963,4 +979,105 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 	}
 
 	return sr, nil
+}
+
+// ──────────────────────────────────────────────
+// Business hours helper
+// ──────────────────────────────────────────────
+
+// advanceByBusinessMinutes advances the start time by the given number of
+// minutes, accounting for business hours if a calendar is provided. When no
+// calendar is available, it falls back to simple clock-time addition.
+//
+// The calendar schedule JSONB is expected as:
+//
+//	{"monday": {"start": "08:00", "end": "17:00"}, "tuesday": {...}, ...}
+//
+// Days omitted from the map are treated as non-working days.
+// Holidays are a JSON array of date strings: ["2026-01-01", "2026-12-25"].
+func advanceByBusinessMinutes(start time.Time, minutes int, cal *BusinessHoursCalendar) time.Time {
+	if cal == nil || minutes <= 0 {
+		return start.Add(time.Duration(minutes) * time.Minute)
+	}
+
+	// Parse schedule.
+	type dayWindow struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
+	}
+	var schedule map[string]dayWindow
+	if err := json.Unmarshal(cal.Schedule, &schedule); err != nil || len(schedule) == 0 {
+		return start.Add(time.Duration(minutes) * time.Minute)
+	}
+
+	// Parse holidays into a set.
+	var holidayList []string
+	_ = json.Unmarshal(cal.Holidays, &holidayList)
+	holidays := make(map[string]struct{}, len(holidayList))
+	for _, h := range holidayList {
+		holidays[h] = struct{}{}
+	}
+
+	// Load timezone.
+	loc, err := time.LoadLocation(cal.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+
+	remaining := minutes
+	cursor := start.In(loc)
+
+	// Safety: cap iteration to 365 days to prevent infinite loop.
+	maxDays := 365
+	for remaining > 0 && maxDays > 0 {
+		dayName := strings.ToLower(cursor.Weekday().String())
+		dateStr := cursor.Format("2006-01-02")
+
+		// Skip holidays.
+		if _, isHoliday := holidays[dateStr]; isHoliday {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		window, hasWindow := schedule[dayName]
+		if !hasWindow {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		dayStart, err1 := time.Parse("15:04", window.Start)
+		dayEnd, err2 := time.Parse("15:04", window.End)
+		if err1 != nil || err2 != nil {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		windowStart := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), dayStart.Hour(), dayStart.Minute(), 0, 0, loc)
+		windowEnd := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), dayEnd.Hour(), dayEnd.Minute(), 0, 0, loc)
+
+		if cursor.Before(windowStart) {
+			cursor = windowStart
+		}
+
+		if !cursor.Before(windowEnd) {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		available := int(windowEnd.Sub(cursor).Minutes())
+		if available >= remaining {
+			cursor = cursor.Add(time.Duration(remaining) * time.Minute)
+			remaining = 0
+		} else {
+			remaining -= available
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+		}
+	}
+
+	return cursor.UTC()
 }

@@ -600,3 +600,67 @@ FROM ticket_kb_links l
 JOIN tickets t ON t.id = l.ticket_id
 WHERE l.article_id = $1
 ORDER BY l.created_at DESC;
+
+-- ──────────────────────────────────────────────
+-- Ticket Subtasks (Parent-Child)
+-- ──────────────────────────────────────────────
+
+-- name: GetChildTickets :many
+SELECT id, ticket_number, title, type, status, priority, assignee_id, created_at
+FROM tickets
+WHERE parent_ticket_id = @parent_ticket_id AND tenant_id = @tenant_id
+ORDER BY created_at ASC;
+
+-- name: GetSubtaskProgress :one
+SELECT
+    COUNT(*)::int AS total,
+    COUNT(*) FILTER (WHERE status IN ('resolved', 'closed'))::int AS completed,
+    COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
+FROM tickets
+WHERE parent_ticket_id = @parent_ticket_id AND tenant_id = @tenant_id;
+
+-- name: SetParentTicket :exec
+UPDATE tickets SET parent_ticket_id = @parent_ticket_id, updated_at = now()
+WHERE id = @id AND tenant_id = @tenant_id;
+
+-- ──────────────────────────────────────────────
+-- Service Request SLA
+-- ──────────────────────────────────────────────
+
+-- name: SetServiceRequestSLA :exec
+UPDATE service_requests
+SET sla_policy_id = @sla_policy_id,
+    sla_resolution_target = @sla_resolution_target,
+    sla_fulfillment_target = @sla_fulfillment_target,
+    updated_at = now()
+WHERE id = @id AND tenant_id = @tenant_id;
+
+-- name: GetBreachedServiceRequests :many
+SELECT sr.*, ci.name AS catalog_item_name
+FROM service_requests sr
+LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
+WHERE sr.tenant_id = @tenant_id
+  AND sr.status NOT IN ('fulfilled', 'cancelled', 'rejected')
+  AND (
+    (sr.sla_resolution_target IS NOT NULL AND sr.sla_resolution_met IS NULL AND sr.sla_resolution_target < now())
+    OR
+    (sr.sla_fulfillment_target IS NOT NULL AND sr.sla_fulfillment_met IS NULL AND sr.sla_fulfillment_target < now())
+  )
+ORDER BY sr.created_at ASC;
+
+-- name: GetServiceRequestSLACompliance :one
+SELECT
+    COUNT(*)::int AS total_requests,
+    COUNT(*) FILTER (WHERE sla_policy_id IS NOT NULL)::int AS with_sla,
+    COUNT(*) FILTER (WHERE sla_resolution_met = true)::int AS resolution_met,
+    COUNT(*) FILTER (WHERE sla_resolution_met = false)::int AS resolution_breached,
+    COUNT(*) FILTER (WHERE sla_fulfillment_met = true)::int AS fulfillment_met,
+    COUNT(*) FILTER (WHERE sla_fulfillment_met = false)::int AS fulfillment_breached,
+    COUNT(*) FILTER (
+        WHERE sla_fulfillment_target IS NOT NULL
+          AND sla_fulfillment_met IS NULL
+          AND status NOT IN ('fulfilled', 'cancelled', 'rejected')
+          AND sla_fulfillment_target < now() + interval '2 hours'
+    )::int AS active_at_risk
+FROM service_requests
+WHERE tenant_id = @tenant_id;

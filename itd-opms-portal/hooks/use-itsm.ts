@@ -32,6 +32,7 @@ import type {
   ExpiringAgreements,
   TicketKBLink,
   KBSuggestion,
+  SubtasksResponse,
 } from "@/types";
 
 /* ================================================================== */
@@ -279,6 +280,7 @@ export function useTickets(
     type?: string;
     assigneeId?: string;
     reporterId?: string;
+    hideSubtasks?: boolean;
   },
 ) {
   return useQuery({
@@ -292,6 +294,7 @@ export function useTickets(
         type: filters?.type,
         assignee_id: filters?.assigneeId,
         reporter_id: filters?.reporterId,
+        hideSubtasks: filters?.hideSubtasks ? "true" : undefined,
       }),
   });
 }
@@ -314,6 +317,62 @@ export function useTicketStats() {
   return useQuery({
     queryKey: ["ticket-stats"],
     queryFn: () => apiClient.get<TicketStats>("/itsm/tickets/stats"),
+  });
+}
+
+/* ================================================================== */
+/*  Subtasks                                                           */
+/* ================================================================== */
+
+/**
+ * GET /itsm/tickets/{id}/subtasks - child tickets + progress.
+ */
+export function useSubtasks(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-subtasks", ticketId],
+    queryFn: () =>
+      apiClient.get<SubtasksResponse>(`/itsm/tickets/${ticketId}/subtasks`),
+    enabled: !!ticketId,
+  });
+}
+
+/**
+ * POST /itsm/tickets/{parentId}/subtasks - create a subtask.
+ */
+export function useCreateSubtask(parentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      title: string;
+      description: string;
+      priority?: string;
+      assigneeId?: string;
+    }) => apiClient.post<Ticket>(`/itsm/tickets/${parentId}/subtasks`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket-subtasks", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast.success("Subtask created");
+    },
+    onError: () => toast.error("Failed to create subtask"),
+  });
+}
+
+/**
+ * DELETE /itsm/tickets/{parentId}/subtasks/{childId} - unlink a subtask.
+ */
+export function useUnlinkSubtask(parentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (childId: string) =>
+      apiClient.delete(`/itsm/tickets/${parentId}/subtasks/${childId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket-subtasks", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast.success("Subtask unlinked");
+    },
+    onError: () => toast.error("Failed to unlink subtask"),
   });
 }
 

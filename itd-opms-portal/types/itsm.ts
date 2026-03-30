@@ -62,6 +62,7 @@ export interface Ticket {
   linkedProblemId?: string;
   linkedAssetIds: string[];
   orgUnitId?: string;
+  parentTicketId?: string;
   resolutionNotes?: string;
   resolvedAt?: string;
   closedAt?: string;
@@ -101,6 +102,8 @@ export interface Ticket {
   majorIncidentRecordId?: string;
   majorIncidentStatus?: string;
   majorIncidentSeverity?: string;
+  subtaskCount?: number;
+  parentTicketNumber?: string;
 }
 
 export interface TicketComment {
@@ -128,6 +131,29 @@ export interface TicketStats {
   openCount: number;
   slaBreachedCount: number;
   majorIncidents: number;
+}
+
+export interface SubtaskSummary {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  type: string;
+  status: string;
+  priority: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  createdAt: string;
+}
+
+export interface SubtaskProgress {
+  total: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface SubtasksResponse {
+  subtasks: SubtaskSummary[];
+  progress: SubtaskProgress;
 }
 
 export interface MajorIncidentCommunicationPlan {
