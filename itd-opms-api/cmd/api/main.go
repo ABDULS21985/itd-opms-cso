@@ -7,8 +7,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/cmdb"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/database"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/server"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,8 +75,20 @@ func run() error {
 		defer natsConn.Close()
 	}
 
+	// --- Microsoft Graph client (shared by HTTP handlers and discovery scheduler) ---
+	var graphClient *msgraph.Client
+	if cfg.EntraID.Enabled && cfg.EntraID.ClientID != "" {
+		graphClient = msgraph.NewClient(cfg.EntraID, cfg.Graph)
+	}
+
+	// --- Discovery scheduler worker ---
+	auditService := audit.NewAuditService(pool)
+	discoveryService := cmdb.NewDiscoveryService(pool, auditService, graphClient, cfg.Discovery)
+	discoveryScheduler := cmdb.NewDiscoveryScheduler(discoveryService, 5*time.Minute)
+
 	// --- Create and start server ---
-	srv := server.NewServer(cfg, pool, redisClient, minioClient, natsConn, js)
+	srv := server.NewServer(cfg, pool, redisClient, minioClient, natsConn, js, graphClient)
+	srv.SetDiscoveryScheduler(discoveryScheduler)
 	srv.Setup()
 
 	slog.Info("all services wired, starting HTTP server")

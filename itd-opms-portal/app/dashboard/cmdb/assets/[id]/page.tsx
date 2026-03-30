@@ -24,6 +24,8 @@ import {
   ChevronRight,
   CheckCircle,
   ClipboardCheck,
+  RefreshCw,
+  Banknote,
 } from "lucide-react";
 import {
   useAsset,
@@ -33,6 +35,8 @@ import {
   useUpdateAsset,
   useDeleteAsset,
   useAssetTransition,
+  useAssetFinancials,
+  useSyncAssetFromERP,
 } from "@/hooks/use-cmdb";
 import { useSearchUsers } from "@/hooks/use-system";
 import { UserPicker } from "@/components/shared/pickers/user-picker";
@@ -70,6 +74,13 @@ const EVENT_ICONS: Record<string, { icon: typeof Clock; color: string }> = {
   disposed: { icon: Trash2, color: "#EF4444" },
 };
 
+const VERIFICATION_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  verified: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981", label: "Verified" },
+  unverified: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B", label: "Unverified" },
+  overdue: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444", label: "Overdue" },
+  discrepancy: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444", label: "Discrepancy" },
+};
+
 const VALID_TRANSITIONS: Record<string, string[]> = {
   procured: ["received"],
   received: ["active"],
@@ -99,6 +110,8 @@ export default function AssetDetailPage({
   const deleteAsset = useDeleteAsset();
   const transitionAsset = useAssetTransition(id);
   const verifyAsset = useVerifyAsset();
+  const { data: financials, isLoading: financialsLoading } = useAssetFinancials(id);
+  const syncFromERP = useSyncAssetFromERP(id);
 
   /* ---- User resolution ---- */
   const { data: allUsers } = useSearchUsers("");
@@ -421,16 +434,53 @@ export default function AssetDetailPage({
         <div className="flex items-center gap-3 mb-3">
           {asset.lastVerifiedAt ? (
             <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.1)]">
-                <CheckCircle size={16} className="text-[#10B981]" />
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{
+                  backgroundColor:
+                    (VERIFICATION_STATUS_COLORS[asset.verificationStatus ?? "verified"] ??
+                      VERIFICATION_STATUS_COLORS.verified
+                    ).bg,
+                }}
+              >
+                <CheckCircle
+                  size={16}
+                  style={{
+                    color:
+                      (VERIFICATION_STATUS_COLORS[asset.verificationStatus ?? "verified"] ??
+                        VERIFICATION_STATUS_COLORS.verified
+                      ).text,
+                  }}
+                />
               </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  Last verified{" "}
-                  <span className="tabular-nums">
-                    {new Date(asset.lastVerifiedAt).toLocaleDateString()}
-                  </span>
-                </p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    Last verified{" "}
+                    <span className="tabular-nums">
+                      {new Date(asset.lastVerifiedAt).toLocaleDateString()}
+                    </span>
+                  </p>
+                  {asset.verificationStatus && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold capitalize"
+                      style={{
+                        backgroundColor:
+                          (VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                            VERIFICATION_STATUS_COLORS.unverified
+                          ).bg,
+                        color:
+                          (VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                            VERIFICATION_STATUS_COLORS.unverified
+                          ).text,
+                      }}
+                    >
+                      {(VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                        { label: asset.verificationStatus }
+                      ).label}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-[var(--text-secondary)]">
                   {(() => {
                     const days = Math.floor(
@@ -449,10 +499,21 @@ export default function AssetDetailPage({
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(245,158,11,0.1)]">
                 <AlertTriangle size={16} className="text-[#F59E0B]" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  Never verified
-                </p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    Never verified
+                  </p>
+                  <span
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{
+                      backgroundColor: "rgba(245, 158, 11, 0.1)",
+                      color: "#F59E0B",
+                    }}
+                  >
+                    Unverified
+                  </span>
+                </div>
                 <p className="text-xs text-[var(--text-secondary)]">
                   This asset has not been physically verified yet
                 </p>
@@ -947,6 +1008,117 @@ export default function AssetDetailPage({
           </dl>
         </motion.div>
       )}
+
+      {/* ================================================================ */}
+      {/*  6b. ERP Financials                                               */}
+      {/* ================================================================ */}
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.23 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Banknote size={16} className="text-[var(--primary)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Financials
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => syncFromERP.mutate()}
+            disabled={syncFromERP.isPending}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
+          >
+            <RefreshCw
+              size={14}
+              className={syncFromERP.isPending ? "animate-spin" : ""}
+            />
+            {syncFromERP.isPending ? "Syncing..." : "Sync from ERP"}
+          </button>
+        </div>
+
+        {financialsLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 size={20} className="animate-spin text-[var(--primary)]" />
+          </div>
+        ) : financials ? (
+          <>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Purchase Price
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.purchasePrice != null
+                    ? `${financials.currency ?? "NGN"} ${financials.purchasePrice.toLocaleString()}`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Current Book Value
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.currentBookValue != null
+                    ? `${financials.currency ?? "NGN"} ${financials.currentBookValue.toLocaleString()}`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Depreciation Rate
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.depreciationRate != null
+                    ? `${financials.depreciationRate}%`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Cost Center
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.costCenter || "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  PO Number
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.poNumber || "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  ERP Asset ID
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.erpAssetId || "N/A"}
+                </dd>
+              </div>
+            </dl>
+            {financials.erpSyncAt && (
+              <p className="mt-3 text-[10px] text-[var(--text-secondary)] tabular-nums">
+                Last synced from ERP:{" "}
+                {new Date(financials.erpSyncAt).toLocaleString()}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center py-6 text-center">
+            <Banknote size={24} className="text-[var(--text-secondary)] mb-2" />
+            <p className="text-sm text-[var(--text-secondary)]">
+              No financial data available. Click &ldquo;Sync from ERP&rdquo; to
+              fetch data.
+            </p>
+          </div>
+        )}
+      </motion.div>
 
       {/* ================================================================ */}
       {/*  7. Lifecycle Timeline                                            */}

@@ -5,33 +5,57 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 )
 
 // Handler is the top-level HTTP handler for the CMDB module.
 // It composes all sub-handlers for assets, CMDB configuration items,
-// licenses, warranties, and renewal alerts.
+// licenses, warranties, renewal alerts, verification campaigns, and ERP integration.
 type Handler struct {
-	asset     *AssetHandler
-	cmdb      *CMDBCIHandler
-	license   *LicenseHandler
-	warranty  *WarrantyHandler
-	discovery *DiscoveryHandler
+	asset        *AssetHandler
+	cmdb         *CMDBCIHandler
+	license      *LicenseHandler
+	warranty     *WarrantyHandler
+	discovery    *DiscoveryHandler
+	verification *VerificationHandler
+	verifSvc     *VerificationService
+	erp          *ERPHandler
 }
 
 // NewHandler creates a new CMDB Handler with all sub-handlers wired up.
-func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Handler {
+func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any) *Handler {
+	var graphClient *msgraph.Client
+	var discoveryCfg config.DiscoveryConfig
+	if len(extras) > 0 {
+		if client, ok := extras[0].(*msgraph.Client); ok {
+			graphClient = client
+		}
+	}
+	if len(extras) > 1 {
+		if cfg, ok := extras[1].(config.DiscoveryConfig); ok {
+			discoveryCfg = cfg
+		}
+	}
+
 	assetSvc := NewAssetService(pool, auditSvc)
 	cmdbSvc := NewCMDBService(pool, auditSvc)
 	licenseSvc := NewLicenseService(pool, auditSvc)
 	warrantySvc := NewWarrantyService(pool, auditSvc)
-	discoverySvc := NewDiscoveryService(pool, auditSvc)
+	discoverySvc := NewDiscoveryService(pool, auditSvc, graphClient, discoveryCfg)
+	verifSvc := NewVerificationService(pool, auditSvc)
+	erpSvc := NewERPService(pool, auditSvc)
 
 	return &Handler{
-		asset:     NewAssetHandler(assetSvc),
-		cmdb:      NewCMDBCIHandler(cmdbSvc),
-		license:   NewLicenseHandler(licenseSvc),
-		warranty:  NewWarrantyHandler(warrantySvc),
-		discovery: NewDiscoveryHandler(discoverySvc),
+		asset:        NewAssetHandler(assetSvc),
+		cmdb:         NewCMDBCIHandler(cmdbSvc),
+		license:      NewLicenseHandler(licenseSvc),
+		warranty:     NewWarrantyHandler(warrantySvc),
+		discovery:    NewDiscoveryHandler(discoverySvc),
+		verification: NewVerificationHandler(verifSvc),
+		verifSvc:     verifSvc,
+		erp:          NewERPHandler(erpSvc),
 	}
 }
 
@@ -64,4 +88,21 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Route("/discovery", func(r chi.Router) {
 		h.discovery.Routes(r)
 	})
+
+	// Physical verification campaigns
+	r.Route("/verification", func(r chi.Router) {
+		h.verification.Routes(r)
+	})
+
+	// Verification status stats on assets path
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/assets/verification-status", VerificationStatsHandler(h.verifSvc))
+
+	// ERP integration
+	r.Route("/integrations/erp", func(r chi.Router) {
+		h.erp.Routes(r)
+	})
+
+	// Asset-level financial endpoints (mounted under /assets/{id}/...)
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/assets/{id}/financials", h.erp.GetAssetFinancials)
+	r.With(middleware.RequirePermission("cmdb.manage")).Post("/assets/{id}/financials/sync", h.erp.SyncSingleAssetFinancials)
 }

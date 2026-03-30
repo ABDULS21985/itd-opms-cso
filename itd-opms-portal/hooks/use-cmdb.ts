@@ -19,6 +19,9 @@ import type {
   DiscoveryRun,
   DiscoveredDevice,
   DiscoveryStats,
+  AssetFinancialView,
+  ERPSyncStatus,
+  ERPSyncLog,
   PaginatedResponse,
 } from "@/types";
 
@@ -1159,6 +1162,78 @@ export function useImportDiscoveryCSV() {
     },
     onError: () => {
       toast.error("Failed to import CSV");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  ERP Integration                                                     */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/assets/{id}/financials - asset financial details from ERP.
+ */
+export function useAssetFinancials(assetId: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-financials", assetId],
+    queryFn: () =>
+      apiClient.get<AssetFinancialView>(`/cmdb/assets/${assetId}/financials`),
+    enabled: !!assetId,
+  });
+}
+
+/**
+ * GET /cmdb/integrations/erp/status - last ERP sync status.
+ */
+export function useERPSyncStatus() {
+  return useQuery({
+    queryKey: ["erp-sync-status"],
+    queryFn: () =>
+      apiClient.get<ERPSyncStatus>("/cmdb/integrations/erp/status"),
+  });
+}
+
+/**
+ * POST /cmdb/integrations/erp/sync - trigger full ERP sync.
+ */
+export function useTriggerERPSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<ERPSyncLog>("/cmdb/integrations/erp/sync", {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["erp-sync-status"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-financials"] });
+      toast.success("ERP sync completed");
+    },
+    onError: () => {
+      toast.error("ERP sync failed");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/assets/{id}/financials/sync - sync single asset from ERP.
+ */
+export function useSyncAssetFromERP(assetId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<AssetFinancialView>(
+        `/cmdb/assets/${assetId}/financials/sync`,
+        {},
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["asset-financials", assetId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["asset", assetId] });
+      queryClient.invalidateQueries({ queryKey: ["erp-sync-status"] });
+      toast.success("Asset synced from ERP");
+    },
+    onError: () => {
+      toast.error("Failed to sync asset from ERP");
     },
   });
 }

@@ -38,8 +38,8 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
-	inboundemail "github.com/itd-cbn/itd-opms-api/internal/platform/email"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/dirsync"
+	inboundemail "github.com/itd-cbn/itd-opms-api/internal/platform/email"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/metrics"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
@@ -57,6 +57,7 @@ type Server struct {
 	natsConn *nats.Conn
 	js       nats.JetStreamContext
 	router   chi.Router
+	graph    *msgraph.Client
 
 	// Background services for graceful shutdown.
 	outboxProcessor       *notification.OutboxProcessor
@@ -64,6 +65,7 @@ type Server struct {
 	dashboardRefresh      *reporting.DashboardRefresher
 	reportScheduler       *reporting.ReportScheduler
 	queryScheduler        *reporting.QueryScheduler
+	discoveryScheduler    *cmdb.DiscoveryScheduler
 	maintenanceWorker     *system.MaintenanceWorker
 	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
@@ -80,6 +82,7 @@ func NewServer(
 	minioClient *minio.Client,
 	natsConn *nats.Conn,
 	js nats.JetStreamContext,
+	graphClient *msgraph.Client,
 ) *Server {
 	return &Server{
 		cfg:      cfg,
@@ -88,7 +91,13 @@ func NewServer(
 		minio:    minioClient,
 		natsConn: natsConn,
 		js:       js,
+		graph:    graphClient,
 	}
+}
+
+// SetDiscoveryScheduler registers the CMDB discovery background scheduler.
+func (s *Server) SetDiscoveryScheduler(scheduler *cmdb.DiscoveryScheduler) {
+	s.discoveryScheduler = scheduler
 }
 
 // Setup configures the chi router with the full middleware chain and all
@@ -128,9 +137,8 @@ func (s *Server) Setup() {
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
 
 	// --- Microsoft Graph API client (if Entra ID is enabled) ---
-	var graphClient *msgraph.Client
-	if s.cfg.EntraID.Enabled && s.cfg.EntraID.ClientID != "" {
-		graphClient = msgraph.NewClient(s.cfg.EntraID, s.cfg.Graph)
+	graphClient := s.graph
+	if graphClient != nil {
 		slog.Info("Microsoft Graph API client initialized")
 	}
 
@@ -216,7 +224,7 @@ func (s *Server) Setup() {
 	peopleHandler := people.NewHandler(s.pool, auditService)
 	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
 	itsmHandler := itsm.NewHandler(s.pool, auditService, s.js)
-	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
+	cmdbHandler := cmdb.NewHandler(s.pool, auditService, graphClient, s.cfg.Discovery)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
@@ -408,6 +416,9 @@ func (s *Server) Start() error {
 	}
 	if s.queryScheduler != nil {
 		s.queryScheduler.Start(ctx)
+	}
+	if s.discoveryScheduler != nil {
+		s.discoveryScheduler.Start(ctx)
 	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)

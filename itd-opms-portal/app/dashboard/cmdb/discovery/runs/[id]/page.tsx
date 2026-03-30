@@ -34,6 +34,13 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   failed: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
 };
 
+const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
+  network: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
+  ad_import: { bg: "rgba(139, 92, 246, 0.1)", text: "#8B5CF6" },
+  sccm: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
+  csv_import: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" },
+};
+
 const ACTION_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   new: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6", label: "New" },
   update: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B", label: "Update" },
@@ -165,6 +172,19 @@ export default function DiscoveryRunDetailPage() {
                 <h1 className="text-xl font-bold text-[var(--text-primary)]">
                   {run.profileName ?? "Discovery Run"}
                 </h1>
+                {run.scanType && (
+                  <span
+                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold"
+                    style={{
+                      backgroundColor:
+                        (SOURCE_COLORS[run.scanType] ?? SOURCE_COLORS.network).bg,
+                      color:
+                        (SOURCE_COLORS[run.scanType] ?? SOURCE_COLORS.network).text,
+                    }}
+                  >
+                    {run.scanType.replace(/_/g, " ")}
+                  </span>
+                )}
                 <span
                   className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold"
                   style={{
@@ -342,6 +362,9 @@ export default function DiscoveryRunDetailPage() {
                     IP Address
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider hidden md:table-cell">
+                    Source
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider hidden md:table-cell">
                     MAC
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider hidden lg:table-cell">
@@ -386,6 +409,21 @@ export default function DiscoveryRunDetailPage() {
                       </td>
                       <td className="px-4 py-3 text-[var(--text-secondary)] tabular-nums">
                         {device.ipAddress ?? "-"}
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          style={{
+                            backgroundColor:
+                              (SOURCE_COLORS[device.source ?? run.scanType ?? "network"] ??
+                                SOURCE_COLORS.network).bg,
+                            color:
+                              (SOURCE_COLORS[device.source ?? run.scanType ?? "network"] ??
+                                SOURCE_COLORS.network).text,
+                          }}
+                        >
+                          {(device.source ?? run.scanType ?? "network").replace(/_/g, " ")}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-[var(--text-secondary)] tabular-nums hidden md:table-cell text-xs">
                         {device.macAddress ?? "-"}

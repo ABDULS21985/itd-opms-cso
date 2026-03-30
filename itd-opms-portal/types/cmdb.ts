@@ -27,6 +27,8 @@ export interface Asset {
   attributes?: Record<string, unknown>;
   tags: string[];
   lastVerifiedAt?: string;
+  lastVerifiedBy?: string;
+  verificationStatus?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -196,6 +198,7 @@ export interface DiscoveryRun {
   tenantId: string;
   profileId: string;
   profileName?: string;
+  scanType?: string;
   status: string;
   startedAt?: string;
   completedAt?: string;
@@ -209,6 +212,7 @@ export interface DiscoveryRun {
 export interface DiscoveredDevice {
   id: string;
   runId: string;
+  source?: string;
   hostname?: string;
   ipAddress?: string;
   macAddress?: string;
@@ -231,4 +235,90 @@ export interface DiscoveryStats {
   activeProfiles: number;
   totalRuns: number;
   lastRunAt?: string;
+  adEnabled: boolean;
+  adTenantId?: string;
+  networkEnabled: boolean;
+  sccmConfigured: boolean;
+}
+
+/* ====================================================================== */
+/*  Verification Campaign Types                                            */
+/* ====================================================================== */
+
+export interface VerificationCampaign {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  status: string;
+  scopeFilter: Record<string, unknown>;
+  targetAssetCount: number;
+  verifiedCount: number;
+  discrepancyCount: number;
+  startedAt?: string;
+  completedAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignAsset {
+  id: string;
+  assetTag: string;
+  name: string;
+  type: string;
+  status: string;
+  location?: string;
+  building?: string;
+  floor?: string;
+  room?: string;
+  verificationStatus: string;
+  lastVerifiedAt?: string;
+}
+
+export interface VerificationStats {
+  total: number;
+  verified: number;
+  unverified: number;
+  discrepancy: number;
+  overdue: number;
+}
+
+/* ====================================================================== */
+/*  ERP Integration Types                                                  */
+/* ====================================================================== */
+
+export interface AssetFinancialView {
+  assetId: string;
+  assetTag: string;
+  assetName: string;
+  purchasePrice?: number;
+  purchaseCost?: number;
+  currency?: string;
+  currentBookValue?: number;
+  depreciationRate?: number;
+  costCenter?: string;
+  poNumber?: string;
+  erpAssetId?: string;
+  erpSyncAt?: string;
+  purchaseDate?: string;
+}
+
+export interface ERPSyncLog {
+  id: string;
+  tenantId: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  assetsSynced: number;
+  assetsFailed: number;
+  errorDetails?: unknown;
+  triggeredBy?: string;
+  createdAt: string;
+}
+
+export interface ERPSyncStatus {
+  erpEnabled: boolean;
+  lastSync?: ERPSyncLog;
+  totalSynced: number;
 }

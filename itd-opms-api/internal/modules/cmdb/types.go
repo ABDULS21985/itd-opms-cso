@@ -75,10 +75,10 @@ const (
 // ──────────────────────────────────────────────
 
 const (
-	CIStatusActive          = "active"
-	CIStatusInactive        = "inactive"
-	CIStatusPlanned         = "planned"
-	CIStatusDecommissioned  = "decommissioned"
+	CIStatusActive         = "active"
+	CIStatusInactive       = "inactive"
+	CIStatusPlanned        = "planned"
+	CIStatusDecommissioned = "decommissioned"
 )
 
 // ──────────────────────────────────────────────
@@ -133,32 +133,32 @@ const (
 
 // Asset represents a tracked IT asset (hardware, software, virtual, cloud, network, peripheral).
 type Asset struct {
-	ID             uuid.UUID        `json:"id"`
-	TenantID       uuid.UUID        `json:"tenantId"`
-	AssetTag       string           `json:"assetTag"`
-	Type           string           `json:"type"`
-	Category       *string          `json:"category"`
-	Name           string           `json:"name"`
-	Description    *string          `json:"description"`
-	Manufacturer   *string          `json:"manufacturer"`
-	Model          *string          `json:"model"`
-	SerialNumber   *string          `json:"serialNumber"`
-	Status         string           `json:"status"`
-	Location       *string          `json:"location"`
-	Building       *string          `json:"building"`
-	Floor          *string          `json:"floor"`
-	Room           *string          `json:"room"`
-	OwnerID        *uuid.UUID       `json:"ownerId"`
-	CustodianID    *uuid.UUID       `json:"custodianId"`
-	PurchaseDate   *time.Time       `json:"purchaseDate"`
-	PurchaseCost   *float64         `json:"purchaseCost"`
-	Currency       *string          `json:"currency"`
-	Classification *string          `json:"classification"`
-	Attributes     json.RawMessage  `json:"attributes"`
-	Tags           []string         `json:"tags"`
-	LastVerifiedAt *time.Time       `json:"lastVerifiedAt"`
-	CreatedAt      time.Time        `json:"createdAt"`
-	UpdatedAt      time.Time        `json:"updatedAt"`
+	ID             uuid.UUID       `json:"id"`
+	TenantID       uuid.UUID       `json:"tenantId"`
+	AssetTag       string          `json:"assetTag"`
+	Type           string          `json:"type"`
+	Category       *string         `json:"category"`
+	Name           string          `json:"name"`
+	Description    *string         `json:"description"`
+	Manufacturer   *string         `json:"manufacturer"`
+	Model          *string         `json:"model"`
+	SerialNumber   *string         `json:"serialNumber"`
+	Status         string          `json:"status"`
+	Location       *string         `json:"location"`
+	Building       *string         `json:"building"`
+	Floor          *string         `json:"floor"`
+	Room           *string         `json:"room"`
+	OwnerID        *uuid.UUID      `json:"ownerId"`
+	CustodianID    *uuid.UUID      `json:"custodianId"`
+	PurchaseDate   *time.Time      `json:"purchaseDate"`
+	PurchaseCost   *float64        `json:"purchaseCost"`
+	Currency       *string         `json:"currency"`
+	Classification *string         `json:"classification"`
+	Attributes     json.RawMessage `json:"attributes"`
+	Tags           []string        `json:"tags"`
+	LastVerifiedAt *time.Time      `json:"lastVerifiedAt"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
 }
 
 // AssetLifecycleEvent records a lifecycle transition for an asset.
@@ -214,7 +214,62 @@ type VerifyAssetRequest struct {
 
 // AssetVerificationConditions are the valid condition values.
 var AssetVerificationConditions = map[string]bool{
-	"good": true, "fair": true, "poor": true, "damaged": true, "missing": true,
+	"good": true, "fair": true, "poor": true, "damaged": true, "missing": true, "not_found": true,
+}
+
+// ──────────────────────────────────────────────
+// Verification Campaign types
+// ──────────────────────────────────────────────
+
+// VerificationCampaign represents a physical stocktake campaign.
+type VerificationCampaign struct {
+	ID               uuid.UUID       `json:"id"`
+	TenantID         uuid.UUID       `json:"tenantId"`
+	Name             string          `json:"name"`
+	Description      *string         `json:"description"`
+	Status           string          `json:"status"`
+	ScopeFilter      json.RawMessage `json:"scopeFilter"`
+	TargetAssetCount int             `json:"targetAssetCount"`
+	VerifiedCount    int             `json:"verifiedCount"`
+	DiscrepancyCount int             `json:"discrepancyCount"`
+	StartedAt        *time.Time      `json:"startedAt"`
+	CompletedAt      *time.Time      `json:"completedAt"`
+	CreatedBy        uuid.UUID       `json:"createdBy"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
+}
+
+// CreateCampaignRequest is the payload for POST /verification/campaigns.
+type CreateCampaignRequest struct {
+	Name        string          `json:"name" validate:"required"`
+	Description *string         `json:"description"`
+	ScopeFilter json.RawMessage `json:"scopeFilter"`
+}
+
+// CampaignVerifyRequest is the payload for verifying an asset within a campaign.
+type CampaignVerifyRequest struct {
+	LocationConfirmed *bool       `json:"locationConfirmed"`
+	Condition         *string     `json:"condition"`
+	ActualLocation    *string     `json:"actualLocation"`
+	Notes             *string     `json:"notes"`
+	PhotoEvidenceIDs  []uuid.UUID `json:"photoEvidenceIds"`
+	DiscrepancyType   *string     `json:"discrepancyType"`
+}
+
+// BulkVerifyRequest is the payload for POST /verification/bulk-verify.
+type BulkVerifyRequest struct {
+	AssetIDs   []uuid.UUID `json:"assetIds" validate:"required"`
+	CampaignID *uuid.UUID  `json:"campaignId"`
+	Condition  *string     `json:"condition"`
+}
+
+// VerificationStats holds summary counts for the verification status dashboard.
+type VerificationStats struct {
+	Total       int `json:"total"`
+	Verified    int `json:"verified"`
+	Unverified  int `json:"unverified"`
+	Discrepancy int `json:"discrepancy"`
+	Overdue     int `json:"overdue"`
 }
 
 // CMDBItem represents a configuration item in the CMDB.
@@ -285,18 +340,18 @@ type LicenseAssignment struct {
 
 // Warranty represents a warranty or support contract for an asset.
 type Warranty struct {
-	ID             uuid.UUID  `json:"id"`
-	AssetID        uuid.UUID  `json:"assetId"`
-	TenantID       uuid.UUID  `json:"tenantId"`
-	Vendor         *string    `json:"vendor"`
-	ContractNumber *string    `json:"contractNumber"`
-	CoverageType   *string    `json:"coverageType"`
-	StartDate      time.Time  `json:"startDate"`
-	EndDate        time.Time  `json:"endDate"`
-	Cost           *float64   `json:"cost"`
-	RenewalStatus  string     `json:"renewalStatus"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
+	ID             uuid.UUID `json:"id"`
+	AssetID        uuid.UUID `json:"assetId"`
+	TenantID       uuid.UUID `json:"tenantId"`
+	Vendor         *string   `json:"vendor"`
+	ContractNumber *string   `json:"contractNumber"`
+	CoverageType   *string   `json:"coverageType"`
+	StartDate      time.Time `json:"startDate"`
+	EndDate        time.Time `json:"endDate"`
+	Cost           *float64  `json:"cost"`
+	RenewalStatus  string    `json:"renewalStatus"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // RenewalAlert represents a scheduled renewal reminder for a license or warranty.
@@ -394,12 +449,12 @@ type CreateLifecycleEventRequest struct {
 
 // CreateDisposalRequest is the payload for initiating an asset disposal.
 type CreateDisposalRequest struct {
-	AssetID          uuid.UUID   `json:"assetId" validate:"required"`
-	DisposalMethod   string      `json:"disposalMethod" validate:"required"`
-	Reason           string      `json:"reason" validate:"required"`
-	WitnessIDs       []uuid.UUID `json:"witnessIds"`
-	DataWipeConfirmed bool       `json:"dataWipeConfirmed"`
-	ApprovalChainID  *uuid.UUID  `json:"approvalChainId"`
+	AssetID           uuid.UUID   `json:"assetId" validate:"required"`
+	DisposalMethod    string      `json:"disposalMethod" validate:"required"`
+	Reason            string      `json:"reason" validate:"required"`
+	WitnessIDs        []uuid.UUID `json:"witnessIds"`
+	DataWipeConfirmed bool        `json:"dataWipeConfirmed"`
+	ApprovalChainID   *uuid.UUID  `json:"approvalChainId"`
 }
 
 // UpdateDisposalStatusRequest is the payload for advancing a disposal through its workflow.
@@ -486,14 +541,14 @@ type CreateLicenseAssignmentRequest struct {
 
 // CreateWarrantyRequest is the payload for creating a warranty record.
 type CreateWarrantyRequest struct {
-	AssetID        uuid.UUID  `json:"assetId" validate:"required"`
-	Vendor         *string    `json:"vendor"`
-	ContractNumber *string    `json:"contractNumber"`
-	CoverageType   *string    `json:"coverageType"`
-	StartDate      time.Time  `json:"startDate" validate:"required"`
-	EndDate        time.Time  `json:"endDate" validate:"required"`
-	Cost           *float64   `json:"cost"`
-	RenewalStatus  *string    `json:"renewalStatus"`
+	AssetID        uuid.UUID `json:"assetId" validate:"required"`
+	Vendor         *string   `json:"vendor"`
+	ContractNumber *string   `json:"contractNumber"`
+	CoverageType   *string   `json:"coverageType"`
+	StartDate      time.Time `json:"startDate" validate:"required"`
+	EndDate        time.Time `json:"endDate" validate:"required"`
+	Cost           *float64  `json:"cost"`
+	RenewalStatus  *string   `json:"renewalStatus"`
 }
 
 // UpdateWarrantyRequest is the payload for updating a warranty record (partial update).
@@ -541,6 +596,7 @@ type DiscoveryRun struct {
 	ID           uuid.UUID       `json:"id"`
 	TenantID     uuid.UUID       `json:"tenantId"`
 	ProfileID    uuid.UUID       `json:"profileId"`
+	ScanType     *string         `json:"scanType,omitempty"`
 	Status       string          `json:"status"`
 	StartedAt    *time.Time      `json:"startedAt,omitempty"`
 	CompletedAt  *time.Time      `json:"completedAt,omitempty"`
@@ -557,6 +613,7 @@ type DiscoveryRun struct {
 type DiscoveredDevice struct {
 	ID              uuid.UUID       `json:"id"`
 	RunID           uuid.UUID       `json:"runId"`
+	Source          *string         `json:"source,omitempty"`
 	Hostname        *string         `json:"hostname,omitempty"`
 	IPAddress       *string         `json:"ipAddress,omitempty"`
 	MACAddress      *string         `json:"macAddress,omitempty"`
@@ -586,6 +643,10 @@ type DiscoveryStats struct {
 	ActiveProfiles int        `json:"activeProfiles"`
 	TotalRuns      int        `json:"totalRuns"`
 	LastRunAt      *time.Time `json:"lastRunAt,omitempty"`
+	ADEnabled      bool       `json:"adEnabled"`
+	ADTenantID     *string    `json:"adTenantId,omitempty"`
+	NetworkEnabled bool       `json:"networkEnabled"`
+	SCCMConfigured bool       `json:"sccmConfigured"`
 }
 
 // ──────────────────────────────────────────────
@@ -642,4 +703,46 @@ func IsValidAssetTransition(from, to string) bool {
 		}
 	}
 	return false
+}
+
+// ──────────────────────────────────────────────
+// ERP Integration types
+// ──────────────────────────────────────────────
+
+// ERPSyncLog tracks the result of an ERP sync run.
+type ERPSyncLog struct {
+	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenantId"`
+	Status       string          `json:"status"`
+	StartedAt    time.Time       `json:"startedAt"`
+	CompletedAt  *time.Time      `json:"completedAt"`
+	AssetsSynced int             `json:"assetsSynced"`
+	AssetsFailed int             `json:"assetsFailed"`
+	ErrorDetails json.RawMessage `json:"errorDetails"`
+	TriggeredBy  *uuid.UUID      `json:"triggeredBy"`
+	CreatedAt    time.Time       `json:"createdAt"`
+}
+
+// AssetFinancialView is the API response for an asset's financial details.
+type AssetFinancialView struct {
+	AssetID          uuid.UUID  `json:"assetId"`
+	AssetTag         string     `json:"assetTag"`
+	AssetName        string     `json:"assetName"`
+	PurchasePrice    *float64   `json:"purchasePrice"`
+	PurchaseCost     *float64   `json:"purchaseCost"`
+	Currency         *string    `json:"currency"`
+	CurrentBookValue *float64   `json:"currentBookValue"`
+	DepreciationRate *float64   `json:"depreciationRate"`
+	CostCenter       *string    `json:"costCenter"`
+	PONumber         *string    `json:"poNumber"`
+	ERPAssetID       *string    `json:"erpAssetId"`
+	ERPSyncAt        *time.Time `json:"erpSyncAt"`
+	PurchaseDate     *time.Time `json:"purchaseDate"`
+}
+
+// ERPSyncStatus is the response for the /erp/status endpoint.
+type ERPSyncStatus struct {
+	ERPEnabled  bool        `json:"erpEnabled"`
+	LastSync    *ERPSyncLog `json:"lastSync"`
+	TotalSynced int         `json:"totalSynced"`
 }

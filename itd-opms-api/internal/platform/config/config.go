@@ -24,6 +24,7 @@ type Config struct {
 	Log           LogConfig
 	SIEM          SIEMConfig
 	License       LicenseConfig
+	Discovery     DiscoveryConfig
 }
 
 type ServerConfig struct {
@@ -150,6 +151,19 @@ type LicenseConfig struct {
 	SyncInterval  time.Duration `mapstructure:"sync_interval"`
 }
 
+type DiscoveryConfig struct {
+	ADEnabled      bool          `mapstructure:"ad_enabled"`
+	ADTenantID     string        `mapstructure:"ad_tenant_id"`
+	NetworkEnabled bool          `mapstructure:"network_enabled"`
+	SNMPCommunity  string        `mapstructure:"snmp_community"`
+	ScanTimeout    time.Duration `mapstructure:"scan_timeout"`
+	MaxConcurrent  int           `mapstructure:"max_concurrent"`
+	SCCMEndpoint   string        `mapstructure:"sccm_endpoint"`
+	SCCMAPIKey     string        `mapstructure:"sccm_api_key"`
+	SCCMUsername   string        `mapstructure:"sccm_username"`
+	SCCMPassword   string        `mapstructure:"sccm_password"`
+}
+
 // Load reads configuration from .env file and environment variables.
 func Load() (*Config, error) {
 	v := viper.New()
@@ -224,6 +238,18 @@ func Load() (*Config, error) {
 	v.SetDefault("MAX_CONCURRENT_LICENSES", 575)
 	v.SetDefault("LICENSE_SYNC_INTERVAL", "5m")
 
+	// Discovery connectors
+	v.SetDefault("DISCOVERY_AD_ENABLED", false)
+	v.SetDefault("DISCOVERY_AD_TENANT_ID", "")
+	v.SetDefault("DISCOVERY_NETWORK_ENABLED", false)
+	v.SetDefault("DISCOVERY_SNMP_COMMUNITY", "public")
+	v.SetDefault("DISCOVERY_SCAN_TIMEOUT_SECONDS", 2)
+	v.SetDefault("DISCOVERY_MAX_CONCURRENT", 50)
+	v.SetDefault("SCCM_ENDPOINT", "")
+	v.SetDefault("SCCM_API_KEY", "")
+	v.SetDefault("SCCM_USERNAME", "")
+	v.SetDefault("SCCM_PASSWORD", "")
+
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
 
@@ -245,6 +271,16 @@ func Load() (*Config, error) {
 	licenseSync, err := time.ParseDuration(v.GetString("LICENSE_SYNC_INTERVAL"))
 	if err != nil {
 		licenseSync = 5 * time.Minute
+	}
+
+	discoveryTimeout := time.Duration(v.GetInt("DISCOVERY_SCAN_TIMEOUT_SECONDS")) * time.Second
+	if discoveryTimeout <= 0 {
+		discoveryTimeout = 2 * time.Second
+	}
+
+	discoveryADTenantID := strings.TrimSpace(v.GetString("DISCOVERY_AD_TENANT_ID"))
+	if discoveryADTenantID == "" {
+		discoveryADTenantID = v.GetString("ENTRA_TENANT_ID")
 	}
 
 	cfg := &Config{
@@ -326,6 +362,18 @@ func Load() (*Config, error) {
 		License: LicenseConfig{
 			MaxConcurrent: v.GetInt("MAX_CONCURRENT_LICENSES"),
 			SyncInterval:  licenseSync,
+		},
+		Discovery: DiscoveryConfig{
+			ADEnabled:      v.GetBool("DISCOVERY_AD_ENABLED"),
+			ADTenantID:     discoveryADTenantID,
+			NetworkEnabled: v.GetBool("DISCOVERY_NETWORK_ENABLED"),
+			SNMPCommunity:  v.GetString("DISCOVERY_SNMP_COMMUNITY"),
+			ScanTimeout:    discoveryTimeout,
+			MaxConcurrent:  v.GetInt("DISCOVERY_MAX_CONCURRENT"),
+			SCCMEndpoint:   v.GetString("SCCM_ENDPOINT"),
+			SCCMAPIKey:     v.GetString("SCCM_API_KEY"),
+			SCCMUsername:   v.GetString("SCCM_USERNAME"),
+			SCCMPassword:   v.GetString("SCCM_PASSWORD"),
 		},
 	}
 

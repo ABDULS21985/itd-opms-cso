@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -12,6 +12,10 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Network,
+  Building2,
+  ServerCog,
+  ShieldCheck,
   ChevronDown,
   ChevronUp,
   X,
@@ -52,6 +56,22 @@ const RUN_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   failed: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444" },
 };
 
+const CRON_PRESETS = [
+  { label: "Every 15 min", value: "*/15 * * * *" },
+  { label: "Hourly", value: "0 * * * *" },
+  { label: "Weekdays 2 AM", value: "0 2 * * 1,2,3,4,5" },
+  { label: "Daily 1 AM", value: "0 1 * * *" },
+];
+
+const SCCM_AUTH_OPTIONS = [
+  { value: "api_key", label: "API Key" },
+  { value: "basic", label: "Username / Password" },
+];
+
+function humanizeScanType(value?: string) {
+  return value ? value.replace(/_/g, " ") : "discovery";
+}
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -69,6 +89,14 @@ export default function DiscoveryPage() {
   const [profileDescription, setProfileDescription] = useState("");
   const [profileScanType, setProfileScanType] = useState("network");
   const [profileSchedule, setProfileSchedule] = useState("");
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [networkRanges, setNetworkRanges] = useState("");
+  const [networkSNMPCommunity, setNetworkSNMPCommunity] = useState("public");
+  const [sccmEndpoint, setSccmEndpoint] = useState("");
+  const [sccmAuthMethod, setSccmAuthMethod] = useState("api_key");
+  const [sccmApiKey, setSccmApiKey] = useState("");
+  const [sccmUsername, setSccmUsername] = useState("");
+  const [sccmPassword, setSccmPassword] = useState("");
 
   const { data: stats } = useDiscoveryStats();
   const { data: profilesData, isLoading: profilesLoading } =
@@ -83,6 +111,47 @@ export default function DiscoveryPage() {
   const profiles = profilesData?.data ?? [];
   const runs = runsData?.data ?? [];
 
+  const profileConfiguration = useMemo(() => {
+    if (profileScanType === "network") {
+      return {
+        ipRanges: networkRanges
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        snmpCommunity: networkSNMPCommunity.trim() || undefined,
+      };
+    }
+
+    if (profileScanType === "ad_import") {
+      return {
+        tenantId: stats?.adTenantId,
+      };
+    }
+
+    if (profileScanType === "sccm") {
+      return {
+        endpoint: sccmEndpoint.trim() || undefined,
+        apiKey: sccmAuthMethod === "api_key" ? sccmApiKey.trim() || undefined : undefined,
+        username:
+          sccmAuthMethod === "basic" ? sccmUsername.trim() || undefined : undefined,
+        password:
+          sccmAuthMethod === "basic" ? sccmPassword || undefined : undefined,
+      };
+    }
+
+    return {};
+  }, [
+    networkRanges,
+    networkSNMPCommunity,
+    profileScanType,
+    sccmApiKey,
+    sccmAuthMethod,
+    sccmEndpoint,
+    sccmPassword,
+    sccmUsername,
+    stats?.adTenantId,
+  ]);
+
   const handleCreateProfile = useCallback(() => {
     if (!profileName.trim()) return;
     createProfile.mutate(
@@ -90,8 +159,8 @@ export default function DiscoveryPage() {
         name: profileName,
         scanType: profileScanType,
         description: profileDescription || undefined,
-        schedule: profileSchedule || undefined,
-        configuration: {},
+        schedule: scheduleEnabled ? profileSchedule || undefined : undefined,
+        configuration: profileConfiguration,
       },
       {
         onSuccess: () => {
@@ -100,10 +169,26 @@ export default function DiscoveryPage() {
           setProfileDescription("");
           setProfileScanType("network");
           setProfileSchedule("");
+          setScheduleEnabled(false);
+          setNetworkRanges("");
+          setNetworkSNMPCommunity("public");
+          setSccmEndpoint("");
+          setSccmAuthMethod("api_key");
+          setSccmApiKey("");
+          setSccmUsername("");
+          setSccmPassword("");
         },
       },
     );
-  }, [profileName, profileScanType, profileDescription, profileSchedule, createProfile]);
+  }, [
+    createProfile,
+    profileConfiguration,
+    profileDescription,
+    profileName,
+    profileScanType,
+    profileSchedule,
+    scheduleEnabled,
+  ]);
 
   const handleCSVUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,6 +205,14 @@ export default function DiscoveryPage() {
     },
     [importCSV, router],
   );
+
+  const canCreateProfile =
+    profileName.trim().length > 0 &&
+    (!scheduleEnabled || profileSchedule.trim().length > 0) &&
+    (profileScanType !== "network" ||
+      networkRanges
+        .split("\n")
+        .some((value) => value.trim().length > 0));
 
   return (
     <div className="space-y-6">
@@ -215,6 +308,53 @@ export default function DiscoveryPage() {
         ))}
       </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08 }}
+        className="grid gap-4 lg:grid-cols-3"
+      >
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+          <div className="flex items-center gap-2">
+            <Building2 size={16} style={{ color: "#8B5CF6" }} />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              Entra Device Import
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
+            {stats?.adEnabled && stats.adTenantId
+              ? `Connected to ${stats.adTenantId}`
+              : "Microsoft Graph discovery is not configured"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+          <div className="flex items-center gap-2">
+            <Network size={16} style={{ color: "#3B82F6" }} />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              Network Sweep
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
+            {stats?.networkEnabled
+              ? "TCP sweep and SNMP enrichment are enabled"
+              : "Network discovery is disabled at the API layer"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+          <div className="flex items-center gap-2">
+            <ServerCog size={16} style={{ color: "#F59E0B" }} />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              SCCM Inventory
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
+            {stats?.sccmConfigured
+              ? "AdminService connector available with CSV fallback"
+              : "Awaiting SCCM endpoint or CSV fallback configuration"}
+          </p>
+        </div>
+      </motion.div>
+
       {/* New Profile Form */}
       {showNewProfile && (
         <motion.div
@@ -258,14 +398,171 @@ export default function DiscoveryPage() {
               onChange={setProfileDescription}
               placeholder="Optional description"
             />
-            <FormField
-              name="schedule"
-              label="Schedule (Cron)"
-              value={profileSchedule}
-              onChange={setProfileSchedule}
-              placeholder="e.g. 0 2 * * 1 (Mon 2am)"
-            />
           </div>
+
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  Schedule
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Enable automatic runs with a cron expression.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScheduleEnabled((value) => !value)}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{
+                    backgroundColor: scheduleEnabled ? "#10B981" : "#9CA3AF",
+                  }}
+                />
+                {scheduleEnabled ? "Scheduled" : "Manual Only"}
+              </button>
+            </div>
+
+            {scheduleEnabled && (
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {CRON_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setProfileSchedule(preset.value)}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--primary)]"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <FormField
+                  name="schedule"
+                  label="Cron Expression"
+                  value={profileSchedule}
+                  onChange={setProfileSchedule}
+                  placeholder="e.g. 0 2 * * 1"
+                  description="Five-field cron format: minute hour day month weekday"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4">
+            <div className="mb-4 flex items-center gap-2">
+              <ShieldCheck size={16} style={{ color: "#3B82F6" }} />
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                {profileScanType === "network" && "Network Configuration"}
+                {profileScanType === "ad_import" && "Entra Configuration"}
+                {profileScanType === "sccm" && "SCCM Configuration"}
+                {profileScanType === "csv_import" && "CSV Import"}
+              </p>
+            </div>
+
+            {profileScanType === "network" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  name="ipRanges"
+                  label="IP Ranges"
+                  type="textarea"
+                  rows={5}
+                  value={networkRanges}
+                  onChange={setNetworkRanges}
+                  placeholder={"10.0.0.0/24\n10.0.10.0/24"}
+                  description="One CIDR range per line. Required for network discovery."
+                />
+                <FormField
+                  name="snmpCommunity"
+                  label="SNMP Community"
+                  value={networkSNMPCommunity}
+                  onChange={setNetworkSNMPCommunity}
+                  placeholder="public"
+                  description="Used only when port 161 is reachable."
+                />
+              </div>
+            )}
+
+            {profileScanType === "ad_import" && (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-0)] p-4">
+                <div className="flex items-center gap-2">
+                  <Building2 size={16} style={{ color: "#8B5CF6" }} />
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                    {stats?.adEnabled && stats.adTenantId
+                      ? `Connected to ${stats.adTenantId}`
+                      : "Graph connection unavailable"}
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                  This profile will use the shared Entra device integration and automatically
+                  populate the tenant from backend configuration.
+                </p>
+              </div>
+            )}
+
+            {profileScanType === "sccm" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  name="sccmEndpoint"
+                  label="Server URL"
+                  value={sccmEndpoint}
+                  onChange={setSccmEndpoint}
+                  placeholder="https://sccm.example.com"
+                  description="AdminService base URL. Leave blank to use the API default."
+                />
+                <FormField
+                  name="sccmAuthMethod"
+                  label="Authentication"
+                  type="select"
+                  value={sccmAuthMethod}
+                  onChange={setSccmAuthMethod}
+                  options={SCCM_AUTH_OPTIONS}
+                />
+                {sccmAuthMethod === "api_key" ? (
+                  <FormField
+                    name="sccmApiKey"
+                    label="API Key"
+                    value={sccmApiKey}
+                    onChange={setSccmApiKey}
+                    placeholder="Optional override"
+                  />
+                ) : (
+                  <>
+                    <FormField
+                      name="sccmUsername"
+                      label="Username"
+                      value={sccmUsername}
+                      onChange={setSccmUsername}
+                      placeholder="DOMAIN\\svc-account"
+                    />
+                    <FormField
+                      name="sccmPassword"
+                      label="Password"
+                      type="password"
+                      value={sccmPassword}
+                      onChange={setSccmPassword}
+                      placeholder="Optional override"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {profileScanType === "csv_import" && (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-0)] p-4">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  CSV imports use the upload flow.
+                </p>
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                  Save a CSV profile if you want a named placeholder, then use the
+                  import action above to upload files against the discovery pipeline.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-2 mt-4">
             <button
               type="button"
@@ -276,7 +573,7 @@ export default function DiscoveryPage() {
             </button>
             <button
               type="button"
-              disabled={!profileName.trim() || createProfile.isPending}
+              disabled={!canCreateProfile || createProfile.isPending}
               onClick={handleCreateProfile}
               className="flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
@@ -442,8 +739,12 @@ export default function DiscoveryPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
-                          disabled={triggerRun.isPending}
-                          onClick={() => triggerRun.mutate(profile.id)}
+                          disabled={triggerRun.isPending && profile.scanType !== "csv_import"}
+                          onClick={() =>
+                            profile.scanType === "csv_import"
+                              ? setShowCSVImport(true)
+                              : triggerRun.mutate(profile.id)
+                          }
                           className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-1)] disabled:opacity-50"
                         >
                           {triggerRun.isPending ? (
@@ -451,7 +752,7 @@ export default function DiscoveryPage() {
                           ) : (
                             <Play size={12} />
                           )}
-                          Run
+                          {profile.scanType === "csv_import" ? "Upload CSV" : "Run"}
                         </button>
                       </td>
                     </tr>
@@ -535,6 +836,19 @@ export default function DiscoveryPage() {
                           <p className="text-sm font-semibold text-[var(--text-primary)]">
                             {run.profileName ?? "Discovery Run"}
                           </p>
+                          {run.scanType && (
+                            <span
+                              className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
+                              style={{
+                                backgroundColor:
+                                  (SCAN_TYPE_COLORS[run.scanType] ?? SCAN_TYPE_COLORS.network).bg,
+                                color:
+                                  (SCAN_TYPE_COLORS[run.scanType] ?? SCAN_TYPE_COLORS.network).text,
+                              }}
+                            >
+                              {humanizeScanType(run.scanType)}
+                            </span>
+                          )}
                           <span
                             className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
                             style={{

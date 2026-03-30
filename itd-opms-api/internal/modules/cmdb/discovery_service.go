@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -26,13 +28,20 @@ import (
 
 // DiscoveryService handles business logic for CMDB discovery profiles, runs, and reconciliation.
 type DiscoveryService struct {
-	pool     *pgxpool.Pool
-	auditSvc *audit.AuditService
+	pool         *pgxpool.Pool
+	auditSvc     *audit.AuditService
+	graphClient  *msgraph.Client
+	discoveryCfg config.DiscoveryConfig
 }
 
 // NewDiscoveryService creates a new DiscoveryService.
-func NewDiscoveryService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *DiscoveryService {
-	return &DiscoveryService{pool: pool, auditSvc: auditSvc}
+func NewDiscoveryService(pool *pgxpool.Pool, auditSvc *audit.AuditService, graphClient *msgraph.Client, discoveryCfg config.DiscoveryConfig) *DiscoveryService {
+	return &DiscoveryService{
+		pool:         pool,
+		auditSvc:     auditSvc,
+		graphClient:  graphClient,
+		discoveryCfg: discoveryCfg,
+	}
 }
 
 // ──────────────────────────────────────────────
@@ -61,7 +70,7 @@ const discoveryRunSelectColumns = `
 	r.started_at, r.completed_at,
 	r.devices_found, r.new_cis, r.updated_cis,
 	r.errors, r.created_at,
-	p.name AS profile_name`
+	p.name AS profile_name, p.scan_type AS scan_type`
 
 const discoveredDeviceColumns = `
 	id, run_id, hostname, ip_address, mac_address,
@@ -131,7 +140,7 @@ func scanDiscoveryRunEnriched(row pgx.Row) (DiscoveryRun, error) {
 		&r.StartedAt, &r.CompletedAt,
 		&r.DevicesFound, &r.NewCIs, &r.UpdatedCIs,
 		&r.Errors, &r.CreatedAt,
-		&r.ProfileName,
+		&r.ProfileName, &r.ScanType,
 	)
 	return r, err
 }
@@ -145,7 +154,7 @@ func scanDiscoveryRunsEnriched(rows pgx.Rows) ([]DiscoveryRun, error) {
 			&r.StartedAt, &r.CompletedAt,
 			&r.DevicesFound, &r.NewCIs, &r.UpdatedCIs,
 			&r.Errors, &r.CreatedAt,
-			&r.ProfileName,
+			&r.ProfileName, &r.ScanType,
 		); err != nil {
 			return nil, err
 		}
@@ -402,92 +411,13 @@ func (s *DiscoveryService) DeleteProfile(ctx context.Context, id uuid.UUID) erro
 // ──────────────────────────────────────────────
 
 // TriggerRun creates a new discovery run for the given profile.
-// For 'csv_import' profiles, use ImportCSV instead. For 'network', 'ad_import', 'sccm'
-// this creates a placeholder run marked as requiring agent deployment.
 func (s *DiscoveryService) TriggerRun(ctx context.Context, profileID uuid.UUID) (DiscoveryRun, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return DiscoveryRun{}, apperrors.Unauthorized("authentication required")
 	}
 
-	// Verify profile exists and belongs to tenant.
-	var scanType string
-	if err := s.pool.QueryRow(ctx,
-		`SELECT scan_type FROM discovery_profiles WHERE id = $1 AND tenant_id = $2`,
-		profileID, auth.TenantID,
-	).Scan(&scanType); err != nil {
-		if err == pgx.ErrNoRows {
-			return DiscoveryRun{}, apperrors.NotFound("DiscoveryProfile", profileID.String())
-		}
-		return DiscoveryRun{}, apperrors.Internal("failed to look up profile", err)
-	}
-
-	id := uuid.New()
-	now := time.Now().UTC()
-
-	// Determine initial status based on scan type.
-	status := "pending"
-	var errorsJSON json.RawMessage
-
-	switch scanType {
-	case "csv_import":
-		return DiscoveryRun{}, apperrors.BadRequest("use the CSV import endpoint for csv_import profiles")
-	case "network":
-		// Stub: network scanning requires agent deployment.
-		errorsJSON, _ = json.Marshal([]map[string]string{
-			{"type": "info", "message": "Network scan requires agent deployment. Configure the discovery agent with this profile ID."},
-		})
-		status = "pending"
-	case "ad_import":
-		// Stub: AD import would connect via MS Graph.
-		errorsJSON, _ = json.Marshal([]map[string]string{
-			{"type": "info", "message": "AD import requires MS Graph integration. Configure Graph service account."},
-		})
-		status = "pending"
-	case "sccm":
-		// Stub: SCCM import would connect to SCCM API.
-		errorsJSON, _ = json.Marshal([]map[string]string{
-			{"type": "info", "message": "SCCM import requires SCCM connector configuration."},
-		})
-		status = "pending"
-	}
-
-	if errorsJSON == nil {
-		errorsJSON = json.RawMessage("[]")
-	}
-
-	query := `
-		INSERT INTO discovery_runs (
-			id, tenant_id, profile_id, status, started_at, errors, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING ` + discoveryRunColumns
-
-	run, err := scanDiscoveryRun(s.pool.QueryRow(ctx, query,
-		id, auth.TenantID, profileID, status, now, errorsJSON, now,
-	))
-	if err != nil {
-		return DiscoveryRun{}, apperrors.Internal("failed to create discovery run", err)
-	}
-
-	// Update profile's last_run_at.
-	_, _ = s.pool.Exec(ctx,
-		`UPDATE discovery_profiles SET last_run_at = $1, updated_at = $1 WHERE id = $2`,
-		now, profileID,
-	)
-
-	changes, _ := json.Marshal(map[string]any{"profile_id": profileID, "scan_type": scanType})
-	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
-		TenantID:   auth.TenantID,
-		ActorID:    auth.UserID,
-		Action:     "create:discovery_run",
-		EntityType: "discovery_run",
-		EntityID:   id,
-		Changes:    changes,
-	}); auditErr != nil {
-		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
-	}
-
-	return run, nil
+	return s.RunDiscovery(ctx, profileID)
 }
 
 // GetRun retrieves a single discovery run by ID with profile name enrichment.
@@ -560,13 +490,19 @@ func (s *DiscoveryService) GetRunDevices(ctx context.Context, runID uuid.UUID, a
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Verify run belongs to tenant.
-	var exists bool
+	// Verify run belongs to tenant and capture scan type for source badge enrichment.
+	var scanType string
 	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM discovery_runs WHERE id = $1 AND tenant_id = $2)`,
+		`SELECT p.scan_type
+		 FROM discovery_runs r
+		 JOIN discovery_profiles p ON p.id = r.profile_id
+		 WHERE r.id = $1 AND r.tenant_id = $2`,
 		runID, auth.TenantID,
-	).Scan(&exists); err != nil || !exists {
-		return nil, 0, apperrors.NotFound("DiscoveryRun", runID.String())
+	).Scan(&scanType); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, 0, apperrors.NotFound("DiscoveryRun", runID.String())
+		}
+		return nil, 0, apperrors.Internal("failed to verify discovery run", err)
 	}
 
 	countQuery := `SELECT COUNT(*) FROM discovered_devices
@@ -594,6 +530,10 @@ func (s *DiscoveryService) GetRunDevices(ctx context.Context, runID uuid.UUID, a
 	devices, err := scanDiscoveredDevices(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan discovered devices", err)
+	}
+	source := scanType
+	for i := range devices {
+		devices[i].Source = &source
 	}
 
 	return devices, total, nil
@@ -755,6 +695,7 @@ func (s *DiscoveryService) ImportCSV(ctx context.Context, file multipart.File, h
 
 	// Fetch the complete run.
 	run, _ := s.GetRun(ctx, runID)
+	s.recordDiscoveryMetrics("csv_import", status, devices, now)
 
 	changes, _ := json.Marshal(map[string]any{
 		"profile_id":    actualProfileID,
@@ -1119,6 +1060,9 @@ func (s *DiscoveryService) ReconcileRun(ctx context.Context, runID uuid.UUID, re
 // buildCIAttributes creates a CMDB attributes JSON from discovered device data.
 func (s *DiscoveryService) buildCIAttributes(d DiscoveredDevice) json.RawMessage {
 	attrs := map[string]any{}
+	if len(d.Attributes) > 0 && string(d.Attributes) != "null" {
+		_ = json.Unmarshal(d.Attributes, &attrs)
+	}
 	if d.IPAddress != nil {
 		attrs["ip_address"] = *d.IPAddress
 	}
@@ -1179,6 +1123,13 @@ func (s *DiscoveryService) GetDiscoveryStats(ctx context.Context) (DiscoveryStat
 	if err != nil {
 		return DiscoveryStats{}, apperrors.Internal("failed to get run stats", err)
 	}
+
+	stats.ADEnabled = s.discoveryCfg.ADEnabled
+	if tenantID := strings.TrimSpace(s.discoveryCfg.ADTenantID); tenantID != "" {
+		stats.ADTenantID = &tenantID
+	}
+	stats.NetworkEnabled = s.discoveryCfg.NetworkEnabled
+	stats.SCCMConfigured = strings.TrimSpace(s.discoveryCfg.SCCMEndpoint) != ""
 
 	return stats, nil
 }
