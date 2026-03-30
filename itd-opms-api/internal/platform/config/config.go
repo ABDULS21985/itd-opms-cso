@@ -196,7 +196,7 @@ func Load() (*Config, error) {
 	v.SetDefault("REDIS_PORT", 6379)
 	v.SetDefault("REDIS_PASSWORD", "")
 	v.SetDefault("REDIS_DB", 0)
-	v.SetDefault("MINIO_ENDPOINT", "localhost:9000")
+	v.SetDefault("MINIO_ENDPOINT", "localhost:9010")
 	v.SetDefault("MINIO_ACCESS_KEY", "opms_minio")
 	v.SetDefault("MINIO_SECRET_KEY", "opms_minio_secret")
 	v.SetDefault("MINIO_USE_SSL", false)

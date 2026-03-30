@@ -37,7 +37,7 @@ module.exports = {
         REDIS_PORT: 6379,
         REDIS_PASSWORD: 'CHANGE_ME',
         REDIS_DB: 0,
-        MINIO_ENDPOINT: 'localhost:9000',
+        MINIO_ENDPOINT: 'localhost:9010',
         MINIO_ACCESS_KEY: 'CHANGE_ME',
         MINIO_SECRET_KEY: 'CHANGE_ME',
         MINIO_USE_SSL: false,

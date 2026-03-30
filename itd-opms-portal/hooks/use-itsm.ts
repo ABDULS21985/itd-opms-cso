@@ -292,8 +292,8 @@ export function useTickets(
         status: filters?.status,
         priority: filters?.priority,
         type: filters?.type,
-        assignee_id: filters?.assigneeId,
-        reporter_id: filters?.reporterId,
+        assigneeId: filters?.assigneeId,
+        reporterId: filters?.reporterId,
         hideSubtasks: filters?.hideSubtasks ? "true" : undefined,
       }),
   });
@@ -801,6 +801,26 @@ export function useUpdateMajorIncidentCommunicationPlan() {
     },
     onError: () => {
       toast.error("Failed to update communication plan");
+    },
+  });
+}
+
+/**
+ * POST /itsm/tickets/{id}/escalate - escalate a ticket manually.
+ */
+export function useEscalateTicket() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post(`/itsm/tickets/${id}/escalate`, { reason }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
+      toast.success("Ticket escalated");
+    },
+    onError: () => {
+      toast.error("Failed to escalate ticket");
     },
   });
 }
@@ -1644,6 +1664,17 @@ export function useBulkUpdateTickets() {
 /*  Service Requests — Types                                           */
 /* ================================================================== */
 
+export interface ConsistencyViolation {
+  type: string;
+  entityId: string;
+  entityName: string;
+  parentSlaId: string;
+  parentSlaName: string;
+  field: string;
+  slaTargetMinutes: number;
+  entityTargetMinutes: number;
+}
+
 export interface ServiceRequest {
   id: string;
   tenantId: string;
@@ -1683,6 +1714,16 @@ export interface ApprovalTask {
   comment?: string;
   delegatedTo?: string;
   createdAt: string;
+}
+
+export interface SLADependencyChainEntry {
+  id: string;
+  slaPolicyId: string;
+  /** Backend serializes as "slaName" */
+  slaName?: string;
+  /** @deprecated use slaName — kept for backwards compat */
+  slaPolicyName?: string;
+  slaResponseMinutes?: number;
 }
 
 export interface RequestTimelineEntry {

@@ -18,7 +18,7 @@ CREATE INDEX idx_escalation_events_tenant ON escalation_events(tenant_id);
 -- Deduplication: prevent the same rule from firing on the same ticket more
 -- than once per hour.
 CREATE UNIQUE INDEX idx_escalation_events_dedup
-    ON escalation_events(ticket_id, rule_id, DATE_TRUNC('hour', created_at));
+    ON escalation_events(ticket_id, rule_id, DATE_TRUNC('hour', created_at AT TIME ZONE 'UTC'));
 
 -- +goose Down
 DROP TABLE IF EXISTS escalation_events;

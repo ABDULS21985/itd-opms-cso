@@ -1,5 +1,15 @@
 -- +goose Up
--- Migration 089: Verification campaigns and enhanced physical asset verification.
+-- Migration 093: Verification campaigns and enhanced physical asset verification.
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION trigger_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 -- ──────────────────────────────────────────────
 -- 1. Verification campaigns
@@ -27,7 +37,7 @@ CREATE INDEX idx_verification_campaigns_tenant ON asset_verification_campaigns(t
 
 CREATE TRIGGER trg_verification_campaigns_updated
     BEFORE UPDATE ON asset_verification_campaigns
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 -- ──────────────────────────────────────────────
 -- 2. Extend asset_verifications with campaign + discrepancy support
@@ -61,3 +71,4 @@ ALTER TABLE asset_verifications DROP COLUMN IF EXISTS campaign_id;
 
 DROP TRIGGER IF EXISTS trg_verification_campaigns_updated ON asset_verification_campaigns;
 DROP TABLE IF EXISTS asset_verification_campaigns;
+DROP FUNCTION IF EXISTS trigger_set_updated_at();

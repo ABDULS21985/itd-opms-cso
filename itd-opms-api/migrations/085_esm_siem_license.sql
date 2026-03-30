@@ -1,7 +1,6 @@
+-- +goose Up
 -- 085_esm_siem_license.sql
 -- ESM BRD: SIEM audit export checkpoint + concurrent license pool
-
-BEGIN;
 
 -- ──────────────────────────────────────────────
 -- 1. SIEM export checkpoint (singleton)
@@ -42,4 +41,9 @@ ON CONFLICT (id) DO NOTHING;
 ALTER TABLE active_sessions
     ADD COLUMN IF NOT EXISTS login_blocked_reason TEXT;
 
-COMMIT;
+-- +goose Down
+ALTER TABLE active_sessions
+    DROP COLUMN IF EXISTS login_blocked_reason;
+
+DROP TABLE IF EXISTS license_pool;
+DROP TABLE IF EXISTS siem_export_state;

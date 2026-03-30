@@ -468,6 +468,7 @@ export interface OperationalLevelAgreement {
   status: string;
   effectiveFrom?: string;
   effectiveTo?: string;
+  reviewDate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -489,6 +490,7 @@ export interface UnderpinningContract {
   status: string;
   effectiveFrom?: string;
   effectiveTo?: string;
+  reviewDate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -496,6 +498,8 @@ export interface UnderpinningContract {
 export interface SLADependencyChainEntry {
   id: string;
   slaPolicyId: string;
+  /** Backend serialises as "slaName" - slaPolicyName kept as alias for backwards compat */
+  slaName?: string;
   slaPolicyName?: string;
   slaResponseMinutes?: number;
   slaResolutionMinutes?: number;
@@ -516,6 +520,7 @@ export interface ConsistencyViolation {
   entityId: string;
   entityName: string;
   parentSlaId: string;
+  parentSlaName: string;
   field: string;
   slaTargetMinutes: number;
   entityTargetMinutes: number;

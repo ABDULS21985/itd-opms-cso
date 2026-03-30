@@ -27,7 +27,7 @@ module.exports = {
         REDIS_PORT: 6379,
         REDIS_PASSWORD: '',
         REDIS_DB: 0,
-        MINIO_ENDPOINT: 'localhost:9000',
+        MINIO_ENDPOINT: 'localhost:9010',
         MINIO_ACCESS_KEY: 'opms_minio',
         MINIO_SECRET_KEY: 'opms_minio_secret',
         MINIO_USE_SSL: false,
