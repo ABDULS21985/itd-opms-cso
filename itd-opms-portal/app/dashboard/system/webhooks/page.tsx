@@ -28,12 +28,14 @@ import type { WebhookEndpoint } from "@/types";
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const TARGET_ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  create_ticket: { label: "Create Ticket", color: "blue" },
-  update_ticket: { label: "Update Ticket", color: "amber" },
-  create_ci: { label: "Create CI", color: "purple" },
-  trigger_notification: { label: "Notification", color: "green" },
-  log_only: { label: "Log Only", color: "gray" },
+type BadgeVariant = "success" | "warning" | "error" | "info" | "default";
+
+const TARGET_ACTION_LABELS: Record<string, { label: string; variant: BadgeVariant }> = {
+  create_ticket: { label: "Create Ticket", variant: "info" },
+  update_ticket: { label: "Update Ticket", variant: "warning" },
+  create_ci: { label: "Create CI", variant: "info" },
+  trigger_notification: { label: "Notification", variant: "success" },
+  log_only: { label: "Log Only", variant: "default" },
 };
 
 const TARGET_ACTIONS = [
@@ -129,9 +131,9 @@ export default function WebhooksPage() {
       render: (item) => {
         const cfg = TARGET_ACTION_LABELS[item.targetAction] || {
           label: item.targetAction,
-          color: "gray",
+          variant: "default" as BadgeVariant,
         };
-        return <StatusBadge status={cfg.label} color={cfg.color} />;
+        return <StatusBadge status={cfg.label} variant={cfg.variant} />;
       },
     },
     {
@@ -139,8 +141,7 @@ export default function WebhooksPage() {
       header: "Status",
       render: (item) => (
         <StatusBadge
-          status={item.isActive ? "Active" : "Inactive"}
-          color={item.isActive ? "green" : "gray"}
+          status={item.isActive ? "active" : "inactive"}
         />
       ),
     },
@@ -261,7 +262,7 @@ export default function WebhooksPage() {
                 ? {
                     currentPage: meta.page ?? page,
                     totalPages: meta.totalPages ?? 1,
-                    totalItems: meta.total ?? meta.totalItems,
+                    totalItems: meta.totalItems,
                     onPageChange: setPage,
                   }
                 : undefined
@@ -295,7 +296,7 @@ export default function WebhooksPage() {
 
         {/* Delete confirmation */}
         <ConfirmDialog
-          isOpen={!!deleteTarget}
+          open={!!deleteTarget}
           onClose={() => setDeleteTarget(null)}
           onConfirm={async () => {
             if (deleteTarget) {
@@ -304,10 +305,10 @@ export default function WebhooksPage() {
             }
           }}
           title="Delete Webhook"
-          description={`Are you sure you want to delete "${deleteTarget?.name}"? All associated logs will be permanently removed.`}
+          message={`Are you sure you want to delete "${deleteTarget?.name}"? All associated logs will be permanently removed.`}
           confirmLabel="Delete"
           variant="danger"
-          isLoading={deleteMutation.isPending}
+          loading={deleteMutation.isPending}
         />
       </div>
     </PermissionGate>

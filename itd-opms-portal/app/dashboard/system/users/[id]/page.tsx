@@ -57,6 +57,7 @@ import {
   useRevokeSession,
   useSearchUsers,
 } from "@/hooks/use-system";
+import { useAdminResetMFA } from "@/hooks/use-mfa";
 import type { RoleDetail, RoleBinding, Delegation, ActiveSession, AuditEventDetail } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -179,11 +180,13 @@ export default function UserDetailPage() {
   const createDelegation = useCreateDelegation(id);
   const revokeDelegation = useRevokeDelegation(id);
   const revokeSession = useRevokeSession();
+  const adminResetMFA = useAdminResetMFA();
 
   /* ---- Local state ---- */
   const [activeTab, setActiveTab] = useState<TabKey>("roles");
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [showReactivateConfirm, setShowReactivateConfirm] = useState(false);
+  const [showResetMFAConfirm, setShowResetMFAConfirm] = useState(false);
 
   // Assign role dialog
   const [showAssignRole, setShowAssignRole] = useState(false);
@@ -483,6 +486,56 @@ export default function UserDetailPage() {
         </motion.div>
 
         {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  MFA STATUS                                                */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-5 py-4"
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              style={{
+                backgroundColor: user.mfaEnabled
+                  ? "color-mix(in srgb, var(--success) 12%, transparent)"
+                  : "color-mix(in srgb, var(--text-muted) 8%, transparent)",
+              }}
+            >
+              <Fingerprint
+                size={18}
+                className={user.mfaEnabled ? "text-[var(--success)]" : "text-[var(--text-muted)]"}
+              />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                Two-Factor Authentication
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {user.mfaEnabled ? "TOTP authenticator configured" : "Not configured"}
+              </p>
+            </div>
+            <span
+              className={`ml-2 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                user.mfaEnabled
+                  ? "bg-[var(--success)]/10 text-[var(--success)]"
+                  : "bg-[var(--surface-2)] text-[var(--text-muted)]"
+              }`}
+            >
+              {user.mfaEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          {user.mfaEnabled && (
+            <button
+              type="button"
+              onClick={() => setShowResetMFAConfirm(true)}
+              className="rounded-xl border border-[var(--warning)]/30 px-3.5 py-2 text-xs font-medium text-[var(--warning)] transition-all hover:bg-[var(--warning)]/5 hover:border-[var(--warning)]/50"
+            >
+              Reset MFA
+            </button>
+          )}
+        </motion.div>
+
+        {/* ═══════════════════════════════════════════════════════════ */}
         {/*  QUICK STATS ROW                                           */}
         {/* ═══════════════════════════════════════════════════════════ */}
         <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -641,6 +694,20 @@ export default function UserDetailPage() {
           confirmLabel="Force Logout"
           variant="danger"
           loading={revokeSession.isPending}
+        />
+        <ConfirmDialog
+          open={showResetMFAConfirm}
+          onClose={() => setShowResetMFAConfirm(false)}
+          onConfirm={() => {
+            adminResetMFA.mutate(id, {
+              onSuccess: () => setShowResetMFAConfirm(false),
+            });
+          }}
+          title="Reset MFA"
+          message={`Are you sure you want to reset MFA for ${user.displayName}? All configured authenticators and backup codes will be removed. The user will need to set up MFA again.`}
+          confirmLabel="Reset MFA"
+          variant="danger"
+          loading={adminResetMFA.isPending}
         />
 
         {/* Assign Role Dialog */}

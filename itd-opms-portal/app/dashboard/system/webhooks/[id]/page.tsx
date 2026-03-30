@@ -36,12 +36,14 @@ import type { WebhookLog } from "@/types";
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const TARGET_ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  create_ticket: { label: "Create Ticket", color: "blue" },
-  update_ticket: { label: "Update Ticket", color: "amber" },
-  create_ci: { label: "Create CI", color: "purple" },
-  trigger_notification: { label: "Notification", color: "green" },
-  log_only: { label: "Log Only", color: "gray" },
+type BadgeVariant = "success" | "warning" | "error" | "info" | "default";
+
+const TARGET_ACTION_LABELS: Record<string, { label: string; variant: BadgeVariant }> = {
+  create_ticket: { label: "Create Ticket", variant: "info" },
+  update_ticket: { label: "Update Ticket", variant: "warning" },
+  create_ci: { label: "Create CI", variant: "info" },
+  trigger_notification: { label: "Notification", variant: "success" },
+  log_only: { label: "Log Only", variant: "default" },
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
@@ -156,7 +158,7 @@ export default function WebhookDetailPage() {
 
   const actionCfg = TARGET_ACTION_LABELS[endpoint.targetAction] || {
     label: endpoint.targetAction,
-    color: "gray",
+    variant: "default" as BadgeVariant,
   };
 
   /* ---- Log columns ---- */
@@ -252,10 +254,9 @@ export default function WebhookDetailPage() {
                   {endpoint.name}
                 </h1>
                 <StatusBadge
-                  status={endpoint.isActive ? "Active" : "Inactive"}
-                  color={endpoint.isActive ? "green" : "gray"}
+                  status={endpoint.isActive ? "active" : "inactive"}
                 />
-                <StatusBadge status={actionCfg.label} color={actionCfg.color} />
+                <StatusBadge status={actionCfg.label} variant={actionCfg.variant} />
               </div>
               <p className="text-sm font-mono" style={{ color: "var(--text-muted)" }}>
                 {endpoint.slug}
@@ -643,7 +644,7 @@ export default function WebhookDetailPage() {
                 ? {
                     currentPage: logsMeta.page ?? logPage,
                     totalPages: logsMeta.totalPages ?? 1,
-                    totalItems: logsMeta.total ?? logsMeta.totalItems,
+                    totalItems: logsMeta.totalItems,
                     onPageChange: setLogPage,
                   }
                 : undefined
@@ -731,32 +732,32 @@ export default function WebhookDetailPage() {
 
         {/* Regenerate Secret Confirm */}
         <ConfirmDialog
-          isOpen={showRegenerate}
+          open={showRegenerate}
           onClose={() => setShowRegenerate(false)}
           onConfirm={async () => {
             await regenerateMutation.mutateAsync();
             setShowRegenerate(false);
           }}
           title="Regenerate Secret"
-          description="This will invalidate the current HMAC secret. Any external systems using the old secret will need to be updated."
+          message="This will invalidate the current HMAC secret. Any external systems using the old secret will need to be updated."
           confirmLabel="Regenerate"
           variant="danger"
-          isLoading={regenerateMutation.isPending}
+          loading={regenerateMutation.isPending}
         />
 
         {/* Delete Confirm */}
         <ConfirmDialog
-          isOpen={showDelete}
+          open={showDelete}
           onClose={() => setShowDelete(false)}
           onConfirm={async () => {
             await deleteMutation.mutateAsync(id);
             router.push("/dashboard/system/webhooks");
           }}
           title="Delete Webhook"
-          description={`Are you sure you want to delete "${endpoint.name}"? All associated logs will be permanently removed.`}
+          message={`Are you sure you want to delete "${endpoint.name}"? All associated logs will be permanently removed.`}
           confirmLabel="Delete"
           variant="danger"
-          isLoading={deleteMutation.isPending}
+          loading={deleteMutation.isPending}
         />
       </div>
     </PermissionGate>

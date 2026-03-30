@@ -22,6 +22,7 @@ export interface UserDetail {
   updatedAt: string;
   orgUnitId?: string;
   orgUnitName?: string;
+  mfaEnabled: boolean;
   roles: RoleBinding[];
   delegations: Delegation[];
 }
