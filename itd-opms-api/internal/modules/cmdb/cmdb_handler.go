@@ -3,6 +3,7 @@ package cmdb
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -27,6 +28,7 @@ func NewCMDBCIHandler(svc *CMDBService) *CMDBCIHandler {
 
 // Routes mounts CMDB CI endpoints on the given router.
 func (h *CMDBCIHandler) Routes(r chi.Router) {
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/topology", h.GetTopology)
 	r.Route("/items", func(r chi.Router) {
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/", h.ListCMDBItems)
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/search", h.SearchCMDBItems)
@@ -46,6 +48,44 @@ func (h *CMDBCIHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("cmdb.manage")).Post("/", h.CreateReconciliationRun)
 		r.With(middleware.RequirePermission("cmdb.manage")).Put("/{id}/complete", h.CompleteReconciliationRun)
 	})
+}
+
+// GetTopology handles GET /topology — returns a graph payload of CIs and relationships.
+func (h *CMDBCIHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	q := optionalString(r, "q")
+	ciType := optionalString(r, "ciType")
+	status := optionalString(r, "status")
+
+	var focusCIID *uuid.UUID
+	if rawFocus := r.URL.Query().Get("focusCiId"); rawFocus != "" {
+		id, err := uuid.Parse(rawFocus)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid focus CI ID")
+			return
+		}
+		focusCIID = &id
+	}
+
+	limit := 80
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		if parsed, err := strconv.Atoi(rawLimit); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	topology, err := h.svc.GetTopology(r.Context(), q, ciType, status, focusCIID, limit)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, topology, nil)
 }
 
 // ──────────────────────────────────────────────

@@ -133,29 +133,29 @@ const (
 
 // Asset represents a tracked IT asset (hardware, software, virtual, cloud, network, peripheral).
 type Asset struct {
-	ID             uuid.UUID       `json:"id"`
-	TenantID       uuid.UUID       `json:"tenantId"`
-	AssetTag       string          `json:"assetTag"`
-	Type           string          `json:"type"`
-	Category       *string         `json:"category"`
-	Name           string          `json:"name"`
-	Description    *string         `json:"description"`
-	Manufacturer   *string         `json:"manufacturer"`
-	Model          *string         `json:"model"`
-	SerialNumber   *string         `json:"serialNumber"`
-	Status         string          `json:"status"`
-	Location       *string         `json:"location"`
-	Building       *string         `json:"building"`
-	Floor          *string         `json:"floor"`
-	Room           *string         `json:"room"`
-	OwnerID        *uuid.UUID      `json:"ownerId"`
-	CustodianID    *uuid.UUID      `json:"custodianId"`
-	PurchaseDate   *time.Time      `json:"purchaseDate"`
-	PurchaseCost   *float64        `json:"purchaseCost"`
-	Currency       *string         `json:"currency"`
-	Classification *string         `json:"classification"`
-	Attributes     json.RawMessage `json:"attributes"`
-	Tags           []string        `json:"tags"`
+	ID                 uuid.UUID       `json:"id"`
+	TenantID           uuid.UUID       `json:"tenantId"`
+	AssetTag           string          `json:"assetTag"`
+	Type               string          `json:"type"`
+	Category           *string         `json:"category"`
+	Name               string          `json:"name"`
+	Description        *string         `json:"description"`
+	Manufacturer       *string         `json:"manufacturer"`
+	Model              *string         `json:"model"`
+	SerialNumber       *string         `json:"serialNumber"`
+	Status             string          `json:"status"`
+	Location           *string         `json:"location"`
+	Building           *string         `json:"building"`
+	Floor              *string         `json:"floor"`
+	Room               *string         `json:"room"`
+	OwnerID            *uuid.UUID      `json:"ownerId"`
+	CustodianID        *uuid.UUID      `json:"custodianId"`
+	PurchaseDate       *time.Time      `json:"purchaseDate"`
+	PurchaseCost       *float64        `json:"purchaseCost"`
+	Currency           *string         `json:"currency"`
+	Classification     *string         `json:"classification"`
+	Attributes         json.RawMessage `json:"attributes"`
+	Tags               []string        `json:"tags"`
 	LastVerifiedAt     *time.Time      `json:"lastVerifiedAt"`
 	LastVerifiedBy     *uuid.UUID      `json:"lastVerifiedBy"`
 	VerificationStatus string          `json:"verificationStatus"`
@@ -297,6 +297,25 @@ type CMDBRelationship struct {
 	Description      *string   `json:"description"`
 	IsActive         bool      `json:"isActive"`
 	CreatedAt        time.Time `json:"createdAt"`
+}
+
+// CMDBTopologyStats summarizes the currently returned topology slice.
+type CMDBTopologyStats struct {
+	TotalItems             int            `json:"totalItems"`
+	TotalRelationships     int            `json:"totalRelationships"`
+	ActiveItems            int            `json:"activeItems"`
+	FocusedNeighborCount   int            `json:"focusedNeighborCount"`
+	TypeCounts             map[string]int `json:"typeCounts"`
+	StatusCounts           map[string]int `json:"statusCounts"`
+	RelationshipTypeCounts map[string]int `json:"relationshipTypeCounts"`
+}
+
+// CMDBTopologyResponse is the graph payload used by the topology view.
+type CMDBTopologyResponse struct {
+	Items         []CMDBItem         `json:"items"`
+	Relationships []CMDBRelationship `json:"relationships"`
+	FocusCIID     *uuid.UUID         `json:"focusCiId,omitempty"`
+	Stats         CMDBTopologyStats  `json:"stats"`
 }
 
 // ReconciliationRun records a discovery/reconciliation pass against an external source.

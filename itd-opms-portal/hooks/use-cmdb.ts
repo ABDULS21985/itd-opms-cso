@@ -9,6 +9,7 @@ import type {
   AssetVerification,
   CMDBItem,
   CMDBRelationship,
+  CMDBTopology,
   ReconciliationRun,
   License,
   LicenseAssignment,
@@ -98,9 +99,7 @@ export function useAssetLifecycleEvents(assetId: string | undefined) {
   return useQuery({
     queryKey: ["asset-lifecycle", assetId],
     queryFn: () =>
-      apiClient.get<AssetLifecycleEvent[]>(
-        `/cmdb/assets/${assetId}/lifecycle`,
-      ),
+      apiClient.get<AssetLifecycleEvent[]>(`/cmdb/assets/${assetId}/lifecycle`),
     enabled: !!assetId,
   });
 }
@@ -264,10 +263,7 @@ export function useVerifyAsset() {
       notes?: string;
       photoEvidenceIds?: string[];
     }) =>
-      apiClient.post<AssetVerification>(
-        `/cmdb/assets/${assetId}/verify`,
-        body,
-      ),
+      apiClient.post<AssetVerification>(`/cmdb/assets/${assetId}/verify`, body),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["asset-verifications", variables.assetId],
@@ -294,8 +290,7 @@ export function useVerifyAsset() {
 export function useAssetDisposal(id: string | undefined) {
   return useQuery({
     queryKey: ["asset-disposal", id],
-    queryFn: () =>
-      apiClient.get<AssetDisposal>(`/cmdb/assets/disposals/${id}`),
+    queryFn: () => apiClient.get<AssetDisposal>(`/cmdb/assets/disposals/${id}`),
     enabled: !!id,
   });
 }
@@ -417,6 +412,29 @@ export function useCMDBRelationships(ciId: string | undefined) {
   });
 }
 
+/**
+ * GET /cmdb/topology - graph payload for the topology workspace.
+ */
+export function useCMDBTopology(
+  q?: string,
+  ciType?: string,
+  status?: string,
+  focusCiId?: string,
+  limit = 80,
+) {
+  return useQuery({
+    queryKey: ["cmdb-topology", q, ciType, status, focusCiId, limit],
+    queryFn: () =>
+      apiClient.get<CMDBTopology>("/cmdb/topology", {
+        q,
+        ciType,
+        status,
+        focusCiId,
+        limit,
+      }),
+  });
+}
+
 /* ================================================================== */
 /*  CMDB Items — Mutations                                              */
 /* ================================================================== */
@@ -490,14 +508,12 @@ export function useCreateRelationship() {
       ciId,
       ...body
     }: Partial<CMDBRelationship> & { ciId: string }) =>
-      apiClient.post<CMDBRelationship>(
-        `/cmdb/relationships`,
-        body,
-      ),
+      apiClient.post<CMDBRelationship>(`/cmdb/relationships`, body),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["cmdb-relationships", variables.ciId],
       });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-topology"] });
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Relationship created successfully");
     },
@@ -520,12 +536,12 @@ export function useDeleteRelationship() {
     }: {
       ciId: string;
       relationshipId: string;
-    }) =>
-      apiClient.delete(`/cmdb/relationships/${relationshipId}`),
+    }) => apiClient.delete(`/cmdb/relationships/${relationshipId}`),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["cmdb-relationships", variables.ciId],
       });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-topology"] });
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Relationship deleted successfully");
     },
@@ -757,10 +773,7 @@ export function useDeleteLicenseAssignment() {
     }: {
       licenseId: string;
       assignmentId: string;
-    }) =>
-      apiClient.delete(
-        `/cmdb/licenses/assignments/${assignmentId}`,
-      ),
+    }) => apiClient.delete(`/cmdb/licenses/assignments/${assignmentId}`),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["license-assignments", variables.licenseId],
@@ -787,11 +800,7 @@ export function useDeleteLicenseAssignment() {
 /**
  * GET /cmdb/warranties - paginated list of warranties.
  */
-export function useWarranties(
-  page = 1,
-  limit = 20,
-  renewalStatus?: string,
-) {
+export function useWarranties(page = 1, limit = 20, renewalStatus?: string) {
   return useQuery({
     queryKey: ["warranties", page, limit, renewalStatus],
     queryFn: () =>
@@ -896,8 +905,7 @@ export function useDeleteWarranty() {
 export function usePendingAlerts() {
   return useQuery({
     queryKey: ["renewal-alerts"],
-    queryFn: () =>
-      apiClient.get<RenewalAlert[]>("/cmdb/renewal-alerts"),
+    queryFn: () => apiClient.get<RenewalAlert[]>("/cmdb/renewal-alerts"),
   });
 }
 
@@ -1007,10 +1015,7 @@ export function useCreateDiscoveryProfile() {
 export function useUpdateDiscoveryProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      ...body
-    }: Partial<DiscoveryProfile> & { id: string }) =>
+    mutationFn: ({ id, ...body }: Partial<DiscoveryProfile> & { id: string }) =>
       apiClient.put<DiscoveryProfile>(`/cmdb/discovery/profiles/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
@@ -1049,9 +1054,7 @@ export function useTriggerDiscoveryRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (profileId: string) =>
-      apiClient.post<DiscoveryRun>(
-        `/cmdb/discovery/profiles/${profileId}/run`,
-      ),
+      apiClient.post<DiscoveryRun>(`/cmdb/discovery/profiles/${profileId}/run`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
       queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
@@ -1076,10 +1079,12 @@ export function useDiscoveryRuns(
   return useQuery({
     queryKey: ["discovery-runs", page, limit, profileId, status],
     queryFn: () =>
-      apiClient.get<PaginatedResponse<DiscoveryRun>>(
-        "/cmdb/discovery/runs",
-        { page, limit, profileId, status },
-      ),
+      apiClient.get<PaginatedResponse<DiscoveryRun>>("/cmdb/discovery/runs", {
+        page,
+        limit,
+        profileId,
+        status,
+      }),
   });
 }
 
@@ -1089,8 +1094,7 @@ export function useDiscoveryRuns(
 export function useDiscoveryRun(id: string | undefined) {
   return useQuery({
     queryKey: ["discovery-run", id],
-    queryFn: () =>
-      apiClient.get<DiscoveryRun>(`/cmdb/discovery/runs/${id}`),
+    queryFn: () => apiClient.get<DiscoveryRun>(`/cmdb/discovery/runs/${id}`),
     enabled: !!id,
   });
 }
@@ -1128,10 +1132,9 @@ export function useReconcileDiscoveryRun() {
       runId: string;
       deviceIds: string[];
     }) =>
-      apiClient.post<DiscoveryRun>(
-        `/cmdb/discovery/runs/${runId}/reconcile`,
-        { deviceIds },
-      ),
+      apiClient.post<DiscoveryRun>(`/cmdb/discovery/runs/${runId}/reconcile`, {
+        deviceIds,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
       queryClient.invalidateQueries({ queryKey: ["discovery-run"] });

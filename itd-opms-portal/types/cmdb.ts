@@ -96,6 +96,23 @@ export interface CMDBRelationship {
   createdAt: string;
 }
 
+export interface CMDBTopologyStats {
+  totalItems: number;
+  totalRelationships: number;
+  activeItems: number;
+  focusedNeighborCount: number;
+  typeCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  relationshipTypeCounts: Record<string, number>;
+}
+
+export interface CMDBTopology {
+  items: CMDBItem[];
+  relationships: CMDBRelationship[];
+  focusCiId?: string;
+  stats: CMDBTopologyStats;
+}
+
 export interface ReconciliationRun {
   id: string;
   tenantId: string;

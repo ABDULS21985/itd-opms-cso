@@ -565,9 +565,7 @@ function LoginPageContent() {
               </div>
             </motion.div>
 
-            <div className="login-form-frame rounded-[2rem] p-[1px] shadow-[0_32px_80px_rgba(7,35,22,0.17)]">
-              <div className="login-glass-card rounded-[1.95rem] border border-white/70 px-4 py-4 sm:px-5 sm:py-5">
-                <div className="login-card-mesh rounded-[1.6rem] border border-[var(--border)]/70 bg-white/82 p-5 shadow-[0_20px_40px_rgba(10,37,23,0.06)] backdrop-blur-2xl sm:p-6 xl:p-8">
+            <div className="login-form-frame login-card-mesh rounded-[2rem] border border-[var(--border)]/70 bg-white/82 p-5 shadow-[0_32px_80px_rgba(7,35,22,0.17)] backdrop-blur-2xl sm:p-6 xl:p-8">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1015,8 +1013,6 @@ function LoginPageContent() {
                       </p>
                     </div>
                   </motion.div>
-                </div>
-              </div>
             </div>
 
             <motion.div
