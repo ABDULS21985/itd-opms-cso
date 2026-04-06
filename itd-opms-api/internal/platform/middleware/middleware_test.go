@@ -1,7 +1,9 @@
 package middleware_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -690,6 +692,28 @@ func TestLogging_DefaultsTo200(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected default 200, got %d", w.Code)
+	}
+}
+
+func TestLogging_Logs200WhenHandlerDoesNotWrite(t *testing.T) {
+	var buf bytes.Buffer
+	previousDefault := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(previousDefault)
+
+	handler := middleware.Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+		t.Fatalf("failed to decode log entry: %v", err)
+	}
+
+	if got := entry["status"]; got != float64(http.StatusOK) {
+		t.Fatalf("expected logged status 200, got %v", got)
 	}
 }
 
