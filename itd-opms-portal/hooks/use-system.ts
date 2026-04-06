@@ -9,9 +9,9 @@ import type {
   Delegation,
   PermissionCatalog,
   TenantDetail,
-  TenantSummary,
   OrgUnitDetail,
   OrgTreeNode,
+  OrgAnalyticsResponse,
   SystemSetting,
   AuditEventDetail,
   AuditStatsResponse,
@@ -21,6 +21,10 @@ import type {
   SystemStats,
   DirectorySyncStatus,
   EmailTemplate,
+  LicenseUtilization,
+  SIEMStatus,
+  WebhookEndpoint,
+  WebhookLog,
   PaginatedResponse,
 } from "@/types";
 
@@ -48,13 +52,13 @@ export function useUsers(
     queryFn: () =>
       apiClient.get<PaginatedResponse<UserDetail>>("/system/users", {
         page,
-        pageSize,
+        limit: pageSize,
         search: filters?.search,
         role: filters?.role,
         status: filters?.status,
         department: filters?.department,
-        sortBy: filters?.sortBy,
-        sortOrder: filters?.sortOrder,
+        sort: filters?.sortBy,
+        order: filters?.sortOrder,
       }),
   });
 }
@@ -78,7 +82,7 @@ export function useSearchUsers(query: string) {
     queryKey: ["system-users-search", query],
     queryFn: () =>
       apiClient.get<UserSearchResult[]>("/system/users/search", { q: query }),
-    enabled: query.length >= 2,
+    enabled: true,
   });
 }
 
@@ -131,6 +135,32 @@ export function useUpdateUser(id: string | undefined) {
     },
     onError: () => {
       toast.error("Failed to update user");
+    },
+  });
+}
+
+/**
+ * POST /system/users - create a new user.
+ */
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      email: string;
+      displayName: string;
+      jobTitle?: string;
+      department?: string;
+      office?: string;
+      unit?: string;
+      phone?: string;
+    }) => apiClient.post<UserDetail>("/system/users", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-users"] });
+      queryClient.invalidateQueries({ queryKey: ["system-user-stats"] });
+      toast.success("User created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create user");
     },
   });
 }
@@ -490,7 +520,7 @@ export function useOrgUnits(page = 1, pageSize = 20) {
     queryFn: () =>
       apiClient.get<PaginatedResponse<OrgUnitDetail>>("/system/org-units", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
@@ -514,6 +544,16 @@ export function useOrgUnit(id: string | undefined) {
     queryFn: () =>
       apiClient.get<OrgUnitDetail>(`/system/org-units/${id}`),
     enabled: !!id,
+  });
+}
+
+/**
+ * GET /system/org-units/analytics - org analytics dashboard data.
+ */
+export function useOrgAnalytics() {
+  return useQuery({
+    queryKey: ["system-org-analytics"],
+    queryFn: () => apiClient.get<OrgAnalyticsResponse>("/system/org-units/analytics"),
   });
 }
 
@@ -644,7 +684,7 @@ export function useDirectorySyncStatus(page = 1, pageSize = 10) {
     queryFn: () =>
       apiClient.get<DirectorySyncStatus>("/system/health/directory-sync", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
@@ -774,9 +814,9 @@ export function useAuditLogs(
         "/system/audit-logs",
         {
           page,
-          pageSize,
-          dateFrom: filters?.dateFrom,
-          dateTo: filters?.dateTo,
+          limit: pageSize,
+          dateFrom: filters?.dateFrom ? `${filters.dateFrom}T00:00:00Z` : undefined,
+          dateTo: filters?.dateTo ? `${filters.dateTo}T23:59:59Z` : undefined,
           actorId: filters?.actorId,
           entityType: filters?.entityType,
           entityId: filters?.entityId,
@@ -802,7 +842,7 @@ export function useAuditEvent(id: string | undefined) {
 }
 
 /**
- * GET /system/audit-logs/timeline/{entityType}/{entityId} - entity timeline.
+ * GET /system/audit-logs/entity/{type}/{id} - entity audit timeline.
  */
 export function useAuditTimeline(
   entityType: string | undefined,
@@ -812,7 +852,7 @@ export function useAuditTimeline(
     queryKey: ["system-audit-timeline", entityType, entityId],
     queryFn: () =>
       apiClient.get<AuditEventDetail[]>(
-        `/system/audit-logs/timeline/${entityType}/${entityId}`,
+        `/system/audit-logs/entity/${entityType}/${entityId}`,
       ),
     enabled: !!entityType && !!entityId,
   });
@@ -826,8 +866,8 @@ export function useAuditStats(dateFrom?: string, dateTo?: string) {
     queryKey: ["system-audit-stats", dateFrom, dateTo],
     queryFn: () =>
       apiClient.get<AuditStatsResponse>("/system/audit-logs/stats", {
-        dateFrom,
-        dateTo,
+        dateFrom: dateFrom ? `${dateFrom}T00:00:00Z` : undefined,
+        dateTo: dateTo ? `${dateTo}T23:59:59Z` : undefined,
       }),
   });
 }
@@ -837,19 +877,28 @@ export function useAuditStats(dateFrom?: string, dateTo?: string) {
 /* ================================================================== */
 
 /**
- * POST /system/audit-logs/verify-integrity - verify audit log integrity.
+ * POST /system/audit-logs/verify - verify audit log integrity.
+ * Backend returns: { valid: boolean; totalEvents: number; verified: number; firstInvalid?: string }
  */
 export function useVerifyIntegrity() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body?: { dateFrom?: string; dateTo?: string }) =>
-      apiClient.post<{ status: string; verified: number; failed: number }>(
-        "/system/audit-logs/verify-integrity",
-        body,
+      apiClient.post<{
+        valid: boolean;
+        totalEvents: number;
+        verified: number;
+        firstInvalid?: string;
+      }>(
+        "/system/audit-logs/verify",
+        {
+          // Append time components so the backend can parse as time.Time (RFC3339)
+          dateFrom: body?.dateFrom ? `${body.dateFrom}T00:00:00Z` : undefined,
+          dateTo: body?.dateTo ? `${body.dateTo}T23:59:59Z` : undefined,
+        },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-audit-stats"] });
-      toast.success("Integrity verification completed");
     },
     onError: () => {
       toast.error("Failed to verify audit integrity");
@@ -858,7 +907,8 @@ export function useVerifyIntegrity() {
 }
 
 /**
- * POST /system/audit-logs/export - export filtered audit logs as CSV or JSON.
+ * GET /system/audit-logs/export - export filtered audit logs as CSV or JSON.
+ * The backend returns []AuditEventDetail; the download is generated client-side.
  */
 export function useExportAuditLogs() {
   return useMutation({
@@ -873,20 +923,57 @@ export function useExportAuditLogs() {
       search?: string;
     }) => {
       const { format, ...filters } = params;
-      const res = await apiClient.post<{ url: string }>(
+      const events = await apiClient.get<AuditEventDetail[]>(
         "/system/audit-logs/export",
-        { format, ...filters },
+        {
+          format,
+          dateFrom: filters.dateFrom ? `${filters.dateFrom}T00:00:00Z` : undefined,
+          dateTo: filters.dateTo ? `${filters.dateTo}T23:59:59Z` : undefined,
+          actorId: filters.actorId,
+          entityType: filters.entityType,
+          entityId: filters.entityId,
+          action: filters.action,
+          search: filters.search,
+        },
       );
-      // Trigger browser download
-      if (res?.url) {
-        const a = document.createElement("a");
-        a.href = res.url;
-        a.download = `audit-logs.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+
+      const rows = Array.isArray(events) ? events : [];
+      let content: string;
+      let mimeType: string;
+
+      if (format === "csv") {
+        const csvHeaders = [
+          "id", "timestamp", "actorId", "actorName", "actorRole",
+          "action", "entityType", "entityId", "ipAddress",
+          "correlationId", "checksum",
+        ];
+        const csvRows = rows.map((e) =>
+          [
+            e.id, e.createdAt, e.actorId, e.actorName, e.actorRole,
+            e.action, e.entityType, e.entityId, e.ipAddress,
+            e.correlationId, e.checksum,
+          ]
+            .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+            .join(","),
+        );
+        content = [csvHeaders.join(","), ...csvRows].join("\n");
+        mimeType = "text/csv;charset=utf-8;";
+      } else {
+        content = JSON.stringify(rows, null, 2);
+        mimeType = "application/json";
       }
-      return res;
+
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      return rows;
     },
     onSuccess: () => {
       toast.success("Audit logs exported");
@@ -910,7 +997,7 @@ export function useSessions(page = 1, pageSize = 20) {
     queryFn: () =>
       apiClient.get<PaginatedResponse<ActiveSession>>("/system/sessions", {
         page,
-        pageSize,
+        limit: pageSize,
       }),
   });
 }
@@ -943,13 +1030,13 @@ export function useUserSessions(userId: string | undefined) {
 /* ================================================================== */
 
 /**
- * POST /system/sessions/{id}/revoke - revoke a single session.
+ * DELETE /system/sessions/{id} - revoke a single session.
  */
 export function useRevokeSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient.post(`/system/sessions/${id}/revoke`),
+      apiClient.delete(`/system/sessions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["system-session-stats"] });
@@ -963,13 +1050,13 @@ export function useRevokeSession() {
 }
 
 /**
- * POST /system/sessions/user/{userId}/revoke-all - revoke all sessions for a user.
+ * DELETE /system/sessions/user/{userId} - revoke all sessions for a user.
  */
 export function useRevokeAllUserSessions() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiClient.post(`/system/sessions/user/${userId}/revoke-all`),
+      apiClient.delete(`/system/sessions/user/${userId}`),
     onSuccess: (_data, userId) => {
       queryClient.invalidateQueries({ queryKey: ["system-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["system-session-stats"] });
@@ -1091,6 +1178,197 @@ export function usePreviewTemplate(id: string | undefined) {
       ),
     onError: () => {
       toast.error("Failed to preview template");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  ESM: License Utilization & SIEM Status                             */
+/* ================================================================== */
+
+/**
+ * GET /system/license-utilization - current license usage.
+ */
+export function useLicenseUtilization() {
+  return useQuery({
+    queryKey: ["system-license-utilization"],
+    queryFn: () =>
+      apiClient.get<LicenseUtilization>("/system/license-utilization"),
+    refetchInterval: 30_000,
+  });
+}
+
+/**
+ * GET /system/siem-status - SIEM exporter state.
+ */
+export function useSIEMStatus() {
+  return useQuery({
+    queryKey: ["system-siem-status"],
+    queryFn: () => apiClient.get<SIEMStatus>("/system/siem-status"),
+    refetchInterval: 60_000,
+  });
+}
+
+/* ================================================================== */
+/*  Webhooks — Queries                                                  */
+/* ================================================================== */
+
+/**
+ * GET /system/webhooks - paginated list of webhook endpoints.
+ */
+export function useWebhookEndpoints(page = 1, pageSize = 20) {
+  return useQuery({
+    queryKey: ["system-webhooks", page, pageSize],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<WebhookEndpoint>>("/system/webhooks", {
+        page,
+        limit: pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /system/webhooks/{id} - single webhook endpoint with secret.
+ */
+export function useWebhookEndpoint(id: string | undefined) {
+  return useQuery({
+    queryKey: ["system-webhook", id],
+    queryFn: () =>
+      apiClient.get<WebhookEndpoint>(`/system/webhooks/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /system/webhooks/{id}/logs - paginated webhook invocation logs.
+ */
+export function useWebhookLogs(
+  id: string | undefined,
+  page = 1,
+  pageSize = 20,
+) {
+  return useQuery({
+    queryKey: ["system-webhook-logs", id, page, pageSize],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<WebhookLog>>(
+        `/system/webhooks/${id}/logs`,
+        { page, limit: pageSize },
+      ),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  Webhooks — Mutations                                                */
+/* ================================================================== */
+
+/**
+ * POST /system/webhooks - create a new webhook endpoint.
+ */
+export function useCreateWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      slug: string;
+      description?: string;
+      targetAction: string;
+      payloadTransform?: Record<string, unknown>;
+    }) => apiClient.post<WebhookEndpoint>("/system/webhooks", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      toast.success("Webhook endpoint created");
+    },
+    onError: () => {
+      toast.error("Failed to create webhook endpoint");
+    },
+  });
+}
+
+/**
+ * PUT /system/webhooks/{id} - update a webhook endpoint.
+ */
+export function useUpdateWebhookEndpoint(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name?: string;
+      description?: string;
+      isActive?: boolean;
+      targetAction?: string;
+      payloadTransform?: Record<string, unknown>;
+    }) => apiClient.put<WebhookEndpoint>(`/system/webhooks/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      queryClient.invalidateQueries({ queryKey: ["system-webhook", id] });
+      toast.success("Webhook endpoint updated");
+    },
+    onError: () => {
+      toast.error("Failed to update webhook endpoint");
+    },
+  });
+}
+
+/**
+ * DELETE /system/webhooks/{id} - delete a webhook endpoint.
+ */
+export function useDeleteWebhookEndpoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/system/webhooks/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhooks"] });
+      toast.success("Webhook endpoint deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete webhook endpoint");
+    },
+  });
+}
+
+/**
+ * POST /system/webhooks/{id}/regenerate-secret - regenerate HMAC secret.
+ */
+export function useRegenerateWebhookSecret(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<{ secret: string }>(
+        `/system/webhooks/${id}/regenerate-secret`,
+        {},
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-webhook", id] });
+      toast.success("Webhook secret regenerated");
+    },
+    onError: () => {
+      toast.error("Failed to regenerate secret");
+    },
+  });
+}
+
+/**
+ * POST /system/webhooks/{id}/test - send a test payload.
+ */
+export function useTestWebhook(id: string | undefined) {
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiClient.post<{
+        status: string;
+        action: string;
+        result: Record<string, unknown>;
+        error?: string;
+      }>(`/system/webhooks/${id}/test`, { payload }),
+    onSuccess: (data) => {
+      if (data.status === "error") {
+        toast.error(`Test failed: ${data.error}`);
+      } else {
+        toast.success("Test webhook executed successfully");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to execute test webhook");
     },
   });
 }

@@ -30,8 +30,7 @@ const NotificationContext = createContext<NotificationContextType>({
   unreadCount: 0,
 });
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
+import { API_BASE_URL } from "@/lib/api-client";
 
 /* ------------------------------------------------------------------ */
 /*  Provider                                                           */

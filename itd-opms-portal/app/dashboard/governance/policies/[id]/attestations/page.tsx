@@ -46,10 +46,8 @@ export default function AttestationDashboardPage({
 
     launchCampaign.mutate(
       {
-        policyId: id,
-        policyVersion: policy?.version ?? 1,
         targetScope: campaignScope,
-        dueDate: campaignDueDate,
+        dueDate: new Date(campaignDueDate + "T00:00:00Z").toISOString(),
       },
       {
         onSuccess: () => {

@@ -9,8 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -23,14 +25,61 @@ import (
 type ProblemService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	js       nats.JetStreamContext
 }
 
 // NewProblemService creates a new ProblemService.
-func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *ProblemService {
+func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStreamContext) *ProblemService {
 	return &ProblemService{
 		pool:     pool,
 		auditSvc: auditSvc,
+		js:       js,
 	}
+}
+
+// ──────────────────────────────────────────────
+// Problem column helpers
+// ──────────────────────────────────────────────
+
+// problemBaseColumns is used in RETURNING clauses (no JOINs available).
+const problemBaseColumns = `id, tenant_id, problem_number, title, description,
+	root_cause, status, linked_incident_ids, workaround,
+	permanent_fix, linked_change_id, owner_id, assigned_group_id,
+	created_at, updated_at`
+
+// problemSelectColumns includes enrichment via LEFT JOINs.
+const problemSelectColumns = `p.id, p.tenant_id, p.problem_number, p.title, p.description,
+	p.root_cause, p.status, p.linked_incident_ids, p.workaround,
+	p.permanent_fix, p.linked_change_id, p.owner_id, p.assigned_group_id,
+	p.created_at, p.updated_at,
+	ou.name AS assigned_group_name,
+	owner.display_name AS owner_name`
+
+const problemFromJoins = `FROM problems p
+	LEFT JOIN org_units ou ON ou.id = p.assigned_group_id
+	LEFT JOIN users owner ON owner.id = p.owner_id`
+
+func scanProblemBase(row pgx.Row) (Problem, error) {
+	var p Problem
+	err := row.Scan(
+		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
+		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	return p, err
+}
+
+func scanProblemEnriched(row pgx.Row) (Problem, error) {
+	var p Problem
+	err := row.Scan(
+		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
+		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
+		&p.CreatedAt, &p.UpdatedAt,
+		&p.AssignedGroupName, &p.OwnerName,
+	)
+	return p, err
 }
 
 // ──────────────────────────────────────────────
@@ -50,26 +99,22 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 	query := `
 		INSERT INTO problems (
 			id, tenant_id, title, description,
-			status, owner_id, created_at, updated_at
+			status, owner_id, assigned_group_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4,
-			'open', $5, $6, $7
+			$5, $6, $7, $8, $9
 		)
-		RETURNING id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at`
+		RETURNING ` + problemBaseColumns
 
-	var p Problem
-	err := s.pool.QueryRow(ctx, query,
+	status := req.Status
+	if status == "" {
+		status = "logged"
+	}
+
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description,
-		req.OwnerID, now, now,
-	).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+		status, req.OwnerID, req.AssignedGroupID, now, now,
+	))
 	if err != nil {
 		return Problem{}, apperrors.Internal("failed to create problem", err)
 	}
@@ -100,21 +145,10 @@ func (s *ProblemService) GetProblem(ctx context.Context, id uuid.UUID) (Problem,
 		return Problem{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at
-		FROM problems
-		WHERE id = $1 AND tenant_id = $2`
+	query := `SELECT ` + problemSelectColumns + ` ` + problemFromJoins + `
+		WHERE p.id = $1 AND p.tenant_id = $2`
 
-	var p Problem
-	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+	p, err := scanProblemEnriched(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Problem{}, apperrors.NotFound("Problem", id.String())
@@ -126,7 +160,7 @@ func (s *ProblemService) GetProblem(ctx context.Context, id uuid.UUID) (Problem,
 }
 
 // ListProblems returns a filtered, paginated list of problems.
-func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit, offset int) ([]Problem, int64, error) {
+func (s *ProblemService) ListProblems(ctx context.Context, status *string, assignedGroupID *uuid.UUID, limit, offset int) ([]Problem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -137,27 +171,24 @@ func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit
 		SELECT COUNT(*)
 		FROM problems
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)
+			AND ($3::uuid IS NULL OR assigned_group_id = $3)`
 
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status, assignedGroupID).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count problems", err)
 	}
 
-	// Fetch paginated results.
-	dataQuery := `
-		SELECT id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at
-		FROM problems
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+	// Fetch paginated results with enrichment.
+	dataQuery := `SELECT ` + problemSelectColumns + ` ` + problemFromJoins + `
+		WHERE p.tenant_id = $1
+			AND ($2::text IS NULL OR p.status = $2)
+			AND ($3::uuid IS NULL OR p.assigned_group_id = $3)
+		ORDER BY p.created_at DESC
+		LIMIT $4 OFFSET $5`
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, assignedGroupID, limit, offset)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list problems", err)
 	}
@@ -165,13 +196,8 @@ func (s *ProblemService) ListProblems(ctx context.Context, status *string, limit
 
 	var problems []Problem
 	for rows.Next() {
-		var p Problem
-		if err := rows.Scan(
-			&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-			&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-			&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-			&p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
+		p, err := scanProblemEnriched(rows)
+		if err != nil {
 			return nil, 0, apperrors.Internal("failed to scan problem", err)
 		}
 		problems = append(problems, p)
@@ -203,35 +229,27 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 
 	now := time.Now().UTC()
 
+	// NOTE: status is intentionally excluded — use TransitionProblem instead.
 	updateQuery := `
 		UPDATE problems SET
 			title = COALESCE($1, title),
 			description = COALESCE($2, description),
 			root_cause = COALESCE($3, root_cause),
-			status = COALESCE($4, status),
-			workaround = COALESCE($5, workaround),
-			permanent_fix = COALESCE($6, permanent_fix),
-			linked_change_id = COALESCE($7, linked_change_id),
-			owner_id = COALESCE($8, owner_id),
+			workaround = COALESCE($4, workaround),
+			permanent_fix = COALESCE($5, permanent_fix),
+			linked_change_id = COALESCE($6, linked_change_id),
+			owner_id = COALESCE($7, owner_id),
+			assigned_group_id = COALESCE($8, assigned_group_id),
 			updated_at = $9
 		WHERE id = $10 AND tenant_id = $11
-		RETURNING id, tenant_id, problem_number, title, description,
-			root_cause, status, linked_incident_ids, workaround,
-			permanent_fix, linked_change_id, owner_id,
-			created_at, updated_at`
+		RETURNING ` + problemBaseColumns
 
-	var p Problem
-	err = s.pool.QueryRow(ctx, updateQuery,
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.RootCause,
-		req.Status, req.Workaround, req.PermanentFix,
-		req.LinkedChangeID, req.OwnerID,
+		req.Workaround, req.PermanentFix,
+		req.LinkedChangeID, req.OwnerID, req.AssignedGroupID,
 		now, id, auth.TenantID,
-	).Scan(
-		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
-		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
+	))
 	if err != nil {
 		return Problem{}, apperrors.Internal("failed to update problem", err)
 	}
@@ -323,6 +341,107 @@ func (s *ProblemService) LinkIncident(ctx context.Context, problemID, incidentID
 	}
 
 	return nil
+}
+
+// ──────────────────────────────────────────────
+// Problem Status Transitions
+// ──────────────────────────────────────────────
+
+// TransitionProblem validates and performs a status transition on a problem.
+func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, req TransitionProblemRequest) (Problem, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Problem{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetProblem(ctx, id)
+	if err != nil {
+		return Problem{}, err
+	}
+
+	// Validate transition against workflow state machine.
+	if err := workflow.ProblemStateMachine.Validate(existing.Status, req.TargetStatus); err != nil {
+		return Problem{}, apperrors.BadRequest(err.Error())
+	}
+
+	now := time.Now().UTC()
+
+	query := `
+		UPDATE problems SET
+			status = $1,
+			updated_at = $2
+		WHERE id = $3 AND tenant_id = $4
+		RETURNING ` + problemBaseColumns
+
+	p, err := scanProblemBase(s.pool.QueryRow(ctx, query, req.TargetStatus, now, id, auth.TenantID))
+	if err != nil {
+		return Problem{}, apperrors.Internal("failed to transition problem status", err)
+	}
+
+	// Auto-create known_error record when transitioning to known_error.
+	if req.TargetStatus == ProblemStatusKnownError {
+		var keCount int
+		_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM known_errors WHERE problem_id = $1`, id).Scan(&keCount)
+		if keCount == 0 {
+			keID := uuid.New()
+			keTitle := "Known Error — " + p.Title
+			_, keErr := s.pool.Exec(ctx, `
+				INSERT INTO known_errors (id, problem_id, title, description, workaround, status, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)`,
+				keID, id, keTitle, p.RootCause, p.Workaround, now, now,
+			)
+			if keErr != nil {
+				slog.ErrorContext(ctx, "failed to auto-create known error", "error", keErr)
+			} else {
+				slog.InfoContext(ctx, "auto-created known error for problem", "problem_id", id, "known_error_id", keID)
+			}
+		}
+	}
+
+	// Log audit event.
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": existing.Status,
+		"new_status":      req.TargetStatus,
+		"comment":         req.Comment,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "transition:problem",
+		EntityType: "problem",
+		EntityID:   id,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	// Publish NATS event.
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"problemId":      id,
+			"problemNumber":  p.ProblemNumber,
+			"title":          p.Title,
+			"previousStatus": existing.Status,
+			"newStatus":      req.TargetStatus,
+			"comment":        req.Comment,
+			"actorId":         auth.UserID,
+			"ownerId":         p.OwnerID,
+			"assignedGroupId": p.AssignedGroupID,
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type":       "itsm.problem.transitioned",
+			"tenantId":   auth.TenantID,
+			"actorId":    auth.UserID,
+			"entityType": "problem",
+			"entityId":   id,
+			"data":       json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.problem.transitioned", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish problem transition event", "error", pubErr)
+		}
+	}
+
+	return p, nil
 }
 
 // ──────────────────────────────────────────────

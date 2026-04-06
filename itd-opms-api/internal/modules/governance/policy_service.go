@@ -13,6 +13,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // PolicyService handles business logic for policy management.
@@ -71,12 +72,12 @@ func (s *PolicyService) CreatePolicy(ctx context.Context, tenantID, createdBy uu
 	versionID := uuid.New()
 	versionQuery := `
 		INSERT INTO policy_versions (
-			id, policy_id, version, title, content, changes_summary, created_by, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			id, tenant_id, policy_id, version, title, content, changes_summary, created_by, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	initialSummary := "Initial version"
 	_, err = s.pool.Exec(ctx, versionQuery,
-		versionID, id, 1, req.Title, req.Content, &initialSummary, createdBy, now,
+		versionID, tenantID, id, 1, req.Title, req.Content, &initialSummary, createdBy, now,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to create policy version", err)
@@ -131,13 +132,7 @@ func (s *PolicyService) GetPolicy(ctx context.Context, tenantID, policyID uuid.U
 
 // ListPolicies returns a filtered, paginated list of policies.
 func (s *PolicyService) ListPolicies(ctx context.Context, tenantID uuid.UUID, category, status string, limit, offset int) ([]Policy, int64, error) {
-	// Count total matching records.
-	countQuery := `
-		SELECT COUNT(*)
-		FROM policies
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR category = $2)
-			AND ($3::text IS NULL OR status = $3)`
+	auth := types.GetAuthContext(ctx)
 
 	var categoryParam, statusParam *string
 	if category != "" {
@@ -147,14 +142,35 @@ func (s *PolicyService) ListPolicies(ctx context.Context, tenantID uuid.UUID, ca
 		statusParam = &status
 	}
 
+	// Build base args: $1=tenantID, $2=category, $3=status.
+	args := []interface{}{tenantID, categoryParam, statusParam}
+	nextIdx := 4
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	// Count total matching records.
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM policies
+		WHERE tenant_id = $1
+			AND ($2::text IS NULL OR category = $2)
+			AND ($3::text IS NULL OR status = $3)%s`, orgClause)
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, tenantID, categoryParam, statusParam).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count policies", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, title, description, category, tags,
 			scope_type, scope_tenant_ids, status, version, content,
 			effective_date, review_date, expiry_date, owner_id,
@@ -162,11 +178,12 @@ func (s *PolicyService) ListPolicies(ctx context.Context, tenantID uuid.UUID, ca
 		FROM policies
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR category = $2)
-			AND ($3::text IS NULL OR status = $3)
+			AND ($3::text IS NULL OR status = $3)%s
 		ORDER BY created_at DESC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, categoryParam, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list policies", err)
 	}
@@ -609,7 +626,13 @@ func (s *PolicyService) AttestPolicy(ctx context.Context, attestationID, userID 
 		"attestation_id": attestationID,
 		"status":         "attested",
 	})
+	authAttest := types.GetAuthContext(ctx)
+	attestTenantID := uuid.Nil
+	if authAttest != nil {
+		attestTenantID = authAttest.TenantID
+	}
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   attestTenantID,
 		ActorID:    userID,
 		Action:     "policy.attested",
 		EntityType: "policy_attestation",

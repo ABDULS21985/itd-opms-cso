@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -18,7 +19,7 @@ import (
 // ──────────────────────────────────────────────
 
 func newTestUserHandler() *UserHandler {
-	svc := NewUserService(nil, nil)
+	svc := NewUserService(nil, nil, nil, config.MinIOConfig{})
 	return NewUserHandler(svc)
 }
 

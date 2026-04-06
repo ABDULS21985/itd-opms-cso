@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -266,11 +267,18 @@ func (s *DashboardService) GetTicketsByPriority(ctx context.Context) ([]ChartDat
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	// Build org-scope filter (tickets have org_unit_id).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT priority AS label, COUNT(*)::int AS value
 		FROM tickets
 		WHERE tenant_id = $1
-			AND status NOT IN ('closed', 'cancelled')
+			AND status NOT IN ('closed', 'cancelled')%s
 			GROUP BY priority
 			ORDER BY
 				CASE priority
@@ -279,9 +287,13 @@ func (s *DashboardService) GetTicketsByPriority(ctx context.Context) ([]ChartDat
 					WHEN 'P3_medium' THEN 3
 					WHEN 'P4_low' THEN 4
 					ELSE 5
-				END`
+				END`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetTicketsByStatus returns ticket counts grouped by status.
@@ -291,14 +303,24 @@ func (s *DashboardService) GetTicketsByStatus(ctx context.Context) ([]ChartDataP
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM tickets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -312,14 +334,24 @@ func (s *DashboardService) GetProjectsByStatus(ctx context.Context) ([]ChartData
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -333,14 +365,24 @@ func (s *DashboardService) GetAssetsByType(ctx context.Context) ([]ChartDataPoin
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT type AS label, COUNT(*)::int AS value
 		FROM assets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY type
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetAssetsByStatus returns asset counts grouped by status.
@@ -350,14 +392,24 @@ func (s *DashboardService) GetAssetsByStatus(ctx context.Context) ([]ChartDataPo
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT status AS label, COUNT(*)::int AS value
 		FROM assets
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -371,7 +423,13 @@ func (s *DashboardService) GetSLAComplianceRate(ctx context.Context, since time.
 		return 0, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			CASE WHEN COUNT(*) = 0 THEN 100.0
 			ELSE (COUNT(*) FILTER (WHERE sla_resolution_met = true)::float8 / COUNT(*)::float8) * 100.0
@@ -379,10 +437,15 @@ func (s *DashboardService) GetSLAComplianceRate(ctx context.Context, since time.
 		FROM tickets
 		WHERE tenant_id = $1
 			AND sla_resolution_met IS NOT NULL
-			AND created_at >= $2`
+			AND created_at >= $2%s`, orgSQL)
+
+	args := []any{auth.TenantID, since}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
 
 	var rate float64
-	err := s.pool.QueryRow(ctx, query, auth.TenantID, since).Scan(&rate)
+	err := s.pool.QueryRow(ctx, query, args...).Scan(&rate)
 	if err != nil {
 		return 0, apperrors.Internal("failed to get SLA compliance rate", err)
 	}
@@ -478,14 +541,24 @@ func (s *DashboardService) GetProjectsByRAG(ctx context.Context) ([]ChartDataPoi
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT rag_status AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY rag_status
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // GetProjectsByPriority returns project counts grouped by priority.
@@ -495,10 +568,16 @@ func (s *DashboardService) GetProjectsByPriority(ctx context.Context) ([]ChartDa
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT priority AS label, COUNT(*)::int AS value
 		FROM projects
-		WHERE tenant_id = $1
+		WHERE tenant_id = $1%s
 		GROUP BY priority
 		ORDER BY
 			CASE priority
@@ -507,9 +586,13 @@ func (s *DashboardService) GetProjectsByPriority(ctx context.Context) ([]ChartDa
 				WHEN 'medium' THEN 3
 				WHEN 'low' THEN 4
 				ELSE 5
-			END`
+			END`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -523,15 +606,28 @@ func (s *DashboardService) GetRisksByCategory(ctx context.Context) ([]ChartDataP
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT COALESCE(category, 'uncategorized') AS label, COUNT(*)::int AS value
-		FROM risk_register
-		WHERE tenant_id = $1
-			AND status = 'open'
-		GROUP BY category
-		ORDER BY value DESC`
+	// risk_register scopes through project's division_id via JOIN.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	joinSQL := ""
+	if orgClause != "" {
+		joinSQL = " JOIN projects p ON p.id = r.project_id"
+		orgSQL = " AND " + orgClause
+	}
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	query := fmt.Sprintf(`
+		SELECT COALESCE(r.category, 'uncategorized') AS label, COUNT(*)::int AS value
+		FROM risk_register r%s
+		WHERE r.tenant_id = $1
+			AND r.status = 'open'%s
+		GROUP BY r.category
+		ORDER BY value DESC`, joinSQL, orgSQL)
+
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -545,14 +641,27 @@ func (s *DashboardService) GetWorkItemsByStatus(ctx context.Context) ([]ChartDat
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
-		SELECT status AS label, COUNT(*)::int AS value
-		FROM work_items
-		WHERE tenant_id = $1
-		GROUP BY status
-		ORDER BY value DESC`
+	// work_items scope through project's division_id via JOIN.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	joinSQL := ""
+	if orgClause != "" {
+		joinSQL = " JOIN projects p ON p.id = wi.project_id"
+		orgSQL = " AND " + orgClause
+	}
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	query := fmt.Sprintf(`
+		SELECT wi.status AS label, COUNT(*)::int AS value
+		FROM work_items wi%s
+		WHERE wi.tenant_id = $1%s
+		GROUP BY wi.status
+		ORDER BY value DESC`, joinSQL, orgSQL)
+
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
 }
 
 // ──────────────────────────────────────────────
@@ -588,7 +697,14 @@ func (s *DashboardService) GetOfficeAnalytics(ctx context.Context) ([]OfficeAnal
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	// Filter visible org units by org scope (o.id matches the division).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "o.id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			o.id AS division_id,
 			o.name AS division_name,
@@ -606,11 +722,15 @@ func (s *DashboardService) GetOfficeAnalytics(ctx context.Context) ([]OfficeAnal
 		LEFT JOIN projects p ON p.division_id = o.id AND p.tenant_id = $1
 		WHERE o.tenant_id = $1
 			AND o.level IN ('office', 'division')
-			AND o.is_active = true
+			AND o.is_active = true%s
 		GROUP BY o.id, o.name, o.code
-		ORDER BY total_projects DESC`
+		ORDER BY total_projects DESC`, orgSQL)
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to query office analytics", err)
 	}
@@ -684,15 +804,566 @@ func (s *DashboardService) GetProjectsByOffice(ctx context.Context) ([]ChartData
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `
+	orgClause, orgParam := types.BuildOrgFilter(auth, "p.division_id", 2)
+	orgSQL := ""
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+	}
+
+	query := fmt.Sprintf(`
 		SELECT COALESCE(o.name, 'Unassigned') AS label, COUNT(*)::int AS value
 		FROM projects p
 		LEFT JOIN org_units o ON o.id = p.division_id
-		WHERE p.tenant_id = $1
+		WHERE p.tenant_id = $1%s
 		GROUP BY o.name
-		ORDER BY value DESC`
+		ORDER BY value DESC`, orgSQL)
 
-	return s.queryChartData(ctx, query, auth.TenantID)
+	args := []any{auth.TenantID}
+	if orgParam != nil {
+		args = append(args, orgParam)
+	}
+	return s.queryChartData(ctx, query, args...)
+}
+
+// ──────────────────────────────────────────────
+// Activity Feed
+// ──────────────────────────────────────────────
+
+// activityTypeFromAction maps an audit event action string to an activity feed display type.
+func activityTypeFromAction(action string) string {
+	lookup := map[string]string{
+		"create:ticket":         "ticket.created",
+		"resolve:ticket":        "ticket.resolved",
+		"escalate:ticket":       "ticket.escalated",
+		"update:project":        "project.status_changed",
+		"create:risk_register":  "risk.identified",
+		"mitigate:risk_register": "risk.mitigated",
+		"create:asset":          "asset.deployed",
+		"retire:asset":          "asset.decommissioned",
+		"create:policy":         "policy.approved",
+		"expire:policy":         "policy.expired",
+	}
+	if t, ok := lookup[action]; ok {
+		return t
+	}
+	return action
+}
+
+// entityHrefFromType constructs a relative navigation href for an entity.
+func entityHrefFromType(entityType, entityID string) string {
+	routes := map[string]string{
+		"ticket":            "/dashboard/itsm/tickets/",
+		"project":           "/dashboard/planning/projects/",
+		"risk_register":     "/dashboard/grc/risks/",
+		"asset":             "/dashboard/cmdb/assets/",
+		"policy":            "/dashboard/governance/policies/",
+		"report_definition": "/dashboard/reports",
+		"report_run":        "/dashboard/reports",
+	}
+	if prefix, ok := routes[entityType]; ok {
+		if entityID != "" && prefix[len(prefix)-1] == '/' {
+			return prefix + entityID
+		}
+		return prefix
+	}
+	return "/dashboard"
+}
+
+// supportedEntityTypes lists entity types for which label lookups are supported.
+var supportedEntityTypes = map[string]bool{
+	"ticket": true, "project": true, "risk_register": true,
+	"asset": true, "policy": true, "report_definition": true,
+}
+
+// resolveEntityLabels batch-queries entity labels for all items in the list.
+// It groups items by entity_type, does one IN query per type, and returns a
+// map[entityType+":"+entityID] → label.
+func (s *DashboardService) resolveEntityLabels(ctx context.Context, tenantID uuid.UUID, items []activityEventRow) map[string]string {
+	byType := map[string][]string{}
+	for _, it := range items {
+		if supportedEntityTypes[it.entityType] {
+			byType[it.entityType] = append(byType[it.entityType], it.entityID)
+		}
+	}
+
+	labels := map[string]string{}
+	for entityType, ids := range byType {
+		if len(ids) == 0 {
+			continue
+		}
+		// $1 = tenant_id, $2..$N = entity IDs cast to uuid
+		params := make([]any, 0, 1+len(ids))
+		params = append(params, tenantID)
+		placeholders := make([]string, len(ids))
+		for i, id := range ids {
+			params = append(params, id)
+			placeholders[i] = fmt.Sprintf("$%d::uuid", i+2)
+		}
+
+		tableQuery := buildEntityLabelBatchQuery(entityType, len(ids))
+		if tableQuery == "" {
+			continue
+		}
+		rows, err := s.pool.Query(ctx, tableQuery, params...)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to resolve entity labels", "entity_type", entityType, "error", err)
+			continue
+		}
+		for rows.Next() {
+			var id, label string
+			if rows.Scan(&id, &label) == nil {
+				labels[entityType+":"+id] = label
+			}
+		}
+		rows.Close()
+	}
+
+	return labels
+}
+
+// buildEntityLabelBatchQuery constructs an IN-query to batch-fetch entity labels.
+// $1 = tenant_id, $2..$N = entity IDs (as text).
+func buildEntityLabelBatchQuery(entityType string, n int) string {
+	placeholders := make([]string, n)
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d::uuid", i+2)
+	}
+	inClause := joinPlaceholders(placeholders)
+
+	switch entityType {
+	case "ticket":
+		return fmt.Sprintf(`SELECT id::text, title FROM tickets WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "project":
+		return fmt.Sprintf(`SELECT id::text, title FROM projects WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "risk_register":
+		return fmt.Sprintf(`SELECT id::text, title FROM risk_register WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "asset":
+		return fmt.Sprintf(`SELECT id::text, name FROM assets WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "policy":
+		return fmt.Sprintf(`SELECT id::text, title FROM policies WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	case "report_definition":
+		return fmt.Sprintf(`SELECT id::text, name FROM report_definitions WHERE tenant_id = $1 AND id IN (%s)`, inClause)
+	default:
+		return ""
+	}
+}
+
+func extractLabelColumn(entityType string) string {
+	switch entityType {
+	case "asset", "report_definition":
+		return "name"
+	default:
+		return "title"
+	}
+}
+
+func joinPlaceholders(ss []string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += ","
+		}
+		result += s
+	}
+	return result
+}
+
+// activityEventRow is an intermediate row from the audit_events query.
+type activityEventRow struct {
+	id          string
+	actorID     string
+	actorName   string
+	action      string
+	entityType  string
+	entityID    string
+	changesJSON []byte
+	timestamp   time.Time
+}
+
+// labelFromChanges tries to extract a human-readable label from a changes JSONB blob.
+func labelFromChanges(changesJSON []byte) string {
+	if len(changesJSON) == 0 {
+		return ""
+	}
+	var ch map[string]any
+	if err := json.Unmarshal(changesJSON, &ch); err != nil {
+		return ""
+	}
+	for _, key := range []string{"name", "title", "subject", "ticket_number"} {
+		if v, ok := ch[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// GetActivityFeed returns a paginated list of recent audit events with resolved entity labels.
+func (s *DashboardService) GetActivityFeed(ctx context.Context, page, limit int) (ActivityFeedResponse, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ActivityFeedResponse{}, apperrors.Unauthorized("authentication required")
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM audit_events WHERE tenant_id = $1`,
+		auth.TenantID,
+	).Scan(&total); err != nil {
+		return ActivityFeedResponse{}, apperrors.Internal("failed to count activity events", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			ae.event_id::text,
+			ae.actor_id::text,
+			COALESCE(u.display_name, ae.actor_id::text) AS actor_name,
+			ae.action,
+			ae.entity_type,
+			ae.entity_id::text,
+			ae.changes,
+			ae.timestamp
+		FROM audit_events ae
+		LEFT JOIN users u ON u.id = ae.actor_id
+		WHERE ae.tenant_id = $1
+		ORDER BY ae.timestamp DESC
+		LIMIT $2 OFFSET $3`,
+		auth.TenantID, limit, offset,
+	)
+	if err != nil {
+		return ActivityFeedResponse{}, apperrors.Internal("failed to query activity feed", err)
+	}
+	defer rows.Close()
+
+	rawEvents := make([]activityEventRow, 0, limit)
+	for rows.Next() {
+		var ev activityEventRow
+		if err := rows.Scan(
+			&ev.id, &ev.actorID, &ev.actorName,
+			&ev.action, &ev.entityType, &ev.entityID,
+			&ev.changesJSON, &ev.timestamp,
+		); err != nil {
+			return ActivityFeedResponse{}, apperrors.Internal("failed to scan activity event", err)
+		}
+		rawEvents = append(rawEvents, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return ActivityFeedResponse{}, apperrors.Internal("failed to iterate activity feed", err)
+	}
+
+	// Batch-resolve entity labels from their canonical tables.
+	entityLabels := s.resolveEntityLabels(ctx, auth.TenantID, rawEvents)
+
+	items := make([]ActivityFeedItem, 0, len(rawEvents))
+	for _, ev := range rawEvents {
+		// Prefer DB-resolved label → changes JSONB extract → entity_type fallback.
+		entityLabel := entityLabels[ev.entityType+":"+ev.entityID]
+		if entityLabel == "" {
+			entityLabel = labelFromChanges(ev.changesJSON)
+		}
+		if entityLabel == "" {
+			entityLabel = ev.entityType
+		}
+
+		items = append(items, ActivityFeedItem{
+			ID:          ev.id,
+			Type:        activityTypeFromAction(ev.action),
+			Actor:       ActivityActor{ID: ev.actorID, Name: ev.actorName},
+			Description: fmt.Sprintf("%s performed %s", ev.actorName, ev.action),
+			Entity: ActivityEntity{
+				Type:  ev.entityType,
+				ID:    ev.entityID,
+				Label: entityLabel,
+				Href:  entityHrefFromType(ev.entityType, ev.entityID),
+			},
+			Timestamp: ev.timestamp,
+		})
+	}
+
+	return ActivityFeedResponse{
+		Data:  items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	}, nil
+}
+
+// ──────────────────────────────────────────────
+// My Tasks (with item details)
+// ──────────────────────────────────────────────
+
+// GetMyTasks returns the current user's assigned tasks with item detail arrays.
+func (s *DashboardService) GetMyTasks(ctx context.Context) (MyTasksSummary, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return MyTasksSummary{}, apperrors.Unauthorized("authentication required")
+	}
+
+	const itemLimit = 10
+
+	// ── Open Tickets ──
+	ticketRows, err := s.pool.Query(ctx, `
+		SELECT id::text, title, priority
+		FROM tickets
+		WHERE tenant_id = $1
+			AND assignee_id = $2
+			AND status NOT IN ('closed', 'cancelled', 'resolved')
+		ORDER BY created_at DESC
+		LIMIT $3`,
+		auth.TenantID, auth.UserID, itemLimit,
+	)
+	if err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to query my open tickets", err)
+	}
+	defer ticketRows.Close()
+
+	var openTickets MyOpenTickets
+	for ticketRows.Next() {
+		var item MyTicketItem
+		if err := ticketRows.Scan(&item.ID, &item.Title, &item.Priority); err != nil {
+			return MyTasksSummary{}, apperrors.Internal("failed to scan my open ticket", err)
+		}
+		item.Href = "/dashboard/itsm/tickets/" + item.ID
+		openTickets.Items = append(openTickets.Items, item)
+	}
+	if err := ticketRows.Err(); err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to iterate my open tickets", err)
+	}
+
+	// Count total (separate query for accuracy beyond the limit).
+	s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM tickets
+		WHERE tenant_id = $1 AND assignee_id = $2 AND status NOT IN ('closed','cancelled','resolved')`,
+		auth.TenantID, auth.UserID,
+	).Scan(&openTickets.Count)
+	if openTickets.Items == nil {
+		openTickets.Items = []MyTicketItem{}
+	}
+
+	// ── Tasks Due This Week ──
+	dueRows, err := s.pool.Query(ctx, `
+		SELECT id::text, title, due_date::text
+		FROM action_items
+		WHERE tenant_id = $1
+			AND owner_id = $2
+			AND status NOT IN ('completed', 'cancelled')
+			AND due_date >= CURRENT_DATE
+			AND due_date <= CURRENT_DATE + INTERVAL '7 days'
+		ORDER BY due_date ASC
+		LIMIT $3`,
+		auth.TenantID, auth.UserID, itemLimit,
+	)
+	if err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to query tasks due this week", err)
+	}
+	defer dueRows.Close()
+
+	var tasksDue MyTasksDue
+	for dueRows.Next() {
+		var item MyDeadlineItem
+		if err := dueRows.Scan(&item.ID, &item.Title, &item.DueDate); err != nil {
+			return MyTasksSummary{}, apperrors.Internal("failed to scan task due this week", err)
+		}
+		item.Href = "/dashboard/governance/action-items/" + item.ID
+		tasksDue.Items = append(tasksDue.Items, item)
+	}
+	if err := dueRows.Err(); err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to iterate tasks due this week", err)
+	}
+
+	s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM action_items
+		WHERE tenant_id = $1 AND owner_id = $2 AND status NOT IN ('completed','cancelled')
+		AND due_date >= CURRENT_DATE AND due_date <= CURRENT_DATE + INTERVAL '7 days'`,
+		auth.TenantID, auth.UserID,
+	).Scan(&tasksDue.Count)
+	if tasksDue.Items == nil {
+		tasksDue.Items = []MyDeadlineItem{}
+	}
+
+	// ── Pending Approvals ──
+	// "Pending" maps to 'open' status (action_items uses: open, in_progress, completed).
+	approvalRows, err := s.pool.Query(ctx, `
+		SELECT id::text, title, source_type
+		FROM action_items
+		WHERE tenant_id = $1
+			AND owner_id = $2
+			AND status = 'open'
+		ORDER BY created_at DESC
+		LIMIT $3`,
+		auth.TenantID, auth.UserID, itemLimit,
+	)
+	if err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to query pending approvals", err)
+	}
+	defer approvalRows.Close()
+
+	var pendingApprovals MyPendingApprovals
+	for approvalRows.Next() {
+		var item MyApprovalItem
+		if err := approvalRows.Scan(&item.ID, &item.Title, &item.Type); err != nil {
+			return MyTasksSummary{}, apperrors.Internal("failed to scan pending approval", err)
+		}
+		item.Href = "/dashboard/governance/action-items/" + item.ID
+		pendingApprovals.Items = append(pendingApprovals.Items, item)
+	}
+	if err := approvalRows.Err(); err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to iterate pending approvals", err)
+	}
+
+	s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM action_items
+		WHERE tenant_id = $1 AND owner_id = $2 AND status = 'open'`,
+		auth.TenantID, auth.UserID,
+	).Scan(&pendingApprovals.Count)
+	if pendingApprovals.Items == nil {
+		pendingApprovals.Items = []MyApprovalItem{}
+	}
+
+	// ── Overdue Items ──
+	overdueRows, err := s.pool.Query(ctx, `
+		SELECT id::text, title, due_date::text
+		FROM action_items
+		WHERE tenant_id = $1
+			AND owner_id = $2
+			AND status NOT IN ('completed', 'cancelled')
+			AND due_date < CURRENT_DATE
+		ORDER BY due_date ASC
+		LIMIT $3`,
+		auth.TenantID, auth.UserID, itemLimit,
+	)
+	if err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to query overdue items", err)
+	}
+	defer overdueRows.Close()
+
+	var overdueItems MyOverdueItems
+	for overdueRows.Next() {
+		var item MyDeadlineItem
+		if err := overdueRows.Scan(&item.ID, &item.Title, &item.DueDate); err != nil {
+			return MyTasksSummary{}, apperrors.Internal("failed to scan overdue item", err)
+		}
+		item.Href = "/dashboard/governance/action-items/" + item.ID
+		overdueItems.Items = append(overdueItems.Items, item)
+	}
+	if err := overdueRows.Err(); err != nil {
+		return MyTasksSummary{}, apperrors.Internal("failed to iterate overdue items", err)
+	}
+
+	s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM action_items
+		WHERE tenant_id = $1 AND owner_id = $2
+		AND status NOT IN ('completed','cancelled') AND due_date < CURRENT_DATE`,
+		auth.TenantID, auth.UserID,
+	).Scan(&overdueItems.Count)
+	if overdueItems.Items == nil {
+		overdueItems.Items = []MyDeadlineItem{}
+	}
+
+	return MyTasksSummary{
+		OpenTickets:      openTickets,
+		TasksDueThisWeek: tasksDue,
+		PendingApprovals: pendingApprovals,
+		OverdueItems:     overdueItems,
+	}, nil
+}
+
+// ──────────────────────────────────────────────
+// Upcoming Events
+// ──────────────────────────────────────────────
+
+// upcomingEventRow holds data from a combined upcoming-events query.
+type upcomingEventRow struct {
+	id        string
+	title     string
+	eventType string
+	date      string
+}
+
+// GetUpcomingEvents returns a merged, sorted list of upcoming meetings and milestones.
+func (s *DashboardService) GetUpcomingEvents(ctx context.Context, limit int) ([]UpcomingEvent, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	if limit < 1 {
+		limit = 5
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	// Combined query: upcoming meetings + upcoming milestones ordered by date.
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, title, 'meeting' AS type, scheduled_at::date::text AS date
+		FROM meetings
+		WHERE tenant_id = $1
+			AND scheduled_at >= NOW()
+			AND status NOT IN ('cancelled')
+		UNION ALL
+		SELECT m.id::text, m.title, 'milestone' AS type, m.target_date::text AS date
+		FROM milestones m
+		JOIN projects p ON p.id = m.project_id
+		WHERE m.tenant_id = $1
+			AND m.target_date >= CURRENT_DATE
+			AND m.status NOT IN ('completed', 'cancelled')
+		ORDER BY date ASC
+		LIMIT $2`,
+		auth.TenantID, limit,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to query upcoming events", err)
+	}
+	defer rows.Close()
+
+	events := make([]UpcomingEvent, 0, limit)
+	for rows.Next() {
+		var r upcomingEventRow
+		if err := rows.Scan(&r.id, &r.title, &r.eventType, &r.date); err != nil {
+			return nil, apperrors.Internal("failed to scan upcoming event", err)
+		}
+
+		var href *string
+		switch r.eventType {
+		case "meeting":
+			h := "/dashboard/governance/meetings/" + r.id
+			href = &h
+		case "milestone":
+			h := "/dashboard/planning"
+			href = &h
+		}
+
+		events = append(events, UpcomingEvent{
+			ID:    r.id,
+			Title: r.title,
+			Type:  r.eventType,
+			Date:  r.date,
+			Href:  href,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate upcoming events", err)
+	}
+
+	if events == nil {
+		events = []UpcomingEvent{}
+	}
+
+	return events, nil
 }
 
 // ──────────────────────────────────────────────

@@ -41,6 +41,8 @@ func (h *AssetHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("cmdb.manage")).Post("/{id}/transition", h.TransitionStatus)
 	r.With(middleware.RequirePermission("cmdb.view")).Get("/{id}/lifecycle", h.ListLifecycleEvents)
 	r.With(middleware.RequirePermission("cmdb.manage")).Post("/{id}/lifecycle", h.CreateLifecycleEvent)
+	r.With(middleware.RequirePermission("cmdb.manage")).Post("/{id}/verify", h.VerifyAsset)
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/{id}/verifications", h.ListAssetVerifications)
 
 	// Disposals
 	r.Route("/disposals", func(r chi.Router) {
@@ -359,9 +361,9 @@ func (h *AssetHandler) CreateLifecycleEvent(w http.ResponseWriter, r *http.Reque
 	}
 
 	var body struct {
-		EventType     string           `json:"eventType"`
-		Details       json.RawMessage  `json:"details"`
-		EvidenceDocID *uuid.UUID       `json:"evidenceDocId"`
+		EventType          string          `json:"eventType"`
+		Details            json.RawMessage `json:"details"`
+		EvidenceDocumentID *uuid.UUID      `json:"evidenceDocumentId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
@@ -373,7 +375,7 @@ func (h *AssetHandler) CreateLifecycleEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	event, err := h.svc.CreateLifecycleEvent(r.Context(), assetID, body.EventType, body.Details, body.EvidenceDocID)
+	event, err := h.svc.CreateLifecycleEvent(r.Context(), assetID, body.EventType, body.Details, body.EvidenceDocumentID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
@@ -494,4 +496,60 @@ func (h *AssetHandler) UpdateDisposalStatus(w http.ResponseWriter, r *http.Reque
 	}
 
 	types.OK(w, disposal, nil)
+}
+
+// ──────────────────────────────────────────────
+// Asset Verification handlers
+// ──────────────────────────────────────────────
+
+// VerifyAsset handles POST /assets/{id}/verify — records a physical verification.
+func (h *AssetHandler) VerifyAsset(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid asset ID")
+		return
+	}
+
+	var req VerifyAssetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	v, err := h.svc.VerifyAsset(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, v)
+}
+
+// ListAssetVerifications handles GET /assets/{id}/verifications.
+func (h *AssetHandler) ListAssetVerifications(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid asset ID")
+		return
+	}
+
+	verifications, err := h.svc.ListAssetVerifications(r.Context(), id)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, verifications, nil)
 }

@@ -138,10 +138,10 @@ func TestExtractEntityInfo(t *testing.T) {
 	id := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
 
 	tests := []struct {
-		name       string
-		path       string
-		wantType   string
-		wantID     uuid.UUID
+		name     string
+		path     string
+		wantType string
+		wantID   uuid.UUID
 	}{
 		{
 			name:     "resource with UUID",
@@ -190,11 +190,11 @@ func TestExtractEntityInfo(t *testing.T) {
 
 func TestClientIP(t *testing.T) {
 	tests := []struct {
-		name     string
-		xff      string
-		xrip     string
-		remote   string
-		wantIP   string
+		name   string
+		xff    string
+		xrip   string
+		remote string
+		wantIP string
 	}{
 		{
 			name:   "X-Forwarded-For with single IP",
@@ -221,6 +221,11 @@ func TestClientIP(t *testing.T) {
 			name:   "fallback to RemoteAddr with port",
 			remote: "192.168.1.50:12345",
 			wantIP: "192.168.1.50",
+		},
+		{
+			name:   "fallback to IPv6 RemoteAddr with port",
+			remote: "[::1]:12345",
+			wantIP: "::1",
 		},
 		{
 			name:   "fallback to RemoteAddr without port",

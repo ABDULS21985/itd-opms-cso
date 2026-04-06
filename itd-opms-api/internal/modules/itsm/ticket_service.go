@@ -39,57 +39,192 @@ func NewTicketService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *TicketS
 // Scan helpers
 // ──────────────────────────────────────────────
 
-// ticketColumns is the canonical column list for the tickets table.
+// ticketColumns is the canonical column list for the tickets table (used in RETURNING clauses).
 const ticketColumns = `
 	id, tenant_id, ticket_number, type,
 	category, subcategory, title, description,
 	priority, urgency, impact, status, channel,
-	reporter_id, assignee_id, team_queue_id,
+	reporter_id, reporter_email, email_thread_id, email_message_ids,
+	assignee_id, team_queue_id,
 	sla_policy_id, sla_response_target, sla_resolution_target,
 	sla_response_met, sla_resolution_met,
 	sla_paused_at, sla_paused_duration_minutes,
 	is_major_incident, related_ticket_ids, linked_problem_id,
-	linked_asset_ids, resolution_notes, resolved_at,
+	linked_asset_ids, org_unit_id, parent_ticket_id, resolution_notes, resolved_at,
 	closed_at, first_response_at, satisfaction_score,
-	tags, custom_fields, created_at, updated_at`
+	tags, custom_fields, created_at, updated_at,
+	change_classification, change_type, risk_level, risk_assessment,
+	implementation_plan, rollback_plan, test_plan,
+	scheduled_start, scheduled_end, actual_start, actual_end,
+	cab_required, cab_meeting_id, cab_decision, cab_decision_date,
+	pir_required, pir_completed, pir_notes,
+	cab_notes, change_success`
 
-// scanTicket scans a single ticket row into a Ticket struct.
+// ticketSelectColumns is the column list for SELECT queries with LEFT JOINs for user enrichment.
+const ticketSelectColumns = `
+	t.id, t.tenant_id, t.ticket_number, t.type,
+	t.category, t.subcategory, t.title, t.description,
+	t.priority, t.urgency, t.impact, t.status, t.channel,
+	t.reporter_id, t.reporter_email, t.email_thread_id, t.email_message_ids,
+	t.assignee_id, t.team_queue_id,
+	t.sla_policy_id, t.sla_response_target, t.sla_resolution_target,
+	t.sla_response_met, t.sla_resolution_met,
+	t.sla_paused_at, t.sla_paused_duration_minutes,
+	t.is_major_incident, t.related_ticket_ids, t.linked_problem_id,
+	t.linked_asset_ids, t.org_unit_id, t.parent_ticket_id, t.resolution_notes, t.resolved_at,
+	t.closed_at, t.first_response_at, t.satisfaction_score,
+	t.tags, t.custom_fields, t.created_at, t.updated_at,
+	t.change_classification, t.change_type, t.risk_level, t.risk_assessment,
+	t.implementation_plan, t.rollback_plan, t.test_plan,
+	t.scheduled_start, t.scheduled_end, t.actual_start, t.actual_end,
+	t.cab_required, t.cab_meeting_id, t.cab_decision, t.cab_decision_date,
+	t.pir_required, t.pir_completed, t.pir_notes,
+	t.cab_notes, t.change_success,
+	reporter.display_name AS reporter_name,
+	reporter.department AS reporter_department,
+	assignee.display_name AS assignee_name,
+	assignee.department AS assignee_department,
+	sq.name AS team_queue_name,
+	mir.id AS major_incident_record_id,
+	mir.status AS major_incident_status,
+	mir.severity AS major_incident_severity,
+	(SELECT COUNT(*) FROM tickets sub WHERE sub.parent_ticket_id = t.id) AS subtask_count,
+	ptkt.ticket_number AS parent_ticket_number`
+
+// ticketFromJoins is the FROM clause with LEFT JOINs for user enrichment.
+const ticketFromJoins = `
+	FROM tickets t
+	LEFT JOIN users reporter ON reporter.id = t.reporter_id
+	LEFT JOIN users assignee ON assignee.id = t.assignee_id
+	LEFT JOIN support_queues sq ON sq.id = t.team_queue_id
+	LEFT JOIN major_incident_records mir ON mir.ticket_id = t.id
+	LEFT JOIN tickets ptkt ON ptkt.id = t.parent_ticket_id`
+
+// scanTicketChangeFields is the common change-field scan targets appended to every scan call.
+func scanTicketChangeFields(t *Ticket) []any {
+	return []any{
+		&t.ChangeClassification, &t.ChangeType, &t.RiskLevel, &t.RiskAssessment,
+		&t.ImplementationPlan, &t.RollbackPlan, &t.TestPlan,
+		&t.ScheduledStart, &t.ScheduledEnd, &t.ActualStart, &t.ActualEnd,
+		&t.CABRequired, &t.CABMeetingID, &t.CABDecision, &t.CABDecisionDate,
+		&t.PIRRequired, &t.PIRCompleted, &t.PIRNotes,
+		&t.CABNotes, &t.ChangeSuccess,
+	}
+}
+
+// scanTicket scans a single ticket row into a Ticket struct (base columns only, for RETURNING clauses).
 func scanTicket(row pgx.Row) (Ticket, error) {
 	var t Ticket
-	err := row.Scan(
+	dest := []any{
 		&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 		&t.Category, &t.Subcategory, &t.Title, &t.Description,
 		&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
-		&t.ReporterID, &t.AssigneeID, &t.TeamQueueID,
+		&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
+		&t.AssigneeID, &t.TeamQueueID,
 		&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
-	)
+	}
+	dest = append(dest, scanTicketChangeFields(&t)...)
+	err := row.Scan(dest...)
 	return t, err
 }
 
-// scanTickets scans multiple ticket rows into a slice.
+// scanTicketEnriched scans a single ticket row with enrichment columns (reporter/assignee names).
+func scanTicketEnriched(row pgx.Row) (Ticket, error) {
+	var t Ticket
+	dest := []any{
+		&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
+		&t.Category, &t.Subcategory, &t.Title, &t.Description,
+		&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
+		&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
+		&t.AssigneeID, &t.TeamQueueID,
+		&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
+		&t.SLAResponseMet, &t.SLAResolutionMet,
+		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
+		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
+		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
+		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+	}
+	dest = append(dest, scanTicketChangeFields(&t)...)
+	dest = append(dest,
+		&t.ReporterName, &t.ReporterDepartment,
+		&t.AssigneeName, &t.AssigneeDepartment,
+		&t.TeamQueueName,
+		&t.MajorIncidentRecordID, &t.MajorIncidentStatus, &t.MajorIncidentSeverity,
+		&t.SubtaskCount, &t.ParentTicketNumber,
+	)
+	err := row.Scan(dest...)
+	return t, err
+}
+
+// scanTickets scans multiple ticket rows into a slice (base columns only).
 func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 	var tickets []Ticket
 	for rows.Next() {
 		var t Ticket
-		if err := rows.Scan(
+		dest := []any{
 			&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
 			&t.Category, &t.Subcategory, &t.Title, &t.Description,
 			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
-			&t.ReporterID, &t.AssigneeID, &t.TeamQueueID,
+			&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
+			&t.AssigneeID, &t.TeamQueueID,
 			&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
+		}
+		dest = append(dest, scanTicketChangeFields(&t)...)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if tickets == nil {
+		tickets = []Ticket{}
+	}
+	return tickets, nil
+}
+
+// scanTicketsEnriched scans multiple ticket rows with enrichment columns.
+func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
+	var tickets []Ticket
+	for rows.Next() {
+		var t Ticket
+		dest := []any{
+			&t.ID, &t.TenantID, &t.TicketNumber, &t.Type,
+			&t.Category, &t.Subcategory, &t.Title, &t.Description,
+			&t.Priority, &t.Urgency, &t.Impact, &t.Status, &t.Channel,
+			&t.ReporterID, &t.ReporterEmail, &t.EmailThreadID, &t.EmailMessageIDs,
+			&t.AssigneeID, &t.TeamQueueID,
+			&t.SLAPolicyID, &t.SLAResponseTarget, &t.SLAResolutionTarget,
+			&t.SLAResponseMet, &t.SLAResolutionMet,
+			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
+			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
+			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
+			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
+		}
+		dest = append(dest, scanTicketChangeFields(&t)...)
+		dest = append(dest,
+			&t.ReporterName, &t.ReporterDepartment,
+			&t.AssigneeName, &t.AssigneeDepartment,
+			&t.TeamQueueName,
+			&t.MajorIncidentRecordID, &t.MajorIncidentStatus, &t.MajorIncidentSeverity,
+			&t.SubtaskCount, &t.ParentTicketNumber,
+		)
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		tickets = append(tickets, t)
@@ -140,6 +275,12 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		customFields = json.RawMessage("null")
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		orgUnitID = &auth.OrgUnitID
+	}
+
 	query := `
 		INSERT INTO tickets (
 			id, tenant_id, type,
@@ -148,17 +289,17 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			reporter_id, assignee_id, team_queue_id,
 			sla_policy_id,
 			is_major_incident, related_ticket_ids,
-			linked_asset_ids, tags, custom_fields,
+			linked_asset_ids, org_unit_id, parent_ticket_id, tags, custom_fields,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3,
 			$4, $5, $6, $7,
-			$8, $9, $10, 'new', $11,
+			$8, $9, $10, 'logged', $11,
 			$12, $13, $14,
 			$15,
 			false, '{}',
-			'{}', $16, $17,
-			$18, $19
+			'{}', $16, $17, $18, $19,
+			$20, $21
 		)
 		RETURNING ` + ticketColumns
 
@@ -168,7 +309,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		priority, req.Urgency, req.Impact, channel,
 		auth.UserID, req.AssigneeID, req.TeamQueueID,
 		req.SLAPolicyID,
-		tags, customFields,
+		orgUnitID, req.ParentTicketID, tags, customFields,
 		now, now,
 	))
 	if err != nil {
@@ -204,9 +345,9 @@ func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (Ticket, er
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `SELECT ` + ticketColumns + ` FROM tickets WHERE id = $1 AND tenant_id = $2`
+	query := `SELECT ` + ticketSelectColumns + ticketFromJoins + ` WHERE t.id = $1 AND t.tenant_id = $2`
 
-	ticket, err := scanTicket(s.pool.QueryRow(ctx, query, id, auth.TenantID))
+	ticket, err := scanTicketEnriched(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Ticket{}, apperrors.NotFound("Ticket", id.String())
@@ -218,10 +359,21 @@ func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (Ticket, er
 }
 
 // ListTickets returns a filtered, paginated list of tickets.
-func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticketType *string, assigneeID, reporterID, teamQueueID *uuid.UUID, limit, offset int) ([]Ticket, int64, error) {
+func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticketType *string, assigneeID, reporterID, teamQueueID *uuid.UUID, hideSubtasks *bool, limit, offset int) ([]Ticket, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
+	}
+
+	// Build org-scope filter clauses (one for count query, one for data query with t. prefix).
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 8)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 8)
+
+	subtaskClause := ""
+	subtaskClauseT := ""
+	if hideSubtasks != nil && *hideSubtasks {
+		subtaskClause = " AND parent_ticket_id IS NULL"
+		subtaskClauseT = " AND t.parent_ticket_id IS NULL"
 	}
 
 	// Count total matching records.
@@ -234,42 +386,64 @@ func (s *TicketService) ListTickets(ctx context.Context, status, priority, ticke
 			AND ($4::text IS NULL OR type = $4)
 			AND ($5::uuid IS NULL OR assignee_id = $5)
 			AND ($6::uuid IS NULL OR reporter_id = $6)
-			AND ($7::uuid IS NULL OR team_queue_id = $7)`
+			AND ($7::uuid IS NULL OR team_queue_id = $7)` + subtaskClause
 
-	var total int64
-	err := s.pool.QueryRow(ctx, countQuery,
+	countArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
 		assigneeID, reporterID, teamQueueID,
-	).Scan(&total)
+	}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
+	var total int64
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count tickets", err)
 	}
 
 	// Fetch paginated results.
-	dataQuery := `
-		SELECT ` + ticketColumns + `
-		FROM tickets
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR priority = $3)
-			AND ($4::text IS NULL OR type = $4)
-			AND ($5::uuid IS NULL OR assignee_id = $5)
-			AND ($6::uuid IS NULL OR reporter_id = $6)
-			AND ($7::uuid IS NULL OR team_queue_id = $7)
-		ORDER BY created_at DESC
-		LIMIT $8 OFFSET $9`
+	// Determine next param index after the org filter (if any).
+	nextIdx := 8
+	if orgClause != "" {
+		nextIdx = 9
+	}
 
-	rows, err := s.pool.Query(ctx, dataQuery,
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND ($2::text IS NULL OR t.status = $2)
+			AND ($3::text IS NULL OR t.priority = $3)
+			AND ($4::text IS NULL OR t.type = $4)
+			AND ($5::uuid IS NULL OR t.assignee_id = $5)
+			AND ($6::uuid IS NULL OR t.reporter_id = $6)
+			AND ($7::uuid IS NULL OR t.team_queue_id = $7)%s%s
+		ORDER BY t.created_at DESC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
+			}
+			return ""
+		}(), subtaskClauseT, nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{
 		auth.TenantID, status, priority, ticketType,
 		assigneeID, reporterID, teamQueueID,
-		limit, offset,
-	)
+	}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list tickets", err)
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan tickets", err)
 	}
@@ -298,15 +472,16 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 			subcategory = COALESCE($2, subcategory),
 			title = COALESCE($3, title),
 			description = COALESCE($4, description),
-			tags = COALESCE($5, tags),
-			custom_fields = COALESCE($6, custom_fields),
-			updated_at = $7
-		WHERE id = $8 AND tenant_id = $9
+			priority = COALESCE($5, priority),
+			tags = COALESCE($6, tags),
+			custom_fields = COALESCE($7, custom_fields),
+			updated_at = $8
+		WHERE id = $9 AND tenant_id = $10
 		RETURNING ` + ticketColumns
 
 	ticket, err := scanTicket(s.pool.QueryRow(ctx, updateQuery,
 		req.Category, req.Subcategory, req.Title,
-		req.Description, req.Tags, req.CustomFields,
+		req.Description, req.Priority, req.Tags, req.CustomFields,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -354,14 +529,16 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 
 	now := time.Now().UTC()
 
-	// Handle SLA pause/resume for pending_customer transitions.
+	// Handle SLA pause/resume for pending_customer and pending_vendor transitions.
 	var slaPausedAt *time.Time
 	slaPausedDurationMinutes := existing.SLAPausedDurationMinutes
+	isPending := req.Status == "pending_customer" || req.Status == "pending_vendor"
+	wasPending := existing.Status == "pending_customer" || existing.Status == "pending_vendor"
 
-	if req.Status == "pending_customer" {
+	if isPending {
 		// Pause SLA clock.
 		slaPausedAt = &now
-	} else if existing.Status == "pending_customer" && existing.SLAPausedAt != nil {
+	} else if wasPending && existing.SLAPausedAt != nil {
 		// Resume SLA clock — calculate how long it was paused.
 		pausedMinutes := int(math.Round(now.Sub(*existing.SLAPausedAt).Minutes()))
 		slaPausedDurationMinutes += pausedMinutes
@@ -470,7 +647,7 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 	}
 
 	// Insert status history if status changed to assigned.
-	if existing.Status == "new" {
+	if existing.Status == "logged" {
 		historyID := uuid.New()
 		_, err = s.pool.Exec(ctx, `
 			INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
@@ -779,7 +956,7 @@ func (s *TicketService) CloseTicket(ctx context.Context, id uuid.UUID) error {
 
 // priorityOrderSQL maps priority labels to sort order (P1 first).
 const priorityOrderSQL = `
-	CASE priority
+	CASE t.priority
 		WHEN 'P1' THEN 1
 		WHEN 'P2' THEN 2
 		WHEN 'P3' THEN 3
@@ -794,6 +971,10 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clauses.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 3)
+
 	// Count total.
 	countQuery := `
 		SELECT COUNT(*)
@@ -802,28 +983,51 @@ func (s *TicketService) ListMyQueue(ctx context.Context, limit, offset int) ([]T
 			AND assignee_id = $2
 			AND status NOT IN ('closed', 'cancelled')`
 
+	countArgs := []interface{}{auth.TenantID, auth.UserID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, auth.UserID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count my queue", err)
 	}
 
-	dataQuery := `
-		SELECT ` + ticketColumns + `
-		FROM tickets
-		WHERE tenant_id = $1
-			AND assignee_id = $2
-			AND status NOT IN ('closed', 'cancelled')
-		ORDER BY ` + priorityOrderSQL + `, created_at ASC
-		LIMIT $3 OFFSET $4`
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" {
+		nextIdx = 4
+	}
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, auth.UserID, limit, offset)
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND t.assignee_id = $2
+			AND t.status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, t.created_at ASC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, auth.UserID}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list my queue", err)
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan my queue", err)
 	}
@@ -838,6 +1042,10 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clauses.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+	orgClauseT, _ := types.BuildOrgFilter(auth, "t.org_unit_id", 3)
+
 	// Count total.
 	countQuery := `
 		SELECT COUNT(*)
@@ -846,28 +1054,51 @@ func (s *TicketService) ListTeamQueue(ctx context.Context, teamID uuid.UUID, lim
 			AND team_queue_id = $2
 			AND status NOT IN ('closed', 'cancelled')`
 
+	countArgs := []interface{}{auth.TenantID, teamID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		countArgs = append(countArgs, orgParam)
+	}
+
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, teamID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count team queue", err)
 	}
 
-	dataQuery := `
-		SELECT ` + ticketColumns + `
-		FROM tickets
-		WHERE tenant_id = $1
-			AND team_queue_id = $2
-			AND status NOT IN ('closed', 'cancelled')
-		ORDER BY ` + priorityOrderSQL + `, created_at ASC
-		LIMIT $3 OFFSET $4`
+	// Determine next param index after the org filter (if any).
+	nextIdx := 3
+	if orgClause != "" {
+		nextIdx = 4
+	}
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, teamID, limit, offset)
+	dataQuery := fmt.Sprintf(`
+		SELECT `+ticketSelectColumns+ticketFromJoins+`
+		WHERE t.tenant_id = $1
+			AND t.team_queue_id = $2
+			AND t.status NOT IN ('closed', 'cancelled')%s
+		ORDER BY `+priorityOrderSQL+`, t.created_at ASC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgClauseT != "" {
+				return " AND " + orgClauseT
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, teamID}
+	if orgClause != "" {
+		dataArgs = append(dataArgs, orgParam)
+	}
+	dataArgs = append(dataArgs, limit, offset)
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list team queue", err)
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to scan team queue", err)
 	}
@@ -891,7 +1122,12 @@ func (s *TicketService) GetTicketStats(ctx context.Context) (TicketStats, error)
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE status NOT IN ('closed', 'cancelled', 'resolved')) AS open_count,
 			COUNT(*) FILTER (WHERE (sla_response_met = false OR sla_resolution_met = false)) AS sla_breached_count,
-			COUNT(*) FILTER (WHERE is_major_incident = true AND status NOT IN ('closed', 'cancelled')) AS major_incidents
+			COALESCE((
+				SELECT COUNT(*)
+				FROM major_incident_records mir
+				WHERE mir.tenant_id = $1
+				  AND mir.status <> 'closed'
+			), 0) AS major_incidents
 		FROM tickets
 		WHERE tenant_id = $1`
 
@@ -1181,31 +1417,86 @@ func ticketColumnForField(field string) string {
 	}
 }
 
+// partitionByValidTransition splits ids into those that can legally transition to newStatus
+// (based on their current status in currentStatuses) and a count of those that cannot.
+// IDs not present in currentStatuses are treated as invalid.
+func partitionByValidTransition(currentStatuses map[uuid.UUID]string, newStatus string, ids []uuid.UUID) (valid []uuid.UUID, failedCount int64) {
+	for _, id := range ids {
+		current, ok := currentStatuses[id]
+		if !ok || !IsValidTicketTransition(current, newStatus) {
+			failedCount++
+			continue
+		}
+		valid = append(valid, id)
+	}
+	return valid, failedCount
+}
+
 // BulkUpdateTickets updates multiple tickets matching the given IDs with the provided field values.
 // Only allowed fields (status, priority, assigneeId) are accepted.
-func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, fields map[string]string) (int64, error) {
+// When updating status, each ticket's current status is validated against the state machine;
+// tickets with invalid transitions are skipped and counted in the returned failed count.
+func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, fields map[string]string) (updated int64, failed int64, err error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
-		return 0, apperrors.Unauthorized("authentication required")
+		return 0, 0, apperrors.Unauthorized("authentication required")
 	}
 
 	if len(ids) == 0 {
-		return 0, apperrors.BadRequest("ids must not be empty")
+		return 0, 0, apperrors.BadRequest("ids must not be empty")
 	}
 
 	if len(fields) == 0 {
-		return 0, apperrors.BadRequest("fields must not be empty")
+		return 0, 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	// Validate all field names upfront before touching the database.
+	for field := range fields {
+		if ticketColumnForField(field) == "" {
+			return 0, 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+		}
+	}
+
+	// If the caller is changing status, validate transitions per-ticket.
+	targetIDs := ids
+	if newStatus, ok := fields["status"]; ok {
+		rows, qErr := s.pool.Query(ctx,
+			`SELECT id, status FROM tickets WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+			auth.TenantID, ids,
+		)
+		if qErr != nil {
+			return 0, 0, apperrors.Internal("failed to fetch current ticket statuses", qErr)
+		}
+		currentStatuses := make(map[uuid.UUID]string, len(ids))
+		for rows.Next() {
+			var tid uuid.UUID
+			var status string
+			if scanErr := rows.Scan(&tid, &status); scanErr != nil {
+				rows.Close()
+				return 0, 0, apperrors.Internal("failed to scan ticket status", scanErr)
+			}
+			currentStatuses[tid] = status
+		}
+		rows.Close()
+		if rowErr := rows.Err(); rowErr != nil {
+			return 0, 0, apperrors.Internal("failed to read ticket statuses", rowErr)
+		}
+
+		targetIDs, failed = partitionByValidTransition(currentStatuses, newStatus, ids)
+		if len(targetIDs) == 0 {
+			return 0, failed, nil
+		}
 	}
 
 	// Build dynamic SET clause.
 	setClauses := []string{}
-	args := []any{auth.TenantID, ids}
+	args := []any{auth.TenantID, targetIDs}
 	argIdx := 3
 
 	for field, value := range fields {
 		col := ticketColumnForField(field)
 		if col == "" {
-			return 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
+			return 0, 0, apperrors.BadRequest(fmt.Sprintf("field %q is not allowed for bulk update", field))
 		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, argIdx))
 		args = append(args, value)
@@ -1222,12 +1513,12 @@ func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, 
 		joinStrings(setClauses, ", "),
 	)
 
-	tag, err := s.pool.Exec(ctx, query, args...)
-	if err != nil {
-		return 0, apperrors.Internal("failed to bulk update tickets", err)
+	tag, execErr := s.pool.Exec(ctx, query, args...)
+	if execErr != nil {
+		return 0, failed, apperrors.Internal("failed to bulk update tickets", execErr)
 	}
 
-	return tag.RowsAffected(), nil
+	return tag.RowsAffected(), failed, nil
 }
 
 // ListTicketsForExport returns up to maxRows tickets matching the given filters, for CSV export.
@@ -1242,13 +1533,12 @@ func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priori
 	}
 
 	query := `
-		SELECT ` + ticketColumns + `
-		FROM tickets
-		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR priority = $3)
-			AND ($4::text IS NULL OR type = $4)
-		ORDER BY created_at DESC
+		SELECT ` + ticketSelectColumns + ticketFromJoins + `
+		WHERE t.tenant_id = $1
+			AND ($2::text IS NULL OR t.status = $2)
+			AND ($3::text IS NULL OR t.priority = $3)
+			AND ($4::text IS NULL OR t.type = $4)
+		ORDER BY t.created_at DESC
 		LIMIT $5`
 
 	rows, err := s.pool.Query(ctx, query, auth.TenantID, status, priority, ticketType, maxRows)
@@ -1257,12 +1547,158 @@ func (s *TicketService) ListTicketsForExport(ctx context.Context, status, priori
 	}
 	defer rows.Close()
 
-	tickets, err := scanTickets(rows)
+	tickets, err := scanTicketsEnriched(rows)
 	if err != nil {
 		return nil, apperrors.Internal("failed to scan tickets for export", err)
 	}
 
 	return tickets, nil
+}
+
+// ──────────────────────────────────────────────
+// Subtask (Parent-Child) Operations
+// ──────────────────────────────────────────────
+
+// ListSubtasks returns child tickets and completion progress for a parent ticket.
+func (s *TicketService) ListSubtasks(ctx context.Context, parentID uuid.UUID) (SubtasksResponse, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return SubtasksResponse{}, apperrors.Unauthorized("authentication required")
+	}
+
+	// Fetch child tickets.
+	query := `
+		SELECT t.id, t.ticket_number, t.title, t.type, t.status, t.priority,
+		       t.assignee_id, u.display_name AS assignee_name, t.created_at
+		FROM tickets t
+		LEFT JOIN users u ON u.id = t.assignee_id
+		WHERE t.parent_ticket_id = $1 AND t.tenant_id = $2
+		ORDER BY t.created_at ASC`
+
+	rows, err := s.pool.Query(ctx, query, parentID, auth.TenantID)
+	if err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to list subtasks", err)
+	}
+	defer rows.Close()
+
+	var subtasks []SubtaskSummary
+	for rows.Next() {
+		var st SubtaskSummary
+		if err := rows.Scan(
+			&st.ID, &st.TicketNumber, &st.Title, &st.Type, &st.Status, &st.Priority,
+			&st.AssigneeID, &st.AssigneeName, &st.CreatedAt,
+		); err != nil {
+			return SubtasksResponse{}, apperrors.Internal("failed to scan subtask", err)
+		}
+		subtasks = append(subtasks, st)
+	}
+	if err := rows.Err(); err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to iterate subtasks", err)
+	}
+	if subtasks == nil {
+		subtasks = []SubtaskSummary{}
+	}
+
+	// Fetch progress.
+	var progress SubtaskProgress
+	progressQuery := `
+		SELECT
+			COUNT(*)::int,
+			COUNT(*) FILTER (WHERE status IN ('resolved', 'closed'))::int,
+			COUNT(*) FILTER (WHERE status = 'cancelled')::int
+		FROM tickets
+		WHERE parent_ticket_id = $1 AND tenant_id = $2`
+	if err := s.pool.QueryRow(ctx, progressQuery, parentID, auth.TenantID).Scan(
+		&progress.Total, &progress.Completed, &progress.Cancelled,
+	); err != nil {
+		return SubtasksResponse{}, apperrors.Internal("failed to get subtask progress", err)
+	}
+
+	return SubtasksResponse{Subtasks: subtasks, Progress: progress}, nil
+}
+
+// CreateSubtask creates a child ticket under the given parent.
+func (s *TicketService) CreateSubtask(ctx context.Context, parentID uuid.UUID, req CreateSubtaskRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	// Fetch parent ticket.
+	parent, err := s.GetTicket(ctx, parentID)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	// A subtask cannot itself have subtasks (max 1 level of nesting).
+	if parent.ParentTicketID != nil {
+		return Ticket{}, apperrors.BadRequest("a subtask cannot have its own subtasks")
+	}
+
+	// Build a CreateTicketRequest inheriting parent properties.
+	urgency := parent.Urgency
+	impact := parent.Impact
+	createReq := CreateTicketRequest{
+		Type:           parent.Type,
+		Title:          req.Title,
+		Description:    req.Description,
+		Priority:       req.Priority,
+		Urgency:        urgency,
+		Impact:         impact,
+		AssigneeID:     req.AssigneeID,
+		TeamQueueID:    parent.TeamQueueID,
+		ParentTicketID: &parentID,
+	}
+
+	return s.CreateTicket(ctx, createReq)
+}
+
+// UnlinkSubtask removes the parent-child relationship (does NOT delete the child).
+func (s *TicketService) UnlinkSubtask(ctx context.Context, parentID, childID uuid.UUID) error {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return apperrors.Unauthorized("authentication required")
+	}
+
+	// Verify the child ticket actually belongs to this parent.
+	var actualParent *uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT parent_ticket_id FROM tickets WHERE id = $1 AND tenant_id = $2`,
+		childID, auth.TenantID,
+	).Scan(&actualParent)
+	if err != nil {
+		return apperrors.NotFound("Ticket", childID.String())
+	}
+	if actualParent == nil || *actualParent != parentID {
+		return apperrors.BadRequest("ticket is not a subtask of this parent")
+	}
+
+	_, err = s.pool.Exec(ctx,
+		`UPDATE tickets SET parent_ticket_id = NULL, updated_at = now() WHERE id = $1 AND tenant_id = $2`,
+		childID, auth.TenantID,
+	)
+	if err != nil {
+		return apperrors.Internal("failed to unlink subtask", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(map[string]any{
+		"action":   "unlink_subtask",
+		"parentId": parentID.String(),
+		"childId":  childID.String(),
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "unlink:subtask",
+		EntityType: "ticket",
+		EntityID:   childID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return nil
 }
 
 // joinStrings joins a slice of strings with a separator.

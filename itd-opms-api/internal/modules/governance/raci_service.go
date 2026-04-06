@@ -12,6 +12,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // RACIService handles business logic for RACI matrix management.
@@ -126,6 +127,30 @@ func (s *RACIService) GetMatrix(ctx context.Context, tenantID, matrixID uuid.UUI
 	if entries == nil {
 		entries = []RACIEntry{}
 	}
+
+	// Resolve all user names in a single batch query.
+	if len(entries) > 0 {
+		allIDs := make([]uuid.UUID, 0, len(entries)*4)
+		for _, e := range entries {
+			allIDs = append(allIDs, e.AccountableID)
+			allIDs = append(allIDs, e.ResponsibleIDs...)
+			allIDs = append(allIDs, e.ConsultedIDs...)
+			allIDs = append(allIDs, e.InformedIDs...)
+		}
+		nameMap := s.resolveUserNames(ctx, allIDs)
+		for i := range entries {
+			e := &entries[i]
+			e.ResponsibleNames = lookupNames(e.ResponsibleIDs, nameMap)
+			if name, ok := nameMap[e.AccountableID]; ok {
+				e.AccountableName = name
+			} else {
+				e.AccountableName = e.AccountableID.String()[:8] + "…"
+			}
+			e.ConsultedNames = lookupNames(e.ConsultedIDs, nameMap)
+			e.InformedNames = lookupNames(e.InformedIDs, nameMap)
+		}
+	}
+
 	m.Entries = entries
 
 	return &m, nil
@@ -235,8 +260,11 @@ func (s *RACIService) DeleteMatrix(ctx context.Context, tenantID, matrixID uuid.
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_matrix.deleted",
 		EntityType: "raci_matrix",
 		EntityID:   matrixID,
@@ -271,12 +299,19 @@ func (s *RACIService) AddEntry(ctx context.Context, matrixID uuid.UUID, req Crea
 		return nil, apperrors.Internal("failed to add RACI entry", err)
 	}
 
+	// Resolve display names for the returned entry.
+	s.populateEntryNames(ctx, &e)
+
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"activity":  req.Activity,
 		"matrix_id": matrixID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.created",
 		EntityType: "raci_entry",
 		EntityID:   id,
@@ -318,11 +353,18 @@ func (s *RACIService) UpdateEntry(ctx context.Context, entryID uuid.UUID, req Up
 		return nil, apperrors.Internal("failed to update RACI entry", err)
 	}
 
+	// Resolve display names for the returned entry.
+	s.populateEntryNames(ctx, &e)
+
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"entry_id": entryID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.updated",
 		EntityType: "raci_entry",
 		EntityID:   entryID,
@@ -346,7 +388,11 @@ func (s *RACIService) DeleteEntry(ctx context.Context, entryID uuid.UUID) error 
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "raci_entry.deleted",
 		EntityType: "raci_entry",
 		EntityID:   entryID,
@@ -355,6 +401,64 @@ func (s *RACIService) DeleteEntry(ctx context.Context, entryID uuid.UUID) error 
 	}
 
 	return nil
+}
+
+// resolveUserNames queries the users table and returns a map of UUID → display_name
+// for all provided IDs. Missing users fall back to a truncated UUID string.
+func (s *RACIService) resolveUserNames(ctx context.Context, ids []uuid.UUID) map[uuid.UUID]string {
+	nameMap := make(map[uuid.UUID]string, len(ids))
+	if len(ids) == 0 {
+		return nameMap
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, display_name FROM users WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nameMap
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var name string
+		if rows.Scan(&id, &name) == nil {
+			nameMap[id] = name
+		}
+	}
+	return nameMap
+}
+
+// lookupNames returns a display name slice for the given UUIDs using nameMap,
+// falling back to a short UUID prefix when the user is not found.
+func lookupNames(ids []uuid.UUID, nameMap map[uuid.UUID]string) []string {
+	if len(ids) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if name, ok := nameMap[id]; ok {
+			out = append(out, name)
+		} else {
+			out = append(out, id.String()[:8]+"…")
+		}
+	}
+	return out
+}
+
+// populateEntryNames resolves display names for all RACI role fields in an entry.
+func (s *RACIService) populateEntryNames(ctx context.Context, e *RACIEntry) {
+	allIDs := make([]uuid.UUID, 0, 1+len(e.ResponsibleIDs)+len(e.ConsultedIDs)+len(e.InformedIDs))
+	allIDs = append(allIDs, e.AccountableID)
+	allIDs = append(allIDs, e.ResponsibleIDs...)
+	allIDs = append(allIDs, e.ConsultedIDs...)
+	allIDs = append(allIDs, e.InformedIDs...)
+	nameMap := s.resolveUserNames(ctx, allIDs)
+	e.ResponsibleNames = lookupNames(e.ResponsibleIDs, nameMap)
+	if name, ok := nameMap[e.AccountableID]; ok {
+		e.AccountableName = name
+	} else {
+		e.AccountableName = e.AccountableID.String()[:8] + "…"
+	}
+	e.ConsultedNames = lookupNames(e.ConsultedIDs, nameMap)
+	e.InformedNames = lookupNames(e.InformedIDs, nameMap)
 }
 
 // RACICoverageReport contains full gap analysis for a RACI matrix.

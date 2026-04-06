@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import DOMPurify from "dompurify";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -36,6 +37,10 @@ const SELECT_CLS =
   "w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20";
 
 const CATEGORY_OPTIONS = [
+  { value: "itsm", label: "ITSM" },
+  { value: "governance", label: "Governance" },
+  { value: "grc", label: "GRC" },
+  { value: "cmdb", label: "CMDB" },
   { value: "onboarding", label: "Onboarding" },
   { value: "password-reset", label: "Password Reset" },
   { value: "notifications", label: "Notifications" },
@@ -45,6 +50,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 const SAMPLE_VARIABLES: Record<string, string> = {
+  // Legacy {{varName}} syntax
   user_name: "John Doe",
   user_email: "john.doe@example.com",
   platform_name: "ITD-OPMS",
@@ -53,6 +59,34 @@ const SAMPLE_VARIABLES: Record<string, string> = {
   action_url: "https://opms.cbn.gov.ng/dashboard",
   date: new Date().toLocaleDateString("en-GB"),
   org_name: "Central Bank of Nigeria - IT Department",
+  // Go template {{.FieldName}} syntax — notification pipeline fields
+  TicketRef: "INC-2024-0042",
+  Priority: "High",
+  TimeRemaining: "2 hours",
+  SLATarget: "4 hours",
+  ActionURL: "https://opms.cbn.gov.ng/dashboard/itsm/tickets/INC-2024-0042",
+  ApprovalType: "Change Request",
+  Requestor: "Jane Smith",
+  Description: "Upgrade database server to latest version",
+  AssigneeName: "John Doe",
+  TicketTitle: "Network connectivity issue in Building C",
+  EscalatedTo: "Level 3 Support",
+  EscalatedFrom: "Level 1 Support",
+  Reason: "SLA threshold exceeded",
+  AssetName: "Dell PowerEdge R740",
+  ExpiryDate: "2024-06-30",
+  LicenseName: "Microsoft 365 E3",
+  ComplianceGap: "5 licenses over allocation",
+  AuditName: "Q1 2024 Access Review",
+  AuditDate: "2024-04-15",
+  EvidenceType: "Access logs",
+  Deadline: "2024-04-10",
+  IncidentTitle: "Major outage: Core banking system",
+  Severity: "P1 - Critical",
+  ImpactSummary: "All core banking transactions affected",
+  ActionTitle: "Update firewall rules for new SWIFT gateway",
+  DueDate: "2024-04-15",
+  DaysOverdue: "3",
 };
 
 interface TemplateFormData {
@@ -113,7 +147,7 @@ function VariableTagInput({
           key={v}
           className="inline-flex items-center gap-1 rounded-lg bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-primary)]"
         >
-          {"{{" + v + "}}"}
+          {v.match(/^[A-Z]/) ? "{{." + v + "}}" : "{{" + v + "}}"}
           <button
             type="button"
             onClick={() => removeVar(v)}
@@ -183,16 +217,24 @@ export default function TemplateEditorPage() {
     setDirty(true);
   }, []);
 
-  // Generate preview from body HTML by replacing variables
+  // Generate preview from body HTML by replacing variables.
+  // Supports both Go template syntax ({{.Field}}) and legacy ({{field}}).
   const livePreview = useMemo(() => {
     let html = form.bodyHtml;
     if (!html) return "<p style='color:#999;text-align:center;padding:40px;'>Enter HTML body to see preview</p>";
-    // Replace {{variable}} with sample values
+    // Replace registered variables (both {{var}} and {{.Var}} forms)
     form.variables.forEach((v) => {
-      const regex = new RegExp(`\\{\\{\\s*${v}\\s*\\}\\}`, "g");
-      html = html.replace(regex, SAMPLE_VARIABLES[v] ?? `[${v}]`);
+      const legacy = new RegExp(`\\{\\{\\s*${v}\\s*\\}\\}`, "g");
+      const goTmpl = new RegExp(`\\{\\{\\s*\\.${v}\\s*\\}\\}`, "g");
+      const val = SAMPLE_VARIABLES[v] ?? `[${v}]`;
+      html = html.replace(legacy, val);
+      html = html.replace(goTmpl, val);
     });
-    // Also replace any remaining {{...}} patterns
+    // Replace any remaining {{.Field}} Go template patterns
+    html = html.replace(/\{\{\s*\.(\w+)\s*\}\}/g, (_match, name) => {
+      return SAMPLE_VARIABLES[name] ?? `[${name}]`;
+    });
+    // Replace any remaining {{field}} legacy patterns
     html = html.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, name) => {
       return SAMPLE_VARIABLES[name] ?? `[${name}]`;
     });
@@ -421,7 +463,7 @@ export default function TemplateEditorPage() {
               type="text"
               value={form.subject}
               onChange={(e) => handleChange("subject", e.target.value)}
-              placeholder="e.g., Welcome to {{platform_name}}"
+              placeholder="e.g., SLA Breach Warning: {{.TicketRef}}"
               className={INPUT_CLS}
             />
           </div>
@@ -432,7 +474,7 @@ export default function TemplateEditorPage() {
               Template Variables
             </label>
             <p className="text-xs text-[var(--neutral-gray)] mb-1.5">
-              Define variables used in the template (e.g., user_name, reset_link)
+              Define variables used in the template. Use PascalCase for delivery pipeline variables (e.g., TicketRef, Priority)
             </p>
             <VariableTagInput
               variables={form.variables}
@@ -489,7 +531,9 @@ export default function TemplateEditorPage() {
               <p className="text-xs text-[var(--neutral-gray)] mb-0.5">Subject</p>
               <p className="text-sm font-medium text-[var(--text-primary)]">
                 {form.subject
-                  ? form.subject.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, name) => SAMPLE_VARIABLES[name] ?? `[${name}]`)
+                  ? form.subject
+                      .replace(/\{\{\s*\.(\w+)\s*\}\}/g, (_m, name) => SAMPLE_VARIABLES[name] ?? `[${name}]`)
+                      .replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, name) => SAMPLE_VARIABLES[name] ?? `[${name}]`)
                   : "No subject"}
               </p>
             </div>
@@ -506,7 +550,7 @@ export default function TemplateEditorPage() {
               </div>
               <div
                 className="p-6 min-h-[300px] max-h-[600px] overflow-auto"
-                dangerouslySetInnerHTML={{ __html: previewHtml || livePreview }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml || livePreview) }}
               />
             </div>
 

@@ -77,6 +77,38 @@ func scanCMDBItems(rows pgx.Rows) ([]CMDBItem, error) {
 	return items, nil
 }
 
+// scanCMDBRelationship scans a single relationship row into a CMDBRelationship struct.
+func scanCMDBRelationship(row pgx.Row) (CMDBRelationship, error) {
+	var rel CMDBRelationship
+	err := row.Scan(
+		&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
+		&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
+	)
+	return rel, err
+}
+
+// scanCMDBRelationships scans multiple relationship rows into a slice.
+func scanCMDBRelationships(rows pgx.Rows) ([]CMDBRelationship, error) {
+	var rels []CMDBRelationship
+	for rows.Next() {
+		var rel CMDBRelationship
+		if err := rows.Scan(
+			&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
+			&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		rels = append(rels, rel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if rels == nil {
+		rels = []CMDBRelationship{}
+	}
+	return rels, nil
+}
+
 // ──────────────────────────────────────────────
 // CI CRUD
 // ──────────────────────────────────────────────
@@ -205,7 +237,7 @@ func (s *CMDBService) ListCMDBItems(ctx context.Context, ciType, status *string,
 	return items, total, nil
 }
 
-// SearchCMDBItems performs a full-text search on configuration items by name, CI type, or description.
+// SearchCMDBItems performs a text search on configuration items by name, CI type, or attributes.
 func (s *CMDBService) SearchCMDBItems(ctx context.Context, query string, params types.PaginationParams) ([]CMDBItem, int64, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -218,7 +250,7 @@ func (s *CMDBService) SearchCMDBItems(ctx context.Context, query string, params 
 		SELECT COUNT(*)
 		FROM cmdb_items
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR ci_type ILIKE $2 OR description ILIKE $2)`
+			AND (name ILIKE $2 OR ci_type ILIKE $2 OR attributes::text ILIKE $2)`
 
 	var total int64
 	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, searchPattern).Scan(&total)
@@ -230,7 +262,7 @@ func (s *CMDBService) SearchCMDBItems(ctx context.Context, query string, params 
 		SELECT ` + cmdbItemColumns + `
 		FROM cmdb_items
 		WHERE tenant_id = $1
-			AND (name ILIKE $2 OR ci_type ILIKE $2 OR description ILIKE $2)
+			AND (name ILIKE $2 OR ci_type ILIKE $2 OR attributes::text ILIKE $2)
 		ORDER BY created_at DESC
 		LIMIT $3 OFFSET $4`
 
@@ -345,6 +377,197 @@ func (s *CMDBService) DeleteCMDBItem(ctx context.Context, id uuid.UUID) error {
 const relationshipColumns = `
 	id, source_ci_id, target_ci_id, relationship_type, description, is_active, created_at`
 
+func (s *CMDBService) ensureCIIDsBelongToTenant(ctx context.Context, tenantID uuid.UUID, ciIDs ...uuid.UUID) error {
+	if len(ciIDs) == 0 {
+		return nil
+	}
+
+	query := `
+		SELECT COUNT(*)
+		FROM cmdb_items
+		WHERE tenant_id = $1
+			AND id = ANY($2)`
+
+	var count int
+	if err := s.pool.QueryRow(ctx, query, tenantID, ciIDs).Scan(&count); err != nil {
+		return apperrors.Internal("failed to validate configuration items", err)
+	}
+
+	if count != len(ciIDs) {
+		return apperrors.NotFound("CMDBItem", "one or more configuration items")
+	}
+
+	return nil
+}
+
+func buildTopologyStats(items []CMDBItem, relationships []CMDBRelationship, focusCIID *uuid.UUID) CMDBTopologyStats {
+	stats := CMDBTopologyStats{
+		TotalItems:             len(items),
+		TotalRelationships:     len(relationships),
+		TypeCounts:             map[string]int{},
+		StatusCounts:           map[string]int{},
+		RelationshipTypeCounts: map[string]int{},
+	}
+
+	for _, item := range items {
+		stats.TypeCounts[item.CIType]++
+		stats.StatusCounts[item.Status]++
+		if item.Status == CIStatusActive {
+			stats.ActiveItems++
+		}
+	}
+
+	for _, rel := range relationships {
+		stats.RelationshipTypeCounts[rel.RelationshipType]++
+		if focusCIID != nil && (rel.SourceCIID == *focusCIID || rel.TargetCIID == *focusCIID) {
+			stats.FocusedNeighborCount++
+		}
+	}
+
+	return stats
+}
+
+// GetTopology returns a graph slice of CIs and relationships for the current tenant.
+func (s *CMDBService) GetTopology(ctx context.Context, q, ciType, status *string, focusCIID *uuid.UUID, limit int) (CMDBTopologyResponse, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return CMDBTopologyResponse{}, apperrors.Unauthorized("authentication required")
+	}
+
+	if limit <= 0 {
+		limit = 80
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	if focusCIID != nil {
+		if err := s.ensureCIIDsBelongToTenant(ctx, auth.TenantID, *focusCIID); err != nil {
+			return CMDBTopologyResponse{}, err
+		}
+
+		relationshipQuery := `
+			SELECT ` + relationshipColumns + `
+			FROM cmdb_relationships
+			WHERE tenant_id = $1
+				AND (source_ci_id = $2 OR target_ci_id = $2)
+			ORDER BY created_at DESC`
+
+		relRows, err := s.pool.Query(ctx, relationshipQuery, auth.TenantID, *focusCIID)
+		if err != nil {
+			return CMDBTopologyResponse{}, apperrors.Internal("failed to list topology relationships", err)
+		}
+		defer relRows.Close()
+
+		relationships, err := scanCMDBRelationships(relRows)
+		if err != nil {
+			return CMDBTopologyResponse{}, apperrors.Internal("failed to scan topology relationships", err)
+		}
+
+		seen := map[uuid.UUID]struct{}{*focusCIID: {}}
+		itemIDs := []uuid.UUID{*focusCIID}
+		for _, rel := range relationships {
+			if _, ok := seen[rel.SourceCIID]; !ok {
+				seen[rel.SourceCIID] = struct{}{}
+				itemIDs = append(itemIDs, rel.SourceCIID)
+			}
+			if _, ok := seen[rel.TargetCIID]; !ok {
+				seen[rel.TargetCIID] = struct{}{}
+				itemIDs = append(itemIDs, rel.TargetCIID)
+			}
+		}
+
+		itemsQuery := `
+			SELECT ` + cmdbItemColumns + `
+			FROM cmdb_items
+			WHERE tenant_id = $1
+				AND id = ANY($2)
+			ORDER BY CASE WHEN id = $3 THEN 0 ELSE 1 END, name ASC`
+
+		itemRows, err := s.pool.Query(ctx, itemsQuery, auth.TenantID, itemIDs, *focusCIID)
+		if err != nil {
+			return CMDBTopologyResponse{}, apperrors.Internal("failed to list topology items", err)
+		}
+		defer itemRows.Close()
+
+		items, err := scanCMDBItems(itemRows)
+		if err != nil {
+			return CMDBTopologyResponse{}, apperrors.Internal("failed to scan topology items", err)
+		}
+
+		return CMDBTopologyResponse{
+			Items:         items,
+			Relationships: relationships,
+			FocusCIID:     focusCIID,
+			Stats:         buildTopologyStats(items, relationships, focusCIID),
+		}, nil
+	}
+
+	searchPattern := "%"
+	if q != nil && *q != "" {
+		searchPattern = "%" + *q + "%"
+	}
+
+	itemsQuery := `
+		SELECT ` + cmdbItemColumns + `
+		FROM cmdb_items
+		WHERE tenant_id = $1
+			AND ($2::text IS NULL OR ci_type = $2)
+			AND ($3::text IS NULL OR status = $3)
+			AND ($4::text = '%%' OR name ILIKE $4 OR ci_type ILIKE $4 OR attributes::text ILIKE $4)
+		ORDER BY updated_at DESC, name ASC
+		LIMIT $5`
+
+	itemRows, err := s.pool.Query(ctx, itemsQuery, auth.TenantID, ciType, status, searchPattern, limit)
+	if err != nil {
+		return CMDBTopologyResponse{}, apperrors.Internal("failed to list topology items", err)
+	}
+	defer itemRows.Close()
+
+	items, err := scanCMDBItems(itemRows)
+	if err != nil {
+		return CMDBTopologyResponse{}, apperrors.Internal("failed to scan topology items", err)
+	}
+
+	if len(items) == 0 {
+		return CMDBTopologyResponse{
+			Items:         []CMDBItem{},
+			Relationships: []CMDBRelationship{},
+			Stats:         buildTopologyStats(nil, nil, nil),
+		}, nil
+	}
+
+	itemIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		itemIDs = append(itemIDs, item.ID)
+	}
+
+	relationshipQuery := `
+		SELECT ` + relationshipColumns + `
+		FROM cmdb_relationships
+		WHERE tenant_id = $1
+			AND source_ci_id = ANY($2)
+			AND target_ci_id = ANY($2)
+		ORDER BY created_at DESC`
+
+	relRows, err := s.pool.Query(ctx, relationshipQuery, auth.TenantID, itemIDs)
+	if err != nil {
+		return CMDBTopologyResponse{}, apperrors.Internal("failed to list topology relationships", err)
+	}
+	defer relRows.Close()
+
+	relationships, err := scanCMDBRelationships(relRows)
+	if err != nil {
+		return CMDBTopologyResponse{}, apperrors.Internal("failed to scan topology relationships", err)
+	}
+
+	return CMDBTopologyResponse{
+		Items:         items,
+		Relationships: relationships,
+		Stats:         buildTopologyStats(items, relationships, nil),
+	}, nil
+}
+
 // CreateRelationship creates a new relationship between two CIs.
 func (s *CMDBService) CreateRelationship(ctx context.Context, req CreateRelationshipRequest) (CMDBRelationship, error) {
 	auth := types.GetAuthContext(ctx)
@@ -352,21 +575,21 @@ func (s *CMDBService) CreateRelationship(ctx context.Context, req CreateRelation
 		return CMDBRelationship{}, apperrors.Unauthorized("authentication required")
 	}
 
+	if err := s.ensureCIIDsBelongToTenant(ctx, auth.TenantID, req.SourceCIID, req.TargetCIID); err != nil {
+		return CMDBRelationship{}, err
+	}
+
 	id := uuid.New()
 	now := time.Now().UTC()
 
 	query := `
-		INSERT INTO cmdb_relationships (id, source_ci_id, target_ci_id, relationship_type, description, is_active, created_at)
-		VALUES ($1, $2, $3, $4, $5, true, $6)
+		INSERT INTO cmdb_relationships (id, tenant_id, source_ci_id, target_ci_id, relationship_type, description, is_active, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, true, $7)
 		RETURNING ` + relationshipColumns
 
-	var rel CMDBRelationship
-	err := s.pool.QueryRow(ctx, query,
-		id, req.SourceCIID, req.TargetCIID, req.RelationshipType, req.Description, now,
-	).Scan(
-		&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
-		&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
-	)
+	rel, err := scanCMDBRelationship(s.pool.QueryRow(ctx, query,
+		id, auth.TenantID, req.SourceCIID, req.TargetCIID, req.RelationshipType, req.Description, now,
+	))
 	if err != nil {
 		return CMDBRelationship{}, apperrors.Internal("failed to create relationship", err)
 	}
@@ -401,33 +624,19 @@ func (s *CMDBService) ListRelationshipsByCI(ctx context.Context, ciID uuid.UUID)
 	query := `
 		SELECT ` + relationshipColumns + `
 		FROM cmdb_relationships
-		WHERE (source_ci_id = $1 OR target_ci_id = $1)
+		WHERE tenant_id = $1
+			AND (source_ci_id = $2 OR target_ci_id = $2)
 		ORDER BY created_at DESC`
 
-	rows, err := s.pool.Query(ctx, query, ciID)
+	rows, err := s.pool.Query(ctx, query, auth.TenantID, ciID)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list relationships", err)
 	}
 	defer rows.Close()
 
-	var rels []CMDBRelationship
-	for rows.Next() {
-		var rel CMDBRelationship
-		if err := rows.Scan(
-			&rel.ID, &rel.SourceCIID, &rel.TargetCIID,
-			&rel.RelationshipType, &rel.Description, &rel.IsActive, &rel.CreatedAt,
-		); err != nil {
-			return nil, apperrors.Internal("failed to scan relationship", err)
-		}
-		rels = append(rels, rel)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, apperrors.Internal("failed to iterate relationships", err)
-	}
-
-	if rels == nil {
-		rels = []CMDBRelationship{}
+	rels, err := scanCMDBRelationships(rows)
+	if err != nil {
+		return nil, apperrors.Internal("failed to scan relationship", err)
 	}
 
 	_ = auth
@@ -443,8 +652,8 @@ func (s *CMDBService) DeleteRelationship(ctx context.Context, id uuid.UUID) erro
 	}
 
 	result, err := s.pool.Exec(ctx, `
-		DELETE FROM cmdb_relationships WHERE id = $1`,
-		id,
+		DELETE FROM cmdb_relationships WHERE id = $1 AND tenant_id = $2`,
+		id, auth.TenantID,
 	)
 	if err != nil {
 		return apperrors.Internal("failed to delete relationship", err)

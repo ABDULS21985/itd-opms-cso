@@ -458,7 +458,8 @@ func (h *MilestoneHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("planning.manage")).Delete("/{id}", h.DeleteMilestone)
 }
 
-// ListMilestones handles GET / — returns all milestones for a project.
+// ListMilestones handles GET / — returns milestones for a project or, when
+// project_id is omitted, all milestones for the tenant (used by analytics dashboards).
 func (h *MilestoneHandler) ListMilestones(w http.ResponseWriter, r *http.Request) {
 	authCtx := types.GetAuthContext(r.Context())
 	if authCtx == nil {
@@ -466,16 +467,14 @@ func (h *MilestoneHandler) ListMilestones(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	projectIDStr := r.URL.Query().Get("project_id")
-	if projectIDStr == "" {
-		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "project_id query parameter is required")
-		return
-	}
-
-	projectID, err := uuid.Parse(projectIDStr)
-	if err != nil {
-		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project_id")
-		return
+	var projectID *uuid.UUID
+	if projectIDStr := r.URL.Query().Get("project_id"); projectIDStr != "" {
+		parsed, err := uuid.Parse(projectIDStr)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project_id")
+			return
+		}
+		projectID = &parsed
 	}
 
 	milestones, err := h.svc.ListMilestones(r.Context(), projectID)

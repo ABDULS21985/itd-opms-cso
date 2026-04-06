@@ -13,7 +13,6 @@ import {
   FileText,
   DollarSign,
   Star,
-  TrendingUp,
   Calendar,
   ExternalLink,
 } from "lucide-react";
@@ -39,7 +38,6 @@ import {
   useVendorScorecards,
   type Vendor,
   type Contract,
-  type VendorScorecard,
 } from "@/hooks/use-vendors";
 import { apiClient } from "@/lib/api-client";
 import { useQuery } from "@tanstack/react-query";
@@ -331,7 +329,7 @@ function OverviewTab({ vendor }: { vendor: Vendor }) {
 
 function ContractsTab({ vendorId }: { vendorId: string }) {
   const router = useRouter();
-  const [contractPage, setContractPage] = useState(1);
+  const [contractPage, _setContractPage] = useState(1);
   const { data, isLoading } = useVendorContracts(vendorId, contractPage);
   const contracts = data?.data ?? [];
 
@@ -785,12 +783,12 @@ function SpendAnalysisTab({ vendorId }: { vendorId: string }) {
                   borderRadius: "12px",
                   fontSize: "12px",
                 }}
-                formatter={(value: number) =>
+                formatter={(value) =>
                   new Intl.NumberFormat("en-NG", {
                     style: "currency",
                     currency: "NGN",
                     maximumFractionDigits: 0,
-                  }).format(value)
+                  }).format(Number(value))
                 }
               />
               <Bar dataKey="value" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Spend" />
@@ -831,12 +829,12 @@ function SpendAnalysisTab({ vendorId }: { vendorId: string }) {
                   borderRadius: "12px",
                   fontSize: "12px",
                 }}
-                formatter={(value: number) =>
+                formatter={(value) =>
                   new Intl.NumberFormat("en-NG", {
                     style: "currency",
                     currency: "NGN",
                     maximumFractionDigits: 0,
-                  }).format(value)
+                  }).format(Number(value))
                 }
               />
               <Bar dataKey="value" fill="#8B5CF6" radius={[0, 6, 6, 0]} name="Spend" />

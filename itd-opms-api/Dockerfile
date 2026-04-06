@@ -18,12 +18,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/api ./cmd/api
 # Stage 2: Runtime
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata curl && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
 COPY --from=builder /app/bin/api .
 COPY --from=builder /app/migrations ./migrations
+
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 8089
 

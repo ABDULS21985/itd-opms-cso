@@ -88,8 +88,12 @@ type KBArticle struct {
 	HelpfulCount    int         `json:"helpfulCount"`
 	NotHelpfulCount int         `json:"notHelpfulCount"`
 	LinkedTicketIDs []uuid.UUID `json:"linkedTicketIds"`
+	OrgUnitID       *uuid.UUID  `json:"orgUnitId,omitempty"`
 	CreatedAt       time.Time   `json:"createdAt"`
 	UpdatedAt       time.Time   `json:"updatedAt"`
+	// Enriched fields — populated via JOIN on read operations.
+	AuthorName   string  `json:"authorName,omitempty"`
+	ReviewerName *string `json:"reviewerName,omitempty"`
 }
 
 // KBArticleVersion represents a historical version of an article's content.
@@ -132,6 +136,7 @@ type Announcement struct {
 	ExpiresAt      *time.Time  `json:"expiresAt"`
 	AuthorID       uuid.UUID   `json:"authorId"`
 	IsActive       bool        `json:"isActive"`
+	OrgUnitID      *uuid.UUID  `json:"orgUnitId,omitempty"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
 }
@@ -177,6 +182,8 @@ type UpdateKBArticleRequest struct {
 	Type       *string    `json:"type"`
 	Tags       []string   `json:"tags"`
 	ReviewerID *uuid.UUID `json:"reviewerId"`
+	// ClearTags when true resets the tags array to empty regardless of the Tags field.
+	ClearTags bool `json:"clearTags"`
 }
 
 // CreateFeedbackRequest is the payload for submitting article feedback.
@@ -204,4 +211,6 @@ type UpdateAnnouncementRequest struct {
 	TargetIDs      []uuid.UUID `json:"targetIds"`
 	IsActive       *bool       `json:"isActive"`
 	ExpiresAt      *time.Time  `json:"expiresAt"`
+	// ClearExpiresAt when true sets expires_at to NULL, ignoring the ExpiresAt field.
+	ClearExpiresAt bool `json:"clearExpiresAt"`
 }

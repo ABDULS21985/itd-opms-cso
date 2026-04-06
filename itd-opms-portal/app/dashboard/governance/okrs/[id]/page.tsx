@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -86,7 +86,6 @@ function LevelBadge({ level }: { level: string }) {
 
 export default function OKRDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const okrId = params.id as string;
 
   const { data: okr, isLoading } = useOKR(okrId);
@@ -354,10 +353,10 @@ export default function OKRDetailPage() {
             Overall Progress
           </h2>
           <span className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
-            {okr.progressPct}%
+            {okr.progressPct ?? 0}%
           </span>
         </div>
-        <ProgressBar value={okr.progressPct} height="h-3" />
+        <ProgressBar value={okr.progressPct ?? 0} height="h-3" />
         <p className="text-xs text-[var(--text-secondary)] mt-2">
           Scoring method: {okr.scoringMethod}
         </p>
@@ -425,7 +424,7 @@ export default function OKRDetailPage() {
             {keyResults.map((kr: KeyResult) => {
               const progress =
                 kr.targetValue && kr.targetValue > 0
-                  ? Math.round((kr.currentValue / kr.targetValue) * 100)
+                  ? Math.round(((kr.currentValue ?? 0) / kr.targetValue) * 100)
                   : 0;
               const isEditing = editingKRId === kr.id;
 
@@ -454,7 +453,7 @@ export default function OKRDetailPage() {
                         type="button"
                         onClick={() => {
                           setEditingKRId(kr.id);
-                          setEditKRValue(String(kr.currentValue));
+                          setEditKRValue(String(kr.currentValue ?? 0));
                         }}
                         className="rounded-lg p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
                         title="Update value"
@@ -479,7 +478,7 @@ export default function OKRDetailPage() {
                       className="flex-1"
                     />
                     <span className="text-xs tabular-nums text-[var(--text-secondary)] whitespace-nowrap">
-                      {kr.currentValue} / {kr.targetValue ?? "?"}
+                      {kr.currentValue ?? 0} / {kr.targetValue ?? "?"}
                       {kr.unit ? ` ${kr.unit}` : ""}
                     </span>
                   </div>
@@ -651,11 +650,11 @@ export default function OKRDetailPage() {
                 </div>
                 <div className="flex items-center gap-3 mt-2">
                   <ProgressBar
-                    value={child.progressPct}
+                    value={child.progressPct ?? 0}
                     className="flex-1"
                   />
                   <span className="text-xs tabular-nums text-[var(--text-secondary)]">
-                    {child.progressPct}%
+                    {child.progressPct ?? 0}%
                   </span>
                 </div>
               </Link>

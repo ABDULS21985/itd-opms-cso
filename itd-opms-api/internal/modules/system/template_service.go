@@ -1,9 +1,12 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"html/template"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -210,6 +213,9 @@ func (s *EmailTemplateService) CreateTemplate(ctx context.Context, tenantID uuid
 		return nil, fmt.Errorf("create email template: %w", err)
 	}
 
+	// Sync to notification pipeline if a matching delivery template exists.
+	s.syncToNotificationTemplate(ctx, t.Name, t.Subject, t.BodyHTML)
+
 	changes, _ := json.Marshal(req)
 	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:      auth.TenantID,
@@ -299,10 +305,19 @@ func (s *EmailTemplateService) UpdateTemplate(ctx context.Context, templateID uu
 		CorrelationID: types.GetCorrelationID(ctx),
 	})
 
-	return s.GetTemplate(ctx, templateID)
+	updated, err := s.GetTemplate(ctx, templateID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sync to notification pipeline if a matching delivery template exists.
+	s.syncToNotificationTemplate(ctx, updated.Name, updated.Subject, updated.BodyHTML)
+
+	return updated, nil
 }
 
 // DeleteTemplate deletes an email template by ID.
+// Templates linked to the notification delivery pipeline cannot be deleted.
 func (s *EmailTemplateService) DeleteTemplate(ctx context.Context, templateID uuid.UUID) error {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -312,6 +327,11 @@ func (s *EmailTemplateService) DeleteTemplate(ctx context.Context, templateID uu
 	existing, err := s.GetTemplate(ctx, templateID)
 	if err != nil {
 		return err
+	}
+
+	// Prevent deletion of templates used by the notification delivery pipeline.
+	if s.hasNotificationTemplate(ctx, existing.Name) {
+		return apperrors.BadRequest("this template is used by the notification delivery pipeline and cannot be deleted")
 	}
 
 	tag, err := s.pool.Exec(ctx, "DELETE FROM email_templates WHERE id = $1", templateID)
@@ -337,21 +357,86 @@ func (s *EmailTemplateService) DeleteTemplate(ctx context.Context, templateID uu
 	return nil
 }
 
+// syncToNotificationTemplate syncs an email template change to the corresponding
+// notification_templates row (matched by key = name) so admin UI edits flow
+// through to the actual email delivery pipeline.
+func (s *EmailTemplateService) syncToNotificationTemplate(ctx context.Context, name, subject, bodyHTML string) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE notification_templates
+		 SET subject_template = $2, body_template = $3, updated_at = NOW()
+		 WHERE key = $1 AND channel = 'email'`,
+		name, subject, bodyHTML,
+	)
+	if err != nil {
+		slog.Warn("failed to sync email template to notification pipeline",
+			"name", name, "error", err)
+		return
+	}
+	if tag.RowsAffected() > 0 {
+		slog.Info("synced email template to notification pipeline", "key", name)
+	}
+}
+
+// hasNotificationTemplate checks whether a delivery-pipeline template exists for the given name.
+func (s *EmailTemplateService) hasNotificationTemplate(ctx context.Context, name string) bool {
+	var exists bool
+	_ = s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM notification_templates WHERE key = $1 AND channel = 'email')`,
+		name,
+	).Scan(&exists)
+	return exists
+}
+
 // PreviewTemplate renders an email template with the given variable substitutions.
+// It supports both Go template syntax ({{.Field}}) used by the delivery pipeline
+// and legacy Handlebars syntax ({{field}}) used by older templates.
 func (s *EmailTemplateService) PreviewTemplate(ctx context.Context, templateID uuid.UUID, variables map[string]string) (string, string, error) {
 	t, err := s.GetTemplate(ctx, templateID)
 	if err != nil {
 		return "", "", err
 	}
 
+	// Convert to map[string]any for Go template execution.
+	data := make(map[string]any, len(variables))
+	for k, v := range variables {
+		data[k] = v
+	}
+
+	// Try Go template rendering first ({{.Field}} syntax from notification pipeline).
+	if subject, body, err := renderGoPreview(t.Subject, t.BodyHTML, data); err == nil {
+		return subject, body, nil
+	}
+
+	// Fall back to simple string replacement ({{field}} legacy syntax).
 	subject := t.Subject
 	bodyHTML := t.BodyHTML
-
 	for key, value := range variables {
 		placeholder := "{{" + key + "}}"
 		subject = strings.ReplaceAll(subject, placeholder, value)
 		bodyHTML = strings.ReplaceAll(bodyHTML, placeholder, value)
 	}
-
 	return subject, bodyHTML, nil
+}
+
+// renderGoPreview renders subject and body using Go's html/template engine.
+func renderGoPreview(subjectStr, bodyStr string, data map[string]any) (string, string, error) {
+	subjectTmpl, err := template.New("preview_subject").Parse(subjectStr)
+	if err != nil {
+		return "", "", err
+	}
+	var subjectBuf bytes.Buffer
+	if err := subjectTmpl.Execute(&subjectBuf, data); err != nil {
+		return "", "", err
+	}
+
+	bodyTmpl, err := template.New("preview_body").Parse(bodyStr)
+	if err != nil {
+		return "", "", err
+	}
+	var bodyBuf bytes.Buffer
+	if err := bodyTmpl.Execute(&bodyBuf, data); err != nil {
+		return "", "", err
+	}
+
+	return subjectBuf.String(), bodyBuf.String(), nil
 }

@@ -147,20 +147,35 @@ func (s *AuditMgmtService) ListAudits(ctx context.Context, status, auditType *st
 
 	offset := (page - 1) * limit
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $3 (audit_type) is 4.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 4)
+
+	// Build args: tenant_id, status, auditType [, orgParam]
+	countArgs := []interface{}{auth.TenantID, status, auditType}
+	orgSQL := ""
+	nextIdx := 4
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 5
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM grc_audits
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR audit_type = $3)`
+			AND ($3::text IS NULL OR audit_type = $3)%s`, orgSQL)
 
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, status, auditType).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count audits", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, title, audit_type, scope,
 			auditor, audit_body, status,
 			scheduled_start, scheduled_end,
@@ -169,11 +184,12 @@ func (s *AuditMgmtService) ListAudits(ctx context.Context, status, auditType *st
 		FROM grc_audits
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR audit_type = $3)
+			AND ($3::text IS NULL OR audit_type = $3)%s
 		ORDER BY created_at DESC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, status, auditType, limit, offset)
+	dataArgs := append(countArgs, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list audits", err)
 	}

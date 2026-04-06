@@ -761,7 +761,3 @@ func TestAuditStatsResponse_JSONRoundTrip(t *testing.T) {
 // ──────────────────────────────────────────────
 // Helper
 // ──────────────────────────────────────────────
-
-func strPtr(s string) *string {
-	return &s
-}

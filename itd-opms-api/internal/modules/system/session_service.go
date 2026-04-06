@@ -46,12 +46,8 @@ func scanActiveSession(row pgx.Row) (ActiveSession, error) {
 func scanActiveSessions(rows pgx.Rows) ([]ActiveSession, error) {
 	var sessions []ActiveSession
 	for rows.Next() {
-		var s ActiveSession
-		if err := rows.Scan(
-			&s.ID, &s.UserID, &s.UserName, &s.UserEmail,
-			&s.TenantID, &s.IPAddress, &s.UserAgent, &s.DeviceInfo,
-			&s.Location, &s.CreatedAt, &s.LastActive, &s.ExpiresAt, &s.IsRevoked,
-		); err != nil {
+		s, err := scanActiveSession(rows)
+		if err != nil {
 			return nil, err
 		}
 		sessions = append(sessions, s)

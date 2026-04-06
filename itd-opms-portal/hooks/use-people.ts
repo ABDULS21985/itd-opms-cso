@@ -260,7 +260,7 @@ export function useUpdateUserSkill() {
   return useMutation({
     mutationFn: ({ id, ...body }: Partial<UserSkill> & { id: string }) =>
       apiClient.put<UserSkill>(`/people/skills/user-skills/${id}`, body),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["user-skills"] });
       queryClient.invalidateQueries({ queryKey: ["users-by-skill"] });
       toast.success("User skill updated successfully");
@@ -556,8 +556,12 @@ export function useCreateChecklist() {
 export function useUpdateChecklistStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiClient.put(`/people/checklists/${id}/status`, { status }),
+    mutationFn: ({ id, status }: { id: string; status: string }) => {
+      const payload: Record<string, unknown> = { status };
+      if (status === "in_progress") payload.startedAt = new Date().toISOString();
+      if (status === "completed") payload.completedAt = new Date().toISOString();
+      return apiClient.put(`/people/checklists/${id}/status`, payload);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });
       queryClient.invalidateQueries({
@@ -646,7 +650,7 @@ export function useUpdateChecklistTask() {
         `/people/checklists/tasks/item/${id}`,
         body,
       ),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["checklist-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });
       toast.success("Task updated successfully");
@@ -663,8 +667,8 @@ export function useUpdateChecklistTask() {
 export function useCompleteChecklistTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.put(`/people/checklists/tasks/item/${id}/complete`, {}),
+    mutationFn: ({ id, evidenceDocId, notes }: { id: string; evidenceDocId?: string; notes?: string }) =>
+      apiClient.put(`/people/checklists/tasks/item/${id}/complete`, { evidenceDocId, notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["checklist-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["people-checklists"] });
@@ -784,15 +788,17 @@ export function useLeaveRecords(
   limit = 20,
   userId?: string,
   status?: string,
+  leaveType?: string,
 ) {
   return useQuery({
-    queryKey: ["leave-records", page, limit, userId, status],
+    queryKey: ["leave-records", page, limit, userId, status, leaveType],
     queryFn: () =>
       apiClient.get<PaginatedResponse<LeaveRecord>>("/people/leave", {
         page,
         limit,
         user_id: userId,
         status,
+        leave_type: leaveType,
       }),
   });
 }

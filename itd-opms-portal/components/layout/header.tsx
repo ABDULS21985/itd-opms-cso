@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,6 +13,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
@@ -21,6 +23,8 @@ import { useBreadcrumbOverrides } from "@/providers/breadcrumb-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
 import { CommandPalette } from "@/components/shared/command-palette";
+import { ActivityPanel } from "@/components/dashboard/activity-panel";
+import { useActivityPanel } from "@/hooks/use-activity-panel";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -111,6 +115,7 @@ function UserMenu() {
   const userInitial = (user?.displayName || user?.email || "U")
     .charAt(0)
     .toUpperCase();
+  const photoUrl = user?.photoUrl;
 
   useEffect(() => {
     if (!open) return;
@@ -132,11 +137,15 @@ function UserMenu() {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 flex items-center justify-center border border-[var(--primary)]/10 hover:ring-2 hover:ring-[var(--primary)]/20 transition-all"
+        className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 flex items-center justify-center border border-[var(--primary)]/10 hover:ring-2 hover:ring-[var(--primary)]/20 transition-all overflow-hidden"
       >
-        <span className="text-sm font-semibold text-[var(--primary)]">
-          {userInitial}
-        </span>
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-sm font-semibold text-[var(--primary)]">
+            {userInitial}
+          </span>
+        )}
       </button>
 
       <AnimatePresence>
@@ -160,7 +169,7 @@ function UserMenu() {
             <button
               onClick={() => {
                 setOpen(false);
-                router.push("/dashboard/system/settings");
+                router.push("/dashboard/profile");
               }}
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-[var(--text-primary)] hover:bg-[var(--surface-1)] transition-colors"
             >
@@ -204,6 +213,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const { open: activityPanelOpen, setOpen: setActivityPanelOpen, toggle: toggleActivityPanel } = useActivityPanel();
   const overrides = useBreadcrumbOverrides();
 
   // Global Cmd+K / Ctrl+K listener
@@ -314,6 +324,16 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           <ThemeToggle />
         </div>
 
+        {/* Activity panel toggle */}
+        <button
+          onClick={toggleActivityPanel}
+          className="p-2 rounded-xl hover:bg-[var(--surface-2)] text-[var(--neutral-gray)] transition-colors"
+          aria-label={activityPanelOpen ? "Close activity panel" : "Open activity panel"}
+          title="Activity Center"
+        >
+          {activityPanelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+        </button>
+
         {/* Notification bell */}
         <NotificationBell
           onClick={() => setNotificationPanelOpen((prev) => !prev)}
@@ -333,6 +353,12 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
+      />
+
+      {/* Activity Panel */}
+      <ActivityPanel
+        open={activityPanelOpen}
+        onOpenChange={setActivityPanelOpen}
       />
     </header>
   );

@@ -9,12 +9,12 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, API_BASE_URL } from "@/lib/api-client";
 import {
-  getToken,
   setToken,
   removeToken,
   setRefreshToken,
+  getRefreshToken,
   isAuthenticated,
   clearSession,
   setAuthenticatedFlag,
@@ -37,12 +37,21 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 // =============================================================================
 // Auth Context Type
 // =============================================================================
+interface LoginResult {
+  passwordChangeRequired: boolean;
+  mfaRequired?: boolean;
+  challengeId?: string;
+  methods?: string[];
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isLoggedIn: boolean;
-  /** Dev-mode login via email/password. */
-  login: (email: string, password: string) => Promise<void>;
+  /** Dev-mode login via email/password. May return MFA challenge. */
+  login: (email: string, password: string) => Promise<LoginResult>;
+  /** Complete MFA verification during login. */
+  verifyMFA: (challengeId: string, method: string, code: string) => Promise<void>;
   /** Initiate Microsoft Entra ID OIDC/PKCE login flow. */
   loginWithEntraID: () => Promise<void>;
   logout: () => void;
@@ -55,7 +64,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
   isLoggedIn: false,
-  login: async () => { },
+  login: async () => ({ passwordChangeRequired: false }),
+  verifyMFA: async () => { },
   loginWithEntraID: async () => { },
   logout: () => { },
   refreshUser: async () => { },
@@ -107,12 +117,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Dev-mode login (email + password)
   // ---------------------------------------------------------------------------
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<LoginResult> => {
+      const response = await apiClient.post<{
+        accessToken?: string;
+        refreshToken?: string;
+        user?: User;
+        passwordChangeRequired?: boolean;
+        mfaRequired?: boolean;
+        challengeId?: string;
+        methods?: string[];
+      }>("/auth/login", { email, password });
+
+      // MFA required — don't store tokens yet
+      if (response.mfaRequired) {
+        return {
+          passwordChangeRequired: false,
+          mfaRequired: true,
+          challengeId: response.challengeId,
+          methods: response.methods,
+        };
+      }
+
+      // Normal login — store tokens
+      if (response.accessToken) {
+        setToken(response.accessToken);
+        setRefreshToken(response.refreshToken!);
+        setAuthMode("dev");
+        setUser(response.user!);
+        setIsLoading(false);
+      }
+      return { passwordChangeRequired: response.passwordChangeRequired ?? false };
+    },
+    [],
+  );
+
+  const verifyMFA = useCallback(
+    async (challengeId: string, method: string, code: string) => {
       const response = await apiClient.post<{
         accessToken: string;
         refreshToken: string;
         user: User;
-      }>("/auth/login", { email, password });
+      }>("/auth/mfa/verify", { challengeId, method, code });
+
       setToken(response.accessToken);
       setRefreshToken(response.refreshToken);
       setAuthMode("dev");
@@ -161,12 +207,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear user state
     setUser(null);
 
-    // Call backend logout endpoint (fire-and-forget)
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8089/api/v1";
-    fetch(`${apiBase}/auth/logout`, {
+    // Call backend logout endpoint (fire-and-forget).
+    // Include the refresh token so the server can revoke it immediately.
+    const refreshToken = getRefreshToken();
+    fetch(`${API_BASE_URL}/auth/logout`, {
       method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
     }).catch(() => {
       // Ignore errors — we're logging out anyway
     });
@@ -304,6 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isLoggedIn: !!user,
         login,
+        verifyMFA,
         loginWithEntraID,
         logout,
         refreshUser,

@@ -266,9 +266,10 @@ func (h *ArticleHandler) SearchArticles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	mode := r.URL.Query().Get("mode") // "boolean" for to_tsquery, default is plain ILIKE
 	params := types.ParsePagination(r)
 
-	articles, total, err := h.svc.SearchArticles(r.Context(), q, params)
+	articles, total, err := h.svc.SearchArticles(r.Context(), q, mode, params)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

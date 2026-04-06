@@ -27,7 +27,7 @@ module.exports = {
         REDIS_PORT: 6379,
         REDIS_PASSWORD: '',
         REDIS_DB: 0,
-        MINIO_ENDPOINT: 'localhost:9000',
+        MINIO_ENDPOINT: 'localhost:9010',
         MINIO_ACCESS_KEY: 'opms_minio',
         MINIO_SECRET_KEY: 'opms_minio_secret',
         MINIO_USE_SSL: false,
@@ -37,6 +37,8 @@ module.exports = {
         JWT_REFRESH_EXPIRY: '168h',
         OTEL_EXPORTER_OTLP_ENDPOINT: 'localhost:4317',
         OTEL_SERVICE_NAME: 'itd-opms-api',
+        // SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME
+        // loaded from itd-opms-api/.env by godotenv at runtime
         LOG_LEVEL: 'debug',
         LOG_FORMAT: 'text',
       },
@@ -44,8 +46,8 @@ module.exports = {
     {
       name: 'opms-portal',
       cwd: './itd-opms-portal',
-      script: 'node_modules/.bin/next',
-      args: 'dev --port 3000',
+      script: 'npm',
+      args: 'run dev -- --port 3004',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -55,7 +57,7 @@ module.exports = {
       listen_timeout: 10000,
       env: {
         NODE_ENV: 'development',
-        PORT: 3000,
+        PORT: 3004,
         HOSTNAME: '0.0.0.0',
         NEXT_PUBLIC_API_URL: 'http://localhost:8089/api/v1',
       },

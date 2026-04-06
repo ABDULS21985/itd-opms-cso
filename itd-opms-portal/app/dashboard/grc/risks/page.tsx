@@ -35,7 +35,7 @@ const CATEGORIES = [
   { value: "security", label: "Security" },
   { value: "compliance", label: "Compliance" },
   { value: "technology", label: "Technology" },
-  { value: "reputational", label: "Reputational" },
+  { value: "reputation", label: "Reputational" },
 ];
 
 const LIKELIHOOD_LEVELS = ["very_low", "low", "medium", "high", "very_high"];

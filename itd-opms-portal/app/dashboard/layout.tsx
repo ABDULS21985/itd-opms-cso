@@ -1,10 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Menu, Search, ChevronRight, LogOut, User, Settings } from "lucide-react";
-import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { BreadcrumbProvider } from "@/providers/breadcrumb-provider";
@@ -112,7 +109,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isLoggedIn, isLoading, user, logout } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
 
   // Sidebar state
   const [mobileOpen, setMobileOpen] = useState(false);

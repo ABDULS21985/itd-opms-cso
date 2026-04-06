@@ -58,7 +58,7 @@ func (s *CalendarService) GetCalendarEvents(ctx context.Context, start, end time
 
 	// 1. Maintenance windows
 	if noFilter || typeFilter["maintenance"] || typeFilter["deployment"] || typeFilter["release"] || typeFilter["outage"] {
-		mwEvents, err := s.getMaintenanceWindowEvents(ctx, auth.TenantID, start, end)
+		mwEvents, err := s.getMaintenanceWindowEvents(ctx, auth, auth.TenantID, start, end)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to fetch maintenance window events", "error", err)
 		} else {
@@ -72,7 +72,7 @@ func (s *CalendarService) GetCalendarEvents(ctx context.Context, start, end time
 
 	// 2. Change freeze periods
 	if noFilter || typeFilter["freeze"] {
-		fpEvents, err := s.getFreezePeriodEvents(ctx, auth.TenantID, start, end)
+		fpEvents, err := s.getFreezePeriodEvents(ctx, auth, auth.TenantID, start, end)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to fetch freeze period events", "error", err)
 		} else {
@@ -118,7 +118,10 @@ func (s *CalendarService) GetCalendarEvents(ctx context.Context, start, end time
 }
 
 // getMaintenanceWindowEvents fetches maintenance windows as calendar events.
-func (s *CalendarService) getMaintenanceWindowEvents(ctx context.Context, tenantID uuid.UUID, start, end time.Time) ([]CalendarEvent, error) {
+func (s *CalendarService) getMaintenanceWindowEvents(ctx context.Context, auth *types.AuthContext, tenantID uuid.UUID, start, end time.Time) ([]CalendarEvent, error) {
+	// Build org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "mw.org_unit_id", 4)
+
 	query := `
 		SELECT mw.id, mw.title, mw.description, mw.window_type, mw.status,
 			mw.start_time, mw.end_time, mw.is_all_day, mw.impact_level,
@@ -129,7 +132,15 @@ func (s *CalendarService) getMaintenanceWindowEvents(ctx context.Context, tenant
 			AND mw.start_time < $3
 			AND mw.end_time > $2`
 
-	rows, err := s.pool.Query(ctx, query, tenantID, start, end)
+	args := []interface{}{tenantID, start, end}
+	if orgClause != "" {
+		query += " AND " + orgClause
+		if orgParam != nil {
+			args = append(args, orgParam)
+		}
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query maintenance windows: %w", err)
 	}
@@ -185,7 +196,10 @@ func (s *CalendarService) getMaintenanceWindowEvents(ctx context.Context, tenant
 }
 
 // getFreezePeriodEvents fetches change freeze periods as calendar events.
-func (s *CalendarService) getFreezePeriodEvents(ctx context.Context, tenantID uuid.UUID, start, end time.Time) ([]CalendarEvent, error) {
+func (s *CalendarService) getFreezePeriodEvents(ctx context.Context, auth *types.AuthContext, tenantID uuid.UUID, start, end time.Time) ([]CalendarEvent, error) {
+	// Build org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "cfp.org_unit_id", 4)
+
 	query := `
 		SELECT cfp.id, cfp.name, cfp.reason, cfp.start_time, cfp.end_time,
 			COALESCE(u.display_name, '')
@@ -195,7 +209,15 @@ func (s *CalendarService) getFreezePeriodEvents(ctx context.Context, tenantID uu
 			AND cfp.start_time < $3
 			AND cfp.end_time > $2`
 
-	rows, err := s.pool.Query(ctx, query, tenantID, start, end)
+	args := []interface{}{tenantID, start, end}
+	if orgClause != "" {
+		query += " AND " + orgClause
+		if orgParam != nil {
+			args = append(args, orgParam)
+		}
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query freeze periods: %w", err)
 	}
@@ -447,34 +469,41 @@ func (s *CalendarService) CreateMaintenanceWindow(ctx context.Context, req Creat
 		affectedServices = []string{}
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		id := auth.OrgUnitID
+		orgUnitID = &id
+	}
+
 	query := `
 		INSERT INTO maintenance_windows (
 			id, tenant_id, title, description, window_type, status,
 			start_time, end_time, is_all_day, recurrence_rule,
 			affected_services, impact_level, change_request_id,
-			ticket_id, project_id, created_by, created_at, updated_at
+			ticket_id, project_id, org_unit_id, created_by, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10,
 			$11, $12, $13,
-			$14, $15, $16, $17, $18
+			$14, $15, $16, $17, $18, $19
 		)
 		RETURNING id, tenant_id, title, description, window_type, status,
 			start_time, end_time, is_all_day, recurrence_rule,
 			affected_services, impact_level, change_request_id,
-			ticket_id, project_id, created_by, created_at, updated_at`
+			ticket_id, project_id, org_unit_id, created_by, created_at, updated_at`
 
 	var mw MaintenanceWindow
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description, windowType, StatusScheduled,
 		req.StartTime, req.EndTime, req.IsAllDay, req.RecurrenceRule,
 		affectedServices, impactLevel, req.ChangeRequestID,
-		req.TicketID, req.ProjectID, auth.UserID, now, now,
+		req.TicketID, req.ProjectID, orgUnitID, auth.UserID, now, now,
 	).Scan(
 		&mw.ID, &mw.TenantID, &mw.Title, &mw.Description, &mw.WindowType, &mw.Status,
 		&mw.StartTime, &mw.EndTime, &mw.IsAllDay, &mw.RecurrenceRule,
 		&mw.AffectedServices, &mw.ImpactLevel, &mw.ChangeRequestID,
-		&mw.TicketID, &mw.ProjectID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
+		&mw.TicketID, &mw.ProjectID, &mw.OrgUnitID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
 	)
 	if err != nil {
 		return MaintenanceWindow{}, apperrors.Internal("failed to create maintenance window", err)
@@ -512,7 +541,7 @@ func (s *CalendarService) GetMaintenanceWindow(ctx context.Context, id uuid.UUID
 		SELECT id, tenant_id, title, description, window_type, status,
 			start_time, end_time, is_all_day, recurrence_rule,
 			affected_services, impact_level, change_request_id,
-			ticket_id, project_id, created_by, created_at, updated_at
+			ticket_id, project_id, org_unit_id, created_by, created_at, updated_at
 		FROM maintenance_windows
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -521,13 +550,18 @@ func (s *CalendarService) GetMaintenanceWindow(ctx context.Context, id uuid.UUID
 		&mw.ID, &mw.TenantID, &mw.Title, &mw.Description, &mw.WindowType, &mw.Status,
 		&mw.StartTime, &mw.EndTime, &mw.IsAllDay, &mw.RecurrenceRule,
 		&mw.AffectedServices, &mw.ImpactLevel, &mw.ChangeRequestID,
-		&mw.TicketID, &mw.ProjectID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
+		&mw.TicketID, &mw.ProjectID, &mw.OrgUnitID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return MaintenanceWindow{}, apperrors.NotFound("MaintenanceWindow", id.String())
 		}
 		return MaintenanceWindow{}, apperrors.Internal("failed to get maintenance window", err)
+	}
+
+	// Org-scope access check.
+	if mw.OrgUnitID != nil && !auth.HasOrgAccess(*mw.OrgUnitID) {
+		return MaintenanceWindow{}, apperrors.NotFound("MaintenanceWindow", id.String())
 	}
 
 	return mw, nil
@@ -567,7 +601,7 @@ func (s *CalendarService) UpdateMaintenanceWindow(ctx context.Context, id uuid.U
 		RETURNING id, tenant_id, title, description, window_type, status,
 			start_time, end_time, is_all_day, recurrence_rule,
 			affected_services, impact_level, change_request_id,
-			ticket_id, project_id, created_by, created_at, updated_at`
+			ticket_id, project_id, org_unit_id, created_by, created_at, updated_at`
 
 	var mw MaintenanceWindow
 	err = s.pool.QueryRow(ctx, updateQuery,
@@ -580,7 +614,7 @@ func (s *CalendarService) UpdateMaintenanceWindow(ctx context.Context, id uuid.U
 		&mw.ID, &mw.TenantID, &mw.Title, &mw.Description, &mw.WindowType, &mw.Status,
 		&mw.StartTime, &mw.EndTime, &mw.IsAllDay, &mw.RecurrenceRule,
 		&mw.AffectedServices, &mw.ImpactLevel, &mw.ChangeRequestID,
-		&mw.TicketID, &mw.ProjectID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
+		&mw.TicketID, &mw.ProjectID, &mw.OrgUnitID, &mw.CreatedBy, &mw.CreatedAt, &mw.UpdatedAt,
 	)
 	if err != nil {
 		return MaintenanceWindow{}, apperrors.Internal("failed to update maintenance window", err)
@@ -666,24 +700,31 @@ func (s *CalendarService) CreateFreezePeriod(ctx context.Context, req CreateFree
 		exceptions = json.RawMessage("[]")
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		oid := auth.OrgUnitID
+		orgUnitID = &oid
+	}
+
 	query := `
 		INSERT INTO change_freeze_periods (
 			id, tenant_id, name, reason, start_time, end_time,
-			exceptions, created_by, created_at
+			exceptions, org_unit_id, created_by, created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9
+			$7, $8, $9, $10
 		)
 		RETURNING id, tenant_id, name, reason, start_time, end_time,
-			exceptions, created_by, created_at`
+			exceptions, org_unit_id, created_by, created_at`
 
 	var fp ChangeFreezePeriod
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Name, req.Reason, req.StartTime, req.EndTime,
-		exceptions, auth.UserID, now,
+		exceptions, orgUnitID, auth.UserID, now,
 	).Scan(
 		&fp.ID, &fp.TenantID, &fp.Name, &fp.Reason, &fp.StartTime, &fp.EndTime,
-		&fp.Exceptions, &fp.CreatedBy, &fp.CreatedAt,
+		&fp.Exceptions, &fp.OrgUnitID, &fp.CreatedBy, &fp.CreatedAt,
 	)
 	if err != nil {
 		return ChangeFreezePeriod{}, apperrors.Internal("failed to create freeze period", err)
@@ -716,14 +757,25 @@ func (s *CalendarService) ListFreezePeriods(ctx context.Context) ([]ChangeFreeze
 		return nil, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 2)
+
 	query := `
 		SELECT id, tenant_id, name, reason, start_time, end_time,
-			exceptions, created_by, created_at
+			exceptions, org_unit_id, created_by, created_at
 		FROM change_freeze_periods
-		WHERE tenant_id = $1
-		ORDER BY start_time DESC`
+		WHERE tenant_id = $1`
 
-	rows, err := s.pool.Query(ctx, query, auth.TenantID)
+	args := []interface{}{auth.TenantID}
+	if orgClause != "" {
+		query += " AND " + orgClause
+		if orgParam != nil {
+			args = append(args, orgParam)
+		}
+	}
+	query += ` ORDER BY start_time DESC`
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, apperrors.Internal("failed to list freeze periods", err)
 	}
@@ -734,7 +786,7 @@ func (s *CalendarService) ListFreezePeriods(ctx context.Context) ([]ChangeFreeze
 		var fp ChangeFreezePeriod
 		if err := rows.Scan(
 			&fp.ID, &fp.TenantID, &fp.Name, &fp.Reason, &fp.StartTime, &fp.EndTime,
-			&fp.Exceptions, &fp.CreatedBy, &fp.CreatedAt,
+			&fp.Exceptions, &fp.OrgUnitID, &fp.CreatedBy, &fp.CreatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan freeze period", err)
 		}
@@ -801,6 +853,9 @@ func (s *CalendarService) CheckConflicts(ctx context.Context, start, end time.Ti
 		FreezePeriods:     []ChangeFreezePeriod{},
 	}
 
+	// Build org-scope filter for maintenance windows.
+	mwOrgClause, mwOrgParam := types.BuildOrgFilter(auth, "mw.org_unit_id", 4)
+
 	// Find overlapping maintenance windows.
 	mwQuery := `
 		SELECT mw.id, mw.title, mw.description, mw.window_type, mw.status,
@@ -813,7 +868,15 @@ func (s *CalendarService) CheckConflicts(ctx context.Context, start, end time.Ti
 			AND mw.start_time < $3
 			AND mw.end_time > $2`
 
-	rows, err := s.pool.Query(ctx, mwQuery, auth.TenantID, start, end)
+	mwArgs := []interface{}{auth.TenantID, start, end}
+	if mwOrgClause != "" {
+		mwQuery += " AND " + mwOrgClause
+		if mwOrgParam != nil {
+			mwArgs = append(mwArgs, mwOrgParam)
+		}
+	}
+
+	rows, err := s.pool.Query(ctx, mwQuery, mwArgs...)
 	if err != nil {
 		return ConflictResult{}, apperrors.Internal("failed to check maintenance window conflicts", err)
 	}
@@ -864,16 +927,27 @@ func (s *CalendarService) CheckConflicts(ctx context.Context, start, end time.Ti
 		return ConflictResult{}, apperrors.Internal("failed to iterate conflicts", err)
 	}
 
+	// Build org-scope filter for freeze periods.
+	fpOrgClause, fpOrgParam := types.BuildOrgFilter(auth, "org_unit_id", 4)
+
 	// Find overlapping freeze periods.
 	fpQuery := `
 		SELECT id, tenant_id, name, reason, start_time, end_time,
-			exceptions, created_by, created_at
+			exceptions, org_unit_id, created_by, created_at
 		FROM change_freeze_periods
 		WHERE tenant_id = $1
 			AND start_time < $3
 			AND end_time > $2`
 
-	fpRows, err := s.pool.Query(ctx, fpQuery, auth.TenantID, start, end)
+	fpArgs := []interface{}{auth.TenantID, start, end}
+	if fpOrgClause != "" {
+		fpQuery += " AND " + fpOrgClause
+		if fpOrgParam != nil {
+			fpArgs = append(fpArgs, fpOrgParam)
+		}
+	}
+
+	fpRows, err := s.pool.Query(ctx, fpQuery, fpArgs...)
 	if err != nil {
 		return ConflictResult{}, apperrors.Internal("failed to check freeze period conflicts", err)
 	}
@@ -883,7 +957,7 @@ func (s *CalendarService) CheckConflicts(ctx context.Context, start, end time.Ti
 		var fp ChangeFreezePeriod
 		if err := fpRows.Scan(
 			&fp.ID, &fp.TenantID, &fp.Name, &fp.Reason, &fp.StartTime, &fp.EndTime,
-			&fp.Exceptions, &fp.CreatedBy, &fp.CreatedAt,
+			&fp.Exceptions, &fp.OrgUnitID, &fp.CreatedBy, &fp.CreatedAt,
 		); err != nil {
 			return ConflictResult{}, apperrors.Internal("failed to scan freeze period conflict", err)
 		}

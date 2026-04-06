@@ -112,6 +112,24 @@ const (
 	CRStatusImplemented = "implemented"
 )
 
+// Change request priority constants
+const (
+	CRPriorityLow      = "low"
+	CRPriorityMedium   = "medium"
+	CRPriorityHigh     = "high"
+	CRPriorityCritical = "critical"
+)
+
+// Change request category constants
+const (
+	CRCategoryScope     = "scope"
+	CRCategorySchedule  = "schedule"
+	CRCategoryBudget    = "budget"
+	CRCategoryResource  = "resource"
+	CRCategoryTechnical = "technical"
+	CRCategoryOther     = "other"
+)
+
 // ──────────────────────────────────────────────
 // Milestone status constants
 // ──────────────────────────────────────────────
@@ -130,6 +148,7 @@ const (
 type Portfolio struct {
 	ID          uuid.UUID  `json:"id"`
 	TenantID    uuid.UUID  `json:"tenantId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
@@ -190,16 +209,18 @@ type ProjectDivisionAssignment struct {
 
 // DivisionAssignmentLog represents a history entry for division assignments.
 type DivisionAssignmentLog struct {
-	ID             uuid.UUID  `json:"id"`
-	EntityType     string     `json:"entityType"`
-	EntityID       uuid.UUID  `json:"entityId"`
-	Action         string     `json:"action"`
-	FromDivisionID *uuid.UUID `json:"fromDivisionId"`
-	ToDivisionID   *uuid.UUID `json:"toDivisionId"`
-	PerformedBy    uuid.UUID  `json:"performedBy"`
-	PerformerName  string     `json:"performerName,omitempty"`
-	Notes          *string    `json:"notes"`
-	CreatedAt      time.Time  `json:"createdAt"`
+	ID               uuid.UUID  `json:"id"`
+	EntityType       string     `json:"entityType"`
+	EntityID         uuid.UUID  `json:"entityId"`
+	Action           string     `json:"action"`
+	FromDivisionID   *uuid.UUID `json:"fromDivisionId"`
+	FromDivisionName string     `json:"fromDivisionName,omitempty"`
+	ToDivisionID     *uuid.UUID `json:"toDivisionId"`
+	ToDivisionName   string     `json:"toDivisionName,omitempty"`
+	PerformedBy      uuid.UUID  `json:"performedBy"`
+	PerformerName    string     `json:"performerName,omitempty"`
+	Notes            *string    `json:"notes"`
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 // ProjectDependency represents a dependency link between two projects.
@@ -326,11 +347,21 @@ type ChangeRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           string     `json:"status"`
+	Priority         string     `json:"priority"`
+	Category         *string    `json:"category,omitempty"`
 	RequestedBy      uuid.UUID  `json:"requestedBy"`
 	ReviewedBy       *uuid.UUID `json:"reviewedBy"`
 	ApprovalChainID  *uuid.UUID `json:"approvalChainId"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
+}
+
+// ChangeRequestResponse is the enriched API response with resolved names.
+type ChangeRequestResponse struct {
+	ChangeRequest
+	RequestedByName string  `json:"requestedByName"`
+	ReviewedByName  *string `json:"reviewedByName,omitempty"`
+	ProjectTitle    *string `json:"projectTitle,omitempty"`
 }
 
 // ──────────────────────────────────────────────
@@ -364,6 +395,7 @@ type CreatePortfolioRequest struct {
 	Name        string     `json:"name" validate:"required"`
 	Description *string    `json:"description"`
 	OwnerID     *uuid.UUID `json:"ownerId"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId"`
 	FiscalYear  int        `json:"fiscalYear" validate:"required"`
 	Status      *string    `json:"status"`
 }
@@ -596,6 +628,8 @@ type CreateChangeRequestRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           *string    `json:"status"`
+	Priority         *string    `json:"priority"`
+	Category         *string    `json:"category"`
 }
 
 // UpdateChangeRequestRequest is the payload for updating a change request.
@@ -606,6 +640,8 @@ type UpdateChangeRequestRequest struct {
 	Justification    *string    `json:"justification"`
 	ImpactAssessment *string    `json:"impactAssessment"`
 	Status           *string    `json:"status"`
+	Priority         *string    `json:"priority"`
+	Category         *string    `json:"category"`
 	ReviewedBy       *uuid.UUID `json:"reviewedBy"`
 	ApprovalChainID  *uuid.UUID `json:"approvalChainId"`
 }

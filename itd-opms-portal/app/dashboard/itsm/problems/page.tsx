@@ -1,114 +1,336 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
   Bug,
-  Plus,
-  Filter,
-  ChevronDown,
-  ChevronRight,
-  AlertCircle,
-  Link as LinkIcon,
+  CheckCircle2,
+  ClipboardList,
+  ExternalLink,
+  Eye,
   FileText,
+  Link as LinkIcon,
   Loader2,
+  Plus,
+  RotateCcw,
+  Building2,
   Save,
+  Search,
+  Sparkles,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
+import { UserPicker, OrgUnitPicker } from "@/components/shared/pickers";
 import {
-  useProblems,
-  useKnownErrors,
-  useCreateProblem,
   useCreateKnownError,
+  useCreateProblem,
+  useKnownErrors,
+  useProblems,
+  useTransitionProblem,
 } from "@/hooks/use-itsm";
 import type { ITSMProblem, KnownError } from "@/types";
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
+interface ProblemStatusOption {
+  value: string;
+  label: string;
+  accent: string;
+  description: string;
+}
 
-const PROBLEM_STATUSES = [
-  { value: "", label: "All Statuses" },
-  { value: "logged", label: "Logged" },
-  { value: "investigating", label: "Investigating" },
-  { value: "root_cause_identified", label: "Root Cause Identified" },
-  { value: "known_error", label: "Known Error" },
-  { value: "resolved", label: "Resolved" },
+interface MetricCardProps {
+  title: string;
+  value: ReactNode;
+  helper: string;
+  icon: LucideIcon;
+  accent: string;
+}
+
+const PROBLEM_STATUSES: ProblemStatusOption[] = [
+  {
+    value: "",
+    label: "All problems",
+    accent: "#1B7340",
+    description: "Full investigation board",
+  },
+  {
+    value: "logged",
+    label: "Logged",
+    accent: "#475569",
+    description: "Freshly recorded and awaiting deeper correlation",
+  },
+  {
+    value: "investigating",
+    label: "Investigating",
+    accent: "#2563EB",
+    description: "Analysis and pattern tracing in progress",
+  },
+  {
+    value: "root_cause_identified",
+    label: "Root cause identified",
+    accent: "#D97706",
+    description: "Cause found, response and fix planning underway",
+  },
+  {
+    value: "known_error",
+    label: "Known error",
+    accent: "#EA580C",
+    description: "Workaround published while the permanent fix is tracked",
+  },
+  {
+    value: "resolved",
+    label: "Resolved",
+    accent: "#1B7340",
+    description: "Problem has been driven to closure",
+  },
 ];
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  logged: { bg: "rgba(107, 114, 128, 0.1)", text: "#6B7280" },
-  investigating: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
-  root_cause_identified: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
-  known_error: { bg: "rgba(249, 115, 22, 0.1)", text: "#F97316" },
-  resolved: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" },
+const STATUS_SUMMARY: Record<
+  string,
+  { accent: string; bgColor: string; description: string }
+> = {
+  logged: {
+    accent: "#475569",
+    bgColor: "rgba(71, 85, 105, 0.12)",
+    description: "Captured and waiting for deeper triage.",
+  },
+  investigating: {
+    accent: "#2563EB",
+    bgColor: "rgba(37, 99, 235, 0.12)",
+    description: "Correlation and evidence gathering are active.",
+  },
+  root_cause_identified: {
+    accent: "#D97706",
+    bgColor: "rgba(217, 119, 6, 0.12)",
+    description: "Cause is known and mitigation can tighten.",
+  },
+  known_error: {
+    accent: "#EA580C",
+    bgColor: "rgba(234, 88, 12, 0.12)",
+    description: "Workaround is available while the long fix lands.",
+  },
+  resolved: {
+    accent: "#1B7340",
+    bgColor: "rgba(27, 115, 64, 0.12)",
+    description: "Problem record has reached closure.",
+  },
 };
 
-/* ------------------------------------------------------------------ */
-/*  Known Error List                                                   */
-/* ------------------------------------------------------------------ */
+const PROBLEM_TRANSITIONS: Record<
+  string,
+  { value: string; label: string; icon: LucideIcon; accent: string }[]
+> = {
+  logged: [
+    { value: "investigating", label: "Investigate", icon: Search, accent: "#2563EB" },
+  ],
+  investigating: [
+    { value: "root_cause_identified", label: "Root Cause Found", icon: Eye, accent: "#D97706" },
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+  ],
+  root_cause_identified: [
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  known_error: [
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  resolved: [
+    { value: "investigating", label: "Reopen", icon: RotateCcw, accent: "#2563EB" },
+  ],
+};
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "just now";
+
+  const delta = Date.now() - new Date(value).getTime();
+  const minutes = Math.floor(delta / 60000);
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Unknown";
+  return new Date(value).toLocaleDateString();
+}
+
+function humanize(value?: string) {
+  return value ? value.replace(/_/g, " ") : "unknown";
+}
+
+function truncateId(value?: string) {
+  if (!value) return "Unassigned";
+  return value.length > 10 ? `${value.slice(0, 8)}...` : value;
+}
+
+function getStatusMeta(status: string) {
+  return (
+    STATUS_SUMMARY[status] ?? {
+      accent: "#475569",
+      bgColor: "rgba(71, 85, 105, 0.12)",
+      description: "Investigation state is active.",
+    }
+  );
+}
+
+function getProblemPosture(
+  unresolvedCount: number,
+  linkedIncidents: number,
+  knownErrorCount: number,
+) {
+  if (unresolvedCount >= 8 || linkedIncidents >= 12) {
+    return {
+      label: "Pressure is high",
+      accent: "#DC2626",
+      badgeClass:
+        "border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
+      description:
+        "Incident clusters are large enough that problem discipline should stay near the top of the queue.",
+    };
+  }
+
+  if (unresolvedCount >= 4 || knownErrorCount === 0) {
+    return {
+      label: "Watch carefully",
+      accent: "#D97706",
+      badgeClass:
+        "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      description:
+        "The board is manageable, but known-error coverage and closure follow-through need attention.",
+    };
+  }
+
+  return {
+    label: "Controlled",
+    accent: "#1B7340",
+    badgeClass:
+      "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    description:
+      "Problem pressure is contained and the investigation funnel is moving well.",
+  };
+}
+
+function LoadingValue({ width = "w-16" }: { width?: string }) {
+  return (
+    <span
+      className={`inline-flex h-8 animate-pulse rounded-xl bg-[var(--surface-2)] ${width}`}
+    />
+  );
+}
+
+function MetricCard({
+  title,
+  value,
+  helper,
+  icon: Icon,
+  accent,
+}: MetricCardProps) {
+  return (
+    <div
+      className="rounded-[28px] border p-5"
+      style={{
+        backgroundColor: "var(--surface-0)",
+        borderColor: "var(--border)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {title}
+          </p>
+          <p
+            className="mt-3 text-3xl font-bold tracking-tight"
+            style={{ color: accent }}
+          >
+            {value}
+          </p>
+        </div>
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: `${accent}16` }}
+        >
+          <Icon size={20} style={{ color: accent }} />
+        </div>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-[var(--text-secondary)]">
+        {helper}
+      </p>
+    </div>
+  );
+}
 
 function KnownErrorList({ problemId }: { problemId: string }) {
   const { data: knownErrors, isLoading } = useKnownErrors(problemId);
   const createKnownError = useCreateKnownError();
 
   const [showForm, setShowForm] = useState(false);
-  const [keTitle, setKeTitle] = useState("");
-  const [keDescription, setKeDescription] = useState("");
-  const [keWorkaround, setKeWorkaround] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [workaround, setWorkaround] = useState("");
 
-  const errors: KnownError[] = knownErrors ?? [];
+  const errors = knownErrors ?? [];
+
+  function resetForm() {
+    setShowForm(false);
+    setTitle("");
+    setDescription("");
+    setWorkaround("");
+  }
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!keTitle.trim()) return;
+    if (!title.trim()) return;
+
     createKnownError.mutate(
       {
         problemId,
-        title: keTitle.trim(),
-        description: keDescription.trim() || undefined,
-        workaround: keWorkaround.trim() || undefined,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        workaround: workaround.trim() || undefined,
       },
       {
-        onSuccess: () => {
-          setShowForm(false);
-          setKeTitle("");
-          setKeDescription("");
-          setKeWorkaround("");
-        },
+        onSuccess: resetForm,
       },
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-2">
-        <Loader2 size={14} className="animate-spin text-[var(--neutral-gray)]" />
-        <span className="text-xs text-[var(--neutral-gray)]">Loading known errors...</span>
-      </div>
     );
   }
 
   return (
-    <div className="mt-3">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
-          Known Errors ({errors.length})
-        </h4>
+    <div className="rounded-[24px] border p-4" style={{ borderColor: "var(--border)" }}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            Known errors
+          </p>
+          <h4 className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            Workaround intelligence
+          </h4>
+        </div>
         <button
           type="button"
-          onClick={() => setShowForm((f) => !f)}
-          className="flex items-center gap-1 text-[10px] font-medium text-[var(--primary)] hover:underline"
+          onClick={() => setShowForm((current) => !current)}
+          className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+          style={{ borderColor: "var(--border)" }}
         >
-          <Plus size={10} />
-          Add Known Error
+          <Plus size={14} />
+          Add known error
         </button>
       </div>
 
-      {/* Known error form */}
       <AnimatePresence>
         {showForm && (
           <motion.form
@@ -116,92 +338,120 @@ function KnownErrorList({ problemId }: { problemId: string }) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mb-3 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3"
+            className="mt-4 space-y-3 rounded-[24px] border p-4"
+            style={{
+              backgroundColor: "var(--surface-1)",
+              borderColor: "var(--border)",
+            }}
           >
             <FormField
               label="Title"
-              name="keTitle"
-              value={keTitle}
-              onChange={setKeTitle}
+              name="knownErrorTitle"
+              value={title}
+              onChange={setTitle}
               placeholder="Known error title"
               required
             />
             <FormField
               label="Description"
-              name="keDescription"
+              name="knownErrorDescription"
               type="textarea"
-              value={keDescription}
-              onChange={setKeDescription}
-              placeholder="Describe the known error"
+              value={description}
+              onChange={setDescription}
+              placeholder="What operators should know about the failure mode"
               rows={2}
             />
             <FormField
               label="Workaround"
-              name="keWorkaround"
+              name="knownErrorWorkaround"
               type="textarea"
-              value={keWorkaround}
-              onChange={setKeWorkaround}
-              placeholder="Temporary workaround for users"
+              value={workaround}
+              onChange={setWorkaround}
+              placeholder="Temporary operating workaround"
               rows={2}
             />
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={createKnownError.isPending || !keTitle.trim()}
-                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {createKnownError.isPending && (
-                  <Loader2 size={12} className="animate-spin" />
-                )}
-                Create
-              </button>
+            <div className="flex items-center justify-end gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)]"
+                onClick={resetForm}
+                className="rounded-xl border px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ borderColor: "var(--border)" }}
               >
                 Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={createKnownError.isPending || !title.trim()}
+                className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {createKnownError.isPending && (
+                  <Loader2 size={14} className="animate-spin" />
+                )}
+                Save known error
               </button>
             </div>
           </motion.form>
         )}
       </AnimatePresence>
 
-      {/* Known error list */}
-      {errors.length === 0 ? (
-        <p className="text-xs text-[var(--neutral-gray)] italic py-1">
-          No known errors recorded yet
-        </p>
+      {isLoading ? (
+        <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <Loader2 size={15} className="animate-spin" />
+          Loading known errors...
+        </div>
+      ) : errors.length === 0 ? (
+        <div
+          className="mt-4 rounded-[20px] border border-dashed p-4"
+          style={{
+            backgroundColor: "var(--surface-1)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            No known errors recorded yet
+          </p>
+          <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+            When a workaround becomes reliable enough to share, publish it here
+            so operators can reduce repeated incident noise.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-2">
-          {errors.map((ke) => (
+        <div className="mt-4 space-y-3">
+          {errors.map((error) => (
             <div
-              key={ke.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3"
+              key={error.id}
+              className="rounded-[20px] border p-4"
+              style={{
+                backgroundColor: "var(--surface-1)",
+                borderColor: "var(--border)",
+              }}
             >
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-[var(--text-primary)]">
-                  {ke.title}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  {error.title}
                 </p>
-                <StatusBadge status={ke.status} />
+                <StatusBadge status={error.status} />
               </div>
-              {ke.description && (
-                <p className="text-[11px] text-[var(--text-secondary)] mb-1">
-                  {ke.description}
+              {error.description && (
+                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                  {error.description}
                 </p>
               )}
-              {ke.workaround && (
-                <div className="mt-1 rounded-md p-2 text-[11px]" style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
-                  <span className="font-medium" style={{ color: "#3B82F6" }}>
-                    Workaround:{" "}
+              {error.workaround && (
+                <div
+                  className="mt-3 rounded-2xl p-3 text-sm"
+                  style={{ backgroundColor: "rgba(37, 99, 235, 0.06)" }}
+                >
+                  <span className="font-semibold text-[#2563EB]">Workaround: </span>
+                  <span className="text-[var(--text-secondary)]">
+                    {error.workaround}
                   </span>
-                  <span className="text-[var(--text-secondary)]">{ke.workaround}</span>
                 </div>
               )}
-              {ke.kbArticleId && (
-                <div className="mt-1 flex items-center gap-1 text-[10px] text-[var(--neutral-gray)]">
-                  <FileText size={10} />
-                  KB Article: {ke.kbArticleId.slice(0, 8)}...
+              {error.kbArticleId && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <FileText size={12} />
+                  Linked KB: {error.kbArticleId}
                 </div>
               )}
             </div>
@@ -212,11 +462,7 @@ function KnownErrorList({ problemId }: { problemId: string }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Problem Row                                                        */
-/* ------------------------------------------------------------------ */
-
-function ProblemRow({
+function ProblemCard({
   problem,
   index,
 }: {
@@ -224,135 +470,218 @@ function ProblemRow({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const transitionProblem = useTransitionProblem();
+  const statusMeta = getStatusMeta(problem.status);
+  const incidentCount = problem.linkedIncidentIds.length;
+  const transitions = PROBLEM_TRANSITIONS[problem.status] ?? [];
 
-  const statusColor = STATUS_COLORS[problem.status] ?? {
-    bg: "var(--surface-2)",
-    text: "var(--neutral-gray)",
-  };
+  const highlights = [
+    {
+      label: "Root cause",
+      value: problem.rootCause || "Still being established",
+    },
+    {
+      label: "Workaround",
+      value: problem.workaround || "No operator workaround has been documented yet.",
+    },
+    {
+      label: "Permanent fix",
+      value: problem.permanentFix || "Permanent remediation is still open.",
+    },
+  ];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04 }}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-hidden"
+      transition={{ duration: 0.32, delay: index * 0.04 }}
+      className="rounded-[30px] border p-5"
+      style={{
+        backgroundColor: "var(--surface-0)",
+        borderColor: "var(--border)",
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${statusMeta.accent}1c, transparent 34%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+      }}
     >
-      {/* Summary row */}
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-[var(--surface-1)]"
-      >
-        <div className="shrink-0">
-          {expanded ? (
-            <ChevronDown size={16} className="text-[var(--neutral-gray)]" />
-          ) : (
-            <ChevronRight size={16} className="text-[var(--neutral-gray)]" />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
+            style={{
+              backgroundColor: statusMeta.bgColor,
+              color: statusMeta.accent,
+            }}
+          >
+            {problem.problemNumber}
+          </span>
+          <StatusBadge status={problem.status} />
+          {problem.linkedChangeId && (
+            <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+              Change linked
+            </span>
           )}
         </div>
 
-        {/* Problem number */}
-        <span className="text-xs font-mono text-[var(--neutral-gray)] w-24 shrink-0">
-          {problem.problemNumber}
-        </span>
-
-        {/* Title */}
-        <span className="flex-1 text-sm font-medium text-[var(--text-primary)] line-clamp-1">
-          {problem.title}
-        </span>
-
-        {/* Status */}
-        <span
-          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize shrink-0"
-          style={{ backgroundColor: statusColor.bg, color: statusColor.text }}
-        >
-          {problem.status.replace(/_/g, " ")}
-        </span>
-
-        {/* Linked incidents count */}
-        <div className="flex items-center gap-1 text-xs text-[var(--neutral-gray)] w-20 shrink-0 justify-end">
-          <LinkIcon size={12} />
-          {problem.linkedIncidentIds.length} incident
-          {problem.linkedIncidentIds.length !== 1 ? "s" : ""}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[var(--surface-0)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)] shadow-sm">
+            {incidentCount} linked incident{incidentCount === 1 ? "" : "s"}
+          </span>
+          <Link
+            href={`/dashboard/itsm/problems/${problem.id}`}
+            className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Open record
+            <ExternalLink size={14} />
+          </Link>
         </div>
+      </div>
 
-        {/* Owner */}
-        <span className="text-xs text-[var(--neutral-gray)] w-20 shrink-0 text-right">
-          {problem.ownerId ? problem.ownerId.slice(0, 8) + "..." : "Unassigned"}
-        </span>
-      </button>
+      <div className="mt-5">
+        <h3 className="text-xl font-semibold text-[var(--text-primary)]">
+          {problem.title}
+        </h3>
+        <p className="mt-3 line-clamp-3 text-sm leading-7 text-[var(--text-secondary)]">
+          {problem.description ||
+            "No narrative has been added yet. Use the expanded panel to document incident patterns, blast radius, and investigative context."}
+        </p>
+      </div>
 
-      {/* Expanded detail */}
+      <div className="mt-5 grid gap-3 lg:grid-cols-3">
+        {highlights.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[24px] border p-4"
+            style={{
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
+              backdropFilter: "blur(18px)",
+            }}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+              {item.label}
+            </p>
+            <p className="mt-3 line-clamp-4 text-sm leading-6 text-[var(--text-secondary)]">
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
+        {problem.ownerName ? (
+          <span>Owner: {problem.ownerName}</span>
+        ) : problem.ownerId ? (
+          <span>Owner: {truncateId(problem.ownerId)}</span>
+        ) : null}
+        {problem.assignedGroupName && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2 py-0.5">
+            <Building2 size={11} />
+            {problem.assignedGroupName}
+          </span>
+        )}
+        <span>Created {formatDate(problem.createdAt)}</span>
+        <span>Updated {formatRelativeTime(problem.updatedAt)}</span>
+        {problem.linkedChangeId && <span>Change {truncateId(problem.linkedChangeId)}</span>}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {transitions.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                disabled={transitionProblem.isPending}
+                onClick={() =>
+                  transitionProblem.mutate({
+                    id: problem.id,
+                    targetStatus: t.value,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                style={{
+                  borderColor: `${t.accent}40`,
+                  backgroundColor: `${t.accent}10`,
+                  color: t.accent,
+                }}
+              >
+                {transitionProblem.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Icon size={13} />
+                )}
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {expanded ? "Hide diagnostics" : "Expand diagnostics"}
+            <ArrowRight
+              size={15}
+              className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+            />
+          </button>
+        </div>
+      </div>
+
       <AnimatePresence>
         {expanded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="border-t border-[var(--border)] bg-[var(--surface-1)] px-4 py-4"
+            className="mt-5 space-y-5 border-t border-[var(--border)] pt-5"
           >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* Root Cause */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)] mb-1">
-                  Root Cause
-                </p>
-                <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                  {problem.rootCause || "Not yet identified"}
-                </p>
-              </div>
-
-              {/* Workaround */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)] mb-1">
-                  Workaround
-                </p>
-                <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                  {problem.workaround || "None documented"}
-                </p>
-              </div>
-
-              {/* Permanent Fix */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)] mb-1">
-                  Permanent Fix
-                </p>
-                <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                  {problem.permanentFix || "Not yet determined"}
-                </p>
-              </div>
-            </div>
-
-            {/* Description */}
             {problem.description && (
-              <div className="mt-3 pt-3 border-t border-[var(--border)]">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)] mb-1">
-                  Description
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Investigation narrative
                 </p>
-                <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--text-secondary)]">
                   {problem.description}
                 </p>
               </div>
             )}
 
-            {/* Linked Change */}
-            {problem.linkedChangeId && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-[var(--neutral-gray)]">
-                <LinkIcon size={12} />
-                Linked Change: {problem.linkedChangeId.slice(0, 8)}...
+            <div className="grid gap-4 md:grid-cols-2">
+              <div
+                className="rounded-[24px] border p-4"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Incident linkage
+                </p>
+                <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                  {incidentCount > 0
+                    ? `${incidentCount} incident${incidentCount === 1 ? "" : "s"} already mapped to this problem record.`
+                    : "No incidents have been linked yet."}
+                </p>
               </div>
-            )}
 
-            {/* Metadata */}
-            <div className="mt-3 flex items-center gap-4 text-[10px] text-[var(--neutral-gray)]">
-              <span>Created: {new Date(problem.createdAt).toLocaleDateString()}</span>
-              <span>Updated: {new Date(problem.updatedAt).toLocaleDateString()}</span>
+              <div
+                className="rounded-[24px] border p-4"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Change linkage
+                </p>
+                <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                  {problem.linkedChangeId
+                    ? `Permanent remediation is being tracked through ${problem.linkedChangeId}.`
+                    : "No linked change request is recorded yet."}
+                </p>
+              </div>
             </div>
 
-            {/* Known Errors */}
-            <div className="mt-3 pt-3 border-t border-[var(--border)]">
-              <KnownErrorList problemId={problem.id} />
-            </div>
+            <KnownErrorList problemId={problem.id} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -360,130 +689,319 @@ function ProblemRow({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Page                                                               */
-/* ------------------------------------------------------------------ */
-
 export default function ProblemsPage() {
-  const router = useRouter();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [groupFilterDisplay, setGroupFilterDisplay] = useState("");
 
-  const { data, isLoading } = useProblems(page, 20, status || undefined);
+  const { data, isLoading } = useProblems(page, 12, status || undefined, groupFilter || undefined);
+  const { data: knownErrors, isLoading: knownErrorsLoading } =
+    useKnownErrors();
   const createProblem = useCreateProblem();
 
   const problems = data?.data ?? [];
   const meta = data?.meta;
+  const totalProblems = meta?.totalItems ?? problems.length;
 
-  /* ---- Create problem form state ---- */
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newOwnerId, setNewOwnerId] = useState("");
+  const [ownerDisplay, setOwnerDisplay] = useState("");
+  const [newGroupId, setNewGroupId] = useState("");
+  const [groupDisplay, setGroupDisplay] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const unresolvedCount = problems.filter(
+    (problem) => problem.status !== "resolved",
+  ).length;
+  const linkedIncidents = problems.reduce(
+    (sum, problem) => sum + problem.linkedIncidentIds.length,
+    0,
+  );
+  const knownErrorCount = knownErrors?.length ?? 0;
+  const knownErrorCoverage =
+    unresolvedCount > 0
+      ? clampPercent((knownErrorCount / unresolvedCount) * 100)
+      : 100;
+  const posture = getProblemPosture(
+    unresolvedCount,
+    linkedIncidents,
+    knownErrorCount,
+  );
+
+  const selectedStatus = PROBLEM_STATUSES.find(
+    (option) => option.value === status,
+  ) ?? PROBLEM_STATUSES[0];
+
+  const statusLandscape = useMemo(
+    () =>
+      PROBLEM_STATUSES.filter((option) => option.value).map((option) => ({
+        ...option,
+        count: problems.filter((problem) => problem.status === option.value)
+          .length,
+      })),
+    [problems],
+  );
+
+  const recentKnownErrors = useMemo(
+    () =>
+      [...(knownErrors ?? [])]
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt || b.createdAt).getTime() -
+            new Date(a.updatedAt || a.createdAt).getTime(),
+        )
+        .slice(0, 4),
+    [knownErrors],
+  );
+
+  function resetCreateForm() {
+    setShowCreateForm(false);
+    setNewTitle("");
+    setNewDescription("");
+    setNewOwnerId("");
+    setOwnerDisplay("");
+    setNewGroupId("");
+    setGroupDisplay("");
+    setFormErrors({});
+  }
 
   function handleCreateProblem(e: React.FormEvent) {
     e.preventDefault();
-    const errs: Record<string, string> = {};
-    if (!newTitle.trim()) errs.title = "Title is required";
-    setFormErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+    const nextErrors: Record<string, string> = {};
+
+    if (!newTitle.trim()) {
+      nextErrors.title = "Title is required";
+    }
+
+    setFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
     createProblem.mutate(
       {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
         ownerId: newOwnerId.trim() || undefined,
+        assignedGroupId: newGroupId.trim() || undefined,
       },
       {
-        onSuccess: () => {
-          setShowCreateForm(false);
-          setNewTitle("");
-          setNewDescription("");
-          setNewOwnerId("");
-          setFormErrors({});
-        },
+        onSuccess: resetCreateForm,
       },
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 pb-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        className="relative overflow-hidden rounded-[32px] border p-6 lg:p-8"
+        style={{
+          backgroundColor: "var(--surface-0)",
+          borderColor: "rgba(37, 99, 235, 0.14)",
+          backgroundImage:
+            "radial-gradient(circle at 12% 18%, rgba(37,99,235,0.14), transparent 32%), radial-gradient(circle at 88% 16%, rgba(234,88,12,0.12), transparent 28%), linear-gradient(135deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+          boxShadow: "0 28px 90px -58px rgba(37, 99, 235, 0.34)",
+        }}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(139,92,246,0.1)]">
-            <Bug size={20} style={{ color: "#8B5CF6" }} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              Problem Management
-            </h1>
-            <p className="text-sm text-[var(--neutral-gray)]">
-              Track root causes, known errors, and permanent fixes
-            </p>
-          </div>
-        </div>
+        <div className="grid gap-6 xl:grid-cols-[1.14fr_0.86fr]">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${posture.badgeClass}`}
+              >
+                <Sparkles size={14} />
+                {posture.label}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)]/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] backdrop-blur-sm">
+                <Bug size={14} className="text-[#2563EB]" />
+                Investigation workspace
+              </span>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowFilters((f) => !f)}
-            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            <div className="max-w-3xl">
+              <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] lg:text-5xl">
+                Problem Management
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--text-secondary)] lg:text-lg">
+                A tighter control room for root-cause analysis, workaround
+                publishing, and long-tail issue eradication. Move beyond
+                incident firefighting and build durable service stability.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCreateForm((current) => !current)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                <Plus size={16} />
+                New Problem
+              </button>
+              <a
+                href="#known-error-library"
+                className="inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <FileText size={16} />
+                Known Error Library
+              </a>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                title="Problems tracked"
+                value={isLoading ? <LoadingValue width="w-16" /> : totalProblems}
+                helper={
+                  status
+                    ? `Records matching the current “${selectedStatus.label}” filter.`
+                    : "All problem records currently represented by this result set."
+                }
+                icon={Bug}
+                accent="#2563EB"
+              />
+              <MetricCard
+                title="Active investigations"
+                value={isLoading ? <LoadingValue width="w-16" /> : unresolvedCount}
+                helper="Open investigation work visible in the current board slice."
+                icon={ClipboardList}
+                accent="#D97706"
+              />
+              <MetricCard
+                title="Known errors"
+                value={
+                  knownErrorsLoading ? <LoadingValue width="w-16" /> : knownErrorCount
+                }
+                helper="Published workaround intelligence available to operators."
+                icon={FileText}
+                accent="#EA580C"
+              />
+              <MetricCard
+                title="Incident impact"
+                value={isLoading ? <LoadingValue width="w-16" /> : linkedIncidents}
+                helper="Linked incident references across the visible problem cards."
+                icon={Activity}
+                accent="#1B7340"
+              />
+            </div>
+          </div>
+
+          <div
+            className="rounded-[28px] border p-5"
+            style={{
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
+              backdropFilter: "blur(18px)",
+            }}
           >
-            <Filter size={16} />
-            Filters
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm((f) => !f)}
-            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            <Plus size={16} />
-            New Problem
-          </button>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Command board
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                  Investigation playbook
+                </h2>
+              </div>
+              <Sparkles size={20} style={{ color: posture.accent }} />
+            </div>
+
+            <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+              {posture.description}
+            </p>
+
+            <div className="mt-5 space-y-3">
+              {[
+                "Capture recurring incident patterns fast.",
+                "Identify the root cause and publish operator-safe workarounds.",
+                "Link the permanent fix path to change activity and close the loop.",
+              ].map((step) => (
+                <div
+                  key={step}
+                  className="flex items-start gap-3 rounded-[22px] border p-4"
+                  style={{
+                    backgroundColor: "var(--surface-0)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  <CheckCircle2 size={18} className="mt-0.5 text-[var(--primary)]" />
+                  <p className="text-sm leading-6 text-[var(--text-secondary)]">
+                    {step}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Current focus
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {selectedStatus.label}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                  {selectedStatus.description}
+                </p>
+              </div>
+              <div className="rounded-[22px] bg-[var(--surface-0)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Known-error coverage
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
+                  {knownErrorsLoading ? <LoadingValue width="w-14" /> : `${knownErrorCoverage}%`}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                  Approximate workaround coverage against unresolved items in this board slice.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
 
-      {/* Filters */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="flex flex-wrap gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-4"
-          >
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--neutral-gray)]">
-                Status
-              </label>
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-2">
+          {PROBLEM_STATUSES.map((option) => {
+            const active = option.value === status;
+            return (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => {
+                  setStatus(option.value);
                   setPage(1);
                 }}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                style={{
+                  borderColor: active ? option.accent : "var(--border)",
+                  backgroundColor: active ? `${option.accent}14` : "var(--surface-0)",
+                  color: active ? option.accent : "var(--text-secondary)",
+                }}
               >
-                {PROBLEM_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="w-56">
+          <OrgUnitPicker
+            value={groupFilter || undefined}
+            displayValue={groupFilterDisplay}
+            onChange={(id, name) => {
+              setGroupFilter(id ?? "");
+              setGroupFilterDisplay(name);
+              setPage(1);
+            }}
+            placeholder="Filter by group"
+          />
+        </div>
+      </div>
 
-      {/* Create Problem Form (inline) */}
       <AnimatePresence>
         {showCreateForm && (
           <motion.form
@@ -491,61 +1009,98 @@ export default function ProblemsPage() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-6"
+            className="rounded-[32px] border p-6"
+            style={{
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
+              backgroundImage:
+                "radial-gradient(circle at 100% 0%, rgba(27,115,64,0.12), transparent 34%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)",
+            }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                Create Problem Record
-              </h2>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  New problem
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                  Create a problem record
+                </h2>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="rounded-lg p-1 text-[var(--neutral-gray)] transition-colors hover:bg-[var(--surface-2)]"
+                onClick={resetCreateForm}
+                className="rounded-2xl border p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+                style={{ borderColor: "var(--border)" }}
               >
                 <X size={16} />
               </button>
             </div>
 
-            <FormField
-              label="Title"
-              name="newTitle"
-              value={newTitle}
-              onChange={setNewTitle}
-              placeholder="Brief description of the problem"
-              required
-              error={formErrors.title}
-            />
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--text-secondary)]">
+              Capture a durable investigation, assign ownership, and give the
+              team a clear place to document root cause and operational
+              workarounds.
+            </p>
 
-            <FormField
-              label="Description"
-              name="newDescription"
-              type="textarea"
-              value={newDescription}
-              onChange={setNewDescription}
-              placeholder="Detailed description of the problem, symptoms, and affected services"
-              rows={3}
-            />
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <FormField
+                label="Title"
+                name="newProblemTitle"
+                value={newTitle}
+                onChange={setNewTitle}
+                placeholder="Short statement of the recurring failure"
+                required
+                error={formErrors.title}
+              />
 
-            <FormField
-              label="Owner ID"
-              name="newOwnerId"
-              value={newOwnerId}
-              onChange={setNewOwnerId}
-              placeholder="User UUID of the problem owner (optional)"
-            />
+              <UserPicker
+                label="Owner"
+                value={newOwnerId || undefined}
+                displayValue={ownerDisplay}
+                onChange={(id, name) => {
+                  setNewOwnerId(id ?? "");
+                  setOwnerDisplay(name);
+                }}
+                placeholder="Assign an investigation owner"
+              />
 
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] pt-4">
+              <OrgUnitPicker
+                label="Assigned Group"
+                value={newGroupId || undefined}
+                displayValue={groupDisplay}
+                onChange={(id, name) => {
+                  setNewGroupId(id ?? "");
+                  setGroupDisplay(name);
+                }}
+                placeholder="Route to a department or unit"
+              />
+
+              <div className="lg:col-span-2">
+                <FormField
+                  label="Description"
+                  name="newProblemDescription"
+                  type="textarea"
+                  value={newDescription}
+                  onChange={setNewDescription}
+                  placeholder="Describe symptoms, affected services, and recurring impact"
+                  rows={4}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border)] pt-5">
               <button
                 type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                onClick={resetCreateForm}
+                className="rounded-xl border px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                style={{ borderColor: "var(--border)" }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={createProblem.isPending}
-                className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {createProblem.isPending ? (
                   <Loader2 size={16} className="animate-spin" />
@@ -559,82 +1114,239 @@ export default function ProblemsPage() {
         )}
       </AnimatePresence>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-24">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
-            <p className="text-sm text-[var(--neutral-gray)]">Loading problems...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!isLoading && problems.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="flex flex-col items-center justify-center py-24 rounded-xl border border-[var(--border)] bg-[var(--surface-0)]"
+      <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <section
+          className="rounded-[32px] border p-6"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "var(--border)",
+          }}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-2)] mb-4">
-            <Bug size={24} className="text-[var(--neutral-gray)]" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                Investigation deck
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                Problem records in motion
+              </h2>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {totalProblems} record{totalProblems === 1 ? "" : "s"} in this result
+              set
+            </p>
           </div>
-          <p className="text-sm font-semibold text-[var(--text-primary)]">
-            No problems found
-          </p>
-          <p className="text-sm text-[var(--neutral-gray)] mt-1 mb-4">
-            Create a problem record to track root causes and known errors.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+
+          {isLoading ? (
+            <div className="mt-6 space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-64 animate-pulse rounded-[30px] bg-[var(--surface-1)]"
+                />
+              ))}
+            </div>
+          ) : problems.length === 0 ? (
+            <div
+              className="mt-6 rounded-[30px] border border-dashed p-10 text-center"
+              style={{
+                backgroundColor: "var(--surface-1)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-0)] shadow-sm">
+                <Bug size={24} className="text-[var(--text-secondary)]" />
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-[var(--text-primary)]">
+                No problems found
+              </h3>
+              <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-[var(--text-secondary)]">
+                Create a problem record to connect repeated incidents, document
+                the root cause trail, and capture workarounds before the same
+                service issue keeps coming back.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(true)}
+                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                <Plus size={16} />
+                New Problem
+              </button>
+            </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {problems.map((problem, index) => (
+                <ProblemCard key={problem.id} problem={problem} index={index} />
+              ))}
+            </div>
+          )}
+
+          {meta && meta.totalPages > 1 && (
+            <div className="mt-6 flex flex-col gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-[var(--text-secondary)]">
+                Page {page} of {meta.totalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => current - 1)}
+                  disabled={page <= 1}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => current + 1)}
+                  disabled={page >= meta.totalPages}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+          <section
+            id="known-error-library"
+            className="rounded-[32px] border p-6"
+            style={{
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
+            }}
           >
-            <Plus size={16} />
-            New Problem
-          </button>
-        </motion.div>
-      )}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Known error library
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                  Published operational memory
+                </h2>
+              </div>
+              <FileText size={20} className="text-[var(--primary)]" />
+            </div>
 
-      {/* Problem List */}
-      {!isLoading && problems.length > 0 && (
-        <div className="space-y-3">
-          {problems.map((problem: ITSMProblem, index: number) => (
-            <ProblemRow key={problem.id} problem={problem} index={index} />
-          ))}
-        </div>
-      )}
+            {knownErrorsLoading ? (
+              <div className="mt-6 space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-24 animate-pulse rounded-[24px] bg-[var(--surface-1)]"
+                  />
+                ))}
+              </div>
+            ) : recentKnownErrors.length === 0 ? (
+              <div
+                className="mt-6 rounded-[24px] border border-dashed p-5"
+                style={{
+                  backgroundColor: "var(--surface-1)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  No known errors published
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                  As repeatable workarounds become stable, publish them from the
+                  expanded problem cards so the service desk can respond faster.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                {recentKnownErrors.map((error) => (
+                  <div
+                    key={error.id}
+                    className="rounded-[24px] border p-4"
+                    style={{
+                      backgroundColor: "var(--surface-1)",
+                      borderColor: "var(--border)",
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {error.title}
+                      </p>
+                      <StatusBadge status={error.status} />
+                    </div>
+                    {error.workaround && (
+                      <p className="mt-3 line-clamp-3 text-sm leading-6 text-[var(--text-secondary)]">
+                        {error.workaround}
+                      </p>
+                    )}
+                    <div className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                      <LinkIcon size={12} />
+                      Problem {truncateId(error.problemId)} · Updated{" "}
+                      {formatRelativeTime(error.updatedAt || error.createdAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-      {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <p className="text-[var(--neutral-gray)]">
-            {meta.totalItems} problem{meta.totalItems !== 1 ? "s" : ""}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage(page - 1)}
-              disabled={page <= 1}
-              className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <span className="text-[var(--neutral-gray)] tabular-nums">
-              {page} / {meta.totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage(page + 1)}
-              disabled={page >= meta.totalPages}
-              className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
+          <section
+            className="rounded-[32px] border p-6"
+            style={{
+              backgroundColor: "var(--surface-0)",
+              borderColor: "var(--border)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  Status landscape
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                  Current board mix
+                </h2>
+              </div>
+              <AlertTriangle size={20} className="text-[var(--primary)]" />
+            </div>
+
+            <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+              Counts below are derived from the currently loaded card set.
+            </p>
+
+            <div className="mt-6 space-y-4">
+              {statusLandscape.map((item) => {
+                const maxCount = Math.max(
+                  1,
+                  ...statusLandscape.map((entry) => entry.count),
+                );
+                const width = (item.count / maxCount) * 100;
+
+                return (
+                  <div key={item.value}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-[var(--text-primary)]">
+                        {item.label}
+                      </span>
+                      <span className="text-sm font-semibold text-[var(--text-secondary)]">
+                        {item.count}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${clampPercent(width)}%`,
+                          backgroundColor: item.accent,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
-      )}
+      </div>
     </div>
   );
 }

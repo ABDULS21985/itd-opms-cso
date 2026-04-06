@@ -2,7 +2,9 @@ package itsm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,9 +12,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/export"
-	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -22,12 +24,17 @@ import (
 
 // TicketHandler handles HTTP requests for ITSM tickets.
 type TicketHandler struct {
-	svc *TicketService
+	svc      *TicketService
+	majorSvc *MajorIncidentService
 }
 
 // NewTicketHandler creates a new TicketHandler.
-func NewTicketHandler(svc *TicketService) *TicketHandler {
-	return &TicketHandler{svc: svc}
+func NewTicketHandler(svc *TicketService, majorSvc ...*MajorIncidentService) *TicketHandler {
+	var workflowSvc *MajorIncidentService
+	if len(majorSvc) > 0 {
+		workflowSvc = majorSvc[0]
+	}
+	return &TicketHandler{svc: svc, majorSvc: workflowSvc}
 }
 
 // Routes mounts ticket endpoints on the given router.
@@ -41,6 +48,7 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}", h.GetTicket)
 	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}/comments", h.ListComments)
 	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}/history", h.ListStatusHistory)
+	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}/subtasks", h.ListSubtasks)
 
 	// Write endpoints.
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateTicket)
@@ -53,6 +61,8 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link", h.LinkTickets)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/resolve", h.ResolveTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/close", h.CloseTicket)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/subtasks", h.CreateSubtask)
+	r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}/subtasks/{childId}", h.UnlinkSubtask)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/csat", h.CreateCSATSurvey)
 
 	// Bulk operations.
@@ -122,7 +132,13 @@ func (h *TicketHandler) ListTickets(w http.ResponseWriter, r *http.Request) {
 	reporterID := optionalUUID(r, "reporterId")
 	teamQueueID := optionalUUID(r, "teamQueueId")
 
-	tickets, total, err := h.svc.ListTickets(r.Context(), status, priority, ticketType, assigneeID, reporterID, teamQueueID, params.Limit, params.Offset())
+	var hideSubtasks *bool
+	if v := r.URL.Query().Get("hideSubtasks"); v == "true" {
+		b := true
+		hideSubtasks = &b
+	}
+
+	tickets, total, err := h.svc.ListTickets(r.Context(), status, priority, ticketType, assigneeID, reporterID, teamQueueID, hideSubtasks, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return
@@ -499,6 +515,23 @@ func (h *TicketHandler) DeclareMajorIncident(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if h.majorSvc != nil {
+		var req DeclareMajorIncidentWorkflowRequest
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+				return
+			}
+		}
+		req.TicketID = id
+		if _, err := h.majorSvc.DeclareMajorIncident(r.Context(), req); err != nil {
+			writeAppError(w, r, err)
+			return
+		}
+		types.NoContent(w)
+		return
+	}
+
 	if err := h.svc.DeclareMajorIncident(r.Context(), id); err != nil {
 		writeAppError(w, r, err)
 		return
@@ -682,13 +715,13 @@ func (h *TicketHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 
-	updated, err := h.svc.BulkUpdateTickets(r.Context(), ids, req.Fields)
+	updated, failed, err := h.svc.BulkUpdateTickets(r.Context(), ids, req.Fields)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
 	}
 
-	types.OK(w, map[string]int64{"updated": updated, "failed": 0}, nil)
+	types.OK(w, map[string]int64{"updated": updated, "failed": failed}, nil)
 }
 
 // ──────────────────────────────────────────────
@@ -737,4 +770,75 @@ func (h *TicketHandler) ExportTickets(w http.ResponseWriter, r *http.Request) {
 
 	filename := fmt.Sprintf("tickets-%s.csv", time.Now().Format("2006-01-02"))
 	export.WriteCSV(w, filename, columns, rows)
+}
+
+// ──────────────────────────────────────────────
+// Subtask Handlers
+// ──────────────────────────────────────────────
+
+// ListSubtasks handles GET /{id}/subtasks — returns child tickets + progress.
+func (h *TicketHandler) ListSubtasks(w http.ResponseWriter, r *http.Request) {
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "invalid ticket ID")
+		return
+	}
+
+	resp, err := h.svc.ListSubtasks(r.Context(), ticketID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, resp, nil)
+}
+
+// CreateSubtask handles POST /{id}/subtasks — creates a child ticket.
+func (h *TicketHandler) CreateSubtask(w http.ResponseWriter, r *http.Request) {
+	parentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "invalid ticket ID")
+		return
+	}
+
+	var req CreateSubtaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	if req.Title == "" || req.Description == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION", "title and description are required")
+		return
+	}
+
+	ticket, err := h.svc.CreateSubtask(r.Context(), parentID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, ticket, nil)
+}
+
+// UnlinkSubtask handles DELETE /{id}/subtasks/{childId} — unlinks (does not delete).
+func (h *TicketHandler) UnlinkSubtask(w http.ResponseWriter, r *http.Request) {
+	parentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "invalid parent ticket ID")
+		return
+	}
+
+	childID, err := uuid.Parse(chi.URLParam(r, "childId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "invalid child ticket ID")
+		return
+	}
+
+	if err := h.svc.UnlinkSubtask(r.Context(), parentID, childID); err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, map[string]string{"status": "unlinked"}, nil)
 }

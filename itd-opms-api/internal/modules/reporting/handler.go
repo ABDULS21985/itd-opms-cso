@@ -8,18 +8,21 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
 )
 
 // Handler is the top-level HTTP handler for the Reporting & Analytics module.
 // It composes all sub-handlers for dashboards, reports, and search.
 type Handler struct {
-	dashboardSvc *DashboardService
-	reportSvc    *ReportService
-	searchSvc    *SearchService
+	dashboardSvc    *DashboardService
+	reportSvc       *ReportService
+	searchSvc       *SearchService
+	queryBuilderSvc *QueryBuilderService
 
-	dashboard *DashboardHandler
-	report    *ReportHandler
-	search    *SearchHandler
+	dashboard    *DashboardHandler
+	report       *ReportHandler
+	search       *SearchHandler
+	queryBuilder *QueryBuilderHandler
 }
 
 // NewHandler creates a new Reporting Handler with all sub-handlers wired up.
@@ -27,14 +30,17 @@ func NewHandler(pool *pgxpool.Pool, redisClient *redis.Client, auditSvc *audit.A
 	dashboardSvc := NewDashboardService(pool, redisClient, auditSvc)
 	reportSvc := NewReportService(pool, auditSvc)
 	searchSvc := NewSearchService(pool, auditSvc)
+	queryBuilderSvc := NewQueryBuilderService(pool, auditSvc)
 
 	return &Handler{
-		dashboardSvc: dashboardSvc,
-		reportSvc:    reportSvc,
-		searchSvc:    searchSvc,
-		dashboard:    NewDashboardHandler(dashboardSvc),
-		report:       NewReportHandler(reportSvc),
-		search:       NewSearchHandler(searchSvc),
+		dashboardSvc:    dashboardSvc,
+		reportSvc:       reportSvc,
+		searchSvc:       searchSvc,
+		queryBuilderSvc: queryBuilderSvc,
+		dashboard:       NewDashboardHandler(dashboardSvc),
+		report:          NewReportHandler(reportSvc),
+		search:          NewSearchHandler(searchSvc),
+		queryBuilder:    NewQueryBuilderHandler(queryBuilderSvc),
 	}
 }
 
@@ -43,8 +49,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// Dashboard & charts
 	r.Route("/dashboards", func(r chi.Router) { h.dashboard.Routes(r) })
 
-	// Report definitions & runs
-	r.Route("/reports", func(r chi.Router) { h.report.Routes(r) })
+	// Report definitions & runs + query builder (same /reports prefix)
+	r.Route("/reports", func(r chi.Router) {
+		h.report.Routes(r)
+		h.queryBuilder.Routes(r)
+	})
 
 	// Global search
 	r.Route("/search", func(r chi.Router) { h.search.Routes(r) })
@@ -68,4 +77,9 @@ func (h *Handler) DashboardRefresher(interval time.Duration) *DashboardRefresher
 // ReportScheduler returns a background scheduler stub for scheduled report runs.
 func (h *Handler) ReportScheduler(interval time.Duration) *ReportScheduler {
 	return NewReportScheduler(h.reportSvc, interval)
+}
+
+// QueryScheduler returns a background scheduler for saved query email delivery.
+func (h *Handler) QueryScheduler(emailSender notification.EmailSender, frontendURL string, interval time.Duration) *QueryScheduler {
+	return NewQueryScheduler(h.queryBuilderSvc, h.reportSvc, emailSender, frontendURL, interval)
 }

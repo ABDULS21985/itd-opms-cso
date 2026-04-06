@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -23,11 +27,27 @@ import (
 type UserService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	minio    *minio.Client
+	minioCfg config.MinIOConfig
 }
 
 // NewUserService creates a new UserService.
-func NewUserService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *UserService {
-	return &UserService{pool: pool, auditSvc: auditSvc}
+func NewUserService(pool *pgxpool.Pool, auditSvc *audit.AuditService, minioClient *minio.Client, minioCfg config.MinIOConfig) *UserService {
+	return &UserService{pool: pool, auditSvc: auditSvc, minio: minioClient, minioCfg: minioCfg}
+}
+
+// resolvePhotoURL replaces a raw MinIO object key with a presigned URL.
+func (s *UserService) resolvePhotoURL(ctx context.Context, photoURL *string) *string {
+	if photoURL == nil || *photoURL == "" || s.minio == nil {
+		return nil
+	}
+	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 1*time.Hour, url.Values{})
+	if err != nil {
+		slog.Warn("failed to generate presigned photo URL", "error", err, "key", *photoURL)
+		return nil
+	}
+	u := presigned.String()
+	return &u
 }
 
 // ──────────────────────────────────────────────
@@ -41,6 +61,7 @@ func scanUserDetail(row pgx.Row) (UserDetail, error) {
 		&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 		&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.OrgUnitID, &u.OrgUnitName, &u.MFAEnabled,
 	)
 	return u, err
 }
@@ -54,6 +75,7 @@ func scanUserDetails(rows pgx.Rows) ([]UserDetail, error) {
 			&u.Department, &u.Office, &u.Unit, &u.TenantID, &u.TenantName,
 			&u.PhotoURL, &u.Phone, &u.IsActive, &u.LastLoginAt,
 			&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+			&u.OrgUnitID, &u.OrgUnitName, &u.MFAEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -81,12 +103,8 @@ func scanRoleBinding(row pgx.Row) (RoleBinding, error) {
 func scanRoleBindings(rows pgx.Rows) ([]RoleBinding, error) {
 	var bindings []RoleBinding
 	for rows.Next() {
-		var rb RoleBinding
-		if err := rows.Scan(
-			&rb.ID, &rb.UserID, &rb.RoleID, &rb.RoleName,
-			&rb.TenantID, &rb.ScopeType, &rb.ScopeID,
-			&rb.GrantedBy, &rb.GrantedAt, &rb.ExpiresAt, &rb.IsActive,
-		); err != nil {
+		rb, err := scanRoleBinding(rows)
+		if err != nil {
 			return nil, err
 		}
 		bindings = append(bindings, rb)
@@ -173,9 +191,12 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
+		       COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.tenant_id = $1
 		  AND ($2::text = 'all' OR ($2::text = 'active' AND u.is_active = true) OR ($2::text = 'inactive' AND u.is_active = false))
 		  AND ($3::text = '' OR u.display_name ILIKE '%' || $3::text || '%' OR u.email ILIKE '%' || $3::text || '%')
@@ -210,7 +231,69 @@ func (s *UserService) ListUsers(ctx context.Context, tenantID uuid.UUID, params 
 		return nil, 0, fmt.Errorf("scan users: %w", err)
 	}
 
+	for i := range users {
+		users[i].PhotoURL = s.resolvePhotoURL(ctx, users[i].PhotoURL)
+	}
+
 	return users, total, nil
+}
+
+// CreateUser creates a new user with a default password hash.
+func (s *UserService) CreateUser(ctx context.Context, tenantID uuid.UUID, req CreateUserRequest) (*UserDetail, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	// Validate required fields.
+	if req.Email == "" {
+		return nil, apperrors.BadRequest("email is required")
+	}
+	if req.DisplayName == "" {
+		return nil, apperrors.BadRequest("displayName is required")
+	}
+
+	// Check for duplicate email.
+	var exists bool
+	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", req.Email).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("check existing email: %w", err)
+	}
+	if exists {
+		return nil, apperrors.Conflict("a user with this email already exists")
+	}
+
+	// Insert user with default password hash.
+	defaultPwdHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+	var newID uuid.UUID
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO users (email, display_name, entra_id, job_title, department, office, unit, tenant_id, password_hash, org_unit_id)
+		VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id`,
+		req.Email, req.DisplayName,
+		ptrStr(req.JobTitle), ptrStr(req.Department),
+		ptrStr(req.Office), ptrStr(req.Unit),
+		tenantID, defaultPwdHash, req.OrgUnitID,
+	).Scan(&newID)
+	if err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(req)
+	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:      tenantID,
+		ActorID:       auth.UserID,
+		ActorRole:     firstRole(auth.Roles),
+		Action:        "user.created",
+		EntityType:    "user",
+		EntityID:      newID,
+		Changes:       changes,
+		CorrelationID: types.GetCorrelationID(ctx),
+	})
+
+	// Return full user detail.
+	return s.GetUser(ctx, tenantID, newID)
 }
 
 // GetUser returns a single user with their roles and delegations.
@@ -219,9 +302,12 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 		SELECT u.id, u.entra_id, u.email, u.display_name, u.job_title,
 		       u.department, u.office, u.unit, u.tenant_id, t.name AS tenant_name,
 		       u.photo_url, u.phone, u.is_active, u.last_login_at,
-		       u.metadata, u.created_at, u.updated_at
+		       u.metadata, u.created_at, u.updated_at,
+		       u.org_unit_id, COALESCE(ou.name, '') AS org_unit_name,
+		       COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false) AS mfa_enabled
 		FROM users u
 		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN org_units ou ON ou.id = u.org_unit_id
 		WHERE u.id = $1 AND u.tenant_id = $2`
 
 	user, err := scanUserDetail(s.pool.QueryRow(ctx, query, userID, tenantID))
@@ -280,6 +366,8 @@ func (s *UserService) GetUser(ctx context.Context, tenantID, userID uuid.UUID) (
 		return nil, fmt.Errorf("scan user delegations: %w", err)
 	}
 
+	user.PhotoURL = s.resolvePhotoURL(ctx, user.PhotoURL)
+
 	return &user, nil
 }
 
@@ -304,6 +392,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		  office = COALESCE(NULLIF($6, ''), office),
 		  unit = COALESCE(NULLIF($7, ''), unit),
 		  phone = COALESCE(NULLIF($8, ''), phone),
+		  org_unit_id = COALESCE($9, org_unit_id),
 		  updated_at = NOW()
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -312,6 +401,7 @@ func (s *UserService) UpdateUser(ctx context.Context, tenantID, userID uuid.UUID
 		ptrStr(req.DisplayName), ptrStr(req.JobTitle),
 		ptrStr(req.Department), ptrStr(req.Office),
 		ptrStr(req.Unit), ptrStr(req.Phone),
+		req.OrgUnitID,
 	)
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)
@@ -440,7 +530,7 @@ func (s *UserService) AssignRole(ctx context.Context, tenantID, userID uuid.UUID
 		SELECT COUNT(*) FROM role_bindings
 		WHERE user_id = $1 AND role_id = $2 AND tenant_id = $3
 		  AND scope_type = $4::scope_type
-		  AND COALESCE(scope_id, '00000000-0000-0000-0000-000000000000') = COALESCE($5, '00000000-0000-0000-0000-000000000000')
+		  AND scope_id IS NOT DISTINCT FROM $5
 		  AND is_active = true`,
 		userID, req.RoleID, tenantID, req.ScopeType, req.ScopeID,
 	).Scan(&existing)
@@ -653,10 +743,10 @@ func (s *UserService) RevokeDelegation(ctx context.Context, tenantID, delegation
 // SearchUsers performs a quick search for user autocomplete.
 func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query string) ([]UserSearchResult, error) {
 	sqlQuery := `
-		SELECT id, display_name, email, photo_url, department, is_active
+		SELECT id, display_name, email, photo_url, department, job_title, is_active
 		FROM users
 		WHERE tenant_id = $1 AND is_active = true
-		  AND (display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')
 		ORDER BY display_name
 		LIMIT 20`
 
@@ -669,7 +759,7 @@ func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query
 	var results []UserSearchResult
 	for rows.Next() {
 		var u UserSearchResult
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.PhotoURL, &u.Department, &u.IsActive); err != nil {
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.PhotoURL, &u.Department, &u.JobTitle, &u.IsActive); err != nil {
 			return nil, err
 		}
 		results = append(results, u)
@@ -680,6 +770,11 @@ func (s *UserService) SearchUsers(ctx context.Context, tenantID uuid.UUID, query
 	if results == nil {
 		results = []UserSearchResult{}
 	}
+
+	for i := range results {
+		results[i].PhotoURL = s.resolvePhotoURL(ctx, results[i].PhotoURL)
+	}
+
 	return results, nil
 }
 
@@ -691,6 +786,34 @@ func (s *UserService) CountActiveUsers(ctx context.Context, tenantID uuid.UUID) 
 		tenantID,
 	).Scan(&count)
 	return count, err
+}
+
+// GetUserStats returns a summary of user counts for the tenant.
+func (s *UserService) GetUserStats(ctx context.Context, tenantID uuid.UUID) (UserStats, error) {
+	var stats UserStats
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+		  COUNT(*)                                                               AS total_users,
+		  COUNT(*) FILTER (WHERE is_active = true)                              AS active_users,
+		  COUNT(*) FILTER (WHERE is_active = false)                             AS inactive_users,
+		  COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()))      AS new_this_month
+		FROM users
+		WHERE tenant_id = $1`,
+		tenantID,
+	).Scan(&stats.TotalUsers, &stats.ActiveUsers, &stats.InactiveUsers, &stats.NewThisMonth)
+	if err != nil {
+		return stats, fmt.Errorf("get user stats: %w", err)
+	}
+
+	// Count online users via active_sessions (not revoked, not expired).
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT user_id)
+		FROM active_sessions
+		WHERE tenant_id = $1 AND is_revoked = false AND expires_at > NOW()`,
+		tenantID,
+	).Scan(&stats.OnlineNow)
+
+	return stats, nil
 }
 
 // ──────────────────────────────────────────────

@@ -3,7 +3,9 @@ package knowledge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,7 +49,7 @@ func scanCategory(row pgx.Row) (KBCategory, error) {
 	return cat, err
 }
 
-// scanArticle scans a single KBArticle from a pgx.Row.
+// scanArticle scans a single KBArticle (with enriched author/reviewer names) from a pgx.Row.
 func scanArticle(row pgx.Row) (KBArticle, error) {
 	var a KBArticle
 	err := row.Scan(
@@ -55,7 +57,22 @@ func scanArticle(row pgx.Row) (KBArticle, error) {
 		&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
 		&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
 		&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-		&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
+		&a.LinkedTicketIDs, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
+		&a.AuthorName, &a.ReviewerName,
+	)
+	return a, err
+}
+
+// scanArticleFromRows scans a KBArticle (with enriched names) from pgx.Rows.
+func scanArticleFromRows(rows pgx.Rows) (KBArticle, error) {
+	var a KBArticle
+	err := rows.Scan(
+		&a.ID, &a.TenantID, &a.CategoryID, &a.Title, &a.Slug,
+		&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
+		&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
+		&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
+		&a.LinkedTicketIDs, &a.OrgUnitID, &a.CreatedAt, &a.UpdatedAt,
+		&a.AuthorName, &a.ReviewerName,
 	)
 	return a, err
 }
@@ -265,12 +282,32 @@ func (s *ArticleService) DeleteCategory(ctx context.Context, id uuid.UUID) error
 // KB Articles
 // ──────────────────────────────────────────────
 
-// articleColumns is the standard SELECT column list for kb_articles.
-const articleColumns = `id, tenant_id, category_id, title, slug,
-	content, status, version, type, tags,
-	author_id, reviewer_id, published_at,
-	view_count, helpful_count, not_helpful_count,
-	linked_ticket_ids, created_at, updated_at`
+// articleSelect is the enriched SELECT column list for kb_articles, including author/reviewer names.
+// Must be used together with articleFrom (which aliases kb_articles as "a" and LEFT JOINs users).
+const articleSelect = `a.id, a.tenant_id, a.category_id, a.title, a.slug,
+	a.content, a.status, a.version, a.type, a.tags,
+	a.author_id, a.reviewer_id, a.published_at,
+	a.view_count, a.helpful_count, a.not_helpful_count,
+	a.linked_ticket_ids, a.org_unit_id, a.created_at, a.updated_at,
+	COALESCE(u_a.display_name, a.author_id::text) AS author_name,
+	u_r.display_name AS reviewer_name`
+
+// articleFrom is the FROM + JOIN clause for enriched kb_articles queries.
+const articleFrom = `FROM kb_articles a
+	LEFT JOIN users u_a ON u_a.id = a.author_id
+	LEFT JOIN users u_r ON u_r.id = a.reviewer_id`
+
+// articleCTESelect is the enriched SELECT for use after a CTE that exposes all kb_articles columns.
+const articleCTESelect = `SELECT cte.id, cte.tenant_id, cte.category_id, cte.title, cte.slug,
+	cte.content, cte.status, cte.version, cte.type, cte.tags,
+	cte.author_id, cte.reviewer_id, cte.published_at,
+	cte.view_count, cte.helpful_count, cte.not_helpful_count,
+	cte.linked_ticket_ids, cte.org_unit_id, cte.created_at, cte.updated_at,
+	COALESCE(u_a.display_name, cte.author_id::text) AS author_name,
+	u_r.display_name AS reviewer_name
+FROM cte
+LEFT JOIN users u_a ON u_a.id = cte.author_id
+LEFT JOIN users u_r ON u_r.id = cte.reviewer_id`
 
 // CreateArticle creates a new KB article.
 func (s *ArticleService) CreateArticle(ctx context.Context, req CreateKBArticleRequest) (KBArticle, error) {
@@ -287,25 +324,35 @@ func (s *ArticleService) CreateArticle(ctx context.Context, req CreateKBArticleR
 		tags = []string{}
 	}
 
+	// Derive org_unit_id from auth context; use NULL if not set.
+	var orgUnitID *uuid.UUID
+	if auth.OrgUnitID != uuid.Nil {
+		oid := auth.OrgUnitID
+		orgUnitID = &oid
+	}
+
 	query := `
-		INSERT INTO kb_articles (
-			id, tenant_id, category_id, title, slug,
-			content, status, version, type, tags,
-			author_id, view_count, helpful_count, not_helpful_count,
-			linked_ticket_ids, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9, $10,
-			$11, $12, $13, $14,
-			$15, $16, $17
+		WITH cte AS (
+			INSERT INTO kb_articles (
+				id, tenant_id, category_id, title, slug,
+				content, status, version, type, tags,
+				author_id, view_count, helpful_count, not_helpful_count,
+				linked_ticket_ids, org_unit_id, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5,
+				$6, $7, $8, $9, $10,
+				$11, $12, $13, $14,
+				$15, $16, $17, $18
+			)
+			RETURNING *
 		)
-		RETURNING ` + articleColumns
+		` + articleCTESelect
 
 	a, err := scanArticle(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.CategoryID, req.Title, req.Slug,
 		req.Content, ArticleStatusDraft, 1, req.Type, tags,
 		auth.UserID, 0, 0, 0,
-		[]uuid.UUID{}, now, now,
+		[]uuid.UUID{}, orgUnitID, now, now,
 	))
 	if err != nil {
 		return KBArticle{}, apperrors.Internal("failed to create KB article", err)
@@ -333,7 +380,7 @@ func (s *ArticleService) GetArticle(ctx context.Context, id uuid.UUID) (KBArticl
 		return KBArticle{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `SELECT ` + articleColumns + ` FROM kb_articles WHERE id = $1 AND tenant_id = $2`
+	query := `SELECT ` + articleSelect + ` ` + articleFrom + ` WHERE a.id = $1 AND a.tenant_id = $2`
 
 	a, err := scanArticle(s.pool.QueryRow(ctx, query, id, auth.TenantID))
 	if err != nil {
@@ -341,6 +388,11 @@ func (s *ArticleService) GetArticle(ctx context.Context, id uuid.UUID) (KBArticl
 			return KBArticle{}, apperrors.NotFound("KBArticle", id.String())
 		}
 		return KBArticle{}, apperrors.Internal("failed to get KB article", err)
+	}
+
+	// Org-scope access check.
+	if a.OrgUnitID != nil && !auth.HasOrgAccess(*a.OrgUnitID) {
+		return KBArticle{}, apperrors.NotFound("KBArticle", id.String())
 	}
 
 	return a, nil
@@ -353,7 +405,7 @@ func (s *ArticleService) GetArticleBySlug(ctx context.Context, slug string) (KBA
 		return KBArticle{}, apperrors.Unauthorized("authentication required")
 	}
 
-	query := `SELECT ` + articleColumns + ` FROM kb_articles WHERE slug = $1 AND tenant_id = $2`
+	query := `SELECT ` + articleSelect + ` ` + articleFrom + ` WHERE a.slug = $1 AND a.tenant_id = $2`
 
 	a, err := scanArticle(s.pool.QueryRow(ctx, query, slug, auth.TenantID))
 	if err != nil {
@@ -361,6 +413,11 @@ func (s *ArticleService) GetArticleBySlug(ctx context.Context, slug string) (KBA
 			return KBArticle{}, apperrors.NotFound("KBArticle", slug)
 		}
 		return KBArticle{}, apperrors.Internal("failed to get KB article by slug", err)
+	}
+
+	// Org-scope access check.
+	if a.OrgUnitID != nil && !auth.HasOrgAccess(*a.OrgUnitID) {
+		return KBArticle{}, apperrors.NotFound("KBArticle", slug)
 	}
 
 	return a, nil
@@ -373,6 +430,9 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build org-scope filter clause.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 6)
+
 	countQuery := `
 		SELECT COUNT(*)
 		FROM kb_articles
@@ -382,24 +442,52 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 			AND ($4::text IS NULL OR type = $4)
 			AND ($5::text IS NULL OR author_id::text = $5)`
 
+	countArgs := []interface{}{auth.TenantID, categoryID, status, articleType, authorID}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, categoryID, status, articleType, authorID).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count KB articles", err)
 	}
 
-	dataQuery := `
-		SELECT ` + articleColumns + `
-		FROM kb_articles
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR category_id = $2)
-			AND ($3::text IS NULL OR status = $3)
-			AND ($4::text IS NULL OR type = $4)
-			AND ($5::text IS NULL OR author_id::text = $5)
-		ORDER BY created_at DESC
-		LIMIT $6 OFFSET $7`
+	// Determine next param index after the org filter (if any).
+	// Use qualified "a.org_unit_id" for the data query which JOINs the users table.
+	orgDataClause, orgDataParam := types.BuildOrgFilter(auth, "a.org_unit_id", 6)
+	nextIdx := 6
+	if orgDataClause != "" && orgDataParam != nil {
+		nextIdx = 7
+	}
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, categoryID, status, articleType, authorID, params.Limit, params.Offset())
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleSelect+`
+		`+articleFrom+`
+		WHERE a.tenant_id = $1
+			AND ($2::uuid IS NULL OR a.category_id = $2)
+			AND ($3::text IS NULL OR a.status = $3)
+			AND ($4::text IS NULL OR a.type = $4)
+			AND ($5::text IS NULL OR a.author_id::text = $5)%s
+		ORDER BY a.created_at DESC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgDataClause != "" {
+				return " AND " + orgDataClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, categoryID, status, articleType, authorID}
+	if orgDataClause != "" && orgDataParam != nil {
+		dataArgs = append(dataArgs, orgDataParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list KB articles", err)
 	}
@@ -407,17 +495,11 @@ func (s *ArticleService) ListArticles(ctx context.Context, categoryID *uuid.UUID
 
 	var articles []KBArticle
 	for rows.Next() {
-		var a KBArticle
-		if err := rows.Scan(
-			&a.ID, &a.TenantID, &a.CategoryID, &a.Title, &a.Slug,
-			&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
-			&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
-			&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-			&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
-		); err != nil {
+		article, err := scanArticleFromRows(rows)
+		if err != nil {
 			return nil, 0, apperrors.Internal("failed to scan KB article", err)
 		}
-		articles = append(articles, a)
+		articles = append(articles, article)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -444,28 +526,31 @@ func (s *ArticleService) UpdateArticle(ctx context.Context, id uuid.UUID, req Up
 
 	now := time.Now().UTC()
 
-	updateQuery := `
-		UPDATE kb_articles SET
-			category_id = COALESCE($1, category_id),
-			title = COALESCE($2, title),
-			slug = COALESCE($3, slug),
-			content = COALESCE($4, content),
-			type = COALESCE($5, type),
-			tags = COALESCE($6, tags),
-			reviewer_id = COALESCE($7, reviewer_id),
-			updated_at = $8
-		WHERE id = $9 AND tenant_id = $10
-		RETURNING ` + articleColumns
-
-	// For tags, pass nil if empty to let COALESCE keep existing value.
+	// For tags: pass nil if not setting (lets CASE/COALESCE keep existing value).
 	var tagsParam []string
 	if len(req.Tags) > 0 {
 		tagsParam = req.Tags
 	}
 
+	updateQuery := `
+		WITH cte AS (
+			UPDATE kb_articles SET
+				category_id = COALESCE($1, category_id),
+				title = COALESCE($2, title),
+				slug = COALESCE($3, slug),
+				content = COALESCE($4, content),
+				type = COALESCE($5, type),
+				tags = CASE WHEN $6::boolean THEN '{}'::text[] ELSE COALESCE($7, tags) END,
+				reviewer_id = COALESCE($8, reviewer_id),
+				updated_at = $9
+			WHERE id = $10 AND tenant_id = $11
+			RETURNING *
+		)
+		` + articleCTESelect
+
 	a, err := scanArticle(s.pool.QueryRow(ctx, updateQuery,
 		req.CategoryID, req.Title, req.Slug,
-		req.Content, req.Type, tagsParam, req.ReviewerID,
+		req.Content, req.Type, req.ClearTags, tagsParam, req.ReviewerID,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -536,13 +621,13 @@ func (s *ArticleService) PublishArticle(ctx context.Context, id uuid.UUID) (KBAr
 	// Save version snapshot.
 	versionQuery := `
 		INSERT INTO kb_article_versions (
-			id, article_id, version, content, changed_by, created_at
+			id, tenant_id, article_id, version, content, changed_by, created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6
+			$1, $2, $3, $4, $5, $6, $7
 		)`
 
 	_, err = s.pool.Exec(ctx, versionQuery,
-		versionID, article.ID, article.Version, article.Content, auth.UserID, now,
+		versionID, auth.TenantID, article.ID, article.Version, article.Content, auth.UserID, now,
 	)
 	if err != nil {
 		return KBArticle{}, apperrors.Internal("failed to save article version", err)
@@ -550,13 +635,16 @@ func (s *ArticleService) PublishArticle(ctx context.Context, id uuid.UUID) (KBAr
 
 	// Update article status and increment version.
 	publishQuery := `
-		UPDATE kb_articles SET
-			status = $1,
-			version = version + 1,
-			published_at = $2,
-			updated_at = $3
-		WHERE id = $4 AND tenant_id = $5
-		RETURNING ` + articleColumns
+		WITH cte AS (
+			UPDATE kb_articles SET
+				status = $1,
+				version = version + 1,
+				published_at = $2,
+				updated_at = $3
+			WHERE id = $4 AND tenant_id = $5
+			RETURNING *
+		)
+		` + articleCTESelect
 
 	a, err := scanArticle(s.pool.QueryRow(ctx, publishQuery,
 		ArticleStatusPublished, now, now, id, auth.TenantID,
@@ -643,12 +731,25 @@ func (s *ArticleService) IncrementViewCount(ctx context.Context, id uuid.UUID) e
 	return nil
 }
 
-// SearchArticles performs a full-text search across KB articles.
-func (s *ArticleService) SearchArticles(ctx context.Context, query string, params types.PaginationParams) ([]KBArticle, int, error) {
+// SearchArticles performs a search across KB articles.
+// When mode == "boolean", it uses PostgreSQL to_tsquery for full-text boolean
+// search (supporting AND, OR, NOT, parentheses). Otherwise it falls back to
+// the original ILIKE pattern match.
+func (s *ArticleService) SearchArticles(ctx context.Context, query, mode string, params types.PaginationParams) ([]KBArticle, int, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
+
+	if mode == "boolean" {
+		return s.searchArticlesBoolean(ctx, auth, query, params)
+	}
+	return s.searchArticlesPlain(ctx, auth, query, params)
+}
+
+// searchArticlesPlain uses ILIKE pattern matching (the original behaviour).
+func (s *ArticleService) searchArticlesPlain(ctx context.Context, auth *types.AuthContext, query string, params types.PaginationParams) ([]KBArticle, int, error) {
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
 
 	countQuery := `
 		SELECT COUNT(*)
@@ -660,28 +761,54 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 				OR $2 = ANY(tags)
 			)`
 
+	countArgs := []interface{}{auth.TenantID, query}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, query).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	dataQuery := `
-		SELECT ` + articleColumns + `
-		FROM kb_articles
-		WHERE tenant_id = $1
-			AND (
-				title ILIKE '%' || $2 || '%'
-				OR content ILIKE '%' || $2 || '%'
-				OR $2 = ANY(tags)
-			)
-		ORDER BY
-			CASE WHEN title ILIKE '%' || $2 || '%' THEN 0 ELSE 1 END,
-			view_count DESC,
-			created_at DESC
-		LIMIT $3 OFFSET $4`
+	orgDataClause, orgDataParam := types.BuildOrgFilter(auth, "a.org_unit_id", 3)
+	nextIdx := 3
+	if orgDataClause != "" && orgDataParam != nil {
+		nextIdx = 4
+	}
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, query, params.Limit, params.Offset())
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleSelect+`
+		`+articleFrom+`
+		WHERE a.tenant_id = $1
+			AND (
+				a.title ILIKE '%%' || $2 || '%%'
+				OR a.content ILIKE '%%' || $2 || '%%'
+				OR $2 = ANY(a.tags)
+			)%s
+		ORDER BY
+			CASE WHEN a.title ILIKE '%%' || $2 || '%%' THEN 0 ELSE 1 END,
+			a.view_count DESC,
+			a.created_at DESC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgDataClause != "" {
+				return " AND " + orgDataClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, query}
+	if orgDataClause != "" && orgDataParam != nil {
+		dataArgs = append(dataArgs, orgDataParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to search KB articles", err)
 	}
@@ -689,26 +816,108 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 
 	var articles []KBArticle
 	for rows.Next() {
-		var a KBArticle
-		if err := rows.Scan(
-			&a.ID, &a.TenantID, &a.CategoryID, &a.Title, &a.Slug,
-			&a.Content, &a.Status, &a.Version, &a.Type, &a.Tags,
-			&a.AuthorID, &a.ReviewerID, &a.PublishedAt,
-			&a.ViewCount, &a.HelpfulCount, &a.NotHelpfulCount,
-			&a.LinkedTicketIDs, &a.CreatedAt, &a.UpdatedAt,
-		); err != nil {
+		article, err := scanArticleFromRows(rows)
+		if err != nil {
 			return nil, 0, apperrors.Internal("failed to scan search result", err)
 		}
-		articles = append(articles, a)
+		articles = append(articles, article)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, 0, apperrors.Internal("failed to iterate search results", err)
 	}
-
 	if articles == nil {
 		articles = []KBArticle{}
 	}
-
 	return articles, total, nil
+}
+
+// searchArticlesBoolean uses PostgreSQL to_tsquery for boolean full-text search.
+// The caller may use AND, OR, NOT and parentheses, e.g. "network AND (timeout OR latency)".
+// The input is normalised from human-friendly syntax into tsquery syntax before execution.
+func (s *ArticleService) searchArticlesBoolean(ctx context.Context, auth *types.AuthContext, query string, params types.PaginationParams) ([]KBArticle, int, error) {
+	tsq := normaliseBooleanQuery(query)
+
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM kb_articles
+		WHERE tenant_id = $1
+			AND to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ to_tsquery('english', $2)`
+
+	countArgs := []interface{}{auth.TenantID, tsq}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
+	var total int
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.BadRequest("invalid boolean search expression — check your AND/OR/NOT syntax")
+	}
+
+	orgDataClause, orgDataParam := types.BuildOrgFilter(auth, "a.org_unit_id", 3)
+	nextIdx := 3
+	if orgDataClause != "" && orgDataParam != nil {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleSelect+`
+		`+articleFrom+`
+		WHERE a.tenant_id = $1
+			AND to_tsvector('english', coalesce(a.title,'') || ' ' || coalesce(a.content,'')) @@ to_tsquery('english', $2)
+		%s
+		ORDER BY
+			ts_rank(to_tsvector('english', coalesce(a.title,'') || ' ' || coalesce(a.content,'')), to_tsquery('english', $2)) DESC,
+			a.view_count DESC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgDataClause != "" {
+				return " AND " + orgDataClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, tsq}
+	if orgDataClause != "" && orgDataParam != nil {
+		dataArgs = append(dataArgs, orgDataParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, apperrors.Internal("boolean search query failed", err)
+	}
+	defer rows.Close()
+
+	var articles []KBArticle
+	for rows.Next() {
+		article, err := scanArticleFromRows(rows)
+		if err != nil {
+			return nil, 0, apperrors.Internal("failed to scan search result", err)
+		}
+		articles = append(articles, article)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.Internal("failed to iterate search results", err)
+	}
+	if articles == nil {
+		articles = []KBArticle{}
+	}
+	return articles, total, nil
+}
+
+// normaliseBooleanQuery converts human-friendly boolean syntax into PostgreSQL
+// tsquery format: AND → &, OR → |, NOT → !, parentheses kept as-is.
+func normaliseBooleanQuery(q string) string {
+	q = strings.TrimSpace(q)
+	q = strings.ReplaceAll(q, " AND ", " & ")
+	q = strings.ReplaceAll(q, " OR ", " | ")
+	q = strings.ReplaceAll(q, " NOT ", " & !")
+	q = strings.ReplaceAll(q, "NOT ", "!")
+	return q
 }

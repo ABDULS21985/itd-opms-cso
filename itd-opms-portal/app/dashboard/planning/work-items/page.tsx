@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { DataTable, type Column, type BulkAction } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { InlineText, InlineSelect, InlineDate } from "@/components/shared/inline-edit";
+import { InlineSelect, InlineDate } from "@/components/shared/inline-edit";
 import { ExportDropdown } from "@/components/shared/export-dropdown";
 import { useWorkItems, useWorkItemStatusCounts, useBulkUpdateWorkItems } from "@/hooks/use-planning";
 import { useAuth } from "@/providers/auth-provider";
@@ -435,7 +435,8 @@ export default function WorkItemsPage() {
       label: "Assign to Me",
       icon: UserCheck,
       onExecute: async (ids) => {
-        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user?.id } });
+        if (!user?.id) return;
+        await bulkUpdate.mutateAsync({ ids, fields: { assigneeId: user.id } });
         toast.success(`${ids.length} item(s) assigned`);
       },
     },

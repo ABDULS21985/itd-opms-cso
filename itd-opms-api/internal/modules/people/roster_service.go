@@ -3,6 +3,7 @@ package people
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -324,7 +325,7 @@ func (s *RosterService) GetLeaveRecord(ctx context.Context, id uuid.UUID) (Leave
 }
 
 // ListLeaveRecords returns a filtered, paginated list of leave records.
-func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID, status *string, page, limit int) ([]LeaveRecord, int, error) {
+func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID, status *string, leaveType *string, page, limit int) ([]LeaveRecord, int, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
@@ -332,30 +333,48 @@ func (s *RosterService) ListLeaveRecords(ctx context.Context, userID *uuid.UUID,
 
 	offset := (page - 1) * limit
 
-	countQuery := `
+	// Build org-scope filter. Next param index after $4 (leave_type) is 5.
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 5)
+
+	// Build args: tenant_id, userID, status, leaveType [, orgParam]
+	countArgs := []interface{}{auth.TenantID, userID, status, leaveType}
+	orgSQL := ""
+	nextIdx := 5
+	if orgClause != "" {
+		orgSQL = " AND " + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+			nextIdx = 6
+		}
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM leave_records
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR user_id = $2)
-			AND ($3::text IS NULL OR status = $3)`
+			AND ($3::text IS NULL OR status = $3)
+			AND ($4::text IS NULL OR leave_type = $4)%s`, orgSQL)
 
 	var total int
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, userID, status).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to count leave records", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, user_id, leave_type, start_date,
 			end_date, status, approved_by, notes, created_at, updated_at
 		FROM leave_records
 		WHERE tenant_id = $1
 			AND ($2::uuid IS NULL OR user_id = $2)
 			AND ($3::text IS NULL OR status = $3)
+			AND ($4::text IS NULL OR leave_type = $4)%s
 		ORDER BY start_date DESC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgSQL, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, userID, status, limit, offset)
+	dataArgs := append(countArgs, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list leave records", err)
 	}

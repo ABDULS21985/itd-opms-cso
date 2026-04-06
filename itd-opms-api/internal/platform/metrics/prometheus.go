@@ -38,6 +38,38 @@ var (
 		Help: "Total number of SLA breaches detected",
 	})
 
+	MajorIncidentsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "major_incidents_active",
+		Help: "Current number of active major incidents",
+	})
+
+	MajorIncidentsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "major_incidents_total",
+		Help: "Total number of declared major incidents",
+	}, []string{"severity"})
+
+	MajorIncidentDurationMinutes = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "major_incident_duration_minutes",
+		Help:    "Duration of resolved major incidents in minutes",
+		Buckets: []float64{5, 15, 30, 60, 120, 240, 480, 720, 1440, 2880},
+	})
+
+	DiscoveryRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "discovery_runs_total",
+		Help: "Total number of discovery runs by scan type and terminal status",
+	}, []string{"scan_type", "status"})
+
+	DiscoveryDevicesFound = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "discovery_devices_found",
+		Help: "Most recent device count discovered per scan type",
+	}, []string{"scan_type"})
+
+	DiscoveryDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "discovery_duration_seconds",
+		Help:    "Discovery run duration in seconds by scan type",
+		Buckets: []float64{0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600},
+	}, []string{"scan_type"})
+
 	NATSMessagesPublished = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "nats_messages_published_total",
 		Help: "Total NATS messages published",
@@ -47,6 +79,28 @@ var (
 		Name: "nats_messages_consumed_total",
 		Help: "Total NATS messages consumed",
 	}, []string{"subject"})
+
+	// License enforcement metrics
+	LicenseActiveSessions = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "license_active_sessions",
+		Help: "Current number of active licensed sessions",
+	})
+
+	LicenseUtilizationRatio = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "license_utilization_ratio",
+		Help: "Ratio of active sessions to max licensed sessions (0.0-1.0)",
+	})
+
+	// SIEM export metrics
+	SIEMEventsExportedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "siem_events_exported_total",
+		Help: "Total number of audit events exported to SIEM",
+	})
+
+	SIEMExportErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "siem_export_errors_total",
+		Help: "Total number of SIEM export errors",
+	})
 )
 
 // Handler returns the Prometheus metrics HTTP handler.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
+	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
 // OverdueStats provides overdue action statistics for the tenant dashboard.
@@ -123,33 +124,49 @@ func (s *MeetingService) GetMeeting(ctx context.Context, tenantID, meetingID uui
 
 // ListMeetings returns a paginated list of meetings, optionally filtered by status.
 func (s *MeetingService) ListMeetings(ctx context.Context, tenantID uuid.UUID, status string, limit, offset int) ([]Meeting, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
 	var statusParam *string
 	if status != "" {
 		statusParam = &status
 	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status.
+	args := []interface{}{tenantID, statusParam}
+	nextIdx := 3
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)`
+			AND ($2::text IS NULL OR status = $2)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count meetings", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at
 		FROM meetings
 		WHERE tenant_id = $1
-			AND ($2::text IS NULL OR status = $2)
+			AND ($2::text IS NULL OR status = $2)%s
 		ORDER BY scheduled_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list meetings", err)
 	}
@@ -191,8 +208,9 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 			duration_minutes = COALESCE($7, duration_minutes),
 			recurrence_rule = COALESCE($8, recurrence_rule),
 			template_agenda = COALESCE($9, template_agenda),
-			attendee_ids = COALESCE($10, attendee_ids)
-		WHERE id = $11 AND tenant_id = $12
+			attendee_ids = COALESCE($10, attendee_ids),
+			status = COALESCE($11, status)
+		WHERE id = $12 AND tenant_id = $13
 		RETURNING id, tenant_id, title, meeting_type, agenda, minutes, location,
 			scheduled_at, duration_minutes, recurrence_rule, template_agenda,
 			attendee_ids, organizer_id, status, created_at`
@@ -201,7 +219,7 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, tenantID, meetingID 
 	err := s.pool.QueryRow(ctx, query,
 		req.Title, req.MeetingType, req.Agenda, req.Minutes, req.Location,
 		req.ScheduledAt, req.DurationMinutes, req.RecurrenceRule, req.TemplateAgenda,
-		req.AttendeeIDs,
+		req.AttendeeIDs, req.Status,
 		meetingID, tenantID,
 	).Scan(
 		&m.ID, &m.TenantID, &m.Title, &m.MeetingType, &m.Agenda, &m.Minutes, &m.Location,
@@ -248,11 +266,14 @@ func (s *MeetingService) UpdateMeetingStatus(ctx context.Context, tenantID, meet
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting.status_changed",
 		EntityType: "meeting",
 		EntityID:   meetingID,
@@ -312,6 +333,7 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"decision_number": decisionNumber,
 		"title":           req.Title,
@@ -319,6 +341,8 @@ func (s *MeetingService) CreateDecision(ctx context.Context, tenantID, meetingID
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.created",
 		EntityType: "meeting_decision",
 		EntityID:   id,
@@ -381,10 +405,14 @@ func (s *MeetingService) UpdateDecisionStatus(ctx context.Context, decisionID uu
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"new_status": status,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "meeting_decision.status_changed",
 		EntityType: "meeting_decision",
 		EntityID:   decisionID,
@@ -429,6 +457,7 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"title":       req.Title,
 		"source_type": req.SourceType,
@@ -438,6 +467,8 @@ func (s *MeetingService) CreateActionItem(ctx context.Context, tenantID uuid.UUI
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.created",
 		EntityType: "action_item",
 		EntityID:   id,
@@ -474,29 +505,57 @@ func (s *MeetingService) GetActionItem(ctx context.Context, tenantID, actionID u
 	return &a, nil
 }
 
-// ListActionItems returns a paginated list of action items, optionally filtered by status and owner.
-func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID string, limit, offset int) ([]ActionItem, int64, error) {
-	var statusParam, ownerParam *string
+// ListActionItems returns a paginated list of action items, optionally filtered by status, owner,
+// sourceType, sourceId, and priority.
+func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID, status, ownerID, sourceType, sourceID, priority string, limit, offset int) ([]ActionItem, int64, error) {
+	auth := types.GetAuthContext(ctx)
+
+	var statusParam, ownerParam, sourceTypeParam, sourceIDParam, priorityParam *string
 	if status != "" {
 		statusParam = &status
 	}
 	if ownerID != "" {
 		ownerParam = &ownerID
 	}
+	if sourceType != "" {
+		sourceTypeParam = &sourceType
+	}
+	if sourceID != "" {
+		sourceIDParam = &sourceID
+	}
+	if priority != "" {
+		priorityParam = &priority
+	}
 
-	countQuery := `
+	// Build base args: $1=tenantID, $2=status, $3=ownerID, $4=sourceType, $5=sourceID, $6=priority.
+	args := []interface{}{tenantID, statusParam, ownerParam, sourceTypeParam, sourceIDParam, priorityParam}
+	nextIdx := 7
+
+	// Add org scope filter.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "org_unit_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM action_items
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
-			AND ($3::text IS NULL OR owner_id::text = $3)`
+			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($4::text IS NULL OR source_type = $4)
+			AND ($5::text IS NULL OR source_id::text = $5)
+			AND ($6::text IS NULL OR priority = $6)%s`, orgClause)
 
 	var total int64
-	if err := s.pool.QueryRow(ctx, countQuery, tenantID, statusParam, ownerParam).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.Internal("failed to count action items", err)
 	}
 
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT id, tenant_id, source_type, source_id, title,
 			description, owner_id, due_date, status,
 			completion_evidence, completed_at, priority, created_at
@@ -504,10 +563,14 @@ func (s *MeetingService) ListActionItems(ctx context.Context, tenantID uuid.UUID
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR status = $2)
 			AND ($3::text IS NULL OR owner_id::text = $3)
+			AND ($4::text IS NULL OR source_type = $4)
+			AND ($5::text IS NULL OR source_id::text = $5)
+			AND ($6::text IS NULL OR priority = $6)%s
 		ORDER BY due_date ASC
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, tenantID, statusParam, ownerParam, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, apperrors.Internal("failed to list action items", err)
 	}
@@ -570,11 +633,14 @@ func (s *MeetingService) UpdateActionItem(ctx context.Context, tenantID, actionI
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.updated",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -646,12 +712,15 @@ func (s *MeetingService) CompleteActionItem(ctx context.Context, tenantID, actio
 	}
 
 	// Log audit event.
+	auth := types.GetAuthContext(ctx)
 	changes, _ := json.Marshal(map[string]any{
 		"status":       ActionStatusCompleted,
 		"completed_at": now,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,
+		ActorID:    auth.UserID,
+		ActorRole:  firstRole(auth.Roles),
 		Action:     "action_item.completed",
 		EntityType: "action_item",
 		EntityID:   actionID,
@@ -822,4 +891,12 @@ func (s *MeetingService) GetOverdueActionsByOwner(ctx context.Context, tenantID,
 	}
 
 	return items, nil
+}
+
+// firstRole returns the first role from a slice, or "unknown" if empty.
+func firstRole(roles []string) string {
+	if len(roles) > 0 {
+		return roles[0]
+	}
+	return "unknown"
 }

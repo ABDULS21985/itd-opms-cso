@@ -206,3 +206,135 @@ func TestCorrelationID_EmptyString(t *testing.T) {
 		t.Errorf("expected empty string, got %q", got)
 	}
 }
+
+// ──────────────────────────────────────────────
+// HasOrgAccess (AC-001 through AC-005)
+// ──────────────────────────────────────────────
+
+func TestHasOrgAccess_GlobalScope(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: true,
+		VisibleOrgIDs: nil,
+	}
+	// AC-001: Global scope user can access any org unit.
+	anyOrgID := uuid.New()
+	if !auth.HasOrgAccess(anyOrgID) {
+		t.Error("expected HasOrgAccess to return true for global scope user")
+	}
+}
+
+func TestHasOrgAccess_NilOrgUnit(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{uuid.New()},
+	}
+	// AC-002: uuid.Nil org unit means tenant-visible → always accessible.
+	if !auth.HasOrgAccess(uuid.Nil) {
+		t.Error("expected HasOrgAccess to return true for uuid.Nil (tenant-visible record)")
+	}
+}
+
+func TestHasOrgAccess_InVisibleList(t *testing.T) {
+	orgA := uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000001")
+	orgB := uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002")
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{orgA, orgB},
+	}
+	// AC-003: Org unit present in visible list.
+	if !auth.HasOrgAccess(orgA) {
+		t.Error("expected HasOrgAccess to return true for org unit in visible list")
+	}
+	if !auth.HasOrgAccess(orgB) {
+		t.Error("expected HasOrgAccess to return true for second org unit in visible list")
+	}
+}
+
+func TestHasOrgAccess_NotInVisibleList(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{
+			uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000001"),
+			uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002"),
+		},
+	}
+	// AC-004: Org unit NOT in visible list.
+	outsideOrgID := uuid.MustParse("bbbbbbbb-0000-0000-0000-000000000099")
+	if auth.HasOrgAccess(outsideOrgID) {
+		t.Error("expected HasOrgAccess to return false for org unit outside visible list")
+	}
+}
+
+func TestHasOrgAccess_EmptyVisibleList(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{},
+	}
+	// AC-005: Empty visible list + non-nil orgUnitID.
+	someOrgID := uuid.New()
+	if auth.HasOrgAccess(someOrgID) {
+		t.Error("expected HasOrgAccess to return false with empty visible list")
+	}
+}
+
+func TestHasOrgAccess_NilVisibleList(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: nil,
+	}
+	someOrgID := uuid.New()
+	if auth.HasOrgAccess(someOrgID) {
+		t.Error("expected HasOrgAccess to return false with nil visible list")
+	}
+}
+
+// ──────────────────────────────────────────────
+// OrgScopeFilter (AC-006 through AC-008)
+// ──────────────────────────────────────────────
+
+func TestOrgScopeFilter_GlobalScope(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: true,
+		VisibleOrgIDs: []uuid.UUID{uuid.New()},
+	}
+	// AC-006: Global scope returns nil (no filter needed).
+	filter := auth.OrgScopeFilter()
+	if filter != nil {
+		t.Errorf("expected nil filter for global scope, got %v", filter)
+	}
+}
+
+func TestOrgScopeFilter_ScopedUser(t *testing.T) {
+	orgA := uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000001")
+	orgB := uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002")
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{orgA, orgB},
+	}
+	// AC-007: Scoped user returns VisibleOrgIDs.
+	filter := auth.OrgScopeFilter()
+	if filter == nil {
+		t.Fatal("expected non-nil filter for scoped user")
+	}
+	if len(filter) != 2 {
+		t.Errorf("expected 2 IDs in filter, got %d", len(filter))
+	}
+	if filter[0] != orgA || filter[1] != orgB {
+		t.Errorf("expected filter to match VisibleOrgIDs, got %v", filter)
+	}
+}
+
+func TestOrgScopeFilter_EmptyScope(t *testing.T) {
+	auth := &types.AuthContext{
+		IsGlobalScope: false,
+		VisibleOrgIDs: []uuid.UUID{},
+	}
+	// AC-008: Empty visible list returns empty (not nil) slice.
+	filter := auth.OrgScopeFilter()
+	if filter == nil {
+		t.Error("expected non-nil (empty) slice for scoped user with no visible orgs")
+	}
+	if len(filter) != 0 {
+		t.Errorf("expected 0 IDs in filter, got %d", len(filter))
+	}
+}

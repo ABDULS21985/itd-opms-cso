@@ -9,10 +9,128 @@ import type {
   ReportRun,
   GlobalSearchResults,
   SavedSearch,
+  SearchEntityType,
   PaginatedResponse,
   ProjectDivisionAssignment,
   DivisionAssignmentLog,
 } from "@/types";
+
+/* ================================================================== */
+/*  Shared request input types — mirror backend DTOs exactly           */
+/* ================================================================== */
+
+export interface CreateReportDefinitionInput {
+  name: string;
+  type: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+}
+
+export interface UpdateReportDefinitionInput {
+  name?: string;
+  type?: string;
+  description?: string;
+  scheduleCron?: string;
+  recipients?: string[];
+  template?: Record<string, unknown>;
+  isActive?: boolean;
+}
+
+/* ================================================================== */
+/*  Activity Feed — Types & Queries                                      */
+/* ================================================================== */
+
+export interface ActivityFeedItem {
+  id: string;
+  type:
+    | "ticket.created"
+    | "ticket.resolved"
+    | "ticket.escalated"
+    | "project.status_changed"
+    | "risk.identified"
+    | "risk.mitigated"
+    | "asset.deployed"
+    | "asset.decommissioned"
+    | "policy.approved"
+    | "policy.expired"
+    | "sla.breached";
+  actor: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  description: string;
+  entity: {
+    type: "ticket" | "project" | "risk" | "asset" | "policy" | "sla";
+    id: string;
+    label: string;
+    href: string;
+  };
+  timestamp: string;
+}
+
+export interface ActivityFeedResponse {
+  data: ActivityFeedItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * GET /reporting/dashboards/activity-feed - recent activity across all modules.
+ */
+export function useRecentActivity(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["activity-feed", page, limit],
+    queryFn: () =>
+      apiClient.get<ActivityFeedResponse>(
+        "/reporting/dashboards/activity-feed",
+        { page, limit },
+      ),
+    refetchInterval: 30 * 1000, // Poll every 30s for near-realtime feel
+  });
+}
+
+export interface MyTasksSummary {
+  openTickets: { count: number; items: Array<{ id: string; title: string; href: string; priority: string }> };
+  tasksDueThisWeek: { count: number; items: Array<{ id: string; title: string; href: string; dueDate: string }> };
+  pendingApprovals: { count: number; items: Array<{ id: string; title: string; href: string; type: string }> };
+  overdueItems: { count: number; items: Array<{ id: string; title: string; href: string; dueDate: string }> };
+}
+
+/**
+ * GET /reporting/dashboards/my-tasks - current user's assigned items with detail arrays.
+ */
+export function useMyTasks() {
+  return useQuery({
+    queryKey: ["my-tasks"],
+    queryFn: () =>
+      apiClient.get<MyTasksSummary>("/reporting/dashboards/my-tasks"),
+    refetchInterval: 60 * 1000,
+  });
+}
+
+export interface UpcomingEvent {
+  id: string;
+  title: string;
+  type: "deadline" | "meeting" | "milestone" | "expiration";
+  date: string;
+  href?: string;
+}
+
+/**
+ * GET /reporting/dashboards/upcoming - next upcoming events/deadlines.
+ */
+export function useUpcomingEvents(limit = 5) {
+  return useQuery({
+    queryKey: ["upcoming-events", limit],
+    queryFn: () =>
+      apiClient.get<UpcomingEvent[]>("/reporting/dashboards/upcoming", { limit }),
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
 
 /* ================================================================== */
 /*  Executive Dashboard — Queries                                        */
@@ -26,6 +144,7 @@ export function useExecutiveSummary() {
     queryKey: ["executive-summary"],
     queryFn: () =>
       apiClient.get<ExecutiveSummary>("/reporting/dashboards/executive"),
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -106,15 +225,42 @@ export function useAssetsByStatus() {
 }
 
 /**
+ * Convert a shorthand time range (e.g. "7d", "30d", "90d", "today") to an
+ * RFC3339 date string the backend expects.
+ */
+function resolveTimeRange(range?: string): string | undefined {
+  if (!range) return undefined;
+  const now = new Date();
+  switch (range) {
+    case "today":
+      now.setHours(0, 0, 0, 0);
+      return now.toISOString();
+    case "7d":
+      now.setDate(now.getDate() - 7);
+      return now.toISOString();
+    case "30d":
+      now.setDate(now.getDate() - 30);
+      return now.toISOString();
+    case "90d":
+      now.setDate(now.getDate() - 90);
+      return now.toISOString();
+    default:
+      // Already RFC3339 or unknown — pass through
+      return range;
+  }
+}
+
+/**
  * GET /reporting/dashboards/charts/sla-compliance - SLA compliance rate.
  */
 export function useSLACompliance(since?: string) {
+  const resolvedSince = resolveTimeRange(since);
   return useQuery({
     queryKey: ["chart-sla-compliance", since],
     queryFn: () =>
       apiClient.get<SLAComplianceRate>(
         "/reporting/dashboards/charts/sla-compliance",
-        { since },
+        { since: resolvedSince },
       ),
   });
 }
@@ -354,11 +500,13 @@ export function useReportDefinition(id: string | undefined) {
 
 /**
  * POST /reporting/reports - create a report definition.
+ * Payload maps to backend CreateReportDefinitionRequest: name (required), type (required),
+ * description, scheduleCron, recipients (UUID strings), template.
  */
 export function useCreateReportDefinition() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: CreateReportDefinitionInput) =>
       apiClient.post<ReportDefinition>("/reporting/reports", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
@@ -371,12 +519,13 @@ export function useCreateReportDefinition() {
 }
 
 /**
- * PUT /reporting/reports/{id} - update a report definition.
+ * PUT /reporting/reports/{id} - update a report definition (partial update via COALESCE).
+ * Payload maps to backend UpdateReportDefinitionRequest: all fields optional.
  */
 export function useUpdateReportDefinition(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ReportDefinition>) =>
+    mutationFn: (body: UpdateReportDefinitionInput) =>
       apiClient.put<ReportDefinition>(`/reporting/reports/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report-definitions"] });
@@ -481,7 +630,7 @@ export function useReportRuns(
 /**
  * GET /reporting/search?q=...&types=... - global search across entities.
  */
-export function useGlobalSearch(query: string, entityTypes?: string[]) {
+export function useGlobalSearch(query: string, entityTypes?: SearchEntityType[]) {
   return useQuery({
     queryKey: ["global-search", query, entityTypes],
     queryFn: () =>
@@ -490,6 +639,21 @@ export function useGlobalSearch(query: string, entityTypes?: string[]) {
         types: entityTypes?.join(","),
       }),
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * POST /reporting/search/saved (isSaved=false) - silently record a search into
+ * recent-search history. Called automatically on every settled search; no toast.
+ */
+export function useRecordRecentSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { query: string; entityTypes?: SearchEntityType[] }) =>
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recent-searches"] });
+    },
   });
 }
 
@@ -526,7 +690,7 @@ export function useSaveSearch() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { query: string; entityTypes?: string[] }) =>
-      apiClient.post<SavedSearch>("/reporting/search/saved", body),
+      apiClient.post<SavedSearch>("/reporting/search/saved", { ...body, isSaved: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
       queryClient.invalidateQueries({ queryKey: ["recent-searches"] });

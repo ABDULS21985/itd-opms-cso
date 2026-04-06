@@ -1,16 +1,19 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -26,84 +29,167 @@ type TokenPair struct {
 
 // UserProfile represents the authenticated user's profile data.
 type UserProfile struct {
-	ID          uuid.UUID `json:"id"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"displayName"`
-	TenantID    uuid.UUID `json:"tenantId"`
-	JobTitle    *string   `json:"jobTitle,omitempty"`
-	Department  *string   `json:"department,omitempty"`
-	Office      *string   `json:"office,omitempty"`
-	Unit        *string   `json:"unit,omitempty"`
-	Roles       []string  `json:"roles"`
-	Permissions []string  `json:"permissions"`
+	ID          uuid.UUID  `json:"id"`
+	Email       string     `json:"email"`
+	DisplayName string     `json:"displayName"`
+	TenantID    uuid.UUID  `json:"tenantId"`
+	TenantName  string     `json:"tenantName"`
+	JobTitle    *string    `json:"jobTitle,omitempty"`
+	Department  *string    `json:"department,omitempty"`
+	Office      *string    `json:"office,omitempty"`
+	Unit        *string    `json:"unit,omitempty"`
+	Phone       *string    `json:"phone,omitempty"`
+	PhotoURL    *string    `json:"photoUrl,omitempty"`
+	Roles       []string   `json:"roles"`
+	Permissions []string   `json:"permissions"`
+	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
+	OrgLevel    string     `json:"orgLevel,omitempty"`
+	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
+	CreatedAt   *time.Time `json:"createdAt,omitempty"`
+}
+
+// UpdateProfileRequest is the payload for self-service profile updates.
+type UpdateProfileRequest struct {
+	DisplayName *string `json:"displayName"`
+	JobTitle    *string `json:"jobTitle"`
+	Department  *string `json:"department"`
+	Office      *string `json:"office"`
+	Unit        *string `json:"unit"`
+	Phone       *string `json:"phone"`
 }
 
 // LoginResponse is the full response returned on successful login.
 type LoginResponse struct {
-	AccessToken  string      `json:"accessToken"`
-	RefreshToken string      `json:"refreshToken"`
-	User         UserProfile `json:"user"`
+	AccessToken            string      `json:"accessToken"`
+	RefreshToken           string      `json:"refreshToken"`
+	User                   UserProfile `json:"user"`
+	PasswordChangeRequired bool        `json:"passwordChangeRequired,omitempty"`
+}
+
+// MFALoginResponse is returned when MFA is required after password validation.
+type MFALoginResponse struct {
+	MFARequired bool      `json:"mfaRequired"`
+	ChallengeID string    `json:"challengeId,omitempty"`
+	Methods     []string  `json:"methods"`
+	UserID      uuid.UUID `json:"-"` // internal use only
 }
 
 // AuthService handles authentication logic: login, token refresh, and logout.
 type AuthService struct {
-	pool   *pgxpool.Pool
-	jwtCfg config.JWTConfig
+	pool     *pgxpool.Pool
+	jwtCfg   config.JWTConfig
+	minio    *minio.Client
+	minioCfg config.MinIOConfig
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig) *AuthService {
+func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig, minioClient *minio.Client, minioCfg config.MinIOConfig) *AuthService {
 	return &AuthService{
-		pool:   pool,
-		jwtCfg: jwtCfg,
+		pool:     pool,
+		jwtCfg:   jwtCfg,
+		minio:    minioClient,
+		minioCfg: minioCfg,
 	}
 }
 
-// Login authenticates a user by email and password, returning a token pair
-// and user profile on success. Uses raw pgx queries.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, error) {
+// Login authenticates a user by email and password. If MFA is enabled,
+// returns (nil, &MFALoginResponse, nil). Otherwise returns (*LoginResponse, nil, nil).
+func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, *MFALoginResponse, error) {
 	// Find the user by email.
 	var (
 		userID       uuid.UUID
 		tenantID     uuid.UUID
+		tenantName   string
 		displayName  string
 		passwordHash *string
 		jobTitle     *string
 		department   *string
 		office       *string
 		unit         *string
+		phone        *string
+		photoURL     *string
+		orgUnitID    *uuid.UUID
+		orgLevel     *string
+		lastLoginAt  *time.Time
+		createdAt    *time.Time
+		mfaEnabled   bool
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, display_name, password_hash, job_title, department, office, unit
-		 FROM users WHERE email = $1 AND is_active = true`,
+		`SELECT u.id, u.tenant_id, t.name, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at,
+		        COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false)
+		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &displayName, &passwordHash, &jobTitle, &department, &office, &unit)
+	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt, &mfaEnabled)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, apperrors.Unauthorized("Invalid email or password")
+			return nil, nil, apperrors.Unauthorized("Invalid email or password")
 		}
-		return nil, apperrors.Internal("Failed to query user", err)
+		return nil, nil, apperrors.Internal("Failed to query user", err)
 	}
 
 	// Verify password.
 	if passwordHash == nil || *passwordHash == "" {
-		return nil, apperrors.Unauthorized("Invalid email or password")
+		return nil, nil, apperrors.Unauthorized("Invalid email or password")
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(password)); err != nil {
-		return nil, apperrors.Unauthorized("Invalid email or password")
+		return nil, nil, apperrors.Unauthorized("Invalid email or password")
 	}
 
+	// Check if user must change their password.
+	var forceChange bool
+	_ = s.pool.QueryRow(ctx,
+		`SELECT force_password_change FROM users WHERE id = $1`,
+		userID,
+	).Scan(&forceChange)
+
+	// If MFA is enabled, return MFA challenge response (no tokens issued yet).
+	if mfaEnabled {
+		// Fetch configured MFA method types
+		rows, err := s.pool.Query(ctx,
+			`SELECT DISTINCT method_type FROM user_mfa_methods
+			 WHERE user_id = $1 AND is_verified = true`,
+			userID,
+		)
+		if err != nil {
+			return nil, nil, apperrors.Internal("Failed to fetch MFA methods", err)
+		}
+		defer rows.Close()
+
+		var methods []string
+		for rows.Next() {
+			var m string
+			if err := rows.Scan(&m); err == nil {
+				methods = append(methods, m)
+			}
+		}
+		if len(methods) == 0 {
+			// MFA flag is on but no methods configured — allow login (shouldn't happen)
+			mfaEnabled = false
+		} else {
+			return nil, &MFALoginResponse{
+				MFARequired: true,
+				Methods:     methods,
+				UserID:      userID,
+			}, nil
+		}
+	}
+
+	// No MFA — issue tokens directly.
 	// Fetch roles and aggregate permissions.
 	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
 	if err != nil {
-		return nil, apperrors.Internal("Failed to fetch user roles", err)
+		return nil, nil, apperrors.Internal("Failed to fetch user roles", err)
 	}
 
 	// Generate tokens.
 	accessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
 	if err != nil {
-		return nil, apperrors.Internal("Failed to generate access token", err)
+		return nil, nil, apperrors.Internal("Failed to generate access token", err)
 	}
 
 	refreshToken := GenerateRefreshToken()
@@ -118,27 +204,125 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	)
 	if err != nil {
 		slog.Error("failed to save refresh token", "error", err.Error(), "user_id", userID)
-		return nil, apperrors.Internal("Failed to create session", err)
+		return nil, nil, apperrors.Internal("Failed to create session", err)
 	}
 
 	// Update last login timestamp.
 	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
 
+	now := time.Now()
+	profile := UserProfile{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		TenantID:    tenantID,
+		TenantName:  tenantName,
+		JobTitle:    jobTitle,
+		Department:  department,
+		Office:      office,
+		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
+		Roles:       roles,
+		Permissions: permissions,
+		OrgUnitID:   orgUnitID,
+		LastLoginAt: &now,
+		CreatedAt:   createdAt,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
+	return &LoginResponse{
+		AccessToken:            accessToken,
+		RefreshToken:           refreshToken,
+		User:                   profile,
+		PasswordChangeRequired: forceChange,
+	}, nil, nil
+}
+
+// GenerateLoginTokens creates a full LoginResponse for a user (used after MFA verification).
+func (s *AuthService) GenerateLoginTokens(ctx context.Context, userID uuid.UUID) (*LoginResponse, error) {
+	var (
+		email       string
+		tenantID    uuid.UUID
+		tenantName  string
+		displayName string
+		jobTitle    *string
+		department  *string
+		office      *string
+		unit        *string
+		phone       *string
+		photoURL    *string
+		orgUnitID   *uuid.UUID
+		orgLevel    *string
+		createdAt   *time.Time
+	)
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT u.email, u.tenant_id, t.name, u.display_name, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.created_at
+		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.id = $1`,
+		userID,
+	).Scan(&email, &tenantID, &tenantName, &displayName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &createdAt)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user for token generation", err)
+	}
+
+	roles, permissions, err := s.getUserRolesAndPermissions(ctx, userID)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to fetch user roles", err)
+	}
+
+	accessToken, err := GenerateAccessToken(s.jwtCfg, userID, tenantID, email, roles, permissions)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to generate access token", err)
+	}
+
+	refreshToken := GenerateRefreshToken()
+	tokenHash := helpers.SHA256Checksum([]byte(refreshToken))
+	expiresAt := time.Now().Add(s.jwtCfg.RefreshExpiry)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, tokenHash, expiresAt,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to create session", err)
+	}
+
+	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_login_at = NOW() WHERE id = $1`, userID)
+
+	now := time.Now()
+	profile := UserProfile{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		TenantID:    tenantID,
+		TenantName:  tenantName,
+		JobTitle:    jobTitle,
+		Department:  department,
+		Office:      office,
+		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
+		Roles:       roles,
+		Permissions: permissions,
+		OrgUnitID:   orgUnitID,
+		LastLoginAt: &now,
+		CreatedAt:   createdAt,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
 	return &LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		User: UserProfile{
-			ID:          userID,
-			Email:       email,
-			DisplayName: displayName,
-			TenantID:    tenantID,
-			JobTitle:    jobTitle,
-			Department:  department,
-			Office:      office,
-			Unit:        unit,
-			Roles:       roles,
-			Permissions: permissions,
-		},
+		User:         profile,
 	}, nil
 }
 
@@ -298,24 +482,86 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
-// GetMe returns the user profile for the given user ID, including roles and
-// permissions.
+// ChangePassword updates the user's password and clears the force_password_change flag.
+// It verifies the current password before allowing the change.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	// Fetch current password hash.
+	var passwordHash *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT password_hash FROM users WHERE id = $1 AND is_active = true`,
+		userID,
+	).Scan(&passwordHash)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NotFound("user", userID.String())
+		}
+		return apperrors.Internal("Failed to fetch user", err)
+	}
+
+	// Verify current password.
+	if passwordHash == nil || *passwordHash == "" {
+		return apperrors.BadRequest("Account does not use password authentication")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(currentPassword)); err != nil {
+		return apperrors.Unauthorized("Current password is incorrect")
+	}
+
+	// Validate new password strength.
+	if len(newPassword) < 8 {
+		return apperrors.BadRequest("New password must be at least 8 characters")
+	}
+	if newPassword == currentPassword {
+		return apperrors.BadRequest("New password must be different from current password")
+	}
+
+	// Hash new password.
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperrors.Internal("Failed to hash password", err)
+	}
+
+	// Update password and clear force_password_change flag.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, force_password_change = false, updated_at = NOW() WHERE id = $2`,
+		string(hash), userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to update password", err)
+	}
+
+	slog.Info("password changed successfully", "user_id", userID)
+	return nil
+}
+
+// GetMe returns the user profile for the given user ID, including roles,
+// permissions, and org scope information.
 func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile, error) {
 	var (
 		email       string
 		displayName string
 		tenantID    uuid.UUID
+		tenantName  string
 		jobTitle    *string
 		department  *string
 		office      *string
 		unit        *string
+		phone       *string
+		photoURL    *string
+		orgUnitID   *uuid.UUID
+		orgLevel    *string
+		lastLoginAt *time.Time
+		createdAt   *time.Time
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT email, display_name, tenant_id, job_title, department, office, unit
-		 FROM users WHERE id = $1 AND is_active = true`,
+		`SELECT u.email, u.display_name, u.tenant_id, t.name, u.job_title, u.department, u.office, u.unit,
+		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
+		 FROM users u
+		 JOIN tenants t ON t.id = u.tenant_id
+		 LEFT JOIN org_units o ON o.id = u.org_unit_id
+		 WHERE u.id = $1 AND u.is_active = true`,
 		userID,
-	).Scan(&email, &displayName, &tenantID, &jobTitle, &department, &office, &unit)
+	).Scan(&email, &displayName, &tenantID, &tenantName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("user", userID.String())
@@ -328,18 +574,29 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 		return nil, apperrors.Internal("Failed to fetch user roles", err)
 	}
 
-	return &UserProfile{
+	profile := &UserProfile{
 		ID:          userID,
 		Email:       email,
 		DisplayName: displayName,
 		TenantID:    tenantID,
+		TenantName:  tenantName,
 		JobTitle:    jobTitle,
 		Department:  department,
 		Office:      office,
 		Unit:        unit,
+		Phone:       phone,
+		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
 		Roles:       roles,
 		Permissions: permissions,
-	}, nil
+		OrgUnitID:   orgUnitID,
+		LastLoginAt: lastLoginAt,
+		CreatedAt:   createdAt,
+	}
+	if orgLevel != nil {
+		profile.OrgLevel = *orgLevel
+	}
+
+	return profile, nil
 }
 
 // GetUserRolesAndPermissions is the exported version used by middleware and
@@ -421,6 +678,260 @@ func (s *AuthService) getUserRolesAndPermissions(ctx context.Context, userID uui
 	}
 
 	return roles, permissions, nil
+}
+
+// ForgotPassword generates a password reset token for the given email.
+// Returns the raw token (to be sent to the user) and an error.
+// If the email doesn't exist, returns nil error with empty token (no information leak).
+func (s *AuthService) ForgotPassword(ctx context.Context, email string) (string, error) {
+	// Look up user by email.
+	var userID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM users WHERE email = $1 AND is_active = true AND password_hash IS NOT NULL`,
+		email,
+	).Scan(&userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// Don't reveal whether the email exists.
+			return "", nil
+		}
+		return "", apperrors.Internal("Failed to look up user", err)
+	}
+
+	// Invalidate any existing unused tokens for this user.
+	_, _ = s.pool.Exec(ctx,
+		`UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+		userID,
+	)
+
+	// Generate a secure random token.
+	rawToken := GenerateRefreshToken() // Reuse the same secure random generator.
+	tokenHash := helpers.SHA256Checksum([]byte(rawToken))
+	expiresAt := time.Now().Add(30 * time.Minute)
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, tokenHash, expiresAt,
+	)
+	if err != nil {
+		return "", apperrors.Internal("Failed to create reset token", err)
+	}
+
+	slog.Info("password reset token generated", "user_id", userID, "email", email, "expires_at", expiresAt)
+	return rawToken, nil
+}
+
+// ResetPassword validates a reset token and sets a new password.
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if len(newPassword) < 8 {
+		return apperrors.BadRequest("New password must be at least 8 characters")
+	}
+
+	tokenHash := helpers.SHA256Checksum([]byte(token))
+
+	// Find and validate the token.
+	var tokenID, userID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, user_id FROM password_reset_tokens
+		 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()`,
+		tokenHash,
+	).Scan(&tokenID, &userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.BadRequest("Invalid or expired reset link. Please request a new password reset.")
+		}
+		return apperrors.Internal("Failed to validate reset token", err)
+	}
+
+	// Hash new password.
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperrors.Internal("Failed to hash password", err)
+	}
+
+	// Update password and mark token as used in a single transaction.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return apperrors.Internal("Failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
+		`UPDATE users SET password_hash = $1, force_password_change = false, updated_at = NOW() WHERE id = $2`,
+		string(hash), userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to update password", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`,
+		tokenID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to mark token as used", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.Internal("Failed to commit transaction", err)
+	}
+
+	// Revoke all existing refresh tokens for the user (force re-login).
+	_, _ = s.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND revoked = false`,
+		userID,
+	)
+
+	slog.Info("password reset completed", "user_id", userID)
+	return nil
+}
+
+// UpdateProfile updates the user's own profile fields.
+//
+// Semantics:
+//   - display_name: uses COALESCE so omitting it (nil) keeps the existing value.
+//     It cannot be cleared because it is required.
+//   - Optional nullable fields (job_title, department, office, unit, phone):
+//     assigned directly. A nil pointer stores NULL (clears the field); a non-nil
+//     pointer stores the provided string. The frontend sends null for fields the
+//     user explicitly cleared and omits nothing else.
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, req UpdateProfileRequest) (*UserProfile, error) {
+	// Validate display name if provided — it must not be blank.
+	if req.DisplayName != nil && strings.TrimSpace(*req.DisplayName) == "" {
+		return nil, apperrors.BadRequest("Display name cannot be empty")
+	}
+
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET
+			display_name = COALESCE($2, display_name),
+			job_title    = $3,
+			department   = $4,
+			office       = $5,
+			unit         = $6,
+			phone        = $7,
+			updated_at   = NOW()
+		 WHERE id = $1`,
+		userID,
+		req.DisplayName,
+		req.JobTitle,
+		req.Department,
+		req.Office,
+		req.Unit,
+		req.Phone,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("Failed to update profile", err)
+	}
+
+	return s.GetMe(ctx, userID)
+}
+
+// UploadProfilePhoto uploads a profile photo to MinIO and updates the user's photo_url.
+func (s *AuthService) UploadProfilePhoto(ctx context.Context, userID, tenantID uuid.UUID, fileBytes []byte, contentType, ext string) (string, error) {
+	if s.minio == nil {
+		return "", apperrors.Internal("File storage is not configured", nil)
+	}
+
+	objectKey := fmt.Sprintf("tenants/%s/profile-photos/%s%s", tenantID, userID, ext)
+
+	_, err := s.minio.PutObject(ctx, s.minioCfg.BucketAttachment, objectKey,
+		bytes.NewReader(fileBytes), int64(len(fileBytes)),
+		minio.PutObjectOptions{ContentType: contentType},
+	)
+	if err != nil {
+		return "", apperrors.Internal("Failed to upload photo", err)
+	}
+
+	// Update photo_url in database.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET photo_url = $2, updated_at = NOW() WHERE id = $1`,
+		userID, objectKey,
+	)
+	if err != nil {
+		// Try to clean up the uploaded object.
+		_ = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, objectKey, minio.RemoveObjectOptions{})
+		return "", apperrors.Internal("Failed to save photo reference", err)
+	}
+
+	slog.Info("profile photo uploaded", "user_id", userID, "object_key", objectKey)
+
+	// Return a presigned URL so the frontend can display it immediately.
+	resolved := s.resolvePhotoURL(ctx, &objectKey)
+	if resolved != nil {
+		return *resolved, nil
+	}
+	return objectKey, nil
+}
+
+// DeleteProfilePhoto removes the user's profile photo from MinIO and clears the DB field.
+func (s *AuthService) DeleteProfilePhoto(ctx context.Context, userID, tenantID uuid.UUID) error {
+	if s.minio == nil {
+		return apperrors.Internal("File storage is not configured", nil)
+	}
+
+	// Get current photo_url.
+	var photoURL *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT photo_url FROM users WHERE id = $1`,
+		userID,
+	).Scan(&photoURL)
+	if err != nil {
+		return apperrors.Internal("Failed to fetch user", err)
+	}
+
+	if photoURL == nil || *photoURL == "" {
+		return apperrors.BadRequest("No profile photo to delete")
+	}
+
+	// Remove from MinIO.
+	err = s.minio.RemoveObject(ctx, s.minioCfg.BucketAttachment, *photoURL, minio.RemoveObjectOptions{})
+	if err != nil {
+		slog.Warn("failed to remove photo from storage", "error", err, "object_key", *photoURL)
+	}
+
+	// Clear photo_url in database.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE users SET photo_url = NULL, updated_at = NOW() WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return apperrors.Internal("Failed to clear photo reference", err)
+	}
+
+	slog.Info("profile photo deleted", "user_id", userID)
+	return nil
+}
+
+// RevokeSessionByTokenHash marks the active_sessions record whose token_hash
+// matches hash(rawToken) as revoked. Both dev-JWT and OIDC sessions are stored
+// with hash(access_token) so this covers both authentication modes.
+// Errors are logged but not surfaced — logout must always succeed for the user.
+func (s *AuthService) RevokeSessionByTokenHash(ctx context.Context, rawToken string) {
+	tokenHash := helpers.SHA256Checksum([]byte(rawToken))
+	_, err := s.pool.Exec(ctx,
+		`UPDATE active_sessions
+		 SET is_revoked = true, revoked_at = NOW()
+		 WHERE token_hash = $1 AND NOT is_revoked`,
+		tokenHash,
+	)
+	if err != nil {
+		slog.Warn("failed to revoke active session by token hash", "error", err.Error())
+	}
+}
+
+// resolvePhotoURL replaces a raw MinIO object key with a presigned URL
+// so the frontend can display the image directly.
+func (s *AuthService) resolvePhotoURL(ctx context.Context, photoURL *string) *string {
+	if photoURL == nil || *photoURL == "" || s.minio == nil {
+		return nil
+	}
+	presigned, err := s.minio.PresignedGetObject(ctx, s.minioCfg.BucketAttachment, *photoURL, 24*time.Hour, url.Values{})
+	if err != nil {
+		slog.Warn("failed to generate presigned photo URL", "error", err, "key", *photoURL)
+		return nil
+	}
+	u := presigned.String()
+	return &u
 }
 
 // parsePermissions unmarshals a JSON array of permission strings and adds

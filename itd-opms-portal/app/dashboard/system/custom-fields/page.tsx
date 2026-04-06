@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings,
@@ -146,8 +146,8 @@ function FieldDialog({
   const [form, setForm] = useState<FieldFormData>(emptyFormData);
 
   // Reset form when dialog opens.
-  const prevOpenRef = useState(false);
-  if (open && !prevOpenRef[0]) {
+  const prevOpenRef = useRef(false);
+  if (open && !prevOpenRef.current) {
     if (editField) {
       setForm({
         fieldLabel: editField.fieldLabel,
@@ -169,7 +169,7 @@ function FieldDialog({
       setForm(emptyFormData);
     }
   }
-  prevOpenRef[0] = open;
+  prevOpenRef.current = open;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -733,7 +733,7 @@ export default function CustomFieldsPage() {
     (index: number) => {
       if (!definitions || index <= 0) return;
       const items = definitions.map(
-        (d: CustomFieldDefinition, i: number) => ({
+        (d: CustomFieldDefinition, _i: number) => ({
           id: d.id,
           displayOrder: d.displayOrder,
         }),
@@ -751,7 +751,7 @@ export default function CustomFieldsPage() {
     (index: number) => {
       if (!definitions || index >= definitions.length - 1) return;
       const items = definitions.map(
-        (d: CustomFieldDefinition, i: number) => ({
+        (d: CustomFieldDefinition, _i: number) => ({
           id: d.id,
           displayOrder: d.displayOrder,
         }),

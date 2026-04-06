@@ -83,8 +83,8 @@ services:
     image: minio/minio:latest
     container_name: opms-minio
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # Web Console
+      - "9010:9000" # S3 API on host
+      - "9011:9001" # Web Console on host
     environment:
       MINIO_ROOT_USER: opms_minio
       MINIO_ROOT_PASSWORD: opms_minio_secret
@@ -124,6 +124,10 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: opms-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=90d"
+      - "--storage.tsdb.retention.size=5GB"
     ports:
       - "9090:9090"
     volumes:

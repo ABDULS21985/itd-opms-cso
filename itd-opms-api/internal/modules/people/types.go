@@ -424,12 +424,14 @@ type UpdateCapacityAllocationRequest struct {
 
 // CreateTrainingRecordRequest is the payload for creating a training record.
 type CreateTrainingRecordRequest struct {
-	UserID     uuid.UUID  `json:"userId" validate:"required"`
-	Title      string     `json:"title" validate:"required"`
-	Provider   *string    `json:"provider,omitempty"`
-	Type       string     `json:"type" validate:"required"`
-	Cost       *float64   `json:"cost,omitempty"`
-	ExpiryDate *time.Time `json:"expiryDate,omitempty"`
+	UserID      uuid.UUID  `json:"userId" validate:"required"`
+	Title       string     `json:"title" validate:"required"`
+	Provider    *string    `json:"provider,omitempty"`
+	Type        string     `json:"type" validate:"required"`
+	Status      *string    `json:"status,omitempty"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+	Cost        *float64   `json:"cost,omitempty"`
+	ExpiryDate  *time.Time `json:"expiryDate,omitempty"`
 }
 
 // UpdateTrainingRecordRequest is the payload for updating a training record.

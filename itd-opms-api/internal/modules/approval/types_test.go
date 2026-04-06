@@ -321,12 +321,11 @@ func TestApprovalDelegationJSONRoundTrip(t *testing.T) {
 	original := ApprovalDelegation{
 		ID:          uuid.New(),
 		TenantID:    uuid.New(),
-		FromUserID:  uuid.New(),
-		ToUserID:    uuid.New(),
+		DelegatedBy: uuid.New(),
+		DelegatedTo: uuid.New(),
 		StepID:      uuid.New(),
-		ChainID:     uuid.New(),
 		Reason:      &reason,
-		DelegatedAt: now,
+		CreatedAt:   now,
 	}
 
 	data, err := json.Marshal(original)
@@ -342,11 +341,11 @@ func TestApprovalDelegationJSONRoundTrip(t *testing.T) {
 	if decoded.ID != original.ID {
 		t.Errorf("ID mismatch")
 	}
-	if decoded.FromUserID != original.FromUserID {
-		t.Errorf("FromUserID mismatch")
+	if decoded.DelegatedBy != original.DelegatedBy {
+		t.Errorf("DelegatedBy mismatch")
 	}
-	if decoded.ToUserID != original.ToUserID {
-		t.Errorf("ToUserID mismatch")
+	if decoded.DelegatedTo != original.DelegatedTo {
+		t.Errorf("DelegatedTo mismatch")
 	}
 	if decoded.Reason == nil || *decoded.Reason != reason {
 		t.Errorf("Reason mismatch")

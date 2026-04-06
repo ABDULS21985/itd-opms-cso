@@ -69,6 +69,7 @@ function absTime(d: string): string {
 const toISO = (d: Date) => d.toISOString().split("T")[0];
 const today = () => toISO(new Date());
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const humanize = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 /** Shared Recharts tooltip style */
@@ -134,6 +135,7 @@ export default function AuditLogExplorerPage() {
   const [actorId, setActorId] = useState("");
   const [actorQuery, setActorQuery] = useState("");
   const [entityId, setEntityId] = useState("");
+  const [entityIdError, setEntityIdError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [applied, setApplied] = useState<Record<string, string | undefined>>({ dateFrom: daysAgo(30) });
 
@@ -158,6 +160,13 @@ export default function AuditLogExplorerPage() {
 
   /* -- Apply / Clear ----------------------------------------------- */
   const handleApply = useCallback(() => {
+    // Validate entityId: if provided it must be a full UUID (the backend
+    // uses uuid.Parse which rejects partial strings).
+    if (entityId && !UUID_RE.test(entityId)) {
+      setEntityIdError("Must be a full UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)");
+      return;
+    }
+    setEntityIdError("");
     setApplied({
       ...dateRange(),
       actorId: actorId || undefined, entityType: entityType || undefined,
@@ -170,7 +179,7 @@ export default function AuditLogExplorerPage() {
   const handleClear = useCallback(() => {
     setSearchInput(""); setDebouncedSearch(""); setDatePreset("last30");
     setCustomFrom(""); setCustomTo(""); setEntityType(""); setAction("");
-    setActorId(""); setActorQuery(""); setEntityId("");
+    setActorId(""); setActorQuery(""); setEntityId(""); setEntityIdError("");
     setApplied({ dateFrom: daysAgo(30) }); setPage(1);
   }, []);
 
@@ -223,9 +232,12 @@ export default function AuditLogExplorerPage() {
   const handleVerify = useCallback(() => {
     verifyMut.mutate({ dateFrom: applied.dateFrom, dateTo: applied.dateTo }, {
       onSuccess: (r) => {
-        r.failed === 0
-          ? toast.success(`Integrity verified: ${r.verified} events, 0 failures`)
-          : toast.error(`Integrity check: ${r.verified} verified, ${r.failed} failed`);
+        const failed = (r.totalEvents ?? 0) - (r.verified ?? 0);
+        if (r.valid) {
+          toast.success(`Integrity verified: ${r.verified} events, 0 failures`);
+        } else {
+          toast.error(`Integrity check: ${r.verified} verified, ${failed} failed${r.firstInvalid ? ` (first invalid: ${r.firstInvalid.slice(0, 8)}…)` : ""}`);
+        }
       },
     });
   }, [verifyMut, applied]);
@@ -451,9 +463,13 @@ export default function AuditLogExplorerPage() {
                 {/* Entity ID */}
                 <div>
                   <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Entity ID</label>
-                  <input type="text" placeholder="UUID or partial..." value={entityId}
-                    onChange={(e) => setEntityId(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm font-mono" style={inputSx} />
+                  <input type="text" placeholder="Full UUID (e.g. 550e8400-…)" value={entityId}
+                    onChange={(e) => { setEntityId(e.target.value); if (entityIdError) setEntityIdError(""); }}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm font-mono ${entityIdError ? "border-[var(--error)]" : ""}`}
+                    style={entityIdError ? { ...inputSx, borderColor: "var(--error)" } : inputSx} />
+                  {entityIdError && (
+                    <p className="mt-1 text-xs" style={{ color: "var(--error)" }}>{entityIdError}</p>
+                  )}
                 </div>
               </div>
             </motion.div>

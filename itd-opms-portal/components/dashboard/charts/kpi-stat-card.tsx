@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus, ExternalLink, type LucideIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { TrendingUp, TrendingDown, Minus, ExternalLink, Info, type LucideIcon } from "lucide-react";
 
 interface KPIStatCardProps {
   label: string;
@@ -17,6 +18,7 @@ interface KPIStatCardProps {
   trendValue?: string;
   subtitle?: string;
   href?: string;
+  hint?: string;
 }
 
 export function KPIStatCard({
@@ -32,7 +34,9 @@ export function KPIStatCard({
   trendValue,
   subtitle,
   href,
+  hint,
 }: KPIStatCardProps) {
+  const [showHint, setShowHint] = useState(false);
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
   const trendColor = trend === "up" ? "#22C55E" : trend === "down" ? "#EF4444" : "var(--text-muted)";
 
@@ -41,7 +45,7 @@ export function KPIStatCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.1 + index * 0.05 }}
-      className={`rounded-xl border p-4 ${href ? "transition-all hover:shadow-md hover:border-[var(--primary)]/30 cursor-pointer group" : ""}`}
+      className={`relative rounded-xl border p-4 ${href ? "transition-all hover:shadow-md hover:border-[var(--primary)]/30 cursor-pointer group" : ""}`}
       style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
     >
       <div className="flex items-center justify-between mb-2">
@@ -61,6 +65,33 @@ export function KPIStatCard({
                 </span>
               )}
             </>
+          )}
+          {hint && (
+            <button
+              type="button"
+              className="relative p-0.5 rounded-full transition-colors hover:bg-[var(--surface-2)]"
+              onMouseEnter={() => setShowHint(true)}
+              onMouseLeave={() => setShowHint(false)}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowHint((p) => !p); }}
+              aria-label={`Info: ${hint}`}
+            >
+              <Info size={13} className="text-[var(--text-muted)]" />
+              <AnimatePresence>
+                {showHint && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-1.5 z-50 w-52 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 shadow-lg"
+                  >
+                    <p className="text-[11px] leading-relaxed text-[var(--text-secondary)] text-left font-normal normal-case tracking-normal">
+                      {hint}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </button>
           )}
           {href && (
             <ExternalLink

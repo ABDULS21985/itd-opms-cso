@@ -61,7 +61,7 @@ export default function GRCHubPage() {
     "in_progress",
   );
   const { data: reviewsData, isLoading: reviewsLoading } =
-    useAccessReviewCampaigns(1, 1, "in_progress");
+    useAccessReviewCampaigns(1, 1, "active");
   const { data: controlsData, isLoading: controlsLoading } =
     useComplianceControls(1, 1);
 

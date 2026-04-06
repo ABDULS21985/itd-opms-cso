@@ -122,7 +122,7 @@ func (s *BudgetService) GetBudgetSummary(ctx context.Context, projectID uuid.UUI
 	// Category breakdown.
 	catQuery := `
 		SELECT
-			COALESCE(ce.category_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(ce.category_id, '00000000-0000-0000-0000-000000000000'::uuid),
 			COALESCE(cc.name, 'Uncategorised'),
 			COALESCE(SUM(CASE WHEN ce.entry_type = 'actual' THEN ce.amount ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ce.entry_type = 'committed' THEN ce.amount ELSE 0 END), 0),
@@ -670,7 +670,7 @@ func (s *BudgetService) ListBudgetSnapshots(ctx context.Context, projectID uuid.
 		SELECT
 			bs.id, bs.tenant_id, bs.project_id, bs.snapshot_date,
 			bs.approved_budget, bs.actual_spend, bs.committed_spend, bs.forecast_total,
-			bs.completion_pct, bs.notes, bs.created_by,
+			COALESCE(bs.completion_pct, 0), bs.notes, bs.created_by,
 			COALESCE(u.display_name, '') AS creator_name,
 			bs.created_at
 		FROM budget_snapshots bs
@@ -891,21 +891,34 @@ func (s *BudgetService) GetPortfolioBudgetSummary(
 		return PortfolioBudgetSummary{}, 0, apperrors.Unauthorized("authentication required")
 	}
 
+	// Build base args: $1=tenantID, $2=portfolioID, $3=status.
+	args := []interface{}{auth.TenantID, portfolioID, status}
+	nextIdx := 4
+
+	// Add org scope filter on division_id.
+	orgClause := ""
+	orgFilter, orgParam := types.BuildOrgFilter(auth, "p.division_id", nextIdx)
+	if orgFilter != "" {
+		orgClause = " AND " + orgFilter
+		args = append(args, orgParam)
+		nextIdx++
+	}
+
 	// Count matching projects.
-	countQuery := `
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
-		FROM projects
-		WHERE tenant_id = $1
-			AND ($2::uuid IS NULL OR portfolio_id = $2)
-			AND ($3::text IS NULL OR status = $3)`
+		FROM projects p
+		WHERE p.tenant_id = $1
+			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
+			AND ($3::text IS NULL OR p.status = $3)%s`, orgClause)
 	var total int64
-	err := s.pool.QueryRow(ctx, countQuery, auth.TenantID, portfolioID, status).Scan(&total)
+	err := s.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return PortfolioBudgetSummary{}, 0, apperrors.Internal("failed to count projects for portfolio budget", err)
 	}
 
 	// Fetch projects with budget data.
-	dataQuery := `
+	dataQuery := fmt.Sprintf(`
 		SELECT
 			p.id, p.title, p.code, p.status,
 			COALESCE(p.budget_approved, 0) AS approved_budget,
@@ -917,11 +930,12 @@ func (s *BudgetService) GetPortfolioBudgetSummary(
 		FROM projects p
 		WHERE p.tenant_id = $1
 			AND ($2::uuid IS NULL OR p.portfolio_id = $2)
-			AND ($3::text IS NULL OR p.status = $3)
+			AND ($3::text IS NULL OR p.status = $3)%s
 		ORDER BY p.title
-		LIMIT $4 OFFSET $5`
+		LIMIT $%d OFFSET $%d`, orgClause, nextIdx, nextIdx+1)
 
-	rows, err := s.pool.Query(ctx, dataQuery, auth.TenantID, portfolioID, status, limit, offset)
+	dataArgs := append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return PortfolioBudgetSummary{}, 0, apperrors.Internal("failed to get portfolio budget summary", err)
 	}

@@ -13,10 +13,11 @@ import {
   Check,
   Users,
 } from "lucide-react";
-import { toast } from "sonner";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PageSkeleton } from "@/components/shared/loading-skeleton";
+import { UserPicker, UserMultiPicker } from "@/components/shared/pickers";
+import type { SelectedEntity } from "@/components/shared/entity-multi-select";
 import {
   useRACIMatrix,
   useAddRACIEntry,
@@ -32,32 +33,23 @@ import type { RACIEntry } from "@/types";
 
 interface EntryFormState {
   activity: string;
-  responsibleIds: string;
+  responsible: SelectedEntity[];
   accountableId: string;
-  consultedIds: string;
-  informedIds: string;
+  accountableDisplay: string;
+  consulted: SelectedEntity[];
+  informed: SelectedEntity[];
   notes: string;
 }
 
 const emptyForm: EntryFormState = {
   activity: "",
-  responsibleIds: "",
+  responsible: [],
   accountableId: "",
-  consultedIds: "",
-  informedIds: "",
+  accountableDisplay: "",
+  consulted: [],
+  informed: [],
   notes: "",
 };
-
-/* ------------------------------------------------------------------ */
-/*  Helper: parse comma-separated UUIDs                                 */
-/* ------------------------------------------------------------------ */
-
-function parseIds(raw: string): string[] {
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -88,9 +80,7 @@ export default function RACIMatrixDetailPage() {
     const errs: Record<string, string> = {};
     if (!form.activity.trim()) errs.activity = "Activity is required";
     if (!form.accountableId.trim())
-      errs.accountableId = "Exactly one Accountable ID is required";
-    else if (form.accountableId.trim().includes(","))
-      errs.accountableId = "Only one Accountable ID is allowed";
+      errs.accountableId = "An Accountable person is required";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -105,10 +95,10 @@ export default function RACIMatrixDetailPage() {
 
     const body: Partial<RACIEntry> = {
       activity: form.activity.trim(),
-      responsibleIds: parseIds(form.responsibleIds),
+      responsibleIds: form.responsible.map((r) => r.id),
       accountableId: form.accountableId.trim(),
-      consultedIds: parseIds(form.consultedIds),
-      informedIds: parseIds(form.informedIds),
+      consultedIds: form.consulted.map((c) => c.id),
+      informedIds: form.informed.map((i) => i.id),
       notes: form.notes.trim() || undefined,
     };
 
@@ -140,10 +130,20 @@ export default function RACIMatrixDetailPage() {
   function startEdit(entry: RACIEntry) {
     setForm({
       activity: entry.activity,
-      responsibleIds: entry.responsibleIds.join(", "),
+      responsible: entry.responsibleIds.map((id, i) => ({
+        id,
+        label: entry.responsibleNames?.[i] ?? id,
+      })),
       accountableId: entry.accountableId,
-      consultedIds: entry.consultedIds?.join(", ") ?? "",
-      informedIds: entry.informedIds?.join(", ") ?? "",
+      accountableDisplay: entry.accountableName ?? entry.accountableId,
+      consulted: (entry.consultedIds ?? []).map((id, i) => ({
+        id,
+        label: entry.consultedNames?.[i] ?? id,
+      })),
+      informed: (entry.informedIds ?? []).map((id, i) => ({
+        id,
+        label: entry.informedNames?.[i] ?? id,
+      })),
       notes: entry.notes ?? "",
     });
     setEditingId(entry.id);
@@ -321,37 +321,37 @@ export default function RACIMatrixDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {entry.responsibleIds.map((id) => (
+                        {entry.responsibleIds.map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#3B82F6" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.responsibleNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
-                        className="inline-block rounded bg-red-50 px-1.5 py-0.5 text-xs font-mono"
+                        className="inline-block rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium"
                         style={{ color: "#EF4444" }}
                         title={entry.accountableId}
                       >
-                        {truncate(entry.accountableId, 8)}
+                        {entry.accountableName ?? truncate(entry.accountableId, 8)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {(entry.consultedIds ?? []).map((id) => (
+                        {(entry.consultedIds ?? []).map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#F59E0B" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.consultedNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                         {(!entry.consultedIds ||
@@ -364,14 +364,14 @@ export default function RACIMatrixDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-wrap justify-center gap-1">
-                        {(entry.informedIds ?? []).map((id) => (
+                        {(entry.informedIds ?? []).map((id, i) => (
                           <span
                             key={id}
-                            className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono"
+                            className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium"
                             style={{ color: "#6B7280" }}
                             title={id}
                           >
-                            {truncate(id, 8)}
+                            {entry.informedNames?.[i] ?? truncate(id, 8)}
                           </span>
                         ))}
                         {(!entry.informedIds ||
@@ -465,103 +465,54 @@ export default function RACIMatrixDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-                  Responsible IDs (R)
-                </label>
-                <input
-                  type="text"
-                  value={form.responsibleIds}
-                  onChange={(e) =>
-                    setForm({ ...form, responsibleIds: e.target.value })
-                  }
-                  placeholder="Comma-separated UUIDs"
-                  className="w-full rounded-xl border px-3.5 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Who does the work
-                </p>
-              </div>
+              <UserMultiPicker
+                label="Responsible (R)"
+                placeholder="Search users who do the work..."
+                description="Who does the work"
+                selected={form.responsible}
+                onChange={(items) =>
+                  setForm({ ...form, responsible: items })
+                }
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-                  Accountable ID (A){" "}
-                  <span className="text-[var(--error)]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.accountableId}
-                  onChange={(e) =>
-                    setForm({ ...form, accountableId: e.target.value })
-                  }
-                  placeholder="Single UUID (exactly one)"
-                  className="w-full rounded-xl border px-3.5 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: formErrors.accountableId
-                      ? "var(--error)"
-                      : "var(--border)",
-                  }}
-                />
-                {formErrors.accountableId && (
-                  <p className="text-xs text-[var(--error)] mt-1">
-                    {formErrors.accountableId}
-                  </p>
-                )}
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Who is ultimately answerable
-                </p>
-              </div>
+              <UserPicker
+                label="Accountable (A)"
+                required
+                placeholder="Search for accountable person..."
+                description="Who is ultimately answerable"
+                error={formErrors.accountableId}
+                value={form.accountableId || undefined}
+                displayValue={form.accountableDisplay}
+                onChange={(id, name) =>
+                  setForm({
+                    ...form,
+                    accountableId: id ?? "",
+                    accountableDisplay: name,
+                  })
+                }
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-                  Consulted IDs (C)
-                </label>
-                <input
-                  type="text"
-                  value={form.consultedIds}
-                  onChange={(e) =>
-                    setForm({ ...form, consultedIds: e.target.value })
-                  }
-                  placeholder="Comma-separated UUIDs"
-                  className="w-full rounded-xl border px-3.5 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Who provides input
-                </p>
-              </div>
+              <UserMultiPicker
+                label="Consulted (C)"
+                placeholder="Search users to consult..."
+                description="Who provides input"
+                selected={form.consulted}
+                onChange={(items) =>
+                  setForm({ ...form, consulted: items })
+                }
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-                  Informed IDs (I)
-                </label>
-                <input
-                  type="text"
-                  value={form.informedIds}
-                  onChange={(e) =>
-                    setForm({ ...form, informedIds: e.target.value })
-                  }
-                  placeholder="Comma-separated UUIDs"
-                  className="w-full rounded-xl border px-3.5 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)]"
-                  style={{
-                    backgroundColor: "var(--surface-0)",
-                    borderColor: "var(--border)",
-                  }}
-                />
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Who is kept updated
-                </p>
-              </div>
+              <UserMultiPicker
+                label="Informed (I)"
+                placeholder="Search users to inform..."
+                description="Who is kept updated"
+                selected={form.informed}
+                onChange={(items) =>
+                  setForm({ ...form, informed: items })
+                }
+              />
             </div>
 
             <div>

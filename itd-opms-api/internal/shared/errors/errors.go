@@ -59,6 +59,14 @@ func BadRequest(message string) *AppError {
 	}
 }
 
+func TooManyRequests(message string) *AppError {
+	return &AppError{
+		Code:    "TOO_MANY_REQUESTS",
+		Message: message,
+		Status:  http.StatusTooManyRequests,
+	}
+}
+
 func Conflict(message string) *AppError {
 	return &AppError{
 		Code:    "CONFLICT",

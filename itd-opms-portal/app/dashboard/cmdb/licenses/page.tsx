@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   FileKey,
   Plus,
@@ -20,7 +19,6 @@ import {
   useLicenseComplianceStats,
   useLicenseAssignments,
 } from "@/hooks/use-cmdb";
-import type { License } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -30,10 +28,9 @@ const LICENSE_TYPES = [
   { value: "", label: "All Types" },
   { value: "perpetual", label: "Perpetual" },
   { value: "subscription", label: "Subscription" },
-  { value: "open_source", label: "Open Source" },
-  { value: "oem", label: "OEM" },
-  { value: "volume", label: "Volume" },
-  { value: "enterprise", label: "Enterprise" },
+  { value: "per_user", label: "Per User" },
+  { value: "per_device", label: "Per Device" },
+  { value: "site", label: "Site" },
 ];
 
 const COMPLIANCE_STATUSES = [
@@ -104,7 +101,6 @@ function AssignmentDrawer({ licenseId }: { licenseId: string }) {
 /* ------------------------------------------------------------------ */
 
 export default function LicensesPage() {
-  const router = useRouter();
   const [page, setPage] = useState(1);
   const [licenseType, setLicenseType] = useState("");
   const [complianceStatus, setComplianceStatus] = useState("");

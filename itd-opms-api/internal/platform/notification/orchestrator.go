@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,7 @@ var eventSubjects = []struct {
 	{"notify.governance.>", "NOTIFY_GOVERNANCE"},
 	{"notify.cmdb.>", "NOTIFY_CMDB"},
 	{"notify.grc.>", "NOTIFY_GRC"},
+	{"notify.release.>", "NOTIFY_RELEASE"},
 }
 
 // Start subscribes to domain event subjects and begins processing.
@@ -117,49 +119,87 @@ func (o *Orchestrator) handleEvent(ctx context.Context, msg *nats.Msg) {
 		return
 	}
 
+	var eventData map[string]any
+	if err := json.Unmarshal(event.Data, &eventData); err != nil {
+		eventData = map[string]any{}
+	}
+
+	channels := notifConfig.Channels
+	if override := channelOverride(eventData["channels"]); len(override) > 0 {
+		channels = override
+	}
+
 	// Resolve recipients.
-	recipients, err := o.resolveRecipients(ctx, event, notifConfig)
+	recipients, err := o.resolveRecipients(ctx, eventData)
 	if err != nil {
 		slog.Error("failed to resolve recipients", "error", err, "event_type", event.Type)
 		msg.Nak()
 		return
 	}
 
+	actionURL := extractActionURL(event.Data)
+
+	// Teams notifications are channel broadcasts, not per-recipient deliveries.
+	if containsChannel(channels, "teams") && notifConfig.TeamsTemplate != "" {
+		req := EnqueueRequest{
+			TenantID:      event.TenantID,
+			Channel:       "teams",
+			TemplateKey:   notifConfig.TemplateKey("teams"),
+			TemplateData:  event.Data,
+			Priority:      notifConfig.Priority,
+			CorrelationID: event.CorrelationID,
+			ActionURL:     actionURL,
+		}
+		if _, err := o.svc.Enqueue(ctx, req); err != nil {
+			slog.Error("failed to enqueue teams notification", "error", err, "event_type", event.Type)
+		}
+	}
+
 	// Enqueue notifications for each recipient and channel.
 	for _, recipient := range recipients {
-		// Check user preferences.
-		prefs, err := o.svc.GetUserPreferences(ctx, recipient.UserID)
-		if err != nil {
-			slog.Warn("failed to get user preferences", "error", err, "user_id", recipient.UserID)
-			prefs = &UserPreferences{
-				ChannelPreferences: map[string]bool{"email": true, "teams": true, "in_app": true},
-				DigestFrequency:    "immediate",
+		prefs := &UserPreferences{
+			ChannelPreferences: map[string]bool{"email": true, "teams": true, "in_app": true},
+			DigestFrequency:    "immediate",
+		}
+		if recipient.UserID != nil {
+			prefs, err = o.svc.GetUserPreferences(ctx, *recipient.UserID)
+			if err != nil {
+				slog.Warn("failed to get user preferences", "error", err, "user_id", recipient.UserID)
+				prefs = &UserPreferences{
+					ChannelPreferences: map[string]bool{"email": true, "teams": true, "in_app": true},
+					DigestFrequency:    "immediate",
+				}
 			}
-		}
-
-		// Check if notification type is disabled.
-		if isTypeDisabled(prefs.DisabledTypes, event.Type) {
-			continue
-		}
-
-		// Check quiet hours.
-		if isInQuietHours(prefs.QuietHoursStart, prefs.QuietHoursEnd) {
-			// Only suppress email/teams, still deliver in-app.
-			prefs.ChannelPreferences["email"] = false
-			prefs.ChannelPreferences["teams"] = false
-		}
-
-		// Enqueue for each enabled channel.
-		for _, channel := range notifConfig.Channels {
-			if enabled, ok := prefs.ChannelPreferences[channel]; !ok || !enabled {
+			if isTypeDisabled(prefs.DisabledTypes, event.Type) {
 				continue
 			}
 
-			actionURL := extractActionURL(event.Data)
+			// Check quiet hours.
+			if isInQuietHours(prefs.QuietHoursStart, prefs.QuietHoursEnd) {
+				// Only suppress email/teams, still deliver in-app.
+				prefs.ChannelPreferences["email"] = false
+				prefs.ChannelPreferences["teams"] = false
+			}
+		} else {
+			prefs.ChannelPreferences = map[string]bool{"email": true, "teams": false, "in_app": false}
+		}
+
+		// Enqueue for each enabled channel.
+		for _, channel := range channels {
+			if channel == "teams" {
+				continue
+			}
+			if enabled, ok := prefs.ChannelPreferences[channel]; !ok || !enabled {
+				continue
+			}
+			if recipient.UserID == nil && channel != "email" {
+				continue
+			}
+
 			req := EnqueueRequest{
 				TenantID:       event.TenantID,
 				Channel:        channel,
-				RecipientID:    &recipient.UserID,
+				RecipientID:    recipient.UserID,
 				RecipientEmail: recipient.Email,
 				TemplateKey:    notifConfig.TemplateKey(channel),
 				TemplateData:   event.Data,
@@ -264,6 +304,29 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      10,
 		},
+		"itsm.major_incident.declared": {
+			EmailTemplate: "major-incident-declared",
+			TeamsTemplate: "teams_major_incident_workflow_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      10,
+		},
+		"itsm.major_incident.update": {
+			EmailTemplate: "major-incident-update",
+			TeamsTemplate: "teams_major_incident_workflow_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      9,
+		},
+		"itsm.major_incident.resolved": {
+			EmailTemplate: "major-incident-resolved",
+			TeamsTemplate: "teams_major_incident_workflow_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      8,
+		},
+		"itsm.major_incident.pir.reminder": {
+			EmailTemplate: "major-incident-pir-reminder",
+			Channels:      []string{"email", "in_app"},
+			Priority:      7,
+		},
 		"governance.action_due_soon": {
 			EmailTemplate: "action_due_reminder",
 			Channels:      []string{"email", "in_app"},
@@ -279,6 +342,44 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      9,
 		},
+		"itsm.problem.transitioned": {
+			EmailTemplate: "problem_transition",
+			Channels:      []string{"in_app"},
+			Priority:      5,
+		},
+		"itsm.change.transitioned": {
+			EmailTemplate: "change_transition",
+			Channels:      []string{"in_app"},
+			Priority:      6,
+		},
+		"itsm.cab.decision": {
+			EmailTemplate: "cab_decision",
+			Channels:      []string{"email", "in_app"},
+			Priority:      7,
+		},
+		"release.created": {
+			EmailTemplate: "release_notification",
+			Channels:      []string{"in_app"},
+			Priority:      5,
+		},
+		"release.deployed": {
+			EmailTemplate: "release_deployed",
+			TeamsTemplate: "teams_release_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      7,
+		},
+		"release.rolled_back": {
+			EmailTemplate: "release_rolled_back",
+			TeamsTemplate: "teams_release_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      9,
+		},
+		"release.approval_needed": {
+			EmailTemplate: "release_approval_request",
+			TeamsTemplate: "teams_approval_card",
+			Channels:      []string{"email", "teams", "in_app"},
+			Priority:      7,
+		},
 	}
 
 	return configs[eventType]
@@ -286,48 +387,62 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 
 // recipient represents a resolved notification recipient.
 type recipient struct {
-	UserID uuid.UUID
+	UserID *uuid.UUID
 	Email  string
 }
 
 // resolveRecipients determines who should receive a notification based on event type.
-func (o *Orchestrator) resolveRecipients(ctx context.Context, event DomainEvent, _ *notificationConfig) ([]recipient, error) {
+func (o *Orchestrator) resolveRecipients(ctx context.Context, eventData map[string]any) ([]recipient, error) {
 	var recipients []recipient
+	seen := map[string]struct{}{}
 
-	// Try to extract recipient information from event data.
-	var eventData map[string]any
-	if err := json.Unmarshal(event.Data, &eventData); err == nil {
-		// Direct recipient (e.g., assignee, approver).
-		if recipientID, ok := eventData["recipientId"].(string); ok {
-			uid, err := uuid.Parse(recipientID)
-			if err == nil {
-				var email string
-				_ = o.svc.pool.QueryRow(ctx,
-					`SELECT email FROM users WHERE id = $1 AND is_active = true`,
-					uid,
-				).Scan(&email)
-				if email != "" {
-					recipients = append(recipients, recipient{UserID: uid, Email: email})
+	addUserRecipient := func(uid uuid.UUID) {
+		key := "user:" + uid.String()
+		if _, ok := seen[key]; ok {
+			return
+		}
+		var email string
+		_ = o.svc.pool.QueryRow(ctx,
+			`SELECT email FROM users WHERE id = $1 AND is_active = true`,
+			uid,
+		).Scan(&email)
+		seen[key] = struct{}{}
+		recipients = append(recipients, recipient{UserID: &uid, Email: email})
+	}
+	addEmailRecipient := func(email string) {
+		email = strings.TrimSpace(email)
+		if email == "" {
+			return
+		}
+		key := "email:" + strings.ToLower(email)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		recipients = append(recipients, recipient{Email: email})
+	}
+
+	if recipientID, ok := eventData["recipientId"].(string); ok {
+		if uid, err := uuid.Parse(recipientID); err == nil {
+			addUserRecipient(uid)
+		}
+	}
+	if recipientIDs, ok := eventData["recipientIds"].([]any); ok {
+		for _, rid := range recipientIDs {
+			if ridStr, ok := rid.(string); ok {
+				if uid, err := uuid.Parse(ridStr); err == nil {
+					addUserRecipient(uid)
 				}
 			}
 		}
-
-		// Multiple recipients (e.g., team members for major incident).
-		if recipientIDs, ok := eventData["recipientIds"].([]any); ok {
-			for _, rid := range recipientIDs {
-				if ridStr, ok := rid.(string); ok {
-					uid, err := uuid.Parse(ridStr)
-					if err == nil {
-						var email string
-						_ = o.svc.pool.QueryRow(ctx,
-							`SELECT email FROM users WHERE id = $1 AND is_active = true`,
-							uid,
-						).Scan(&email)
-						if email != "" {
-							recipients = append(recipients, recipient{UserID: uid, Email: email})
-						}
-					}
-				}
+	}
+	if recipientEmail, ok := eventData["recipientEmail"].(string); ok {
+		addEmailRecipient(recipientEmail)
+	}
+	if recipientEmails, ok := eventData["recipientEmails"].([]any); ok {
+		for _, email := range recipientEmails {
+			if emailStr, ok := email.(string); ok {
+				addEmailRecipient(emailStr)
 			}
 		}
 	}
@@ -335,7 +450,38 @@ func (o *Orchestrator) resolveRecipients(ctx context.Context, event DomainEvent,
 	return recipients, nil
 }
 
+func channelOverride(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	channels := make([]string, 0, len(items))
+	for _, item := range items {
+		if channel, ok := item.(string); ok {
+			channel = strings.TrimSpace(strings.ToLower(channel))
+			if channel == "" || containsChannel(channels, channel) {
+				continue
+			}
+			switch channel {
+			case "email", "teams", "in_app":
+				channels = append(channels, channel)
+			}
+		}
+	}
+	return channels
+}
+
+func containsChannel(channels []string, target string) bool {
+	for _, channel := range channels {
+		if channel == target {
+			return true
+		}
+	}
+	return false
+}
+
 // isTypeDisabled checks if a notification type is in the user's disabled list.
+// Matching stays exact so preference scopes do not unexpectedly widen.
 func isTypeDisabled(disabled []string, eventType string) bool {
 	for _, d := range disabled {
 		if d == eventType {
@@ -345,17 +491,27 @@ func isTypeDisabled(disabled []string, eventType string) bool {
 	return false
 }
 
+// parseHHMM parses a time string in either "HH:MM" or "HH:MM:SS" format.
+// PostgreSQL TIME columns return "HH:MM:SS" when scanned as a string, but
+// the frontend sends "HH:MM". Both formats are handled here.
+func parseHHMM(s string) (time.Time, error) {
+	if t, err := time.Parse("15:04:05", s); err == nil {
+		return t, nil
+	}
+	return time.Parse("15:04", s)
+}
+
 // isInQuietHours checks if the current time falls within quiet hours.
 func isInQuietHours(start, end *string) bool {
 	if start == nil || end == nil {
 		return false
 	}
 	now := time.Now()
-	startTime, err := time.Parse("15:04", *start)
+	startTime, err := parseHHMM(*start)
 	if err != nil {
 		return false
 	}
-	endTime, err := time.Parse("15:04", *end)
+	endTime, err := parseHHMM(*end)
 	if err != nil {
 		return false
 	}

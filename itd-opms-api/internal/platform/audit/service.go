@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,25 +79,28 @@ func NewAuditService(pool *pgxpool.Pool) *AuditService {
 func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 	id := helpers.NewUUID()
 
-	evidenceRefs, err := json.Marshal(entry.EvidenceRefs)
-	if err != nil {
-		return fmt.Errorf("marshal evidence refs: %w", err)
+	// Ensure evidence_refs is never nil (PostgreSQL can't parse "null" as UUID[]).
+	evidenceRefs := entry.EvidenceRefs
+	if evidenceRefs == nil {
+		evidenceRefs = []uuid.UUID{}
 	}
+
+	ipAddress := normalizeIPAddress(entry.IPAddress)
 
 	query := `
 		INSERT INTO audit_events (
-			id, tenant_id, actor_id, actor_role, action,
+			event_id, tenant_id, actor_id, actor_role, action,
 			entity_type, entity_id, changes, previous_state,
 			evidence_refs, ip_address, user_agent, correlation_id,
-			created_at
+			timestamp
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
-			$10, $11, $12, $13,
+			$10, NULLIF($11, '')::inet, $12, $13,
 			$14
 		)`
 
-	_, err = s.pool.Exec(ctx, query,
+	_, err := s.pool.Exec(ctx, query,
 		id,
 		entry.TenantID,
 		entry.ActorID,
@@ -106,7 +111,7 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 		entry.Changes,
 		entry.PreviousState,
 		evidenceRefs,
-		entry.IPAddress,
+		ipAddress,
 		entry.UserAgent,
 		entry.CorrelationID,
 		time.Now().UTC(),
@@ -123,6 +128,24 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 	)
 
 	return nil
+}
+
+func normalizeIPAddress(raw string) string {
+	ip := strings.TrimSpace(raw)
+	if ip == "" {
+		return ""
+	}
+
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host
+	}
+
+	ip = strings.TrimPrefix(strings.TrimSuffix(ip, "]"), "[")
+	if parsed := net.ParseIP(ip); parsed != nil {
+		return parsed.String()
+	}
+
+	return ""
 }
 
 // Query returns a paginated list of audit events matching the given filters.
@@ -165,12 +188,12 @@ func (s *AuditService) Query(ctx context.Context, filter AuditFilter, pagination
 	}
 
 	if filter.DateFrom != nil {
-		conditions = append(conditions, "created_at >= "+nextArg())
+		conditions = append(conditions, "timestamp >= "+nextArg())
 		args = append(args, *filter.DateFrom)
 	}
 
 	if filter.DateTo != nil {
-		conditions = append(conditions, "created_at <= "+nextArg())
+		conditions = append(conditions, "timestamp <= "+nextArg())
 		args = append(args, *filter.DateTo)
 	}
 
@@ -188,13 +211,13 @@ func (s *AuditService) Query(ctx context.Context, filter AuditFilter, pagination
 
 	// Fetch the page of results.
 	dataQuery := fmt.Sprintf(`
-		SELECT id, tenant_id, actor_id, actor_role, action,
+		SELECT event_id, tenant_id, actor_id, actor_role, action,
 			   entity_type, entity_id, changes, previous_state,
-			   evidence_refs, ip_address, user_agent, correlation_id,
-			   checksum, created_at
+			   evidence_refs, COALESCE(host(ip_address), ''), user_agent, correlation_id,
+			   checksum, timestamp
 		FROM audit_events
 		%s
-		ORDER BY created_at %s
+		ORDER BY timestamp %s
 		LIMIT %s OFFSET %s`,
 		whereClause,
 		pagination.Order,
@@ -243,12 +266,12 @@ func (s *AuditService) Query(ctx context.Context, filter AuditFilter, pagination
 // GetByID retrieves a single audit event by its ID.
 func (s *AuditService) GetByID(ctx context.Context, eventID uuid.UUID) (*AuditEvent, error) {
 	query := `
-		SELECT id, tenant_id, actor_id, actor_role, action,
+		SELECT event_id, tenant_id, actor_id, actor_role, action,
 			   entity_type, entity_id, changes, previous_state,
-			   evidence_refs, ip_address, user_agent, correlation_id,
-			   checksum, created_at
+			   evidence_refs, COALESCE(host(ip_address), ''), user_agent, correlation_id,
+			   checksum, timestamp
 		FROM audit_events
-		WHERE id = $1`
+		WHERE event_id = $1`
 
 	var (
 		evt          AuditEvent
@@ -284,18 +307,41 @@ type IntegrityResult struct {
 	FirstInvalid string `json:"firstInvalid,omitempty"`
 }
 
-// VerifyIntegrity verifies the checksum chain for all audit events belonging
-// to the given tenant. Each event's stored checksum is re-computed from the
-// event data and compared against the stored value.
-func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) (*IntegrityResult, error) {
-	query := `
-		SELECT id, tenant_id, actor_id, action, entity_type,
-			   entity_id, changes, checksum, created_at
-		FROM audit_events
-		WHERE tenant_id = $1
-		ORDER BY created_at ASC`
+// VerifyIntegrity verifies the checksum chain for audit events belonging to
+// the given tenant. An optional date range narrows the scope; when nil the
+// entire tenant history is verified.
+func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID, dateFrom, dateTo *time.Time) (*IntegrityResult, error) {
+	var (
+		conditions []string
+		args       []any
+		argIdx     int
+	)
 
-	rows, err := s.pool.Query(ctx, query, tenantID)
+	nextArg := func() string {
+		argIdx++
+		return fmt.Sprintf("$%d", argIdx)
+	}
+
+	conditions = append(conditions, "tenant_id = "+nextArg())
+	args = append(args, tenantID)
+
+	if dateFrom != nil {
+		conditions = append(conditions, "timestamp >= "+nextArg())
+		args = append(args, *dateFrom)
+	}
+	if dateTo != nil {
+		conditions = append(conditions, "timestamp <= "+nextArg())
+		args = append(args, *dateTo)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT event_id, tenant_id, actor_id, action, entity_type,
+			   entity_id, changes, checksum, timestamp
+		FROM audit_events
+		WHERE %s
+		ORDER BY timestamp ASC`, strings.Join(conditions, " AND "))
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query audit events for integrity: %w", err)
 	}
@@ -323,6 +369,8 @@ func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) 
 
 		result.TotalEvents++
 
+		// Use Unix microseconds to match the DB trigger which computes:
+		// ((EXTRACT(EPOCH FROM timestamp) * 1000000)::bigint)::text
 		expected := helpers.ComputeAuditChecksum(
 			tid.String(),
 			actorID.String(),
@@ -330,7 +378,7 @@ func (s *AuditService) VerifyIntegrity(ctx context.Context, tenantID uuid.UUID) 
 			entityType,
 			entityID.String(),
 			changes,
-			createdAt.UTC().Format(time.RFC3339Nano),
+			strconv.FormatInt(createdAt.UTC().UnixMicro(), 10),
 		)
 
 		if expected == checksum {

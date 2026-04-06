@@ -23,6 +23,10 @@ import type {
   ProjectDocument,
   ProjectDocumentCategoryCount,
   DocumentDownloadResponse,
+  ValidateImportResponse,
+  CommitImportResponse,
+  ImportBatch,
+  ImportBatchError,
 } from "@/types";
 
 /* ================================================================== */
@@ -168,6 +172,21 @@ export function useProjects(
 }
 
 /**
+ * GET /planning/projects?search=<query> — lightweight project search for pickers.
+ */
+export function useSearchProjects(query: string) {
+  return useQuery({
+    queryKey: ["projects-search", query],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Project>>("/planning/projects", {
+        page: 1,
+        limit: 15,
+        ...(query.length >= 2 ? { search: query } : {}),
+      }),
+  });
+}
+
+/**
  * GET /planning/projects/{id} - single project detail.
  */
 export function useProject(id: string | undefined) {
@@ -266,16 +285,25 @@ export function useDeleteProject() {
 }
 
 /**
- * POST /planning/projects/{id}/approve - approve a project.
+ * POST /planning/projects/{id}/approve - approve a project (status transition).
+ * Backend requires { status, ragStatus? } in the request body.
  */
 export function useApproveProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post(`/planning/projects/${id}/approve`),
-    onSuccess: (_data, id) => {
+    mutationFn: ({
+      id,
+      status,
+      ragStatus,
+    }: {
+      id: string;
+      status: string;
+      ragStatus?: string;
+    }) =>
+      apiClient.post(`/planning/projects/${id}/approve`, { status, ragStatus }),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["project", variables.id] });
       toast.success("Project approved");
     },
     onError: () => {
@@ -878,7 +906,7 @@ export function useEscalateIssue() {
       escalatedToId: string;
     }) =>
       apiClient.put(`/planning/issues/${id}/escalate`, { escalatedToId }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       toast.success("Issue escalated");
     },
@@ -900,13 +928,15 @@ export function useChangeRequests(
   limit = 20,
   projectId?: string,
   status?: string,
+  priority?: string,
+  category?: string,
 ) {
   return useQuery({
-    queryKey: ["change-requests", page, limit, projectId, status],
+    queryKey: ["change-requests", page, limit, projectId, status, priority, category],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ChangeRequest>>(
         "/planning/change-requests",
-        { page, limit, project_id: projectId, status },
+        { page, limit, project_id: projectId, status, priority, category },
       ),
   });
 }
@@ -1331,10 +1361,81 @@ export function useDownloadProjectDocument(
 export function useBulkUpdateWorkItems() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { ids: string[]; fields: Record<string, unknown> }) =>
+    mutationFn: (body: { ids: string[]; fields: Record<string, string> }) =>
       apiClient.post("/planning/work-items/bulk/update", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["work-items"] });
     },
+  });
+}
+
+/* ================================================================== */
+/*  Bulk Project Import                                                */
+/* ================================================================== */
+
+/**
+ * POST /planning/projects/import/validate - upload and validate a file.
+ */
+export function useValidateProjectImport() {
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<ValidateImportResponse>(
+        "/planning/projects/import/validate",
+        formData,
+      ),
+    onError: () => {
+      toast.error("Failed to validate import file");
+    },
+  });
+}
+
+/**
+ * POST /planning/projects/import/commit - commit a validated batch.
+ */
+export function useCommitProjectImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) =>
+      apiClient.post<CommitImportResponse>(
+        "/planning/projects/import/commit",
+        { batchId },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(
+        `Successfully imported ${data.importedRows} project${data.importedRows !== 1 ? "s" : ""}`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to import projects");
+    },
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id} - get batch details.
+ */
+export function useImportBatch(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch", id],
+    queryFn: () =>
+      apiClient.get<ImportBatch>(
+        `/planning/projects/import/batches/${id}`,
+      ),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /planning/projects/import/batches/{id}/errors - get batch errors.
+ */
+export function useImportBatchErrors(id: string | undefined) {
+  return useQuery({
+    queryKey: ["import-batch-errors", id],
+    queryFn: () =>
+      apiClient.get<ImportBatchError[]>(
+        `/planning/projects/import/batches/${id}/errors`,
+      ),
+    enabled: !!id,
   });
 }

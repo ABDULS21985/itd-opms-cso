@@ -8,6 +8,9 @@ import type {
   TicketComment,
   TicketStatusHistory,
   TicketStats,
+  MajorIncidentCommunicationPlan,
+  MajorIncidentRecord,
+  MajorIncidentStats,
   SLAPolicy,
   BusinessHoursCalendar,
   SLABreachEntry,
@@ -18,7 +21,18 @@ import type {
   SupportQueue,
   CSATSurvey,
   CSATStats,
+  CABMeeting,
+  ChangeStats,
+  ChangeCalendarEvent,
   PaginatedResponse,
+  OperationalLevelAgreement,
+  UnderpinningContract,
+  SLADependencyChainEntry,
+  ConsistencyViolation,
+  ExpiringAgreements,
+  TicketKBLink,
+  KBSuggestion,
+  SubtasksResponse,
 } from "@/types";
 
 /* ================================================================== */
@@ -157,9 +171,40 @@ export function useCatalogItem(id: string | undefined) {
   });
 }
 
+/**
+ * GET /itsm/catalog/items/{id}/related - related items in the same category.
+ */
+export function useRelatedCatalogItems(id: string | undefined) {
+  return useQuery({
+    queryKey: ["catalog-item-related", id],
+    queryFn: () =>
+      apiClient.get<CatalogItem[]>(`/itsm/catalog/items/${id}/related`),
+    enabled: !!id,
+  });
+}
+
 /* ================================================================== */
 /*  Catalog Items — Mutations                                           */
 /* ================================================================== */
+
+/**
+ * POST /itsm/catalog/items/bulk/status - bulk update status for multiple items.
+ */
+export function useBulkUpdateCatalogItemStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; status: string }) =>
+      apiClient.post<{ updated: number }>("/itsm/catalog/items/bulk/status", body),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["catalog-items"] });
+      queryClient.invalidateQueries({ queryKey: ["catalog-items-entitled"] });
+      toast.success(`${variables.ids.length} item(s) updated to ${variables.status}`);
+    },
+    onError: () => {
+      toast.error("Failed to bulk update item statuses");
+    },
+  });
+}
 
 /**
  * POST /itsm/catalog/items - create a catalog item.
@@ -235,6 +280,7 @@ export function useTickets(
     type?: string;
     assigneeId?: string;
     reporterId?: string;
+    hideSubtasks?: boolean;
   },
 ) {
   return useQuery({
@@ -246,8 +292,9 @@ export function useTickets(
         status: filters?.status,
         priority: filters?.priority,
         type: filters?.type,
-        assignee_id: filters?.assigneeId,
-        reporter_id: filters?.reporterId,
+        assigneeId: filters?.assigneeId,
+        reporterId: filters?.reporterId,
+        hideSubtasks: filters?.hideSubtasks ? "true" : undefined,
       }),
   });
 }
@@ -270,6 +317,126 @@ export function useTicketStats() {
   return useQuery({
     queryKey: ["ticket-stats"],
     queryFn: () => apiClient.get<TicketStats>("/itsm/tickets/stats"),
+  });
+}
+
+/* ================================================================== */
+/*  Subtasks                                                           */
+/* ================================================================== */
+
+/**
+ * GET /itsm/tickets/{id}/subtasks - child tickets + progress.
+ */
+export function useSubtasks(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-subtasks", ticketId],
+    queryFn: () =>
+      apiClient.get<SubtasksResponse>(`/itsm/tickets/${ticketId}/subtasks`),
+    enabled: !!ticketId,
+  });
+}
+
+/**
+ * POST /itsm/tickets/{parentId}/subtasks - create a subtask.
+ */
+export function useCreateSubtask(parentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      title: string;
+      description: string;
+      priority?: string;
+      assigneeId?: string;
+    }) => apiClient.post<Ticket>(`/itsm/tickets/${parentId}/subtasks`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket-subtasks", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast.success("Subtask created");
+    },
+    onError: () => toast.error("Failed to create subtask"),
+  });
+}
+
+/**
+ * DELETE /itsm/tickets/{parentId}/subtasks/{childId} - unlink a subtask.
+ */
+export function useUnlinkSubtask(parentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (childId: string) =>
+      apiClient.delete(`/itsm/tickets/${parentId}/subtasks/${childId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket-subtasks", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", parentId] });
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast.success("Subtask unlinked");
+    },
+    onError: () => toast.error("Failed to unlink subtask"),
+  });
+}
+
+export interface DeclareMajorIncidentPayload {
+  ticketId: string;
+  severity?: "sev1" | "sev2" | "sev3";
+  incidentCommanderId?: string;
+  communicationLeadId?: string;
+  bridgeUrl?: string;
+  bridgePhone?: string;
+  affectedServices?: string[];
+  affectedCiIds?: string[];
+  estimatedAffectedUsers?: number;
+  businessImpact?: "critical" | "high" | "medium" | "low";
+  communicationPlan?: MajorIncidentCommunicationPlan;
+}
+
+export interface MajorIncidentFilterParams {
+  status?: string;
+  severity?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  ticketId?: string;
+}
+
+export function useMajorIncidents(
+  page = 1,
+  limit = 20,
+  filters?: MajorIncidentFilterParams,
+) {
+  return useQuery({
+    queryKey: ["major-incidents", page, limit, filters],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<MajorIncidentRecord>>("/itsm/major-incidents", {
+        page,
+        limit,
+        status: filters?.status,
+        severity: filters?.severity,
+        dateFrom: filters?.dateFrom,
+        dateTo: filters?.dateTo,
+        ticketId: filters?.ticketId,
+      }),
+  });
+}
+
+export function useActiveMajorIncidents() {
+  return useQuery({
+    queryKey: ["major-incidents-active"],
+    queryFn: () => apiClient.get<MajorIncidentRecord[]>("/itsm/major-incidents/active"),
+  });
+}
+
+export function useMajorIncident(id: string | undefined) {
+  return useQuery({
+    queryKey: ["major-incident", id],
+    queryFn: () => apiClient.get<MajorIncidentRecord>(`/itsm/major-incidents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useMajorIncidentStats() {
+  return useQuery({
+    queryKey: ["major-incident-stats"],
+    queryFn: () => apiClient.get<MajorIncidentStats>("/itsm/major-incidents/stats"),
   });
 }
 
@@ -371,6 +538,7 @@ export function useTransitionTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket status updated");
@@ -405,6 +573,9 @@ export function useAssignTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-comments", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       queryClient.invalidateQueries({ queryKey: ["team-queue"] });
       toast.success("Ticket assigned successfully");
@@ -434,6 +605,7 @@ export function useResolveTicket() {
       queryClient.invalidateQueries({
         queryKey: ["ticket", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket resolved");
@@ -470,16 +642,185 @@ export function useCloseTicket() {
 export function useDeclareMajorIncident() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.post(`/itsm/tickets/${id}/major-incident`),
-    onSuccess: (_data, id) => {
+    mutationFn: (payload: string | DeclareMajorIncidentPayload) => {
+      if (typeof payload === "string") {
+        return apiClient.post(`/itsm/tickets/${payload}/major-incident`);
+      }
+      return apiClient.post<MajorIncidentRecord>("/itsm/major-incidents", {
+        ticketId: payload.ticketId,
+        severity: payload.severity,
+        incidentCommanderId: payload.incidentCommanderId,
+        communicationLeadId: payload.communicationLeadId,
+        bridgeUrl: payload.bridgeUrl,
+        bridgePhone: payload.bridgePhone,
+        affectedServices: payload.affectedServices,
+        affectedCiIds: payload.affectedCiIds,
+        estimatedAffectedUsers: payload.estimatedAffectedUsers,
+        businessImpact: payload.businessImpact,
+        communicationPlan: payload.communicationPlan,
+      });
+    },
+    onSuccess: (_data, payload) => {
+      const ticketId = typeof payload === "string" ? payload : payload.ticketId;
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
       toast.success("Major incident declared");
     },
     onError: () => {
       toast.error("Failed to declare major incident");
+    },
+  });
+}
+
+export function useTransitionMajorIncident() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, targetStatus }: { id: string; targetStatus: string }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/transition`, {
+        targetStatus,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("Major incident status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition major incident");
+    },
+  });
+}
+
+export function usePostMajorIncidentUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      message,
+      updateType,
+    }: {
+      id: string;
+      message: string;
+      updateType: "status_update" | "comms" | "technical";
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/update`, {
+        message,
+        updateType,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      toast.success("Stakeholder update posted");
+    },
+    onError: () => {
+      toast.error("Failed to post stakeholder update");
+    },
+  });
+}
+
+export function useResolveMajorIncident() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      resolutionSummary,
+      rootCause,
+    }: {
+      id: string;
+      resolutionSummary: string;
+      rootCause: string;
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/resolve`, {
+        resolutionSummary,
+        rootCause,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("Major incident resolved");
+    },
+    onError: () => {
+      toast.error("Failed to resolve major incident");
+    },
+  });
+}
+
+export function useSubmitMajorIncidentPIR() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      pirReport,
+    }: {
+      id: string;
+      pirReport: Record<string, unknown>;
+    }) =>
+      apiClient.post<MajorIncidentRecord>(`/itsm/major-incidents/${id}/pir`, {
+        pirReport,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
+      queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
+      toast.success("PIR submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit PIR");
+    },
+  });
+}
+
+export function useUpdateMajorIncidentCommunicationPlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      communicationPlan,
+    }: {
+      id: string;
+      communicationPlan: MajorIncidentCommunicationPlan;
+    }) =>
+      apiClient.put<MajorIncidentRecord>(`/itsm/major-incidents/${id}/communication-plan`, {
+        communicationPlan,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["major-incident", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
+      toast.success("Communication plan updated");
+    },
+    onError: () => {
+      toast.error("Failed to update communication plan");
+    },
+  });
+}
+
+/**
+ * POST /itsm/tickets/{id}/escalate - escalate a ticket manually.
+ */
+export function useEscalateTicket() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post(`/itsm/tickets/${id}/escalate`, { reason }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
+      toast.success("Ticket escalated");
+    },
+    onError: () => {
+      toast.error("Failed to escalate ticket");
     },
   });
 }
@@ -522,7 +863,9 @@ export function useTicketComments(ticketId: string | undefined) {
   return useQuery({
     queryKey: ["ticket-comments", ticketId],
     queryFn: () =>
-      apiClient.get<TicketComment[]>(`/itsm/tickets/${ticketId}/comments`),
+      apiClient.get<TicketComment[]>(`/itsm/tickets/${ticketId}/comments`, {
+        includeInternal: true,
+      }),
     enabled: !!ticketId,
   });
 }
@@ -565,6 +908,101 @@ export function useTicketStatusHistory(ticketId: string | undefined) {
         `/itsm/tickets/${ticketId}/history`,
       ),
     enabled: !!ticketId,
+  });
+}
+
+/* ================================================================== */
+/*  Ticket ↔ KB Article Links                                           */
+/* ================================================================== */
+
+
+
+/** GET /itsm/tickets/{id}/kb-links */
+export function useTicketKBLinks(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-kb-links", ticketId],
+    queryFn: () =>
+      apiClient.get<TicketKBLink[]>(`/itsm/tickets/${ticketId}/kb-links`),
+    enabled: !!ticketId,
+  });
+}
+
+/** GET /itsm/tickets/{id}/kb-suggestions */
+export function useTicketKBSuggestions(ticketId: string | undefined) {
+  return useQuery({
+    queryKey: ["ticket-kb-suggestions", ticketId],
+    queryFn: () =>
+      apiClient.get<KBSuggestion[]>(
+        `/itsm/tickets/${ticketId}/kb-suggestions`,
+      ),
+    enabled: !!ticketId,
+  });
+}
+
+/** GET /itsm/tickets/{id}/kb-search?q=... */
+export function useTicketKBSearch(
+  ticketId: string | undefined,
+  query: string,
+) {
+  return useQuery({
+    queryKey: ["ticket-kb-search", ticketId, query],
+    queryFn: () =>
+      apiClient.get<KBSuggestion[]>(
+        `/itsm/tickets/${ticketId}/kb-search`,
+        { q: query, limit: 10 },
+      ),
+    enabled: !!ticketId && query.length >= 2,
+  });
+}
+
+/** POST /itsm/tickets/{id}/kb-links */
+export function useLinkArticle(ticketId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { articleId: string; linkType: string }) =>
+      apiClient.post<TicketKBLink>(
+        `/itsm/tickets/${ticketId}/kb-links`,
+        body,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-links", ticketId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-suggestions", ticketId],
+      });
+      // Resolution links auto-add a comment, so refresh the timeline.
+      if (variables.linkType === "resolution") {
+        queryClient.invalidateQueries({
+          queryKey: ["ticket-comments", ticketId],
+        });
+      }
+      toast.success("Article linked");
+    },
+    onError: () => {
+      toast.error("Failed to link article");
+    },
+  });
+}
+
+/** DELETE /itsm/tickets/{id}/kb-links/{linkId} */
+export function useUnlinkArticle(ticketId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      apiClient.delete(`/itsm/tickets/${ticketId}/kb-links/${linkId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-links", ticketId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket-kb-suggestions", ticketId],
+      });
+      toast.success("Article unlinked");
+    },
+    onError: () => {
+      toast.error("Failed to unlink article");
+    },
   });
 }
 
@@ -682,6 +1120,29 @@ export function useSLAComplianceStats(priority?: string) {
       apiClient.get<SLAComplianceStats>("/itsm/sla-compliance", {
         priority,
       }),
+  });
+}
+
+/**
+ * GET /itsm/sla-compliance/service-requests - SLA compliance stats for service requests.
+ */
+export interface ServiceRequestSLACompliance {
+  totalRequests: number;
+  withSla: number;
+  resolutionMet: number;
+  resolutionBreached: number;
+  fulfillmentMet: number;
+  fulfillmentBreached: number;
+  activeAtRisk: number;
+}
+
+export function useServiceRequestSLACompliance() {
+  return useQuery({
+    queryKey: ["sla-compliance-service-requests"],
+    queryFn: () =>
+      apiClient.get<ServiceRequestSLACompliance>(
+        "/itsm/sla-compliance/service-requests",
+      ),
   });
 }
 
@@ -853,14 +1314,15 @@ export function useDeleteEscalationRule() {
 /**
  * GET /itsm/problems - paginated list of problems.
  */
-export function useProblems(page = 1, limit = 20, status?: string) {
+export function useProblems(page = 1, limit = 20, status?: string, assignedGroupId?: string) {
   return useQuery({
-    queryKey: ["itsm-problems", page, limit, status],
+    queryKey: ["itsm-problems", page, limit, status, assignedGroupId],
     queryFn: () =>
       apiClient.get<PaginatedResponse<ITSMProblem>>("/itsm/problems", {
         page,
         limit,
         status,
+        assignedGroupId,
       }),
   });
 }
@@ -936,6 +1398,39 @@ export function useDeleteProblem() {
 }
 
 /**
+ * POST /itsm/problems/{id}/transition - transition problem status.
+ */
+export function useTransitionProblem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      targetStatus,
+      comment,
+    }: {
+      id: string;
+      targetStatus: string;
+      comment?: string;
+    }) =>
+      apiClient.post(`/itsm/problems/${id}/transition`, {
+        targetStatus,
+        comment,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
+      queryClient.invalidateQueries({
+        queryKey: ["itsm-problem", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["known-errors"] });
+      toast.success("Problem status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition problem");
+    },
+  });
+}
+
+/**
  * POST /itsm/problems/{id}/link-incident - link an incident to a problem.
  */
 export function useLinkIncidentToProblem() {
@@ -949,7 +1444,7 @@ export function useLinkIncidentToProblem() {
       ticketId: string;
     }) =>
       apiClient.post(`/itsm/problems/${problemId}/link-incident`, {
-        ticketId,
+        incidentId: ticketId,
       }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
@@ -979,7 +1474,7 @@ export function useKnownErrors(problemId?: string) {
     queryKey: ["known-errors", problemId],
     queryFn: () =>
       apiClient.get<KnownError[]>("/itsm/problems/known-errors", {
-        problem_id: problemId,
+        problemId,
       }),
   });
 }
@@ -1016,6 +1511,24 @@ export function useUpdateKnownError(id: string | undefined) {
     },
     onError: () => {
       toast.error("Failed to update known error");
+    },
+  });
+}
+
+/**
+ * DELETE /itsm/problems/known-errors/{id} - delete a known error.
+ */
+export function useDeleteKnownError() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/problems/known-errors/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["known-errors"] });
+      toast.success("Known error deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete known error");
     },
   });
 }
@@ -1110,15 +1623,16 @@ export function useCSATStats() {
 }
 
 /**
- * POST /itsm/tickets/{ticketId}/csat - submit a CSAT survey.
+ * POST /itsm/tickets/csat - submit a CSAT survey.
+ * ticketId is passed in the request body (not the URL path).
  */
 export function useCreateCSATSurvey(ticketId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<CSATSurvey>) =>
       apiClient.post<CSATSurvey>(
-        `/itsm/tickets/${ticketId}/csat`,
-        body,
+        `/itsm/tickets/csat`,
+        { ...body, ticketId },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["csat-stats"] });
@@ -1143,5 +1657,725 @@ export function useBulkUpdateTickets() {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
     },
+  });
+}
+
+/* ================================================================== */
+/*  Service Requests — Types                                           */
+/* ================================================================== */
+
+export interface ServiceRequest {
+  id: string;
+  tenantId: string;
+  requestNumber: string;
+  catalogItemId: string;
+  requesterId: string;
+  status: string;
+  formData?: Record<string, unknown>;
+  assignedTo?: string;
+  priority: string;
+  ticketId?: string;
+  rejectionReason?: string;
+  fulfillmentNotes?: string;
+  fulfilledAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  catalogItemName?: string;
+  // SLA fields
+  slaPolicyId?: string;
+  slaResolutionTarget?: string;
+  slaResolutionMet?: boolean;
+  slaFulfillmentTarget?: string;
+  slaFulfillmentMet?: boolean;
+  slaPausedAt?: string;
+  slaPausedDurationMinutes?: number;
+}
+
+export interface ApprovalTask {
+  id: string;
+  tenantId: string;
+  requestId: string;
+  approverId: string;
+  sequenceOrder: number;
+  status: string;
+  decisionAt?: string;
+  comment?: string;
+  delegatedTo?: string;
+  createdAt: string;
+}
+
+export interface RequestTimelineEntry {
+  id: string;
+  requestId: string;
+  eventType: string;
+  actorId: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ServiceRequestDetail extends ServiceRequest {
+  approvalTasks: ApprovalTask[];
+  timeline: RequestTimelineEntry[];
+}
+
+/* ================================================================== */
+/*  Service Requests — Queries                                         */
+/* ================================================================== */
+
+/**
+ * GET /itsm/catalog/requests - list service requests for the current user.
+ */
+export function useMyServiceRequests(page = 1, limit = 20, status?: string) {
+  return useQuery({
+    queryKey: ["service-requests", page, limit, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ServiceRequest>>(
+        "/itsm/catalog/requests",
+        { page, limit, status },
+      ),
+  });
+}
+
+/**
+ * GET /itsm/catalog/requests/{id} - single service request detail.
+ */
+export function useServiceRequestDetail(id: string | undefined) {
+  return useQuery({
+    queryKey: ["service-request", id],
+    queryFn: () =>
+      apiClient.get<ServiceRequestDetail>(`/itsm/catalog/requests/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /itsm/catalog/requests/pending-approvals - requests pending approval by the current user.
+ */
+export function usePendingApprovals(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["pending-approvals", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<ServiceRequest>>(
+        "/itsm/catalog/requests/pending-approvals",
+        { page, limit },
+      ),
+  });
+}
+
+/* ================================================================== */
+/*  Service Requests — Mutations                                       */
+/* ================================================================== */
+
+/**
+ * POST /itsm/catalog/requests - submit a new service request.
+ */
+export function useSubmitServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      catalogItemId: string;
+      formData?: Record<string, unknown>;
+    }) => apiClient.post<ServiceRequest>("/itsm/catalog/requests", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      toast.success("Service request submitted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to submit service request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/approve - approve a service request.
+ */
+export function useApproveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/approve`, { comment }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      toast.success("Request approved");
+    },
+    onError: () => {
+      toast.error("Failed to approve request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/reject - reject a service request.
+ */
+export function useRejectRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/reject`, { reason }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      toast.success("Request rejected");
+    },
+    onError: () => {
+      toast.error("Failed to reject request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/cancel - cancel a service request.
+ */
+export function useCancelServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post(`/itsm/catalog/requests/${id}/cancel`),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["service-request", id] });
+      toast.success("Request cancelled");
+    },
+    onError: () => {
+      toast.error("Failed to cancel request");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Change Management — Queries                                        */
+/* ================================================================== */
+
+/**
+ * GET /itsm/changes - list changes with optional filters.
+ */
+export function useChanges(params?: { classification?: string; status?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ["changes", params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Ticket>>("/itsm/changes", {
+        classification: params?.classification,
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /itsm/changes/{id} - single change.
+ */
+export function useChange(id: string | undefined) {
+  return useQuery({
+    queryKey: ["change", id],
+    queryFn: () => apiClient.get<Ticket>(`/itsm/changes/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /itsm/changes/stats - change statistics.
+ */
+export function useChangeStats() {
+  return useQuery({
+    queryKey: ["change-stats"],
+    queryFn: () => apiClient.get<ChangeStats>("/itsm/changes/stats"),
+  });
+}
+
+/**
+ * GET /itsm/changes/calendar - change calendar events.
+ */
+export function useChangeCalendar(start: string, end: string) {
+  return useQuery({
+    queryKey: ["change-calendar", start, end],
+    queryFn: () =>
+      apiClient.get<ChangeCalendarEvent[]>("/itsm/changes/calendar", { start, end }),
+    enabled: !!start && !!end,
+  });
+}
+
+/* ================================================================== */
+/*  Change Management — Mutations                                      */
+/* ================================================================== */
+
+/**
+ * POST /itsm/changes - create a change.
+ */
+export function useCreateChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<Ticket>("/itsm/changes", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create change");
+    },
+  });
+}
+
+/**
+ * PUT /itsm/changes/{id} - update a change.
+ */
+export function useUpdateChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.put<Ticket>(`/itsm/changes/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      toast.success("Change updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/transition - transition change status.
+ */
+export function useTransitionChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { targetStatus: string; comment?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/transition`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change status updated");
+    },
+    onError: () => {
+      toast.error("Failed to transition change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/cab-decision - submit CAB decision.
+ */
+export function useSubmitCABDecision(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { decision: string; notes?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/cab-decision`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("CAB decision submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit CAB decision");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/pir - complete post-implementation review.
+ */
+export function useCompletePIR(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { pirNotes: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/pir`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("PIR completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete PIR");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/risk-assessment - submit risk assessment.
+ */
+export function useSubmitRiskAssessment(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { riskAssessment: Record<string, unknown>; riskLevel?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/risk-assessment`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      toast.success("Risk assessment submitted");
+    },
+    onError: () => {
+      toast.error("Failed to submit risk assessment");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/implement - start implementation.
+ */
+export function useImplementChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body?: { comment?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/implement`, body ?? {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Implementation started");
+    },
+    onError: () => {
+      toast.error("Failed to start implementation");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/complete - complete change with success/failure.
+ */
+export function useCompleteChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { success: boolean; notes?: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/complete`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete change");
+    },
+  });
+}
+
+/**
+ * POST /itsm/changes/{id}/rollback - trigger rollback.
+ */
+export function useRollbackChange(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string }) =>
+      apiClient.post<Ticket>(`/itsm/changes/${id}/rollback`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["changes"] });
+      queryClient.invalidateQueries({ queryKey: ["change", id] });
+      queryClient.invalidateQueries({ queryKey: ["change-stats"] });
+      toast.success("Change rolled back");
+    },
+    onError: () => {
+      toast.error("Failed to rollback change");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  CAB Meetings — Queries                                             */
+/* ================================================================== */
+
+/**
+ * GET /itsm/cab-meetings - list CAB meetings.
+ */
+export function useCABMeetings(params?: { status?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ["cab-meetings", params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<CABMeeting>>("/itsm/cab-meetings", {
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+      }),
+  });
+}
+
+/**
+ * GET /itsm/cab-meetings/{id} - single CAB meeting.
+ */
+export function useCABMeeting(id: string | undefined) {
+  return useQuery({
+    queryKey: ["cab-meeting", id],
+    queryFn: () => apiClient.get<CABMeeting>(`/itsm/cab-meetings/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  CAB Meetings — Mutations                                           */
+/* ================================================================== */
+
+/**
+ * POST /itsm/cab-meetings - create a CAB meeting.
+ */
+export function useCreateCABMeeting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<CABMeeting>("/itsm/cab-meetings", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      toast.success("CAB meeting created");
+    },
+    onError: () => {
+      toast.error("Failed to create CAB meeting");
+    },
+  });
+}
+
+/**
+ * PUT /itsm/cab-meetings/{id} - update a CAB meeting.
+ */
+export function useUpdateCABMeeting(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.put<CABMeeting>(`/itsm/cab-meetings/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
+      toast.success("CAB meeting updated");
+    },
+    onError: () => {
+      toast.error("Failed to update CAB meeting");
+    },
+  });
+}
+
+/**
+ * POST /itsm/cab-meetings/{id}/complete - complete a CAB meeting.
+ */
+export function useCompleteCABMeeting(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post(`/itsm/cab-meetings/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
+      toast.success("CAB meeting completed");
+    },
+    onError: () => {
+      toast.error("Failed to complete CAB meeting");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  OLA (Operational Level Agreements) — Queries                       */
+/* ================================================================== */
+
+export function useOLAs(status?: string) {
+  return useQuery({
+    queryKey: ["olas", status],
+    queryFn: () =>
+      apiClient.get<OperationalLevelAgreement[]>("/itsm/olas", { status }),
+  });
+}
+
+export function useOLA(id: string | undefined) {
+  return useQuery({
+    queryKey: ["ola", id],
+    queryFn: () =>
+      apiClient.get<OperationalLevelAgreement>(`/itsm/olas/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  OLA — Mutations                                                    */
+/* ================================================================== */
+
+export function useCreateOLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<OperationalLevelAgreement>) =>
+      apiClient.post<OperationalLevelAgreement>("/itsm/olas", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      toast.success("OLA created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create OLA");
+    },
+  });
+}
+
+export function useUpdateOLA(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<OperationalLevelAgreement>) =>
+      apiClient.put<OperationalLevelAgreement>(`/itsm/olas/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      queryClient.invalidateQueries({ queryKey: ["ola", id] });
+      toast.success("OLA updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update OLA");
+    },
+  });
+}
+
+export function useDeleteOLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/olas/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["olas"] });
+      toast.success("OLA deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete OLA");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  UC (Underpinning Contracts) — Queries                              */
+/* ================================================================== */
+
+export function useUCs(status?: string) {
+  return useQuery({
+    queryKey: ["ucs", status],
+    queryFn: () =>
+      apiClient.get<UnderpinningContract[]>("/itsm/underpinning-contracts", { status }),
+  });
+}
+
+export function useUC(id: string | undefined) {
+  return useQuery({
+    queryKey: ["uc", id],
+    queryFn: () =>
+      apiClient.get<UnderpinningContract>(`/itsm/underpinning-contracts/${id}`),
+    enabled: !!id,
+  });
+}
+
+/* ================================================================== */
+/*  UC — Mutations                                                     */
+/* ================================================================== */
+
+export function useCreateUC() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<UnderpinningContract>) =>
+      apiClient.post<UnderpinningContract>("/itsm/underpinning-contracts", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      toast.success("Underpinning contract created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create underpinning contract");
+    },
+  });
+}
+
+export function useUpdateUC(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<UnderpinningContract>) =>
+      apiClient.put<UnderpinningContract>(`/itsm/underpinning-contracts/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      queryClient.invalidateQueries({ queryKey: ["uc", id] });
+      toast.success("Underpinning contract updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update underpinning contract");
+    },
+  });
+}
+
+export function useDeleteUC() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/underpinning-contracts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ucs"] });
+      toast.success("Underpinning contract deleted successfully");
+    },
+    onError: () => {
+      toast.error("Failed to delete underpinning contract");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  SLA Dependency Chain                                               */
+/* ================================================================== */
+
+export function useSLADependencyChain(slaId: string | undefined) {
+  return useQuery({
+    queryKey: ["sla-dependency-chain", slaId],
+    queryFn: () =>
+      apiClient.get<SLADependencyChainEntry[]>(`/itsm/sla/dependency-chain/${slaId}`),
+    enabled: !!slaId,
+  });
+}
+
+export function useCreateDependencyChainEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { slaPolicyId: string; olaId?: string; ucId?: string; notes?: string }) =>
+      apiClient.post("/itsm/sla/dependency-chain", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
+      toast.success("Dependency chain entry created");
+    },
+    onError: () => {
+      toast.error("Failed to create dependency chain entry");
+    },
+  });
+}
+
+export function useDeleteDependencyChainEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/itsm/sla/dependency-chain/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
+      toast.success("Dependency chain entry removed");
+    },
+    onError: () => {
+      toast.error("Failed to remove dependency chain entry");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  SLA Consistency Check & Expiring                                   */
+/* ================================================================== */
+
+export function useSLAConsistencyCheck() {
+  return useQuery({
+    queryKey: ["sla-consistency-check"],
+    queryFn: () =>
+      apiClient.get<ConsistencyViolation[]>("/itsm/sla/consistency-check"),
+  });
+}
+
+export function useExpiringAgreements(days = 30) {
+  return useQuery({
+    queryKey: ["sla-expiring", days],
+    queryFn: () =>
+      apiClient.get<ExpiringAgreements>("/itsm/sla/expiring", { days }),
   });
 }

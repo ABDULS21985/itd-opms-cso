@@ -641,8 +641,8 @@ func (s *SLAService) GetComplianceStats(ctx context.Context, priority *string) (
 	query := `
 		SELECT
 			COUNT(*) AS total_tickets,
-			COUNT(*) FILTER (WHERE response_sla_met = true) AS response_met,
-			COUNT(*) FILTER (WHERE resolution_sla_met = true) AS resolution_met
+			COUNT(*) FILTER (WHERE sla_response_met = true) AS response_met,
+			COUNT(*) FILTER (WHERE sla_resolution_met = true) AS resolution_met
 		FROM tickets
 		WHERE tenant_id = $1
 			AND ($2::text IS NULL OR priority = $2)`
@@ -655,6 +655,47 @@ func (s *SLAService) GetComplianceStats(ctx context.Context, priority *string) (
 	)
 	if err != nil {
 		return SLAComplianceStats{}, apperrors.Internal("failed to get SLA compliance stats", err)
+	}
+
+	return stats, nil
+}
+
+// GetServiceRequestSLACompliance returns SLA compliance stats for service requests.
+func (s *SLAService) GetServiceRequestSLACompliance(ctx context.Context) (ServiceRequestSLACompliance, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ServiceRequestSLACompliance{}, apperrors.Unauthorized("authentication required")
+	}
+
+	query := `
+		SELECT
+			COUNT(*) AS total_requests,
+			COUNT(*) FILTER (WHERE sla_policy_id IS NOT NULL) AS with_sla,
+			COUNT(*) FILTER (WHERE sla_resolution_met = true) AS resolution_met,
+			COUNT(*) FILTER (WHERE sla_resolution_met = false) AS resolution_breached,
+			COUNT(*) FILTER (WHERE sla_fulfillment_met = true) AS fulfillment_met,
+			COUNT(*) FILTER (WHERE sla_fulfillment_met = false) AS fulfillment_breached,
+			COUNT(*) FILTER (
+				WHERE sla_fulfillment_target IS NOT NULL
+				  AND sla_fulfillment_met IS NULL
+				  AND status NOT IN ('fulfilled', 'cancelled', 'rejected')
+				  AND sla_fulfillment_target < now() + interval '2 hours'
+			) AS active_at_risk
+		FROM service_requests
+		WHERE tenant_id = $1`
+
+	var stats ServiceRequestSLACompliance
+	err := s.pool.QueryRow(ctx, query, auth.TenantID).Scan(
+		&stats.TotalRequests,
+		&stats.WithSLA,
+		&stats.ResolutionMet,
+		&stats.ResolutionBreached,
+		&stats.FulfillmentMet,
+		&stats.FulfillmentBreached,
+		&stats.ActiveAtRisk,
+	)
+	if err != nil {
+		return ServiceRequestSLACompliance{}, apperrors.Internal("failed to get service request SLA compliance", err)
 	}
 
 	return stats, nil

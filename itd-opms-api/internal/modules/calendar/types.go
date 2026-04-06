@@ -98,9 +98,10 @@ type MaintenanceWindow struct {
 	ChangeRequestID  *uuid.UUID `json:"changeRequestId"`
 	TicketID         *uuid.UUID `json:"ticketId"`
 	ProjectID        *uuid.UUID `json:"projectId"`
-	CreatedBy        uuid.UUID `json:"createdBy"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	CreatedBy        uuid.UUID  `json:"createdBy"`
+	OrgUnitID        *uuid.UUID `json:"orgUnitId,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
 }
 
 // ChangeFreezePeriod represents a period during which changes are frozen.
@@ -113,6 +114,7 @@ type ChangeFreezePeriod struct {
 	EndTime    time.Time       `json:"endTime"`
 	Exceptions json.RawMessage `json:"exceptions"`
 	CreatedBy  uuid.UUID       `json:"createdBy"`
+	OrgUnitID  *uuid.UUID      `json:"orgUnitId,omitempty"`
 	CreatedAt  time.Time       `json:"createdAt"`
 }
 

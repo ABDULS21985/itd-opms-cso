@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState, useId } from "react";
+import { useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ interface FormFieldProps {
   required?: boolean;
   disabled?: boolean;
   rows?: number;
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; group?: string }[];
   className?: string;
 }
 
@@ -46,7 +46,6 @@ export function FormField({
   className,
 }: FormFieldProps) {
   const id = useId();
-  const [focused, setFocused] = useState(false);
 
   const inputClass = cn(
     "w-full rounded-xl border bg-[var(--surface-0)] text-sm transition-all duration-200",
@@ -67,8 +66,6 @@ export function FormField({
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           required={required}
           disabled={disabled}
@@ -79,24 +76,49 @@ export function FormField({
     }
 
     if (type === "select") {
+      const hasGroups = options.some((opt) => opt.group);
+
+      const renderOptions = () => {
+        if (!hasGroups) {
+          return options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ));
+        }
+        const groups: { name: string; items: typeof options }[] = [];
+        for (const opt of options) {
+          const gName = opt.group || "";
+          let g = groups.find((x) => x.name === gName);
+          if (!g) {
+            g = { name: gName, items: [] };
+            groups.push(g);
+          }
+          g.items.push(opt);
+        }
+        return groups.map((g) => (
+          <optgroup key={g.name} label={g.name}>
+            {g.items.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </optgroup>
+        ));
+      };
+
       return (
         <select
           id={id}
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           required={required}
           disabled={disabled}
           className={cn(inputClass, "px-3.5 py-2.5")}
         >
           <option value="">{placeholder || "Select..."}</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
+          {renderOptions()}
         </select>
       );
     }
@@ -108,8 +130,6 @@ export function FormField({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         required={required}
         disabled={disabled}

@@ -36,6 +36,7 @@ func (h *UserHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("system.view")).Get("/{id}", h.GetUser)
 
 	// Write endpoints.
+	r.With(middleware.RequirePermission("system.manage")).Post("/", h.CreateUser)
 	r.With(middleware.RequirePermission("system.manage")).Patch("/{id}", h.UpdateUser)
 	r.With(middleware.RequirePermission("system.manage")).Post("/{id}/deactivate", h.DeactivateUser)
 	r.With(middleware.RequirePermission("system.manage")).Post("/{id}/reactivate", h.ReactivateUser)
@@ -166,6 +167,29 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, user, nil)
+}
+
+// CreateUser handles POST /system/users — create a new user.
+func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	var req CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	user, err := h.svc.CreateUser(r.Context(), auth.TenantID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, user)
 }
 
 // DeactivateUser handles POST /system/users/{id}/deactivate.
@@ -352,10 +376,6 @@ func (h *UserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := r.URL.Query().Get("q")
-	if query == "" {
-		types.OK(w, []UserSearchResult{}, nil)
-		return
-	}
 
 	results, err := h.svc.SearchUsers(r.Context(), auth.TenantID, query)
 	if err != nil {
@@ -366,7 +386,7 @@ func (h *UserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	types.OK(w, results, nil)
 }
 
-// GetUserStats handles GET /system/users/stats — active user count.
+// GetUserStats handles GET /system/users/stats — user statistics.
 func (h *UserHandler) GetUserStats(w http.ResponseWriter, r *http.Request) {
 	auth := types.GetAuthContext(r.Context())
 	if auth == nil {
@@ -374,11 +394,11 @@ func (h *UserHandler) GetUserStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := h.svc.CountActiveUsers(r.Context(), auth.TenantID)
+	stats, err := h.svc.GetUserStats(r.Context(), auth.TenantID)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
 	}
 
-	types.OK(w, map[string]int64{"activeUsers": count}, nil)
+	types.OK(w, stats, nil)
 }

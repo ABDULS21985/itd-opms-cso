@@ -18,14 +18,87 @@ func TestDocumentStatusConstants(t *testing.T) {
 		got      string
 		expected string
 	}{
+		{"Draft", DocumentStatusDraft, "draft"},
 		{"Active", DocumentStatusActive, "active"},
+		{"UnderReview", DocumentStatusUnderReview, "under_review"},
+		{"Approved", DocumentStatusApproved, "approved"},
+		{"Rejected", DocumentStatusRejected, "rejected"},
+		{"Archived", DocumentStatusArchived, "archived"},
+		{"Expired", DocumentStatusExpired, "expired"},
 		{"Deleted", DocumentStatusDeleted, "deleted"},
+		{"Restored", DocumentStatusRestored, "restored"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.got != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, tt.got)
+			}
+		})
+	}
+}
+
+func TestValidStatuses(t *testing.T) {
+	expected := []string{
+		"draft", "active", "under_review", "approved", "rejected",
+		"archived", "expired", "deleted", "restored",
+	}
+	for _, v := range expected {
+		if !ValidStatuses[v] {
+			t.Errorf("expected %q to be a valid status", v)
+		}
+	}
+
+	if ValidStatuses["invalid"] {
+		t.Errorf("expected 'invalid' to not be a valid status")
+	}
+
+	if len(ValidStatuses) != len(expected) {
+		t.Errorf("expected %d statuses, got %d", len(expected), len(ValidStatuses))
+	}
+}
+
+// ──────────────────────────────────────────────
+// Status transitions
+// ──────────────────────────────────────────────
+
+func TestValidTransitions(t *testing.T) {
+	tests := []struct {
+		from    string
+		to      string
+		allowed bool
+	}{
+		{DocumentStatusDraft, DocumentStatusActive, true},
+		{DocumentStatusDraft, DocumentStatusDeleted, true},
+		{DocumentStatusDraft, DocumentStatusArchived, false},
+		{DocumentStatusActive, DocumentStatusUnderReview, true},
+		{DocumentStatusActive, DocumentStatusArchived, true},
+		{DocumentStatusActive, DocumentStatusDeleted, true},
+		{DocumentStatusActive, DocumentStatusApproved, false},
+		{DocumentStatusUnderReview, DocumentStatusApproved, true},
+		{DocumentStatusUnderReview, DocumentStatusRejected, true},
+		{DocumentStatusUnderReview, DocumentStatusActive, true},
+		{DocumentStatusApproved, DocumentStatusActive, true},
+		{DocumentStatusApproved, DocumentStatusArchived, true},
+		{DocumentStatusApproved, DocumentStatusDeleted, false},
+		{DocumentStatusRejected, DocumentStatusActive, true},
+		{DocumentStatusRejected, DocumentStatusDraft, true},
+		{DocumentStatusRejected, DocumentStatusDeleted, true},
+		{DocumentStatusArchived, DocumentStatusRestored, true},
+		{DocumentStatusArchived, DocumentStatusDeleted, false},
+		{DocumentStatusExpired, DocumentStatusRestored, true},
+		{DocumentStatusExpired, DocumentStatusDeleted, true},
+		{DocumentStatusDeleted, DocumentStatusRestored, true},
+		{DocumentStatusDeleted, DocumentStatusActive, false},
+		{DocumentStatusRestored, DocumentStatusActive, true},
+		{DocumentStatusRestored, DocumentStatusDraft, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.from+"→"+tt.to, func(t *testing.T) {
+			allowed := ValidTransitions[tt.from][tt.to]
+			if allowed != tt.allowed {
+				t.Errorf("transition %s→%s: expected allowed=%v, got %v", tt.from, tt.to, tt.allowed, allowed)
 			}
 		})
 	}
@@ -133,6 +206,8 @@ func TestPermissionConstants(t *testing.T) {
 		{"View", PermissionView, "view"},
 		{"Download", PermissionDownload, "download"},
 		{"Edit", PermissionEdit, "edit"},
+		{"Share", PermissionShare, "share"},
+		{"Approve", PermissionApprove, "approve"},
 	}
 
 	for _, tt := range tests {
@@ -145,7 +220,7 @@ func TestPermissionConstants(t *testing.T) {
 }
 
 func TestValidPermissions(t *testing.T) {
-	expected := []string{"view", "download", "edit"}
+	expected := []string{"view", "download", "edit", "share", "approve"}
 	for _, v := range expected {
 		if !ValidPermissions[v] {
 			t.Errorf("expected %q to be a valid permission", v)
@@ -168,6 +243,8 @@ func TestValidPermissions(t *testing.T) {
 func TestVaultDocumentJSONRoundTrip(t *testing.T) {
 	desc := "Server config"
 	folderName := "Infrastructure"
+	ownerName := "Jane Owner"
+	docCode := "DOC-2024-001"
 	now := time.Now().UTC().Truncate(time.Second)
 	original := VaultDocument{
 		ID:             uuid.New(),
@@ -188,8 +265,13 @@ func TestVaultDocumentJSONRoundTrip(t *testing.T) {
 		UploadedBy:     uuid.New(),
 		CreatedAt:      now,
 		UpdatedAt:      now,
+		OwnerID:        ptrUUID(uuid.New()),
+		DocumentCode:   &docCode,
+		Confidential:   false,
+		LegalHold:      false,
 		UploaderName:   "Jane Admin",
 		FolderName:     &folderName,
+		OwnerName:      &ownerName,
 	}
 
 	data, err := json.Marshal(original)
@@ -234,6 +316,18 @@ func TestVaultDocumentJSONRoundTrip(t *testing.T) {
 	}
 	if decoded.FolderName == nil || *decoded.FolderName != folderName {
 		t.Errorf("FolderName mismatch")
+	}
+	if decoded.DocumentCode == nil || *decoded.DocumentCode != docCode {
+		t.Errorf("DocumentCode mismatch")
+	}
+	if decoded.OwnerName == nil || *decoded.OwnerName != ownerName {
+		t.Errorf("OwnerName mismatch")
+	}
+	if decoded.Confidential != false {
+		t.Errorf("Confidential mismatch: expected false")
+	}
+	if decoded.LegalHold != false {
+		t.Errorf("LegalHold mismatch: expected false")
 	}
 }
 
@@ -320,6 +414,82 @@ func TestDocumentShareJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDocumentCommentJSONRoundTrip(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	original := DocumentComment{
+		ID:         uuid.New(),
+		DocumentID: uuid.New(),
+		TenantID:   uuid.New(),
+		UserID:     uuid.New(),
+		Content:    "This document needs review.",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		UserName:   "Jane Admin",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal DocumentComment: %v", err)
+	}
+
+	var decoded DocumentComment
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal DocumentComment: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch")
+	}
+	if decoded.Content != "This document needs review." {
+		t.Errorf("Content mismatch: got %q", decoded.Content)
+	}
+	if decoded.UserName != "Jane Admin" {
+		t.Errorf("UserName mismatch")
+	}
+}
+
+func TestDocumentLifecycleEntryJSONRoundTrip(t *testing.T) {
+	reason := "Approved after review"
+	now := time.Now().UTC().Truncate(time.Second)
+	original := DocumentLifecycleEntry{
+		ID:            uuid.New(),
+		DocumentID:    uuid.New(),
+		TenantID:      uuid.New(),
+		FromStatus:    DocumentStatusUnderReview,
+		ToStatus:      DocumentStatusApproved,
+		ChangedBy:     uuid.New(),
+		Reason:        &reason,
+		CreatedAt:     now,
+		ChangedByName: "Jane Admin",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal DocumentLifecycleEntry: %v", err)
+	}
+
+	var decoded DocumentLifecycleEntry
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal DocumentLifecycleEntry: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch")
+	}
+	if decoded.FromStatus != DocumentStatusUnderReview {
+		t.Errorf("FromStatus mismatch")
+	}
+	if decoded.ToStatus != DocumentStatusApproved {
+		t.Errorf("ToStatus mismatch")
+	}
+	if decoded.Reason == nil || *decoded.Reason != reason {
+		t.Errorf("Reason mismatch")
+	}
+	if decoded.ChangedByName != "Jane Admin" {
+		t.Errorf("ChangedByName mismatch")
+	}
+}
+
 func TestVaultStatsJSONRoundTrip(t *testing.T) {
 	original := VaultStats{
 		TotalDocuments: 100,
@@ -329,6 +499,11 @@ func TestVaultStatsJSONRoundTrip(t *testing.T) {
 			"operational": 50,
 			"policy":      30,
 			"report":      20,
+		},
+		ByStatus: map[string]int64{
+			"active":   80,
+			"archived": 15,
+			"draft":    5,
 		},
 		RecentUploads: 5,
 	}
@@ -354,6 +529,12 @@ func TestVaultStatsJSONRoundTrip(t *testing.T) {
 	}
 	if decoded.ByClassification["operational"] != 50 {
 		t.Errorf("ByClassification[operational] mismatch")
+	}
+	if decoded.ByStatus["active"] != 80 {
+		t.Errorf("ByStatus[active] mismatch")
+	}
+	if decoded.ByStatus["archived"] != 15 {
+		t.Errorf("ByStatus[archived] mismatch")
 	}
 	if decoded.RecentUploads != 5 {
 		t.Errorf("RecentUploads mismatch")
@@ -407,4 +588,71 @@ func TestMoveDocumentRequestJSON(t *testing.T) {
 	if req.FolderID == nil || req.FolderID.String() != "22222222-2222-2222-2222-222222222222" {
 		t.Errorf("FolderID mismatch")
 	}
+}
+
+func TestTransitionStatusRequestJSON(t *testing.T) {
+	body := `{"toStatus": "approved", "reason": "Looks good"}`
+
+	var req TransitionStatusRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal TransitionStatusRequest: %v", err)
+	}
+
+	if req.ToStatus != "approved" {
+		t.Errorf("ToStatus mismatch")
+	}
+	if req.Reason == nil || *req.Reason != "Looks good" {
+		t.Errorf("Reason mismatch")
+	}
+}
+
+func TestAddCommentRequestJSON(t *testing.T) {
+	body := `{"content": "Please review this", "parentId": "33333333-3333-3333-3333-333333333333"}`
+
+	var req AddCommentRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal AddCommentRequest: %v", err)
+	}
+
+	if req.Content != "Please review this" {
+		t.Errorf("Content mismatch")
+	}
+	if req.ParentID == nil || req.ParentID.String() != "33333333-3333-3333-3333-333333333333" {
+		t.Errorf("ParentID mismatch")
+	}
+}
+
+func TestUpdateDocumentRequestJSON(t *testing.T) {
+	body := `{
+		"title": "Updated Title",
+		"documentCode": "DOC-2024-001",
+		"confidential": true,
+		"effectiveDate": "2024-01-15T00:00:00Z"
+	}`
+
+	var req UpdateDocumentRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("failed to unmarshal UpdateDocumentRequest: %v", err)
+	}
+
+	if req.Title == nil || *req.Title != "Updated Title" {
+		t.Errorf("Title mismatch")
+	}
+	if req.DocumentCode == nil || *req.DocumentCode != "DOC-2024-001" {
+		t.Errorf("DocumentCode mismatch")
+	}
+	if req.Confidential == nil || *req.Confidential != true {
+		t.Errorf("Confidential mismatch")
+	}
+	if req.EffectiveDate == nil {
+		t.Errorf("EffectiveDate should not be nil")
+	}
+}
+
+// ──────────────────────────────────────────────
+// Test helpers
+// ──────────────────────────────────────────────
+
+func ptrUUID(id uuid.UUID) *uuid.UUID {
+	return &id
 }

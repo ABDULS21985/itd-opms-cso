@@ -123,6 +123,27 @@ export function useWorkflowDefinition(id: string | undefined) {
 }
 
 /* ================================================================== */
+/*  Workflow Definitions — Request types                               */
+/* ================================================================== */
+
+export interface CreateWorkflowDefinitionBody {
+  name: string;
+  description: string | null;
+  entityType: string;
+  steps: WorkflowStepDef[];
+  autoAssignRules?: Record<string, unknown>;
+}
+
+export interface UpdateWorkflowDefinitionBody {
+  name?: string;
+  description?: string | null;
+  entityType?: string;
+  steps?: WorkflowStepDef[];
+  isActive?: boolean;
+  autoAssignRules?: Record<string, unknown>;
+}
+
+/* ================================================================== */
 /*  Workflow Definitions — Mutations                                   */
 /* ================================================================== */
 
@@ -132,18 +153,8 @@ export function useWorkflowDefinition(id: string | undefined) {
 export function useCreateWorkflowDefinition() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (
-      body: Omit<
-        WorkflowDefinition,
-        | "id"
-        | "tenantId"
-        | "isActive"
-        | "version"
-        | "createdBy"
-        | "createdAt"
-        | "updatedAt"
-      >,
-    ) => apiClient.post<WorkflowDefinition>("/approvals/workflows", body),
+    mutationFn: (body: CreateWorkflowDefinitionBody) =>
+      apiClient.post<WorkflowDefinition>("/approvals/workflows", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-definitions"] });
       toast.success("Workflow definition created");
@@ -156,11 +167,14 @@ export function useCreateWorkflowDefinition() {
 
 /**
  * PUT /approvals/workflows/{id} - update a workflow definition.
+ * Sends only the fields that should be updated; server uses COALESCE for
+ * omitted fields so existing values are preserved.
+ * Description accepts null to explicitly clear the field.
  */
 export function useUpdateWorkflowDefinition(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<WorkflowDefinition>) =>
+    mutationFn: (body: UpdateWorkflowDefinitionBody) =>
       apiClient.put<WorkflowDefinition>(`/approvals/workflows/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-definitions"] });

@@ -59,18 +59,20 @@ type ReportDefinition struct {
 
 // ReportRun represents an individual report generation run.
 type ReportRun struct {
-	ID            uuid.UUID       `json:"id"`
-	DefinitionID  uuid.UUID       `json:"definitionId"`
-	TenantID      uuid.UUID       `json:"tenantId"`
-	Status        string          `json:"status"`
-	TriggerSource string          `json:"triggerSource"`
-	ScheduledFor  *time.Time      `json:"scheduledFor"`
-	GeneratedAt   *time.Time      `json:"generatedAt"`
-	CompletedAt   *time.Time      `json:"completedAt"`
-	DocumentID    *uuid.UUID      `json:"documentId"`
-	DataSnapshot  json.RawMessage `json:"dataSnapshot"`
-	ErrorMessage  *string         `json:"errorMessage"`
-	CreatedAt     time.Time       `json:"createdAt"`
+	ID               uuid.UUID       `json:"id"`
+	DefinitionID     uuid.UUID       `json:"definitionId"`
+	TenantID         uuid.UUID       `json:"tenantId"`
+	Status           string          `json:"status"`
+	TriggerSource    string          `json:"triggerSource"`
+	ScheduledFor     *time.Time      `json:"scheduledFor"`
+	GeneratedAt      *time.Time      `json:"generatedAt"`
+	CompletedAt      *time.Time      `json:"completedAt"`
+	DocumentID       *uuid.UUID      `json:"documentId"`
+	DataSnapshot     json.RawMessage `json:"dataSnapshot"`
+	ErrorMessage     *string         `json:"errorMessage"`
+	EmailDeliveredAt *time.Time      `json:"emailDeliveredAt"`
+	EmailError       *string         `json:"emailError"`
+	CreatedAt        time.Time       `json:"createdAt"`
 }
 
 // DashboardCache represents cached dashboard aggregation data.
@@ -178,4 +180,207 @@ type CreateSavedSearchRequest struct {
 	Query       string   `json:"query" validate:"required"`
 	EntityTypes []string `json:"entityTypes"`
 	IsSaved     bool     `json:"isSaved"`
+}
+
+// ──────────────────────────────────────────────
+// Activity Feed types
+// ──────────────────────────────────────────────
+
+// ActivityActor identifies the user who performed an action.
+type ActivityActor struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Avatar *string `json:"avatar,omitempty"`
+}
+
+// ActivityEntity identifies the entity that was acted upon.
+type ActivityEntity struct {
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+
+// ActivityFeedItem represents a single recent-activity event.
+type ActivityFeedItem struct {
+	ID          string         `json:"id"`
+	Type        string         `json:"type"`
+	Actor       ActivityActor  `json:"actor"`
+	Description string         `json:"description"`
+	Entity      ActivityEntity `json:"entity"`
+	Timestamp   time.Time      `json:"timestamp"`
+}
+
+// ActivityFeedResponse wraps a paginated list of activity feed items.
+type ActivityFeedResponse struct {
+	Data  []ActivityFeedItem `json:"data"`
+	Total int                `json:"total"`
+	Page  int                `json:"page"`
+	Limit int                `json:"limit"`
+}
+
+// ──────────────────────────────────────────────
+// My-Tasks types
+// ──────────────────────────────────────────────
+
+// MyTicketItem represents a ticket in the my-tasks summary.
+type MyTicketItem struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Href     string `json:"href"`
+	Priority string `json:"priority"`
+}
+
+// MyDeadlineItem represents a deadline-sensitive task in the my-tasks summary.
+type MyDeadlineItem struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Href    string `json:"href"`
+	DueDate string `json:"dueDate"`
+}
+
+// MyApprovalItem represents a pending-approval action item.
+type MyApprovalItem struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Href  string `json:"href"`
+	Type  string `json:"type"`
+}
+
+// MyOpenTickets holds count + items for open tickets assigned to the user.
+type MyOpenTickets struct {
+	Count int            `json:"count"`
+	Items []MyTicketItem `json:"items"`
+}
+
+// MyTasksDue holds count + items for tasks due this week.
+type MyTasksDue struct {
+	Count int              `json:"count"`
+	Items []MyDeadlineItem `json:"items"`
+}
+
+// MyPendingApprovals holds count + items for pending approvals.
+type MyPendingApprovals struct {
+	Count int              `json:"count"`
+	Items []MyApprovalItem `json:"items"`
+}
+
+// MyOverdueItems holds count + items for overdue action items.
+type MyOverdueItems struct {
+	Count int              `json:"count"`
+	Items []MyDeadlineItem `json:"items"`
+}
+
+// MyTasksSummary is the full response for /dashboards/my-tasks.
+type MyTasksSummary struct {
+	OpenTickets      MyOpenTickets      `json:"openTickets"`
+	TasksDueThisWeek MyTasksDue         `json:"tasksDueThisWeek"`
+	PendingApprovals MyPendingApprovals `json:"pendingApprovals"`
+	OverdueItems     MyOverdueItems     `json:"overdueItems"`
+}
+
+// ──────────────────────────────────────────────
+// Upcoming Events types
+// ──────────────────────────────────────────────
+
+// UpcomingEvent represents a single upcoming event or deadline.
+type UpcomingEvent struct {
+	ID    string  `json:"id"`
+	Title string  `json:"title"`
+	Type  string  `json:"type"`
+	Date  string  `json:"date"`
+	Href  *string `json:"href,omitempty"`
+}
+
+// ──────────────────────────────────────────────
+// Query Builder types
+// ──────────────────────────────────────────────
+
+// SavedQuery represents a persisted ad-hoc query definition.
+type SavedQuery struct {
+	ID              uuid.UUID       `json:"id"`
+	TenantID        uuid.UUID       `json:"tenantId"`
+	Name            string          `json:"name"`
+	Description     *string         `json:"description"`
+	EntityType      string          `json:"entityType"`
+	Filters         json.RawMessage `json:"filters"`
+	Columns         []string        `json:"columns"`
+	SortBy          *string         `json:"sortBy"`
+	SortOrder       *string         `json:"sortOrder"`
+	GroupBy         *string         `json:"groupBy"`
+	ChartType       *string         `json:"chartType"`
+	IsShared        bool            `json:"isShared"`
+	Schedule        *string         `json:"schedule"`
+	EmailRecipients []string        `json:"emailRecipients"`
+	CreatedBy       uuid.UUID       `json:"createdBy"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+}
+
+// QueryFilter represents a single filter condition in the query builder.
+type QueryFilter struct {
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    any    `json:"value"`
+}
+
+// QueryResult represents the output of an executed query.
+type QueryResult struct {
+	Columns  []string         `json:"columns"`
+	Rows     []map[string]any `json:"rows"`
+	RowCount int              `json:"rowCount"`
+}
+
+// CreateSavedQueryRequest is the payload for creating a new saved query.
+type CreateSavedQueryRequest struct {
+	Name            string        `json:"name" validate:"required"`
+	Description     *string       `json:"description"`
+	EntityType      string        `json:"entityType" validate:"required"`
+	Filters         []QueryFilter `json:"filters"`
+	Columns         []string      `json:"columns" validate:"required"`
+	SortBy          *string       `json:"sortBy"`
+	SortOrder       *string       `json:"sortOrder"`
+	GroupBy         *string       `json:"groupBy"`
+	ChartType       *string       `json:"chartType"`
+	IsShared        bool          `json:"isShared"`
+	Schedule        *string       `json:"schedule"`
+	EmailRecipients []string      `json:"emailRecipients"`
+}
+
+// UpdateSavedQueryRequest is the payload for updating an existing saved query.
+type UpdateSavedQueryRequest struct {
+	Name            *string       `json:"name"`
+	Description     *string       `json:"description"`
+	EntityType      *string       `json:"entityType"`
+	Filters         []QueryFilter `json:"filters"`
+	Columns         []string      `json:"columns"`
+	SortBy          *string       `json:"sortBy"`
+	SortOrder       *string       `json:"sortOrder"`
+	GroupBy         *string       `json:"groupBy"`
+	ChartType       *string       `json:"chartType"`
+	IsShared        *bool         `json:"isShared"`
+	Schedule        *string       `json:"schedule"`
+	EmailRecipients []string      `json:"emailRecipients"`
+}
+
+// ExecuteQueryRequest is the payload for previewing or running an ad-hoc query.
+type ExecuteQueryRequest struct {
+	EntityType string        `json:"entityType" validate:"required"`
+	Columns    []string      `json:"columns" validate:"required"`
+	Filters    []QueryFilter `json:"filters"`
+	SortBy     *string       `json:"sortBy"`
+	SortOrder  *string       `json:"sortOrder"`
+	GroupBy    *string       `json:"groupBy"`
+}
+
+// EntityFieldInfo describes an allowed field for the query builder UI.
+type EntityFieldInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// EntitySchema describes the allowed fields for a given entity type.
+type EntitySchema struct {
+	EntityType string            `json:"entityType"`
+	Fields     []EntityFieldInfo `json:"fields"`
 }

@@ -35,7 +35,7 @@ func ParsePagination(r *http.Request) PaginationParams {
 	}
 
 	if limit := r.URL.Query().Get("limit"); limit != "" {
-		if v, err := strconv.Atoi(limit); err == nil && v > 0 && v <= 100 {
+		if v, err := strconv.Atoi(limit); err == nil && v > 0 && v <= 500 {
 			p.Limit = v
 		}
 	}

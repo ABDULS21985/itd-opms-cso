@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS budget_snapshots (
 CREATE INDEX IF NOT EXISTS idx_budget_snapshots_project ON budget_snapshots(project_id, snapshot_date);
 
 -- Auto-update projects.budget_spent when cost entries change
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION fn_update_project_budget_spent() RETURNS TRIGGER AS $$
 BEGIN
     UPDATE projects SET budget_spent = (
@@ -67,6 +68,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_cost_entry_budget_sync
     AFTER INSERT OR UPDATE OR DELETE ON project_cost_entries

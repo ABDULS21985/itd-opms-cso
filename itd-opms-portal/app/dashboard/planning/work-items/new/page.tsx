@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
+import { WorkItemPicker } from "@/components/shared/pickers";
 import { useCreateWorkItem, useProjects } from "@/hooks/use-planning";
 import { useUsers } from "@/hooks/use-system";
 
@@ -95,6 +96,7 @@ export default function NewWorkItemPage() {
   /* ---- Form state ---- */
   const [projectId, setProjectId] = useState("");
   const [parentId, setParentId] = useState("");
+  const [parentDisplay, setParentDisplay] = useState("");
   const [type, setType] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -327,20 +329,32 @@ export default function NewWorkItemPage() {
                       name="projectId"
                       type="select"
                       value={projectId}
-                      onChange={setProjectId}
+                      onChange={(v: string) => { setProjectId(v); setParentId(""); setParentDisplay(""); }}
                       options={projectOptions}
                       placeholder="Select project"
                       required
                       error={errors.projectId}
                     />
-                    <FormField
-                      label="Parent ID"
-                      name="parentId"
-                      value={parentId}
-                      onChange={setParentId}
-                      placeholder="Parent work item UUID (optional)"
-                      description="For subtasks, reference the parent item"
-                    />
+                    {projectId ? (
+                      <WorkItemPicker
+                        label="Parent Work Item"
+                        projectId={projectId}
+                        value={parentId || undefined}
+                        displayValue={parentDisplay}
+                        onChange={(id, title) => { setParentId(id ?? ""); setParentDisplay(title); }}
+                        description="For subtasks, reference the parent item"
+                      />
+                    ) : (
+                      <FormField
+                        label="Parent Work Item"
+                        name="parentId"
+                        value=""
+                        onChange={() => {}}
+                        placeholder="Select a project first"
+                        disabled
+                        description="For subtasks, reference the parent item"
+                      />
+                    )}
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField
@@ -466,7 +480,7 @@ export default function NewWorkItemPage() {
                         label="Project"
                         value={findLabel(projectOptions, projectId)}
                       />
-                      <ReviewField label="Parent ID" value={parentId} />
+                      <ReviewField label="Parent Item" value={parentDisplay || parentId} />
                       <ReviewField
                         label="Type"
                         value={findLabel(WORK_ITEM_TYPES, type)}

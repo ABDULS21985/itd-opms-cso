@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 
 interface HeatMapCell {
@@ -88,8 +88,8 @@ export function HeatMapGrid({
             {Array.from({ length: rows }, (_, ri) => {
               const rowIdx = rows - 1 - ri;
               return (
-                <>
-                  <div key={`label-${rowIdx}`} className="flex items-center justify-end pr-2">
+                <React.Fragment key={`row-${rowIdx}`}>
+                  <div className="flex items-center justify-end pr-2">
                     <span className="text-[9px] font-medium text-[var(--text-muted)]">
                       {rowLabels[ri]}
                     </span>
@@ -138,7 +138,7 @@ export function HeatMapGrid({
                       </motion.div>
                     );
                   })}
-                </>
+                </React.Fragment>
               );
             })}
           </div>

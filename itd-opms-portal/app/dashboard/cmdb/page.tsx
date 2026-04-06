@@ -11,6 +11,7 @@ import {
   Network,
   RefreshCw,
   BarChart3,
+  ClipboardCheck,
   Plus,
   ArrowRight,
   type LucideIcon,
@@ -21,6 +22,7 @@ import {
   useLicenseComplianceStats,
   useExpiringWarranties,
 } from "@/hooks/use-cmdb";
+import { useVerificationStats } from "@/hooks/use-verification";
 
 /* ------------------------------------------------------------------ */
 /*  Summary Card Type                                                   */
@@ -58,6 +60,7 @@ export default function CMDBHubPage() {
     useLicenseComplianceStats();
   const { data: expiringWarranties, isLoading: warrantiesLoading } =
     useExpiringWarranties(90);
+  const { data: verifStats, isLoading: verifLoading } = useVerificationStats();
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -111,6 +114,11 @@ export default function CMDBHubPage() {
     },
   ];
 
+  const verifPct =
+    verifStats && verifStats.total > 0
+      ? Math.round((verifStats.verified / verifStats.total) * 100)
+      : undefined;
+
   const quickLinks: QuickLink[] = [
     {
       label: "Register Asset",
@@ -126,6 +134,11 @@ export default function CMDBHubPage() {
       label: "Add License",
       href: "/dashboard/cmdb/licenses",
       icon: FileKey,
+    },
+    {
+      label: "New Verification Campaign",
+      href: "/dashboard/cmdb/verification",
+      icon: ClipboardCheck,
     },
   ];
 
@@ -212,6 +225,115 @@ export default function CMDBHubPage() {
         })}
       </div>
 
+      {/* Verification Status */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.35 }}
+      >
+        <Link
+          href="/dashboard/cmdb/verification"
+          className="group block rounded-xl border p-5 shadow-sm transition-all duration-200 hover:shadow-md"
+          style={{
+            backgroundColor: "var(--surface-0)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}
+              >
+                <ClipboardCheck size={18} style={{ color: "#10B981" }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  Physical Verification
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Asset verification campaign status
+                </p>
+              </div>
+            </div>
+            <ArrowRight
+              size={16}
+              className="text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-all duration-200"
+            />
+          </div>
+
+          {verifLoading ? (
+            <div className="flex gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex-1 h-12 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+              ))}
+            </div>
+          ) : verifStats ? (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="rounded-lg bg-[var(--surface-1)] p-3 text-center">
+                <p className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {verifStats.total}
+                </p>
+                <p className="text-[10px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+                  Total
+                </p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}>
+                <p className="text-lg font-bold tabular-nums" style={{ color: "#10B981" }}>
+                  {verifStats.verified}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "#10B981" }}>
+                  Verified
+                </p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "rgba(245, 158, 11, 0.1)" }}>
+                <p className="text-lg font-bold tabular-nums" style={{ color: "#F59E0B" }}>
+                  {verifStats.unverified}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "#F59E0B" }}>
+                  Unverified
+                </p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}>
+                <p className="text-lg font-bold tabular-nums" style={{ color: "#EF4444" }}>
+                  {verifStats.discrepancy}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "#EF4444" }}>
+                  Discrepancy
+                </p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "rgba(239, 68, 68, 0.05)" }}>
+                <p className="text-lg font-bold tabular-nums" style={{ color: "#EF4444" }}>
+                  {verifStats.overdue}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "#EF4444" }}>
+                  Overdue
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-secondary)]">No verification data available</p>
+          )}
+
+          {verifPct != null && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-[var(--text-secondary)]">Verification coverage</span>
+                <span className="text-xs font-bold tabular-nums" style={{ color: "#10B981" }}>
+                  {verifPct}%
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${verifPct}%`, backgroundColor: "#10B981" }}
+                />
+              </div>
+            </div>
+          )}
+        </Link>
+      </motion.div>
+
       {/* Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -292,6 +414,13 @@ export default function CMDBHubPage() {
                 "Run discovery reconciliation and review discrepancies",
               href: "/dashboard/cmdb/reconciliation",
               icon: RefreshCw,
+            },
+            {
+              title: "Verification",
+              description:
+                "Physical verification campaigns and asset stocktake workflows",
+              href: "/dashboard/cmdb/verification",
+              icon: ClipboardCheck,
             },
             {
               title: "Reports",

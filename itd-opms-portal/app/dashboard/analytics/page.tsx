@@ -13,8 +13,10 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowRight,
+  Info,
   type LucideIcon,
 } from "lucide-react";
+import { InfoHint } from "@/components/shared/info-hint";
 import {
   useExecutiveSummary,
 } from "@/hooks/use-reporting";
@@ -41,7 +43,10 @@ const RAG_COLORS = { green: "#22C55E", amber: "#F59E0B", red: "#EF4444" };
 const STATUS_COLORS: Record<string, string> = {
   proposed: "#9CA3AF", active: "#3B82F6", "in-development": "#8B5CF6",
   implementation: "#06B6D4", completed: "#22C55E", cancelled: "#EF4444",
-  "on-hold": "#F97316", "kick-off": "#14B8A6", "project-mode": "#6366F1",
+  // Backend constant uses on_hold (underscore); "on-hold" kept for legacy data
+  "on-hold": "#F97316", on_hold: "#F97316",
+  approved: "#10B981",
+  "kick-off": "#14B8A6", "project-mode": "#6366F1",
   "requirement-management": "#EC4899", "solution-architecture": "#A855F7",
 };
 
@@ -99,8 +104,7 @@ function computeDivisionalData(projects: Project[]) {
   const divisionMap: Record<string, Record<string, number>> = {};
   const allStatuses = new Set<string>();
   for (const p of projects) {
-    const md = p.metadata as Record<string, string> | undefined;
-    const division = md?.division || md?.owning_division || "Unassigned";
+    const division = p.divisionName || "Unassigned";
     const status = p.status || "unknown";
     allStatuses.add(status);
     if (!divisionMap[division]) divisionMap[division] = {};
@@ -179,12 +183,14 @@ export default function ExecutiveAnalyticsPage() {
   const { data: milestonesRaw, isLoading: milestonesLoading } = useMilestones();
 
   // Normalise paginated / array responses
-  const projects = useMemo<Project[]>(() => {
-    if (!projectsRaw) return [];
-    if (Array.isArray(projectsRaw)) return projectsRaw;
-    if ("data" in projectsRaw && Array.isArray((projectsRaw as { data: Project[] }).data))
-      return (projectsRaw as { data: Project[] }).data;
-    return [];
+  const { items: projects, totalFromMeta: projectsTotalFromMeta } = useMemo<{ items: Project[]; totalFromMeta: number | null }>(() => {
+    if (!projectsRaw) return { items: [], totalFromMeta: null };
+    if (Array.isArray(projectsRaw)) return { items: projectsRaw, totalFromMeta: null };
+    if ("data" in projectsRaw && Array.isArray((projectsRaw as { data: Project[]; meta?: { total?: number; totalItems?: number } }).data)) {
+      const typed = projectsRaw as { data: Project[]; meta?: { total?: number; totalItems?: number } };
+      return { items: typed.data, totalFromMeta: typed.meta?.total ?? typed.meta?.totalItems ?? null };
+    }
+    return { items: [], totalFromMeta: null };
   }, [projectsRaw]);
 
   const risks = useMemo<Risk[]>(() => {
@@ -212,7 +218,7 @@ export default function ExecutiveAnalyticsPage() {
   const riskHeatData = useMemo(() => computeRiskHeatMap(risks), [risks]);
   const milestoneTrend = useMemo(() => computeMilestoneTrend(milestones), [milestones]);
 
-  const totalProjects = projects.length;
+  const totalProjects = projectsTotalFromMeta ?? projects.length;
   const completedProjects = projects.filter((p) => p.status === "completed").length;
   const avgCompletion = totalProjects > 0
     ? Math.round(projects.reduce((s, p) => s + (p.completionPct || 0), 0) / totalProjects) : 0;
@@ -223,44 +229,50 @@ export default function ExecutiveAnalyticsPage() {
 
   const kpis: Array<{
     label: string; value: number | string | undefined; icon: LucideIcon;
-    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string;
+    color: string; bgColor: string; suffix?: string; subtitle?: string; href?: string; hint?: string;
   }> = [
-    {
-      label: "Total Projects", value: anyLoading ? undefined : totalProjects,
-      icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
-      subtitle: `${completedProjects} completed`,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Completed", value: anyLoading ? undefined : completedProjects,
-      icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
-      subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
-      icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
-      icon: DollarSign, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
-      subtitle: totalBudgetApproved > 0
-        ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
-      href: "/dashboard/planning/projects",
-    },
-    {
-      label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
-      icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
-      href: "/dashboard/planning/milestones",
-    },
-    {
-      label: "Active Risks", value: summary?.highRisks,
-      icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
-      subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
-      href: "/dashboard/planning/risks",
-    },
-  ];
+      {
+        label: "Total Projects", value: anyLoading ? undefined : totalProjects,
+        icon: FolderKanban, color: "#1B7340", bgColor: "rgba(27,115,64,0.1)",
+        subtitle: `${completedProjects} completed`,
+        href: "/dashboard/planning/projects",
+        hint: "Total number of projects across all portfolios, regardless of status. Click to view the project list.",
+      },
+      {
+        label: "Completed", value: anyLoading ? undefined : completedProjects,
+        icon: CheckCircle2, color: "#22C55E", bgColor: "rgba(34,197,94,0.1)",
+        subtitle: totalProjects > 0 ? `${Math.round((completedProjects / totalProjects) * 100)}% of total` : undefined,
+        href: "/dashboard/planning/projects",
+        hint: "Number of projects with 'completed' status. Percentage shows completion rate relative to total projects.",
+      },
+      {
+        label: "Overall Progress", value: anyLoading ? undefined : avgCompletion,
+        icon: Activity, color: "#3B82F6", bgColor: "rgba(59,130,246,0.1)", suffix: "%",
+        href: "/dashboard/planning/projects",
+        hint: "Average completion percentage across all active projects. Calculated from individual project progress.",
+      },
+      {
+        label: "Budget Utilization", value: anyLoading ? undefined : budgetUtilization,
+        icon: DollarSign, color: "#8B5CF6", bgColor: "rgba(139,92,246,0.1)", suffix: "%",
+        subtitle: totalBudgetApproved > 0
+          ? `${(totalBudgetSpent / 1e6).toFixed(1)}M / ${(totalBudgetApproved / 1e6).toFixed(1)}M` : undefined,
+        href: "/dashboard/planning/projects",
+        hint: "Percentage of approved budget that has been spent. Values above 100% indicate overspend.",
+      },
+      {
+        label: "On-Time Delivery", value: summary?.onTimeDeliveryPct,
+        icon: Clock, color: "#06B6D4", bgColor: "rgba(6,182,212,0.1)", suffix: "%",
+        href: "/dashboard/planning/milestones",
+        hint: "Percentage of milestones delivered on or before their target date.",
+      },
+      {
+        label: "Active Risks", value: summary?.highRisks,
+        icon: AlertTriangle, color: "#EF4444", bgColor: "rgba(239,68,68,0.1)",
+        subtitle: summary?.criticalRisks ? `${summary.criticalRisks} critical` : undefined,
+        href: "/dashboard/planning/risks",
+        hint: "Number of risks rated high or above. Critical risks require immediate attention and escalation.",
+      },
+    ];
 
   return (
     <div className="space-y-6 pb-8">
@@ -278,7 +290,7 @@ export default function ExecutiveAnalyticsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                PMO Executive Dashboard
+                Divisional Executive Dashboard
               </h1>
               <p className="text-sm text-[var(--text-secondary)]">
                 Cross-module performance overview and strategic insights
@@ -303,8 +315,7 @@ export default function ExecutiveAnalyticsPage() {
       >
         {analyticsPages.map((page) => (
           <Link key={page.href} href={page.href}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              page.active ? "text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${page.active ? "text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"}`}
             style={page.active ? { backgroundColor: "#1B7340" } : undefined}>
             {page.label}
           </Link>
@@ -314,19 +325,38 @@ export default function ExecutiveAnalyticsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpis.map((kpi, index) => (
-          <KPIStatCard key={kpi.label} {...kpi} isLoading={anyLoading} index={index} />
+          <div key={kpi.label} className="relative">
+            <KPIStatCard {...kpi} isLoading={anyLoading} index={index} />
+            {kpi.hint && (
+              <span className="absolute top-2 right-2">
+                <InfoHint text={kpi.hint} position="bottom" size={13} />
+              </span>
+            )}
+          </div>
         ))}
       </div>
 
       {/* Row 2 — Primary Charts 2x2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Project Lifecycle Funnel" subtitle="Project flow through stages" delay={0.2}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Shows how projects flow through stages from Proposed to Completed. Wider bars mean more projects at that stage.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <FunnelChart data={funnelData} height={260} />}
         </ChartCard>
 
         <ChartCard title="RAG Status Distribution" subtitle="Project health indicators" delay={0.25}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Green = on track, Amber = at risk, Red = critical issues. Ring percentage shows proportion of total projects.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-64 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : (
@@ -346,37 +376,67 @@ export default function ExecutiveAnalyticsPage() {
         </ChartCard>
 
         <ChartCard title="Divisional Progress Tracker" subtitle="Status by division" delay={0.3}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Each bar represents a division. Segments show project status breakdown — larger completed segments indicate better delivery.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <StackedBarChart data={divisionalData.data} categories={divisionalData.categories}
-                height={280} layout="vertical" colors={Object.values(STATUS_COLORS)} />}
+              height={280} layout="vertical" colors={Object.values(STATUS_COLORS)} />}
         </ChartCard>
 
         <ChartCard title="Budget Overview" subtitle="Approved → Spent → Remaining" delay={0.35}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Waterfall view: total approved budget minus total spent equals remaining. If spent exceeds approved, the portfolio is over budget.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-72 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <WaterfallChart data={budgetData} height={280}
-                formatValue={(v) => `${(v / 1e6).toFixed(1)}M`} />}
+              formatValue={(v) => `${(v / 1e6).toFixed(1)}M`} />}
         </ChartCard>
       </div>
 
       {/* Row 3 — Secondary Charts 3-col */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <ChartCard title="Priority Distribution" delay={0.4}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Breakdown of projects by priority level. High concentration in critical/high may indicate resource strain.
+            </span>
+          </div>
           {projectsLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <DonutChart data={priorityData} height={220} innerRadius={45} outerRadius={75}
-                centerLabel="Projects" showLabel />}
+              centerLabel="Projects" showLabel />}
         </ChartCard>
 
         <ChartCard title="Milestone Progress" subtitle="Completed vs pending over time" delay={0.45}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Monthly trend of completed vs pending milestones. Rising completed line indicates healthy delivery velocity.
+            </span>
+          </div>
           {milestonesLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <TrendLineChart data={milestoneTrend} height={220}
-                lines={[{ key: "Completed", color: "#22C55E" }, { key: "Pending", color: "#F59E0B" }]} />}
+              lines={[{ key: "Completed", color: "#22C55E" }, { key: "Pending", color: "#F59E0B" }]} />}
         </ChartCard>
 
         <ChartCard title="Risk Heat Map" subtitle="Likelihood vs Impact" delay={0.5}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Info size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)]">
+              5x5 matrix plotting risk likelihood (horizontal) vs impact (vertical). Darker cells in top-right corner need urgent attention.
+            </span>
+          </div>
           {risksLoading
             ? <div className="h-52 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             : <HeatMapGrid data={riskHeatData} height={220} />}

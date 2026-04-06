@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useState,
-  useCallback,
   useEffect,
   type ReactNode,
 } from "react";
@@ -54,13 +53,34 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
  */
 export function useBreadcrumbs(items: BreadcrumbItem[]) {
   const { setOverrides } = useContext(BreadcrumbContext);
+  const [normalizedItems, setNormalizedItems] = useState<BreadcrumbItem[]>(items);
+
+  // Keep a normalized snapshot of the items that only changes when the
+  // breadcrumb contents (label/href) actually change. This avoids depending
+  // on JSON.stringify hacks or disabling exhaustive-deps.
+  useEffect(() => {
+    setNormalizedItems((prev) =>
+      areBreadcrumbArraysEqual(prev, items) ? prev : items
+    );
+  }, [items]);
 
   useEffect(() => {
-    setOverrides(items);
+    setOverrides(normalizedItems);
     return () => setOverrides(null);
-    // Only re-run when the serialized items change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(items), setOverrides]);
+  }, [normalizedItems, setOverrides]);
+}
+
+function areBreadcrumbArraysEqual(a: BreadcrumbItem[], b: BreadcrumbItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const ai = a[i];
+    const bi = b[i];
+    if (ai.label !== bi.label || ai.href !== bi.href) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Read-only access to the current breadcrumb overrides (used by the header). */
