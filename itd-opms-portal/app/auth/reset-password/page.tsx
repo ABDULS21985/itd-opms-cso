@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowLeft,
-  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 

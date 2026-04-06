@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, userEvent, within } from "@/test/test-utils";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, userEvent } from "@/test/test-utils";
 import { DataTable, type Column, type BulkAction } from "../data-table";
 
 // ---------------------------------------------------------------------------
