@@ -11,23 +11,28 @@ import {
   CheckCircle2,
   ClipboardList,
   ExternalLink,
+  Eye,
   FileText,
   Link as LinkIcon,
   Loader2,
   Plus,
+  RotateCcw,
+  Building2,
   Save,
+  Search,
   Sparkles,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
-import { UserPicker } from "@/components/shared/pickers";
+import { UserPicker, OrgUnitPicker } from "@/components/shared/pickers";
 import {
   useCreateKnownError,
   useCreateProblem,
   useKnownErrors,
   useProblems,
+  useTransitionProblem,
 } from "@/hooks/use-itsm";
 import type { ITSMProblem, KnownError } from "@/types";
 
@@ -114,6 +119,29 @@ const STATUS_SUMMARY: Record<
     bgColor: "rgba(27, 115, 64, 0.12)",
     description: "Problem record has reached closure.",
   },
+};
+
+const PROBLEM_TRANSITIONS: Record<
+  string,
+  { value: string; label: string; icon: LucideIcon; accent: string }[]
+> = {
+  logged: [
+    { value: "investigating", label: "Investigate", icon: Search, accent: "#2563EB" },
+  ],
+  investigating: [
+    { value: "root_cause_identified", label: "Root Cause Found", icon: Eye, accent: "#D97706" },
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+  ],
+  root_cause_identified: [
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  known_error: [
+    { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
+  ],
+  resolved: [
+    { value: "investigating", label: "Reopen", icon: RotateCcw, accent: "#2563EB" },
+  ],
 };
 
 function clampPercent(value: number) {
@@ -442,8 +470,10 @@ function ProblemCard({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const transitionProblem = useTransitionProblem();
   const statusMeta = getStatusMeta(problem.status);
   const incidentCount = problem.linkedIncidentIds.length;
+  const transitions = PROBLEM_TRANSITIONS[problem.status] ?? [];
 
   const highlights = [
     {
@@ -538,28 +568,68 @@ function ProblemCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
-        <span>Owner: {truncateId(problem.ownerId)}</span>
+        {problem.ownerName ? (
+          <span>Owner: {problem.ownerName}</span>
+        ) : problem.ownerId ? (
+          <span>Owner: {truncateId(problem.ownerId)}</span>
+        ) : null}
+        {problem.assignedGroupName && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2 py-0.5">
+            <Building2 size={11} />
+            {problem.assignedGroupName}
+          </span>
+        )}
         <span>Created {formatDate(problem.createdAt)}</span>
         <span>Updated {formatRelativeTime(problem.updatedAt)}</span>
         {problem.linkedChangeId && <span>Change {truncateId(problem.linkedChangeId)}</span>}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-        <div className="max-w-2xl text-sm text-[var(--text-secondary)]">
-          {statusMeta.description}
+        <div className="flex flex-wrap items-center gap-2">
+          {transitions.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                disabled={transitionProblem.isPending}
+                onClick={() =>
+                  transitionProblem.mutate({
+                    id: problem.id,
+                    targetStatus: t.value,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                style={{
+                  borderColor: `${t.accent}40`,
+                  backgroundColor: `${t.accent}10`,
+                  color: t.accent,
+                }}
+              >
+                {transitionProblem.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Icon size={13} />
+                )}
+                {t.label}
+              </button>
+            );
+          })}
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
-          style={{ borderColor: "var(--border)" }}
-        >
-          {expanded ? "Hide diagnostics" : "Expand diagnostics"}
-          <ArrowRight
-            size={15}
-            className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-          />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {expanded ? "Hide diagnostics" : "Expand diagnostics"}
+            <ArrowRight
+              size={15}
+              className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+            />
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -623,8 +693,10 @@ export default function ProblemsPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [groupFilterDisplay, setGroupFilterDisplay] = useState("");
 
-  const { data, isLoading } = useProblems(page, 12, status || undefined);
+  const { data, isLoading } = useProblems(page, 12, status || undefined, groupFilter || undefined);
   const { data: knownErrors, isLoading: knownErrorsLoading } =
     useKnownErrors();
   const createProblem = useCreateProblem();
@@ -637,6 +709,8 @@ export default function ProblemsPage() {
   const [newDescription, setNewDescription] = useState("");
   const [newOwnerId, setNewOwnerId] = useState("");
   const [ownerDisplay, setOwnerDisplay] = useState("");
+  const [newGroupId, setNewGroupId] = useState("");
+  const [groupDisplay, setGroupDisplay] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const unresolvedCount = problems.filter(
@@ -689,6 +763,8 @@ export default function ProblemsPage() {
     setNewDescription("");
     setNewOwnerId("");
     setOwnerDisplay("");
+    setNewGroupId("");
+    setGroupDisplay("");
     setFormErrors({});
   }
 
@@ -708,6 +784,7 @@ export default function ProblemsPage() {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
         ownerId: newOwnerId.trim() || undefined,
+        assignedGroupId: newGroupId.trim() || undefined,
       },
       {
         onSuccess: resetCreateForm,
@@ -887,28 +964,42 @@ export default function ProblemsPage() {
         </div>
       </motion.div>
 
-      <div className="flex flex-wrap gap-2">
-        {PROBLEM_STATUSES.map((option) => {
-          const active = option.value === status;
-          return (
-            <button
-              key={option.label}
-              type="button"
-              onClick={() => {
-                setStatus(option.value);
-                setPage(1);
-              }}
-              className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
-              style={{
-                borderColor: active ? option.accent : "var(--border)",
-                backgroundColor: active ? `${option.accent}14` : "var(--surface-0)",
-                color: active ? option.accent : "var(--text-secondary)",
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-2">
+          {PROBLEM_STATUSES.map((option) => {
+            const active = option.value === status;
+            return (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => {
+                  setStatus(option.value);
+                  setPage(1);
+                }}
+                className="rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200"
+                style={{
+                  borderColor: active ? option.accent : "var(--border)",
+                  backgroundColor: active ? `${option.accent}14` : "var(--surface-0)",
+                  color: active ? option.accent : "var(--text-secondary)",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="w-56">
+          <OrgUnitPicker
+            value={groupFilter || undefined}
+            displayValue={groupFilterDisplay}
+            onChange={(id, name) => {
+              setGroupFilter(id ?? "");
+              setGroupFilterDisplay(name);
+              setPage(1);
+            }}
+            placeholder="Filter by group"
+          />
+        </div>
       </div>
 
       <AnimatePresence>
@@ -971,6 +1062,17 @@ export default function ProblemsPage() {
                   setOwnerDisplay(name);
                 }}
                 placeholder="Assign an investigation owner"
+              />
+
+              <OrgUnitPicker
+                label="Assigned Group"
+                value={newGroupId || undefined}
+                displayValue={groupDisplay}
+                onChange={(id, name) => {
+                  setNewGroupId(id ?? "");
+                  setGroupDisplay(name);
+                }}
+                placeholder="Route to a department or unit"
               />
 
               <div className="lg:col-span-2">

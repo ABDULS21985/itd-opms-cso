@@ -26,8 +26,23 @@ export interface Asset {
   classification?: string;
   attributes?: Record<string, unknown>;
   tags: string[];
+  lastVerifiedAt?: string;
+  lastVerifiedBy?: string;
+  verificationStatus?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssetVerification {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  verifierId: string;
+  verifiedAt: string;
+  locationConfirmed?: boolean;
+  condition?: string;
+  notes?: string;
+  photoEvidenceIds: string[];
 }
 
 export interface AssetLifecycleEvent {
@@ -79,6 +94,23 @@ export interface CMDBRelationship {
   description?: string;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface CMDBTopologyStats {
+  totalItems: number;
+  totalRelationships: number;
+  activeItems: number;
+  focusedNeighborCount: number;
+  typeCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  relationshipTypeCounts: Record<string, number>;
+}
+
+export interface CMDBTopology {
+  items: CMDBItem[];
+  relationships: CMDBRelationship[];
+  focusCiId?: string;
+  stats: CMDBTopologyStats;
 }
 
 export interface ReconciliationRun {
@@ -156,4 +188,154 @@ export interface LicenseComplianceStats {
   compliant: number;
   overDeployed: number;
   underUtilized: number;
+}
+
+/* ====================================================================== */
+/*  Discovery Types                                                        */
+/* ====================================================================== */
+
+export interface DiscoveryProfile {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  scanType: string;
+  configuration: Record<string, unknown>;
+  schedule?: string;
+  isActive: boolean;
+  lastRunAt?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  tenantId: string;
+  profileId: string;
+  profileName?: string;
+  scanType?: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  devicesFound: number;
+  newCis: number;
+  updatedCis: number;
+  errors: unknown[];
+  createdAt: string;
+}
+
+export interface DiscoveredDevice {
+  id: string;
+  runId: string;
+  source?: string;
+  hostname?: string;
+  ipAddress?: string;
+  macAddress?: string;
+  deviceType?: string;
+  osName?: string;
+  osVersion?: string;
+  manufacturer?: string;
+  model?: string;
+  serialNumber?: string;
+  openPorts: number[];
+  attributes: Record<string, unknown>;
+  matchedCiId?: string;
+  matchConfidence?: number;
+  action?: string;
+  createdAt: string;
+}
+
+export interface DiscoveryStats {
+  totalProfiles: number;
+  activeProfiles: number;
+  totalRuns: number;
+  lastRunAt?: string;
+  adEnabled: boolean;
+  adTenantId?: string;
+  networkEnabled: boolean;
+  sccmConfigured: boolean;
+}
+
+/* ====================================================================== */
+/*  Verification Campaign Types                                            */
+/* ====================================================================== */
+
+export interface VerificationCampaign {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  status: string;
+  scopeFilter: Record<string, unknown>;
+  targetAssetCount: number;
+  verifiedCount: number;
+  discrepancyCount: number;
+  startedAt?: string;
+  completedAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignAsset {
+  id: string;
+  assetTag: string;
+  name: string;
+  type: string;
+  status: string;
+  location?: string;
+  building?: string;
+  floor?: string;
+  room?: string;
+  verificationStatus: string;
+  lastVerifiedAt?: string;
+}
+
+export interface VerificationStats {
+  total: number;
+  verified: number;
+  unverified: number;
+  discrepancy: number;
+  overdue: number;
+}
+
+/* ====================================================================== */
+/*  ERP Integration Types                                                  */
+/* ====================================================================== */
+
+export interface AssetFinancialView {
+  assetId: string;
+  assetTag: string;
+  assetName: string;
+  purchasePrice?: number;
+  purchaseCost?: number;
+  currency?: string;
+  currentBookValue?: number;
+  depreciationRate?: number;
+  costCenter?: string;
+  poNumber?: string;
+  erpAssetId?: string;
+  erpSyncAt?: string;
+  purchaseDate?: string;
+}
+
+export interface ERPSyncLog {
+  id: string;
+  tenantId: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  assetsSynced: number;
+  assetsFailed: number;
+  errorDetails?: unknown;
+  triggeredBy?: string;
+  createdAt: string;
+}
+
+export interface ERPSyncStatus {
+  erpEnabled: boolean;
+  lastSync?: ERPSyncLog;
+  totalSynced: number;
 }

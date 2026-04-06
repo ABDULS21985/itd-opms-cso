@@ -6,14 +6,23 @@ import type {
   AssetLifecycleEvent,
   AssetDisposal,
   AssetStats,
+  AssetVerification,
   CMDBItem,
   CMDBRelationship,
+  CMDBTopology,
   ReconciliationRun,
   License,
   LicenseAssignment,
   LicenseComplianceStats,
   Warranty,
   RenewalAlert,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoveredDevice,
+  DiscoveryStats,
+  AssetFinancialView,
+  ERPSyncStatus,
+  ERPSyncLog,
   PaginatedResponse,
 } from "@/types";
 
@@ -90,9 +99,7 @@ export function useAssetLifecycleEvents(assetId: string | undefined) {
   return useQuery({
     queryKey: ["asset-lifecycle", assetId],
     queryFn: () =>
-      apiClient.get<AssetLifecycleEvent[]>(
-        `/cmdb/assets/${assetId}/lifecycle`,
-      ),
+      apiClient.get<AssetLifecycleEvent[]>(`/cmdb/assets/${assetId}/lifecycle`),
     enabled: !!assetId,
   });
 }
@@ -223,6 +230,57 @@ export function useCreateLifecycleEvent() {
 }
 
 /* ================================================================== */
+/*  Asset Verification — Queries & Mutations                            */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/assets/{id}/verifications - verification history for an asset.
+ */
+export function useAssetVerifications(assetId: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-verifications", assetId],
+    queryFn: () =>
+      apiClient.get<AssetVerification[]>(
+        `/cmdb/assets/${assetId}/verifications`,
+      ),
+    enabled: !!assetId,
+  });
+}
+
+/**
+ * POST /cmdb/assets/{id}/verify - verify an asset.
+ */
+export function useVerifyAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      assetId,
+      ...body
+    }: {
+      assetId: string;
+      locationConfirmed?: boolean;
+      condition?: string;
+      notes?: string;
+      photoEvidenceIds?: string[];
+    }) =>
+      apiClient.post<AssetVerification>(`/cmdb/assets/${assetId}/verify`, body),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["asset-verifications", variables.assetId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["asset", variables.assetId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      toast.success("Asset verified successfully");
+    },
+    onError: () => {
+      toast.error("Failed to verify asset");
+    },
+  });
+}
+
+/* ================================================================== */
 /*  Disposals — Queries & Mutations                                     */
 /* ================================================================== */
 
@@ -232,8 +290,7 @@ export function useCreateLifecycleEvent() {
 export function useAssetDisposal(id: string | undefined) {
   return useQuery({
     queryKey: ["asset-disposal", id],
-    queryFn: () =>
-      apiClient.get<AssetDisposal>(`/cmdb/assets/disposals/${id}`),
+    queryFn: () => apiClient.get<AssetDisposal>(`/cmdb/assets/disposals/${id}`),
     enabled: !!id,
   });
 }
@@ -355,6 +412,29 @@ export function useCMDBRelationships(ciId: string | undefined) {
   });
 }
 
+/**
+ * GET /cmdb/topology - graph payload for the topology workspace.
+ */
+export function useCMDBTopology(
+  q?: string,
+  ciType?: string,
+  status?: string,
+  focusCiId?: string,
+  limit = 80,
+) {
+  return useQuery({
+    queryKey: ["cmdb-topology", q, ciType, status, focusCiId, limit],
+    queryFn: () =>
+      apiClient.get<CMDBTopology>("/cmdb/topology", {
+        q,
+        ciType,
+        status,
+        focusCiId,
+        limit,
+      }),
+  });
+}
+
 /* ================================================================== */
 /*  CMDB Items — Mutations                                              */
 /* ================================================================== */
@@ -428,14 +508,12 @@ export function useCreateRelationship() {
       ciId,
       ...body
     }: Partial<CMDBRelationship> & { ciId: string }) =>
-      apiClient.post<CMDBRelationship>(
-        `/cmdb/relationships`,
-        body,
-      ),
+      apiClient.post<CMDBRelationship>(`/cmdb/relationships`, body),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["cmdb-relationships", variables.ciId],
       });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-topology"] });
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Relationship created successfully");
     },
@@ -458,12 +536,12 @@ export function useDeleteRelationship() {
     }: {
       ciId: string;
       relationshipId: string;
-    }) =>
-      apiClient.delete(`/cmdb/relationships/${relationshipId}`),
+    }) => apiClient.delete(`/cmdb/relationships/${relationshipId}`),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["cmdb-relationships", variables.ciId],
       });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-topology"] });
       queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
       toast.success("Relationship deleted successfully");
     },
@@ -695,10 +773,7 @@ export function useDeleteLicenseAssignment() {
     }: {
       licenseId: string;
       assignmentId: string;
-    }) =>
-      apiClient.delete(
-        `/cmdb/licenses/assignments/${assignmentId}`,
-      ),
+    }) => apiClient.delete(`/cmdb/licenses/assignments/${assignmentId}`),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["license-assignments", variables.licenseId],
@@ -725,11 +800,7 @@ export function useDeleteLicenseAssignment() {
 /**
  * GET /cmdb/warranties - paginated list of warranties.
  */
-export function useWarranties(
-  page = 1,
-  limit = 20,
-  renewalStatus?: string,
-) {
+export function useWarranties(page = 1, limit = 20, renewalStatus?: string) {
   return useQuery({
     queryKey: ["warranties", page, limit, renewalStatus],
     queryFn: () =>
@@ -834,8 +905,7 @@ export function useDeleteWarranty() {
 export function usePendingAlerts() {
   return useQuery({
     queryKey: ["renewal-alerts"],
-    queryFn: () =>
-      apiClient.get<RenewalAlert[]>("/cmdb/renewal-alerts"),
+    queryFn: () => apiClient.get<RenewalAlert[]>("/cmdb/renewal-alerts"),
   });
 }
 
@@ -871,6 +941,302 @@ export function useMarkAlertSent() {
     },
     onError: () => {
       toast.error("Failed to mark alert as sent");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Discovery — Queries & Mutations                                    */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/discovery/stats - discovery dashboard stats.
+ */
+export function useDiscoveryStats() {
+  return useQuery({
+    queryKey: ["discovery-stats"],
+    queryFn: () => apiClient.get<DiscoveryStats>("/cmdb/discovery/stats"),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/profiles - paginated list of discovery profiles.
+ */
+export function useDiscoveryProfiles(
+  page = 1,
+  limit = 20,
+  scanType?: string,
+  isActive?: boolean,
+) {
+  return useQuery({
+    queryKey: ["discovery-profiles", page, limit, scanType, isActive],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveryProfile>>(
+        "/cmdb/discovery/profiles",
+        { page, limit, scanType, isActive },
+      ),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/profiles/{id} - single profile detail.
+ */
+export function useDiscoveryProfile(id: string | undefined) {
+  return useQuery({
+    queryKey: ["discovery-profile", id],
+    queryFn: () =>
+      apiClient.get<DiscoveryProfile>(`/cmdb/discovery/profiles/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * POST /cmdb/discovery/profiles - create a new discovery profile.
+ */
+export function useCreateDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<DiscoveryProfile>) =>
+      apiClient.post<DiscoveryProfile>("/cmdb/discovery/profiles", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery profile created");
+    },
+    onError: () => {
+      toast.error("Failed to create discovery profile");
+    },
+  });
+}
+
+/**
+ * PUT /cmdb/discovery/profiles/{id} - update an existing profile.
+ */
+export function useUpdateDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: Partial<DiscoveryProfile> & { id: string }) =>
+      apiClient.put<DiscoveryProfile>(`/cmdb/discovery/profiles/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profile"] });
+      toast.success("Discovery profile updated");
+    },
+    onError: () => {
+      toast.error("Failed to update discovery profile");
+    },
+  });
+}
+
+/**
+ * DELETE /cmdb/discovery/profiles/{id} - delete a profile.
+ */
+export function useDeleteDiscoveryProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/cmdb/discovery/profiles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery profile deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete discovery profile");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/discovery/profiles/{id}/run - trigger a discovery run.
+ */
+export function useTriggerDiscoveryRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) =>
+      apiClient.post<DiscoveryRun>(`/cmdb/discovery/profiles/${profileId}/run`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      toast.success("Discovery run triggered");
+    },
+    onError: () => {
+      toast.error("Failed to trigger discovery run");
+    },
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs - paginated list of discovery runs.
+ */
+export function useDiscoveryRuns(
+  page = 1,
+  limit = 20,
+  profileId?: string,
+  status?: string,
+) {
+  return useQuery({
+    queryKey: ["discovery-runs", page, limit, profileId, status],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveryRun>>("/cmdb/discovery/runs", {
+        page,
+        limit,
+        profileId,
+        status,
+      }),
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs/{id} - single run detail.
+ */
+export function useDiscoveryRun(id: string | undefined) {
+  return useQuery({
+    queryKey: ["discovery-run", id],
+    queryFn: () => apiClient.get<DiscoveryRun>(`/cmdb/discovery/runs/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * GET /cmdb/discovery/runs/{id}/devices - discovered devices for a run.
+ */
+export function useDiscoveryRunDevices(
+  runId: string | undefined,
+  page = 1,
+  limit = 50,
+  action?: string,
+) {
+  return useQuery({
+    queryKey: ["discovery-run-devices", runId, page, limit, action],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<DiscoveredDevice>>(
+        `/cmdb/discovery/runs/${runId}/devices`,
+        { page, limit, action },
+      ),
+    enabled: !!runId,
+  });
+}
+
+/**
+ * POST /cmdb/discovery/runs/{id}/reconcile - apply discovery to CMDB.
+ */
+export function useReconcileDiscoveryRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      runId,
+      deviceIds,
+    }: {
+      runId: string;
+      deviceIds: string[];
+    }) =>
+      apiClient.post<DiscoveryRun>(`/cmdb/discovery/runs/${runId}/reconcile`, {
+        deviceIds,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-run"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-run-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
+      toast.success("Reconciliation completed");
+    },
+    onError: () => {
+      toast.error("Failed to reconcile discovery run");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/discovery/import-csv - upload CSV for bulk discovery import.
+ */
+export function useImportDiscoveryCSV() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) =>
+      apiClient.upload<DiscoveryRun>("/cmdb/discovery/import-csv", formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery-profiles"] });
+      toast.success("CSV imported successfully");
+    },
+    onError: () => {
+      toast.error("Failed to import CSV");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  ERP Integration                                                     */
+/* ================================================================== */
+
+/**
+ * GET /cmdb/assets/{id}/financials - asset financial details from ERP.
+ */
+export function useAssetFinancials(assetId: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-financials", assetId],
+    queryFn: () =>
+      apiClient.get<AssetFinancialView>(`/cmdb/assets/${assetId}/financials`),
+    enabled: !!assetId,
+  });
+}
+
+/**
+ * GET /cmdb/integrations/erp/status - last ERP sync status.
+ */
+export function useERPSyncStatus() {
+  return useQuery({
+    queryKey: ["erp-sync-status"],
+    queryFn: () =>
+      apiClient.get<ERPSyncStatus>("/cmdb/integrations/erp/status"),
+  });
+}
+
+/**
+ * POST /cmdb/integrations/erp/sync - trigger full ERP sync.
+ */
+export function useTriggerERPSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<ERPSyncLog>("/cmdb/integrations/erp/sync", {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["erp-sync-status"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-financials"] });
+      toast.success("ERP sync completed");
+    },
+    onError: () => {
+      toast.error("ERP sync failed");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/assets/{id}/financials/sync - sync single asset from ERP.
+ */
+export function useSyncAssetFromERP(assetId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<AssetFinancialView>(
+        `/cmdb/assets/${assetId}/financials/sync`,
+        {},
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["asset-financials", assetId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["asset", assetId] });
+      queryClient.invalidateQueries({ queryKey: ["erp-sync-status"] });
+      toast.success("Asset synced from ERP");
+    },
+    onError: () => {
+      toast.error("Failed to sync asset from ERP");
     },
   });
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,18 +86,22 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
 	}
 
-	// Look up catalog item to check approval requirements.
+	// Look up catalog item to check approval requirements and SLA policy.
 	itemQuery := `
-		SELECT id, approval_required, approval_chain_config, name
-		FROM catalog_items
+		SELECT id, approval_required, approval_chain_config, name,
+			COALESCE(approval_mode, 'sequential'), sla_policy_id
+		FROM service_catalog_items
 		WHERE id = $1 AND tenant_id = $2 AND status = 'active'`
 
 	var itemID uuid.UUID
 	var approvalRequired bool
 	var chainConfigRaw json.RawMessage
 	var itemName string
+	var approvalMode string
+	var catalogSLAPolicyID *uuid.UUID
 	err := s.pool.QueryRow(ctx, itemQuery, req.CatalogItemID, auth.TenantID).Scan(
-		&itemID, &approvalRequired, &chainConfigRaw, &itemName,
+		&itemID, &approvalRequired, &chainConfigRaw, &itemName, &approvalMode,
+		&catalogSLAPolicyID,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -118,6 +123,55 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 
 	id := uuid.New()
 	now := time.Now().UTC()
+	requestPriority := "P3_medium"
+
+	// Calculate SLA targets if catalog item has an SLA policy.
+	var slaPolicyID *uuid.UUID
+	var slaResolutionTarget *time.Time // approval deadline
+	var slaFulfillmentTarget *time.Time // fulfillment deadline
+	if catalogSLAPolicyID != nil {
+		var priorityTargetsRaw json.RawMessage
+		var calendarID *uuid.UUID
+		err := s.pool.QueryRow(ctx,
+			`SELECT priority_targets, business_hours_calendar_id FROM sla_policies
+			 WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
+			*catalogSLAPolicyID, auth.TenantID,
+		).Scan(&priorityTargetsRaw, &calendarID)
+		if err == nil {
+			// Load business hours calendar if referenced.
+			var calendar *BusinessHoursCalendar
+			if calendarID != nil {
+				var cal BusinessHoursCalendar
+				calErr := s.pool.QueryRow(ctx,
+					`SELECT id, tenant_id, name, timezone, schedule, holidays, created_at, updated_at
+					 FROM business_hours_calendars WHERE id = $1 AND tenant_id = $2`,
+					*calendarID, auth.TenantID,
+				).Scan(&cal.ID, &cal.TenantID, &cal.Name, &cal.Timezone, &cal.Schedule, &cal.Holidays, &cal.CreatedAt, &cal.UpdatedAt)
+				if calErr == nil {
+					calendar = &cal
+				}
+			}
+
+			// Parse priority_targets JSONB: {"P3_medium": {"response_minutes": 60, "resolution_minutes": 480}, ...}
+			var targets map[string]struct {
+				ResponseMinutes   int `json:"response_minutes"`
+				ResolutionMinutes int `json:"resolution_minutes"`
+			}
+			if json.Unmarshal(priorityTargetsRaw, &targets) == nil {
+				if t, ok := targets[requestPriority]; ok {
+					slaPolicyID = catalogSLAPolicyID
+					if t.ResponseMinutes > 0 {
+						rt := advanceByBusinessMinutes(now, t.ResponseMinutes, calendar)
+						slaResolutionTarget = &rt
+					}
+					if t.ResolutionMinutes > 0 {
+						ft := advanceByBusinessMinutes(now, t.ResolutionMinutes, calendar)
+						slaFulfillmentTarget = &ft
+					}
+				}
+			}
+		}
+	}
 
 	// Begin transaction.
 	tx, err := s.pool.Begin(ctx)
@@ -131,27 +185,36 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 		INSERT INTO service_requests (
 			id, tenant_id, catalog_item_id, requester_id,
 			status, form_data, priority,
+			sla_policy_id, sla_resolution_target, sla_fulfillment_target,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4,
-			$5, $6, 'P3_medium',
-			$7, $8
+			$5, $6, $7,
+			$8, $9, $10,
+			$11, $12
 		)
 		RETURNING id, tenant_id, request_number, catalog_item_id, requester_id,
 			status, form_data, assigned_to, priority, ticket_id,
 			rejection_reason, fulfillment_notes, fulfilled_at, cancelled_at,
-			created_at, updated_at`
+			created_at, updated_at,
+			sla_policy_id, sla_resolution_target, sla_resolution_met,
+			sla_fulfillment_target, sla_fulfillment_met,
+			sla_paused_at, sla_paused_duration_minutes`
 
 	var sr ServiceRequest
 	err = tx.QueryRow(ctx, insertQuery,
 		id, auth.TenantID, req.CatalogItemID, auth.UserID,
-		status, formData,
+		status, formData, requestPriority,
+		slaPolicyID, slaResolutionTarget, slaFulfillmentTarget,
 		now, now,
 	).Scan(
 		&sr.ID, &sr.TenantID, &sr.RequestNumber, &sr.CatalogItemID, &sr.RequesterID,
 		&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
 		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
 		&sr.CreatedAt, &sr.UpdatedAt,
+		&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
+		&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
+		&sr.SLAPausedAt, &sr.SLAPausedDurationMinutes,
 	)
 	if err != nil {
 		return ServiceRequest{}, apperrors.Internal("failed to create service request", err)
@@ -170,12 +233,21 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 			return ServiceRequest{}, apperrors.Internal("failed to parse approval chain config", err)
 		}
 
-		for _, approver := range chainCfg.Approvers {
+		// Use the catalog item's approval_mode (overrides legacy chain config type).
+		effectiveMode := approvalMode
+
+		for i, approver := range chainCfg.Approvers {
 			taskID := uuid.New()
 
-			// For parallel chains, all tasks start as pending.
-			// For sequential chains, only order 1 (or the lowest) starts as pending;
-			// subsequent ones start as pending too but will be checked in sequence.
+			// For parallel mode: all tasks start as "pending" (all approvers notified at once).
+			// For sequential mode: only the first task starts as "pending"; rest as "pending"
+			// but ApproveRequest will enforce sequence order.
+			taskStatus := ApprovalTaskStatusPending
+			order := approver.Order
+			if order == 0 {
+				order = i + 1
+			}
+
 			taskQuery := `
 				INSERT INTO approval_tasks (
 					id, tenant_id, request_id, approver_id,
@@ -184,7 +256,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 
 			_, err := tx.Exec(ctx, taskQuery,
 				taskID, auth.TenantID, id, approver.UserID,
-				approver.Order, ApprovalTaskStatusPending, now,
+				order, taskStatus, now,
 			)
 			if err != nil {
 				return ServiceRequest{}, apperrors.Internal("failed to create approval task", err)
@@ -192,9 +264,21 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 		}
 
 		// Add "approval_requested" timeline entry.
-		approvalDesc := fmt.Sprintf("Approval requested (%s chain with %d approver(s))", chainCfg.Type, len(chainCfg.Approvers))
+		approvalDesc := fmt.Sprintf("Approval requested (%s mode with %d approver(s))", effectiveMode, len(chainCfg.Approvers))
 		if err := s.addTimelineEntry(ctx, tx, id, auth.UserID, "approval_requested", &approvalDesc, nil); err != nil {
 			return ServiceRequest{}, apperrors.Internal("failed to add approval timeline entry", err)
+		}
+
+		// Pause the SLA fulfillment clock during the approval phase.
+		if slaFulfillmentTarget != nil {
+			_, err := tx.Exec(ctx,
+				`UPDATE service_requests SET sla_paused_at = $1 WHERE id = $2`,
+				now, id,
+			)
+			if err != nil {
+				return ServiceRequest{}, apperrors.Internal("failed to pause SLA clock", err)
+			}
+			sr.SLAPausedAt = &now
 		}
 	}
 
@@ -254,9 +338,12 @@ func (s *RequestService) ListMyRequests(ctx context.Context, status *string, lim
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
 			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
 			sr.created_at, sr.updated_at,
+			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
+			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
+			sr.sla_paused_at, sr.sla_paused_duration_minutes,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.tenant_id = $1
 			AND sr.requester_id = $2
 			AND ($3::text IS NULL OR sr.status = $3)
@@ -277,6 +364,9 @@ func (s *RequestService) ListMyRequests(ctx context.Context, status *string, lim
 			&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
 			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
 			&sr.CreatedAt, &sr.UpdatedAt,
+			&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
+			&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
+			&sr.SLAPausedAt, &sr.SLAPausedDurationMinutes,
 			&sr.CatalogItemName,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan service request", err)
@@ -312,9 +402,12 @@ func (s *RequestService) GetRequestDetail(ctx context.Context, id uuid.UUID) (Se
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
 			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
 			sr.created_at, sr.updated_at,
+			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
+			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
+			sr.sla_paused_at, sr.sla_paused_duration_minutes,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.id = $1 AND sr.tenant_id = $2`
 
 	var detail ServiceRequestDetail
@@ -323,6 +416,9 @@ func (s *RequestService) GetRequestDetail(ctx context.Context, id uuid.UUID) (Se
 		&detail.Status, &detail.FormData, &detail.AssignedTo, &detail.Priority, &detail.TicketID,
 		&detail.RejectionReason, &detail.FulfillmentNotes, &detail.FulfilledAt, &detail.CancelledAt,
 		&detail.CreatedAt, &detail.UpdatedAt,
+		&detail.SLAPolicyID, &detail.SLAResolutionTarget, &detail.SLAResolutionMet,
+		&detail.SLAFulfillmentTarget, &detail.SLAFulfillmentMet,
+		&detail.SLAPausedAt, &detail.SLAPausedDurationMinutes,
 		&detail.CatalogItemName,
 	)
 	if err != nil {
@@ -438,10 +534,13 @@ func (s *RequestService) ListPendingApprovals(ctx context.Context, limit, offset
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
 			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
 			sr.created_at, sr.updated_at,
+			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
+			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
+			sr.sla_paused_at, sr.sla_paused_duration_minutes,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
 		INNER JOIN approval_tasks at ON at.request_id = sr.id
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.tenant_id = $1
 			AND at.approver_id = $2
 			AND at.status = 'pending'
@@ -463,6 +562,9 @@ func (s *RequestService) ListPendingApprovals(ctx context.Context, limit, offset
 			&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
 			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
 			&sr.CreatedAt, &sr.UpdatedAt,
+			&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
+			&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
+			&sr.SLAPausedAt, &sr.SLAPausedDurationMinutes,
 			&sr.CatalogItemName,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan pending approval", err)
@@ -501,13 +603,18 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 	}
 	defer tx.Rollback(ctx)
 
-	// Verify the request exists and is pending approval.
+	// Verify the request exists and is pending approval; also look up the catalog item's approval_mode.
 	var currentStatus string
 	var tenantID uuid.UUID
+	var reqApprovalMode string
 	err = tx.QueryRow(ctx,
-		`SELECT tenant_id, status FROM service_requests WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		`SELECT sr.tenant_id, sr.status, COALESCE(ci.approval_mode, 'sequential')
+		 FROM service_requests sr
+		 JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
+		 WHERE sr.id = $1 AND sr.tenant_id = $2
+		 FOR UPDATE OF sr`,
 		requestID, auth.TenantID,
-	).Scan(&tenantID, &currentStatus)
+	).Scan(&tenantID, &currentStatus, &reqApprovalMode)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return ServiceRequest{}, apperrors.NotFound("ServiceRequest", requestID.String())
@@ -534,6 +641,22 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 		return ServiceRequest{}, apperrors.Internal("failed to find approval task", err)
 	}
 
+	// For sequential mode, ensure all tasks with a lower sequence_order are already approved.
+	if reqApprovalMode == "sequential" {
+		var blockedCount int
+		err = tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM approval_tasks
+			 WHERE request_id = $1 AND sequence_order < $2 AND status NOT IN ('approved', 'skipped')`,
+			requestID, sequenceOrder,
+		).Scan(&blockedCount)
+		if err != nil {
+			return ServiceRequest{}, apperrors.Internal("failed to check sequential order", err)
+		}
+		if blockedCount > 0 {
+			return ServiceRequest{}, apperrors.Validation("sequence", "earlier approval steps must be completed first")
+		}
+	}
+
 	// Mark the task as approved.
 	now := time.Now().UTC()
 	_, err = tx.Exec(ctx,
@@ -556,8 +679,16 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 
 	// If all tasks are approved, transition request to "approved".
 	if pendingCount == 0 {
+		// Mark SLA resolution (approval phase) as met and resume the SLA clock.
 		_, err = tx.Exec(ctx,
-			`UPDATE service_requests SET status = $1, updated_at = $2 WHERE id = $3`,
+			`UPDATE service_requests
+			 SET status = $1, updated_at = $2,
+			     sla_resolution_met = CASE WHEN sla_resolution_target IS NOT NULL
+			         THEN ($2 <= sla_resolution_target) ELSE sla_resolution_met END,
+			     sla_paused_duration_minutes = sla_paused_duration_minutes +
+			         COALESCE(EXTRACT(EPOCH FROM ($2::timestamptz - sla_paused_at))::int / 60, 0),
+			     sla_paused_at = NULL
+			 WHERE id = $3`,
 			RequestStatusApproved, now, requestID,
 		)
 		if err != nil {
@@ -676,9 +807,16 @@ func (s *RequestService) RejectRequest(ctx context.Context, requestID uuid.UUID,
 		return ServiceRequest{}, apperrors.Internal("failed to skip remaining approval tasks", err)
 	}
 
-	// Transition request to rejected.
+	// Transition request to rejected; mark SLA resolution as met/breached and clear pause.
 	_, err = tx.Exec(ctx,
-		`UPDATE service_requests SET status = $1, rejection_reason = $2, updated_at = $3 WHERE id = $4`,
+		`UPDATE service_requests
+		 SET status = $1, rejection_reason = $2, updated_at = $3,
+		     sla_resolution_met = CASE WHEN sla_resolution_target IS NOT NULL
+		         THEN ($3 <= sla_resolution_target) ELSE sla_resolution_met END,
+		     sla_fulfillment_met = CASE WHEN sla_fulfillment_target IS NOT NULL
+		         THEN true ELSE sla_fulfillment_met END,
+		     sla_paused_at = NULL
+		 WHERE id = $4`,
 		RequestStatusRejected, req.Reason, now, requestID,
 	)
 	if err != nil {
@@ -757,9 +895,12 @@ func (s *RequestService) CancelRequest(ctx context.Context, requestID uuid.UUID)
 
 	now := time.Now().UTC()
 
-	// Transition request to cancelled.
+	// Transition request to cancelled; mark SLA as N/A and clear pause.
 	_, err = tx.Exec(ctx,
-		`UPDATE service_requests SET status = $1, cancelled_at = $2, updated_at = $3 WHERE id = $4`,
+		`UPDATE service_requests
+		 SET status = $1, cancelled_at = $2, updated_at = $3,
+		     sla_paused_at = NULL
+		 WHERE id = $4`,
 		RequestStatusCancelled, now, now, requestID,
 	)
 	if err != nil {
@@ -811,9 +952,12 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
 			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
 			sr.created_at, sr.updated_at,
+			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
+			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
+			sr.sla_paused_at, sr.sla_paused_duration_minutes,
 			ci.name AS catalog_item_name
 		FROM service_requests sr
-		LEFT JOIN catalog_items ci ON ci.id = sr.catalog_item_id
+		LEFT JOIN service_catalog_items ci ON ci.id = sr.catalog_item_id
 		WHERE sr.id = $1 AND sr.tenant_id = $2`
 
 	var sr ServiceRequest
@@ -822,6 +966,9 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 		&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
 		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
 		&sr.CreatedAt, &sr.UpdatedAt,
+		&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
+		&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
+		&sr.SLAPausedAt, &sr.SLAPausedDurationMinutes,
 		&sr.CatalogItemName,
 	)
 	if err != nil {
@@ -832,4 +979,105 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 	}
 
 	return sr, nil
+}
+
+// ──────────────────────────────────────────────
+// Business hours helper
+// ──────────────────────────────────────────────
+
+// advanceByBusinessMinutes advances the start time by the given number of
+// minutes, accounting for business hours if a calendar is provided. When no
+// calendar is available, it falls back to simple clock-time addition.
+//
+// The calendar schedule JSONB is expected as:
+//
+//	{"monday": {"start": "08:00", "end": "17:00"}, "tuesday": {...}, ...}
+//
+// Days omitted from the map are treated as non-working days.
+// Holidays are a JSON array of date strings: ["2026-01-01", "2026-12-25"].
+func advanceByBusinessMinutes(start time.Time, minutes int, cal *BusinessHoursCalendar) time.Time {
+	if cal == nil || minutes <= 0 {
+		return start.Add(time.Duration(minutes) * time.Minute)
+	}
+
+	// Parse schedule.
+	type dayWindow struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
+	}
+	var schedule map[string]dayWindow
+	if err := json.Unmarshal(cal.Schedule, &schedule); err != nil || len(schedule) == 0 {
+		return start.Add(time.Duration(minutes) * time.Minute)
+	}
+
+	// Parse holidays into a set.
+	var holidayList []string
+	_ = json.Unmarshal(cal.Holidays, &holidayList)
+	holidays := make(map[string]struct{}, len(holidayList))
+	for _, h := range holidayList {
+		holidays[h] = struct{}{}
+	}
+
+	// Load timezone.
+	loc, err := time.LoadLocation(cal.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+
+	remaining := minutes
+	cursor := start.In(loc)
+
+	// Safety: cap iteration to 365 days to prevent infinite loop.
+	maxDays := 365
+	for remaining > 0 && maxDays > 0 {
+		dayName := strings.ToLower(cursor.Weekday().String())
+		dateStr := cursor.Format("2006-01-02")
+
+		// Skip holidays.
+		if _, isHoliday := holidays[dateStr]; isHoliday {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		window, hasWindow := schedule[dayName]
+		if !hasWindow {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		dayStart, err1 := time.Parse("15:04", window.Start)
+		dayEnd, err2 := time.Parse("15:04", window.End)
+		if err1 != nil || err2 != nil {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		windowStart := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), dayStart.Hour(), dayStart.Minute(), 0, 0, loc)
+		windowEnd := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), dayEnd.Hour(), dayEnd.Minute(), 0, 0, loc)
+
+		if cursor.Before(windowStart) {
+			cursor = windowStart
+		}
+
+		if !cursor.Before(windowEnd) {
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+			continue
+		}
+
+		available := int(windowEnd.Sub(cursor).Minutes())
+		if available >= remaining {
+			cursor = cursor.Add(time.Duration(remaining) * time.Minute)
+			remaining = 0
+		} else {
+			remaining -= available
+			cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day()+1, 0, 0, 0, 0, loc)
+			maxDays--
+		}
+	}
+
+	return cursor.UTC()
 }

@@ -28,19 +28,24 @@ const showcaseHighlights = [
     icon: Shield,
     eyebrow: "Governance",
     title: "Policy, approval, and audit discipline in one operating layer",
-    description: "Align standards, review cycles, and decision trails without fragmenting the work.",
+    description:
+      "Align standards, review cycles, and decision trails without fragmenting the work.",
   },
   {
     icon: Building2,
     eyebrow: "Service Delivery",
-    title: "Incidents, requests, and operational queues share one source of truth",
-    description: "Run ITSM execution with clearer handoffs, visibility, and ownership.",
+    title:
+      "Incidents, requests, and operational queues share one source of truth",
+    description:
+      "Run ITSM execution with clearer handoffs, visibility, and ownership.",
   },
   {
     icon: Landmark,
     eyebrow: "Assets & Portfolio",
-    title: "Track systems, investments, and delivery commitments with board-ready clarity",
-    description: "Bring PMO, CMDB, licensing, and procurement signals into one rhythm.",
+    title:
+      "Track systems, investments, and delivery commitments with board-ready clarity",
+    description:
+      "Bring PMO, CMDB, licensing, and procurement signals into one rhythm.",
   },
 ] as const;
 
@@ -48,17 +53,20 @@ const operationalSignals = [
   {
     value: "24/7",
     label: "Operational posture",
-    description: "A single command surface for service, governance, and delivery.",
+    description:
+      "A single command surface for service, governance, and delivery.",
   },
   {
     value: "4",
     label: "Core disciplines",
-    description: "Governance, ITSM, projects, and asset intelligence connected.",
+    description:
+      "Governance, ITSM, projects, and asset intelligence connected.",
   },
   {
     value: "1",
     label: "Unified portal",
-    description: "Less context switching, faster decisions, cleaner accountability.",
+    description:
+      "Less context switching, faster decisions, cleaner accountability.",
   },
 ] as const;
 
@@ -92,39 +100,56 @@ function MicrosoftLogo({ className }: { className?: string }) {
 /**
  * Maps API error messages to user-friendly guidance.
  */
-function getFriendlyError(message: string): { title: string; description: string; icon: typeof Shield } {
+function getFriendlyError(message: string): {
+  title: string;
+  description: string;
+  icon: typeof Shield;
+} {
   const lower = message.toLowerCase();
-  if (lower.includes("invalid email or password") || lower.includes("invalid credentials")) {
+  if (
+    lower.includes("invalid email or password") ||
+    lower.includes("invalid credentials")
+  ) {
     return {
       title: "Incorrect email or password",
-      description: "Please double-check your credentials and try again. If you've forgotten your password, use the \"Forgot password?\" link below.",
+      description:
+        'Please double-check your credentials and try again. If you\'ve forgotten your password, use the "Forgot password?" link below.',
       icon: Lock,
     };
   }
   if (lower.includes("account") && lower.includes("disabled")) {
     return {
       title: "Account disabled",
-      description: "Your account has been deactivated. Please contact your IT administrator for assistance.",
+      description:
+        "Your account has been deactivated. Please contact your IT administrator for assistance.",
       icon: AlertTriangle,
     };
   }
   if (lower.includes("too many") || lower.includes("rate limit")) {
     return {
       title: "Too many attempts",
-      description: "You've made too many login attempts. Please wait a few minutes before trying again.",
+      description:
+        "You've made too many login attempts. Please wait a few minutes before trying again.",
       icon: Clock,
     };
   }
-  if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch")) {
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("failed to fetch")
+  ) {
     return {
       title: "Connection error",
-      description: "Unable to reach the server. Please check your network connection and try again.",
+      description:
+        "Unable to reach the server. Please check your network connection and try again.",
       icon: AlertTriangle,
     };
   }
   return {
     title: "Sign in failed",
-    description: message || "An unexpected error occurred. Please try again or contact IT support.",
+    description:
+      message ||
+      "An unexpected error occurred. Please try again or contact IT support.",
     icon: Shield,
   };
 }
@@ -140,21 +165,43 @@ export default function LoginPage() {
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithEntraID, isEntraIDEnabled, isLoading: authLoading } = useAuth();
+  const {
+    login,
+    verifyMFA,
+    loginWithEntraID,
+    isEntraIDEnabled,
+    isLoading: authLoading,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSSOLoading, setIsSSOLoading] = useState(false);
   const [error, setError] = useState("");
-  const [infoBanner, setInfoBanner] = useState<{ message: string; icon: typeof Clock } | null>(null);
+  const [infoBanner, setInfoBanner] = useState<{
+    message: string;
+    icon: typeof Clock;
+  } | null>(null);
+
+  // MFA state
+  const [loginStep, setLoginStep] = useState<"credentials" | "mfa">(
+    "credentials",
+  );
+  const [mfaChallenge, setMfaChallenge] = useState<{
+    challengeId: string;
+    methods: string[];
+  } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "backup_codes">("totp");
+  const [isMfaLoading, setIsMfaLoading] = useState(false);
 
   // Detect redirect reasons (e.g., session timeout, password reset success)
   useEffect(() => {
     const reason = searchParams.get("reason");
     if (reason === "timeout") {
       setInfoBanner({
-        message: "Your session has expired due to inactivity. Please sign in again to continue.",
+        message:
+          "Your session has expired due to inactivity. Please sign in again to continue.",
         icon: Clock,
       });
       toast.info("Session expired", {
@@ -163,7 +210,8 @@ function LoginPageContent() {
       });
     } else if (reason === "password-reset") {
       toast.success("Password reset successful", {
-        description: "Your password has been updated. Please sign in with your new password.",
+        description:
+          "Your password has been updated. Please sign in with your new password.",
         duration: 6000,
       });
     }
@@ -177,9 +225,25 @@ function LoginPageContent() {
 
     try {
       const result = await login(email, password);
+
+      // MFA required — show MFA form
+      if (result?.mfaRequired && result.challengeId) {
+        setMfaChallenge({
+          challengeId: result.challengeId,
+          methods: result.methods ?? [],
+        });
+        setMfaMethod(
+          result.methods?.includes("totp") ? "totp" : "backup_codes",
+        );
+        setLoginStep("mfa");
+        setIsLoading(false);
+        return;
+      }
+
       if (result?.passwordChangeRequired) {
         toast.warning("Password change required", {
-          description: "You must change your default password before continuing.",
+          description:
+            "You must change your default password before continuing.",
         });
         router.push("/auth/change-password");
         return;
@@ -195,9 +259,56 @@ function LoginPageContent() {
           : "Invalid credentials. Please try again.";
       const friendly = getFriendlyError(message);
       setError(message);
-      toast.error(friendly.title, { description: friendly.description, duration: 5000 });
+      toast.error(friendly.title, {
+        description: friendly.description,
+        duration: 5000,
+      });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMFASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallenge || !mfaCode.trim()) return;
+    setError("");
+    setIsMfaLoading(true);
+
+    try {
+      await verifyMFA(mfaChallenge.challengeId, mfaMethod, mfaCode.trim());
+      toast.success("Welcome back!", {
+        description: "You have been signed in successfully.",
+      });
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Invalid verification code";
+      setError(message);
+      setMfaCode("");
+      if (
+        message.toLowerCase().includes("locked") ||
+        message.toLowerCase().includes("too many")
+      ) {
+        toast.error("Account Locked", {
+          description:
+            "Too many failed attempts. Please try again in 15 minutes.",
+          duration: 6000,
+        });
+      } else if (message.toLowerCase().includes("expired")) {
+        toast.error("Challenge Expired", {
+          description: "Please sign in again.",
+          duration: 5000,
+        });
+        setLoginStep("credentials");
+        setMfaChallenge(null);
+      } else {
+        toast.error("Invalid Code", {
+          description: "Please check your code and try again.",
+          duration: 4000,
+        });
+      }
+    } finally {
+      setIsMfaLoading(false);
     }
   };
 
@@ -228,10 +339,19 @@ function LoginPageContent() {
         <div className="login-scroll-pane login-showcase-panel relative hidden overflow-hidden lg:flex lg:w-[58%] lg:min-h-0 lg:overflow-y-auto">
           <div className="login-showcase-grid absolute inset-0" />
           <div className="login-showcase-orbit absolute inset-0" />
-          <div className="absolute left-[10%] top-[16%] h-3 w-3 rounded-full bg-[#D9C58A]/65 login-float" />
+          <div
+            className="login-float absolute left-[10%] top-[16%] h-3 w-3 rounded-full"
+            style={{ backgroundColor: "rgba(168,137,61,0.65)" }}
+          />
           <div className="absolute right-[16%] top-[22%] h-2 w-2 rounded-full bg-white/35 login-float-slow" />
-          <div className="absolute bottom-[22%] left-[22%] h-2.5 w-2.5 rounded-full bg-[#D9C58A]/45 login-float-reverse" />
-          <div className="absolute right-[18%] bottom-[18%] h-[22rem] w-[22rem] rounded-full bg-[#D9C58A]/10 blur-3xl" />
+          <div
+            className="login-float-reverse absolute bottom-[22%] left-[22%] h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: "rgba(168,137,61,0.45)" }}
+          />
+          <div
+            className="absolute right-[18%] bottom-[18%] h-[22rem] w-[22rem] rounded-full blur-3xl"
+            style={{ backgroundColor: "rgba(168,137,61,0.12)" }}
+          />
 
           <div className="login-showcase-content relative z-10 flex w-full flex-col justify-between px-8 py-8 xl:px-12 xl:py-10">
             <motion.div
@@ -255,13 +375,13 @@ function LoginPageContent() {
                   <span className="block text-[1.75rem] font-bold leading-tight text-white">
                     Central Bank of Nigeria
                   </span>
-                  <span className="mt-1 block text-sm text-emerald-100/72">
+                  <span className="mt-1 block text-sm text-white/72">
                     IT Department — OPMS
                   </span>
                 </div>
               </div>
 
-              <div className="login-glass hidden rounded-full px-4 py-2 text-xs font-medium tracking-[0.18em] text-emerald-100/85 xl:inline-flex">
+              <div className="login-glass hidden rounded-full px-4 py-2 text-xs font-medium tracking-[0.18em] text-white/82 xl:inline-flex">
                 CONTROL ROOM
               </div>
             </motion.div>
@@ -273,15 +393,16 @@ function LoginPageContent() {
                 transition={{ duration: 0.7, delay: 0.15 }}
                 className="max-w-2xl"
               >
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm text-emerald-100/88 backdrop-blur-xl">
-                  <Sparkles className="h-4 w-4 text-[#D9C58A]" />
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm text-white/88 backdrop-blur-xl">
+                  <Sparkles className="h-4 w-4 text-[var(--gold-light)]" />
                   <span>National IT operations in a single visual rhythm</span>
                 </div>
                 <h1 className="login-showcase-title max-w-2xl text-5xl font-bold leading-[0.95] tracking-[-0.05em] text-white xl:text-[5.35rem]">
                   Operational clarity for every workflow that matters.
                 </h1>
-                <p className="mt-6 max-w-xl text-lg leading-8 text-emerald-100/78">
-                  A sharper surface for governance, service delivery, project execution, and asset intelligence across the IT department.
+                <p className="mt-6 max-w-xl text-lg leading-8 text-white/78">
+                  A sharper surface for governance, service delivery, project
+                  execution, and asset intelligence across the IT department.
                 </p>
               </motion.div>
 
@@ -297,20 +418,20 @@ function LoginPageContent() {
                     >
                       <div className="flex items-start gap-4">
                         <div className="login-highlight-icon">
-                          <highlight.icon className="h-5 w-5 text-[#D9C58A]" />
+                          <highlight.icon className="h-5 w-5 text-[var(--gold-light)]" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100/55">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/55">
                             {highlight.eyebrow}
                           </p>
                           <h2 className="mt-2 text-lg font-semibold leading-6 text-white">
                             {highlight.title}
                           </h2>
-                          <p className="mt-2 text-sm leading-6 text-emerald-100/68">
+                          <p className="mt-2 text-sm leading-6 text-white/72">
                             {highlight.description}
                           </p>
                         </div>
-                        <ChevronRight className="mt-1 h-5 w-5 flex-shrink-0 text-white/28 transition-transform duration-300 group-hover:translate-x-1 group-hover:text-[#D9C58A]" />
+                        <ChevronRight className="mt-1 h-5 w-5 flex-shrink-0 text-white/28 transition-transform duration-300 group-hover:translate-x-1 group-hover:text-[var(--gold-light)]" />
                       </div>
                     </motion.div>
                   ))}
@@ -324,7 +445,7 @@ function LoginPageContent() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100/55">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">
                         Operating Picture
                       </p>
                       <h2 className="mt-3 text-[1.65rem] font-bold leading-8 text-white">
@@ -343,27 +464,29 @@ function LoginPageContent() {
                         <span className="text-3xl font-bold tracking-[-0.05em] text-white">
                           {signal.value}
                         </span>
-                        <p className="mt-2 text-sm font-semibold text-[#E5D4A3]">
+                        <p className="mt-2 text-sm font-semibold text-[var(--gold-light)]">
                           {signal.label}
                         </p>
-                        <p className="mt-1 text-sm leading-6 text-emerald-100/62">
+                        <p className="mt-1 text-sm leading-6 text-white/65">
                           {signal.description}
                         </p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="mt-7 rounded-[1.65rem] border border-white/10 bg-black/12 px-5 py-4">
+                  <div className="mt-7 rounded-[1.65rem] border border-white/12 bg-white/8 px-5 py-4">
                     <div className="flex items-start gap-3">
-                      <div className="rounded-2xl border border-white/10 bg-white/10 p-2.5">
-                        <Info className="h-4 w-4 text-[#D9C58A]" />
+                      <div className="rounded-2xl border border-white/12 bg-white/10 p-2.5">
+                        <Info className="h-4 w-4 text-[var(--gold-light)]" />
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-white">
                           Designed for secure daily use
                         </p>
-                        <p className="mt-1 text-sm leading-6 text-emerald-100/62">
-                          A calmer entry point for high-accountability work, whether access flows through credentials or Microsoft Entra ID.
+                        <p className="mt-1 text-sm leading-6 text-white/66">
+                          A calmer entry point for high-accountability work,
+                          whether access flows through credentials or Microsoft
+                          Entra ID.
                         </p>
                       </div>
                     </div>
@@ -381,13 +504,14 @@ function LoginPageContent() {
               {trustPillars.map((pillar) => (
                 <div
                   key={pillar}
-                  className="login-glass rounded-full px-4 py-2 text-xs font-medium tracking-[0.12em] text-emerald-100/82"
+                  className="login-glass rounded-full px-4 py-2 text-xs font-medium tracking-[0.12em] text-white/82"
                 >
                   {pillar}
                 </div>
               ))}
-              <p className="ml-auto text-sm text-emerald-100/58">
-                &copy; {new Date().getFullYear()} Central Bank of Nigeria. All rights reserved.
+              <p className="ml-auto text-sm text-white/58">
+                &copy; {new Date().getFullYear()} Central Bank of Nigeria. All
+                rights reserved.
               </p>
             </motion.div>
           </div>
@@ -395,8 +519,14 @@ function LoginPageContent() {
 
         <div className="login-scroll-pane login-auth-surface relative flex flex-1 items-start justify-center overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:min-h-0 lg:px-8 lg:py-5 lg:overflow-y-auto xl:items-center xl:px-10 xl:py-8">
           <div className="login-auth-grid absolute inset-0" />
-          <div className="absolute -left-28 top-20 h-72 w-72 rounded-full bg-[#D9C58A]/18 blur-3xl" />
-          <div className="absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-[#1B7340]/10 blur-3xl" />
+          <div
+            className="absolute -left-28 top-20 h-72 w-72 rounded-full blur-3xl"
+            style={{ backgroundColor: "rgba(168,137,61,0.18)" }}
+          />
+          <div
+            className="absolute -right-24 bottom-0 h-80 w-80 rounded-full blur-3xl"
+            style={{ backgroundColor: "rgba(27,115,64,0.12)" }}
+          />
 
           <motion.div
             className="login-auth-shell relative z-10 w-full max-w-[38rem]"
@@ -429,14 +559,13 @@ function LoginPageContent() {
                   </div>
                 </div>
                 <p className="mt-4 max-w-sm text-sm leading-6 text-[var(--neutral-gray)]">
-                  Sign in to a sharper operations cockpit for governance, ITSM, delivery, and asset intelligence.
+                  Sign in to a sharper operations cockpit for governance, ITSM,
+                  delivery, and asset intelligence.
                 </p>
               </div>
             </motion.div>
 
-            <div className="login-form-frame rounded-[2rem] p-[1px] shadow-[0_32px_80px_rgba(7,35,22,0.17)]">
-              <div className="login-glass-card rounded-[1.95rem] border border-white/70 px-4 py-4 sm:px-5 sm:py-5">
-                <div className="login-card-mesh rounded-[1.6rem] border border-[var(--border)]/70 bg-white/82 p-5 shadow-[0_20px_40px_rgba(10,37,23,0.06)] backdrop-blur-2xl sm:p-6 xl:p-8">
+            <div className="login-form-frame login-card-mesh rounded-[2rem] border border-[var(--border)]/70 bg-white/82 p-5 shadow-[0_32px_80px_rgba(7,35,22,0.17)] backdrop-blur-2xl sm:p-6 xl:p-8">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -445,7 +574,7 @@ function LoginPageContent() {
                   >
                     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                       <div className="login-form-pill">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-[#1B7340]" />
+                        <span className="inline-flex h-2 w-2 rounded-full bg-[var(--primary)]" />
                         Secure Access Layer
                       </div>
                       <div className="text-right">
@@ -487,15 +616,25 @@ function LoginPageContent() {
                     {infoBanner && !error && (
                       <motion.div
                         initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                        animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
+                        animate={{
+                          opacity: 1,
+                          height: "auto",
+                          marginBottom: 24,
+                        }}
                         exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                         className="overflow-hidden"
                       >
                         <div className="login-info-banner" aria-live="polite">
                           <div className="login-info-banner__icon">
-                            <infoBanner.icon className="h-4 w-4 text-blue-700" />
+                            <infoBanner.icon
+                              className="h-4 w-4"
+                              style={{ color: "var(--info-dark)" }}
+                            />
                           </div>
-                          <p className="text-sm font-medium leading-6 text-blue-800">
+                          <p
+                            className="text-sm font-medium leading-6"
+                            style={{ color: "var(--info-dark)" }}
+                          >
                             {infoBanner.message}
                           </p>
                         </div>
@@ -507,11 +646,18 @@ function LoginPageContent() {
                     {error && (
                       <motion.div
                         initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                        animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
+                        animate={{
+                          opacity: 1,
+                          height: "auto",
+                          marginBottom: 24,
+                        }}
                         exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="login-error-banner" aria-live="assertive">
+                        <div
+                          className="login-error-banner"
+                          aria-live="assertive"
+                        >
                           <div className="login-error-banner__icon">
                             <AlertTriangle className="h-4 w-4 text-[var(--error)]" />
                           </div>
@@ -566,112 +712,275 @@ function LoginPageContent() {
                     </motion.div>
                   )}
 
-                  <form onSubmit={handleSubmit} className="space-y-5">
-                    <motion.div
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.35 : 0.25 }}
-                    >
-                      <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
-                        Email address
-                      </label>
-                      <div className="login-input-glow login-input-shell">
-                        <Mail
-                          size={18}
-                          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
-                        />
-                        <input
-                          type="email"
-                          required
-                          autoComplete="username"
-                          spellCheck={false}
-                          value={email}
-                          onChange={(e) => {
-                            setEmail(e.target.value);
-                            if (error) setError("");
-                          }}
-                          placeholder="you@cbn.gov.ng"
-                          className="login-input-field w-full pl-11 pr-4"
-                        />
-                      </div>
-                    </motion.div>
+                  {loginStep === "credentials" ? (
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                      <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.4,
+                          delay: isEntraIDEnabled ? 0.35 : 0.25,
+                        }}
+                      >
+                        <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+                          Email address
+                        </label>
+                        <div className="login-input-glow login-input-shell">
+                          <Mail
+                            size={18}
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
+                          />
+                          <input
+                            type="email"
+                            required
+                            autoComplete="username"
+                            spellCheck={false}
+                            value={email}
+                            onChange={(e) => {
+                              setEmail(e.target.value);
+                              if (error) setError("");
+                            }}
+                            placeholder="you@cbn.gov.ng"
+                            className="login-input-field w-full pl-11 pr-4"
+                          />
+                        </div>
+                      </motion.div>
 
-                    <motion.div
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.45 : 0.35 }}
-                    >
-                      <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
-                        Password
-                      </label>
-                      <div className="login-input-glow login-input-shell">
-                        <Lock
-                          size={18}
-                          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
-                        />
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          required
-                          autoComplete="current-password"
-                          value={password}
-                          onChange={(e) => {
-                            setPassword(e.target.value);
-                            if (error) setError("");
-                          }}
-                          placeholder="Enter your password"
-                          className="login-input-field w-full pl-11 pr-12"
-                        />
+                      <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.4,
+                          delay: isEntraIDEnabled ? 0.45 : 0.35,
+                        }}
+                      >
+                        <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+                          Password
+                        </label>
+                        <div className="login-input-glow login-input-shell">
+                          <Lock
+                            size={18}
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
+                          />
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            required
+                            autoComplete="current-password"
+                            value={password}
+                            onChange={(e) => {
+                              setPassword(e.target.value);
+                              if (error) setError("");
+                            }}
+                            placeholder="Enter your password"
+                            className="login-input-field w-full pl-11 pr-12"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            aria-label={
+                              showPassword ? "Hide password" : "Show password"
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[var(--neutral-gray)] transition-all duration-200 hover:bg-black/5 hover:text-[var(--foreground)]"
+                          >
+                            {showPassword ? (
+                              <EyeOff size={18} />
+                            ) : (
+                              <Eye size={18} />
+                            )}
+                          </button>
+                        </div>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          duration: 0.4,
+                          delay: isEntraIDEnabled ? 0.5 : 0.4,
+                        }}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]/80 bg-white/80 px-3 py-1.5 text-xs text-[var(--neutral-gray)] shadow-sm">
+                          <Lock className="h-3.5 w-3.5 text-[var(--primary)]" />
+                          Encrypted authentication session
+                        </div>
+                        <Link
+                          href="/auth/forgot-password"
+                          className="text-xs font-medium text-[var(--primary)] transition-all duration-200 hover:text-[var(--secondary)] hover:underline"
+                        >
+                          Forgot password?
+                        </Link>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.4,
+                          delay: isEntraIDEnabled ? 0.55 : 0.45,
+                        }}
+                        className="pt-1"
+                      >
+                        <button
+                          type="submit"
+                          disabled={isLoading}
+                          className="login-btn-shine login-submit-button"
+                        >
+                          {isLoading ? (
+                            <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          ) : (
+                            <>
+                              <LogIn size={16} />
+                              Sign In with Credentials
+                            </>
+                          )}
+                        </button>
+                      </motion.div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleMFASubmit} className="space-y-5">
+                      <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        <div className="mb-4 flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
+                          <Shield
+                            size={20}
+                            className="text-[var(--primary)] shrink-0"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--foreground)]">
+                              Two-Factor Authentication
+                            </p>
+                            <p className="text-xs text-[var(--neutral-gray)]">
+                              Enter the code from your authenticator app to
+                              continue
+                            </p>
+                          </div>
+                        </div>
+
+                        {mfaChallenge?.methods.includes("backup_codes") && (
+                          <div className="mb-4 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMfaMethod("totp");
+                                setMfaCode("");
+                                setError("");
+                              }}
+                              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                                mfaMethod === "totp"
+                                  ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                                  : "border-[var(--border)] text-[var(--neutral-gray)] hover:border-[var(--primary)]/40"
+                              }`}
+                            >
+                              Authenticator Code
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMfaMethod("backup_codes");
+                                setMfaCode("");
+                                setError("");
+                              }}
+                              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                                mfaMethod === "backup_codes"
+                                  ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                                  : "border-[var(--border)] text-[var(--neutral-gray)] hover:border-[var(--primary)]/40"
+                              }`}
+                            >
+                              Backup Code
+                            </button>
+                          </div>
+                        )}
+
+                        <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+                          {mfaMethod === "totp"
+                            ? "6-Digit Code"
+                            : "Backup Code"}
+                        </label>
+                        <div className="login-input-glow login-input-shell">
+                          <Shield
+                            size={18}
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--neutral-gray)] transition-colors duration-300"
+                          />
+                          <input
+                            type="text"
+                            required
+                            autoComplete="one-time-code"
+                            inputMode={
+                              mfaMethod === "totp" ? "numeric" : "text"
+                            }
+                            maxLength={mfaMethod === "totp" ? 6 : 8}
+                            value={mfaCode}
+                            onChange={(e) => {
+                              const val =
+                                mfaMethod === "totp"
+                                  ? e.target.value
+                                      .replace(/\D/g, "")
+                                      .slice(0, 6)
+                                  : e.target.value.toUpperCase().slice(0, 8);
+                              setMfaCode(val);
+                              if (error) setError("");
+                            }}
+                            placeholder={
+                              mfaMethod === "totp" ? "000000" : "ABCD1234"
+                            }
+                            className="login-input-field w-full pl-11 pr-4 tracking-[0.3em] text-center text-lg font-mono"
+                            autoFocus
+                          />
+                        </div>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, delay: 0.1 }}
+                        className="pt-1"
+                      >
+                        <button
+                          type="submit"
+                          disabled={
+                            isMfaLoading ||
+                            (mfaMethod === "totp"
+                              ? mfaCode.length < 6
+                              : mfaCode.length < 4)
+                          }
+                          className="login-btn-shine login-submit-button"
+                        >
+                          {isMfaLoading ? (
+                            <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          ) : (
+                            <>
+                              <Shield size={16} />
+                              Verify &amp; Sign In
+                            </>
+                          )}
+                        </button>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.35, delay: 0.2 }}
+                        className="text-center"
+                      >
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[var(--neutral-gray)] transition-all duration-200 hover:bg-black/5 hover:text-[var(--foreground)]"
+                          onClick={() => {
+                            setLoginStep("credentials");
+                            setMfaChallenge(null);
+                            setMfaCode("");
+                            setError("");
+                          }}
+                          className="text-xs font-medium text-[var(--neutral-gray)] transition-colors hover:text-[var(--foreground)]"
                         >
-                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          Back to sign in
                         </button>
-                      </div>
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.5 : 0.4 }}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]/80 bg-white/80 px-3 py-1.5 text-xs text-[var(--neutral-gray)] shadow-sm">
-                        <Lock className="h-3.5 w-3.5 text-[var(--primary)]" />
-                        Encrypted authentication session
-                      </div>
-                      <Link
-                        href="/auth/forgot-password"
-                        className="text-xs font-medium text-[var(--primary)] transition-all duration-200 hover:text-[var(--secondary)] hover:underline"
-                      >
-                        Forgot password?
-                      </Link>
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: isEntraIDEnabled ? 0.55 : 0.45 }}
-                      className="pt-1"
-                    >
-                      <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="login-btn-shine login-submit-button"
-                      >
-                        {isLoading ? (
-                          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                        ) : (
-                          <>
-                            <LogIn size={16} />
-                            Sign In with Credentials
-                          </>
-                        )}
-                      </button>
-                    </motion.div>
-                  </form>
+                      </motion.div>
+                    </form>
+                  )}
 
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -704,8 +1013,6 @@ function LoginPageContent() {
                       </p>
                     </div>
                   </motion.div>
-                </div>
-              </div>
             </div>
 
             <motion.div
@@ -715,7 +1022,7 @@ function LoginPageContent() {
               transition={{ duration: 0.5, delay: 0.8 }}
             >
               <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]/80 bg-white/85 px-4 py-2 text-xs text-[var(--neutral-gray)] shadow-sm backdrop-blur-xl">
-                <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                <div className="h-1.5 w-1.5 rounded-full bg-[var(--success)] animate-pulse" />
                 <span>Secured with 256-bit encryption</span>
               </div>
               <div className="inline-flex items-center gap-2 text-xs text-[var(--neutral-gray)]">

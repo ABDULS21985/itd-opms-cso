@@ -40,6 +40,7 @@ import {
   PieChart,
   TrendingUp,
   ShieldAlert,
+  DatabaseZap,
   Milestone,
   AlertCircle,
   FileEdit,
@@ -53,7 +54,10 @@ import {
   Zap,
   SlidersHorizontal,
   Handshake,
+  Package,
   Server,
+  Radar,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -125,6 +129,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/analytics/collaboration",
         label: "Collaboration & Dependencies",
         icon: GitBranch,
+        permission: "reporting.view",
+      },
+      {
+        href: "/dashboard/reports/query-builder",
+        label: "Query Builder",
+        icon: DatabaseZap,
         permission: "reporting.view",
       },
     ],
@@ -310,9 +320,27 @@ export const navGroups: NavGroup[] = [
         permission: "itsm.view",
       },
       {
+        href: "/dashboard/itsm/major-incidents",
+        label: "Major Incidents",
+        icon: ShieldAlert,
+        permission: "itsm.view",
+      },
+      {
         href: "/dashboard/itsm/problems",
         label: "Problems",
         icon: Bug,
+        permission: "itsm.view",
+      },
+      {
+        href: "/dashboard/itsm/changes",
+        label: "Changes",
+        icon: GitBranch,
+        permission: "itsm.view",
+      },
+      {
+        href: "/dashboard/itsm/cab-meetings",
+        label: "CAB Meetings",
+        icon: ClipboardList,
         permission: "itsm.view",
       },
       {
@@ -320,6 +348,23 @@ export const navGroups: NavGroup[] = [
         label: "SLA Dashboard",
         icon: Activity,
         permission: "itsm.view",
+      },
+    ],
+  },
+  {
+    label: "Release Mgmt",
+    items: [
+      {
+        href: "/dashboard/releases",
+        label: "Releases",
+        icon: Package,
+        permission: "release.view",
+      },
+      {
+        href: "/dashboard/releases/calendar",
+        label: "Release Calendar",
+        icon: CalendarDays,
+        permission: "release.view",
       },
     ],
   },
@@ -351,9 +396,21 @@ export const navGroups: NavGroup[] = [
         permission: "assets.view",
       },
       {
+        href: "/dashboard/cmdb/discovery",
+        label: "Discovery",
+        icon: Radar,
+        permission: "assets.view",
+      },
+      {
         href: "/dashboard/cmdb/reconciliation",
         label: "Reconciliation",
         icon: Layers,
+        permission: "assets.view",
+      },
+      {
+        href: "/dashboard/cmdb/integrations",
+        label: "Integrations",
+        icon: Zap,
         permission: "assets.view",
       },
       {
@@ -547,6 +604,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/system/email-templates",
         label: "Email Templates",
         icon: Mail,
+        permission: "system.manage",
+      },
+      {
+        href: "/dashboard/system/webhooks",
+        label: "Webhooks",
+        icon: Webhook,
         permission: "system.manage",
       },
       {

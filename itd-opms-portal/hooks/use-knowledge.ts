@@ -157,19 +157,21 @@ export function useKBArticleBySlug(slug: string | undefined) {
 }
 
 /**
- * GET /knowledge/articles/search?q=... - search articles.
+ * GET /knowledge/articles/search?q=...&mode=... - search articles.
+ * Pass mode="boolean" for full-text boolean search (AND/OR/NOT).
  */
 export function useSearchKBArticles(
   query: string,
   page = 1,
   limit = 20,
+  mode?: "plain" | "boolean",
 ) {
   return useQuery({
-    queryKey: ["kb-articles-search", query, page, limit],
+    queryKey: ["kb-articles-search", query, page, limit, mode],
     queryFn: () =>
       apiClient.get<PaginatedResponse<KBArticle>>(
         "/knowledge/articles/search",
-        { q: query, page, limit },
+        { q: query, page, limit, ...(mode === "boolean" && { mode: "boolean" }) },
       ),
     enabled: query.length > 0,
   });

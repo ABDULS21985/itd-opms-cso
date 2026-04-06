@@ -32,6 +32,7 @@ func (h *ProblemHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteProblem)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/transition", h.TransitionProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link-incident", h.LinkIncident)
 
 	// Known Errors
@@ -61,9 +62,19 @@ func (h *ProblemHandler) ListProblems(w http.ResponseWriter, r *http.Request) {
 		statusParam = &s
 	}
 
+	var assignedGroupID *uuid.UUID
+	if g := r.URL.Query().Get("assignedGroupId"); g != "" {
+		parsed, err := uuid.Parse(g)
+		if err != nil {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid assignedGroupId")
+			return
+		}
+		assignedGroupID = &parsed
+	}
+
 	params := types.ParsePagination(r)
 
-	problems, total, err := h.svc.ListProblems(r.Context(), statusParam, params.Limit, params.Offset())
+	problems, total, err := h.svc.ListProblems(r.Context(), statusParam, assignedGroupID, params.Limit, params.Offset())
 	if err != nil {
 		writeAppError(w, r, err)
 		return
@@ -143,6 +154,13 @@ func (h *ProblemHandler) UpdateProblem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Status must only be changed via the TransitionProblem endpoint.
+	if req.Status != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"Status cannot be changed via update. Use POST /problems/{id}/transition instead.")
+		return
+	}
+
 	problem, err := h.svc.UpdateProblem(r.Context(), id, req)
 	if err != nil {
 		writeAppError(w, r, err)
@@ -205,6 +223,44 @@ func (h *ProblemHandler) LinkIncident(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// ──────────────────────────────────────────────
+// Problem Transition Handler
+// ──────────────────────────────────────────────
+
+// TransitionProblem handles POST /{id}/transition — transitions problem status.
+func (h *ProblemHandler) TransitionProblem(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid problem ID")
+		return
+	}
+
+	var req TransitionProblemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if req.TargetStatus == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Target status is required")
+		return
+	}
+
+	problem, err := h.svc.TransitionProblem(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, problem, nil)
 }
 
 // ──────────────────────────────────────────────

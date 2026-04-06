@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -730,14 +731,24 @@ func (s *ArticleService) IncrementViewCount(ctx context.Context, id uuid.UUID) e
 	return nil
 }
 
-// SearchArticles performs a full-text search across KB articles.
-func (s *ArticleService) SearchArticles(ctx context.Context, query string, params types.PaginationParams) ([]KBArticle, int, error) {
+// SearchArticles performs a search across KB articles.
+// When mode == "boolean", it uses PostgreSQL to_tsquery for full-text boolean
+// search (supporting AND, OR, NOT, parentheses). Otherwise it falls back to
+// the original ILIKE pattern match.
+func (s *ArticleService) SearchArticles(ctx context.Context, query, mode string, params types.PaginationParams) ([]KBArticle, int, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Build org-scope filter clause.
+	if mode == "boolean" {
+		return s.searchArticlesBoolean(ctx, auth, query, params)
+	}
+	return s.searchArticlesPlain(ctx, auth, query, params)
+}
+
+// searchArticlesPlain uses ILIKE pattern matching (the original behaviour).
+func (s *ArticleService) searchArticlesPlain(ctx context.Context, auth *types.AuthContext, query string, params types.PaginationParams) ([]KBArticle, int, error) {
 	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
 
 	countQuery := `
@@ -764,8 +775,6 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 		return nil, 0, apperrors.Internal("failed to count search results", err)
 	}
 
-	// Determine next param index after the org filter (if any).
-	// Use qualified "a.org_unit_id" for the data query which JOINs the users table.
 	orgDataClause, orgDataParam := types.BuildOrgFilter(auth, "a.org_unit_id", 3)
 	nextIdx := 3
 	if orgDataClause != "" && orgDataParam != nil {
@@ -813,14 +822,102 @@ func (s *ArticleService) SearchArticles(ctx context.Context, query string, param
 		}
 		articles = append(articles, article)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, 0, apperrors.Internal("failed to iterate search results", err)
 	}
-
 	if articles == nil {
 		articles = []KBArticle{}
 	}
-
 	return articles, total, nil
+}
+
+// searchArticlesBoolean uses PostgreSQL to_tsquery for boolean full-text search.
+// The caller may use AND, OR, NOT and parentheses, e.g. "network AND (timeout OR latency)".
+// The input is normalised from human-friendly syntax into tsquery syntax before execution.
+func (s *ArticleService) searchArticlesBoolean(ctx context.Context, auth *types.AuthContext, query string, params types.PaginationParams) ([]KBArticle, int, error) {
+	tsq := normaliseBooleanQuery(query)
+
+	orgClause, orgParam := types.BuildOrgFilter(auth, "org_unit_id", 3)
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM kb_articles
+		WHERE tenant_id = $1
+			AND to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ to_tsquery('english', $2)`
+
+	countArgs := []interface{}{auth.TenantID, tsq}
+	if orgClause != "" {
+		countQuery += ` AND ` + orgClause
+		if orgParam != nil {
+			countArgs = append(countArgs, orgParam)
+		}
+	}
+
+	var total int
+	err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.BadRequest("invalid boolean search expression — check your AND/OR/NOT syntax")
+	}
+
+	orgDataClause, orgDataParam := types.BuildOrgFilter(auth, "a.org_unit_id", 3)
+	nextIdx := 3
+	if orgDataClause != "" && orgDataParam != nil {
+		nextIdx = 4
+	}
+
+	dataQuery := fmt.Sprintf(`
+		SELECT `+articleSelect+`
+		`+articleFrom+`
+		WHERE a.tenant_id = $1
+			AND to_tsvector('english', coalesce(a.title,'') || ' ' || coalesce(a.content,'')) @@ to_tsquery('english', $2)
+		%s
+		ORDER BY
+			ts_rank(to_tsvector('english', coalesce(a.title,'') || ' ' || coalesce(a.content,'')), to_tsquery('english', $2)) DESC,
+			a.view_count DESC
+		LIMIT $%d OFFSET $%d`,
+		func() string {
+			if orgDataClause != "" {
+				return " AND " + orgDataClause
+			}
+			return ""
+		}(), nextIdx, nextIdx+1)
+
+	dataArgs := []interface{}{auth.TenantID, tsq}
+	if orgDataClause != "" && orgDataParam != nil {
+		dataArgs = append(dataArgs, orgDataParam)
+	}
+	dataArgs = append(dataArgs, params.Limit, params.Offset())
+
+	rows, err := s.pool.Query(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, apperrors.Internal("boolean search query failed", err)
+	}
+	defer rows.Close()
+
+	var articles []KBArticle
+	for rows.Next() {
+		article, err := scanArticleFromRows(rows)
+		if err != nil {
+			return nil, 0, apperrors.Internal("failed to scan search result", err)
+		}
+		articles = append(articles, article)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.Internal("failed to iterate search results", err)
+	}
+	if articles == nil {
+		articles = []KBArticle{}
+	}
+	return articles, total, nil
+}
+
+// normaliseBooleanQuery converts human-friendly boolean syntax into PostgreSQL
+// tsquery format: AND → &, OR → |, NOT → !, parentheses kept as-is.
+func normaliseBooleanQuery(q string) string {
+	q = strings.TrimSpace(q)
+	q = strings.ReplaceAll(q, " AND ", " & ")
+	q = strings.ReplaceAll(q, " OR ", " | ")
+	q = strings.ReplaceAll(q, " NOT ", " & !")
+	q = strings.ReplaceAll(q, "NOT ", "!")
+	return q
 }

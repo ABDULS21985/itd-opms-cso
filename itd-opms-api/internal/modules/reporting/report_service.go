@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -63,14 +64,14 @@ func scanReportDefinition(row pgx.Row) (ReportDefinition, error) {
 const reportRunColumns = `
 	id, definition_id, tenant_id, status, trigger_source, scheduled_for,
 	generated_at, completed_at, document_id,
-	data_snapshot, error_message, created_at`
+	data_snapshot, error_message, email_delivered_at, email_error, created_at`
 
 func scanReportRun(row pgx.Row) (ReportRun, error) {
 	var rr ReportRun
 	err := row.Scan(
 		&rr.ID, &rr.DefinitionID, &rr.TenantID, &rr.Status, &rr.TriggerSource, &rr.ScheduledFor,
 		&rr.GeneratedAt, &rr.CompletedAt, &rr.DocumentID,
-		&rr.DataSnapshot, &rr.ErrorMessage, &rr.CreatedAt,
+		&rr.DataSnapshot, &rr.ErrorMessage, &rr.EmailDeliveredAt, &rr.EmailError, &rr.CreatedAt,
 	)
 	return rr, err
 }
@@ -311,7 +312,8 @@ func (s *ReportService) DeleteDefinition(ctx context.Context, id uuid.UUID) erro
 // Report Runs
 // ──────────────────────────────────────────────
 
-// TriggerReportRun creates a new report run with pending status and captures a data snapshot.
+// TriggerReportRun creates a new report run, auto-completes it (data snapshot is captured at
+// creation), and enqueues email delivery to configured recipients.
 func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.UUID) (ReportRun, error) {
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
@@ -328,10 +330,22 @@ func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.
 		return ReportRun{}, err
 	}
 
+	// Auto-complete the run (data snapshot captured at creation).
+	now := time.Now().UTC()
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE report_runs SET status = $1, completed_at = $2 WHERE id = $3`,
+		RunStatusCompleted, now, rr.ID,
+	); err != nil {
+		slog.ErrorContext(ctx, "failed to auto-complete manual run", "run_id", rr.ID, "error", err)
+	} else {
+		rr.Status = RunStatusCompleted
+		rr.CompletedAt = &now
+	}
+
 	// Log audit event.
 	changes, _ := json.Marshal(map[string]any{
 		"definition_id": definitionID,
-		"status":        RunStatusPending,
+		"status":        RunStatusCompleted,
 		"triggerSource": RunTriggerManual,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
@@ -344,6 +358,9 @@ func (s *ReportService) TriggerReportRun(ctx context.Context, definitionID uuid.
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	// Enqueue email delivery to configured recipients.
+	s.enqueueReportEmails(ctx, rr.ID, auth.TenantID, definitionID)
 
 	return rr, nil
 }
@@ -412,7 +429,7 @@ func (s *ReportService) EnqueueDueScheduledRuns(ctx context.Context, at time.Tim
 	}()
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, tenant_id, schedule_cron
+		SELECT id, tenant_id, name, schedule_cron, recipients
 		FROM report_definitions
 		WHERE is_active = true
 		  AND schedule_cron IS NOT NULL
@@ -429,8 +446,10 @@ func (s *ReportService) EnqueueDueScheduledRuns(ctx context.Context, at time.Tim
 	for rows.Next() {
 		var definitionID uuid.UUID
 		var tenantID uuid.UUID
+		var defName string
 		var schedule string
-		if err := rows.Scan(&definitionID, &tenantID, &schedule); err != nil {
+		var recipients []uuid.UUID
+		if err := rows.Scan(&definitionID, &tenantID, &defName, &schedule, &recipients); err != nil {
 			return enqueued, apperrors.Internal("failed to scan scheduled report definition", err)
 		}
 
@@ -443,13 +462,27 @@ func (s *ReportService) EnqueueDueScheduledRuns(ctx context.Context, at time.Tim
 			continue
 		}
 
-		_, created, err := s.insertReportRun(ctx, tenantID, definitionID, RunTriggerSchedule, &scheduledAt)
+		rr, created, err := s.insertReportRun(ctx, tenantID, definitionID, RunTriggerSchedule, &scheduledAt)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to enqueue scheduled report run", "definition_id", definitionID, "tenant_id", tenantID, "error", err)
 			continue
 		}
 		if created {
 			enqueued++
+
+			// Auto-complete scheduled runs (data snapshot captured at creation).
+			if _, err := s.pool.Exec(ctx,
+				`UPDATE report_runs SET status = $1, completed_at = NOW() WHERE id = $2`,
+				RunStatusCompleted, rr.ID,
+			); err != nil {
+				slog.ErrorContext(ctx, "failed to auto-complete scheduled run", "run_id", rr.ID, "error", err)
+				continue
+			}
+
+			// Enqueue email delivery if definition has recipients.
+			if len(recipients) > 0 {
+				s.enqueueReportEmails(ctx, rr.ID, tenantID, definitionID)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -524,7 +557,7 @@ func (s *ReportService) ListReportRuns(ctx context.Context, definitionID uuid.UU
 		if err := rows.Scan(
 			&rr.ID, &rr.DefinitionID, &rr.TenantID, &rr.Status, &rr.TriggerSource, &rr.ScheduledFor,
 			&rr.GeneratedAt, &rr.CompletedAt, &rr.DocumentID,
-			&rr.DataSnapshot, &rr.ErrorMessage, &rr.CreatedAt,
+			&rr.DataSnapshot, &rr.ErrorMessage, &rr.EmailDeliveredAt, &rr.EmailError, &rr.CreatedAt,
 		); err != nil {
 			return nil, 0, apperrors.Internal("failed to scan report run", err)
 		}
@@ -550,6 +583,15 @@ func (s *ReportService) CompleteReportRun(ctx context.Context, id uuid.UUID, doc
 	}
 
 	now := time.Now().UTC()
+
+	// Fetch definition_id before updating so we can enqueue emails.
+	var definitionID uuid.UUID
+	if err := s.pool.QueryRow(ctx,
+		`SELECT definition_id FROM report_runs WHERE id = $1 AND tenant_id = $2`,
+		id, auth.TenantID,
+	).Scan(&definitionID); err != nil {
+		return apperrors.NotFound("ReportRun", id.String())
+	}
 
 	result, err := s.pool.Exec(ctx, `
 		UPDATE report_runs SET
@@ -583,6 +625,9 @@ func (s *ReportService) CompleteReportRun(ctx context.Context, id uuid.UUID, doc
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	// Enqueue email delivery to configured recipients.
+	s.enqueueReportEmails(ctx, id, auth.TenantID, definitionID)
 
 	return nil
 }
@@ -709,6 +754,66 @@ func defaultExecutivePackTemplate() json.RawMessage {
 			"format": "pdf"
 		}
 	}`)
+}
+
+// enqueueReportEmails creates notification_outbox entries for each recipient of a report definition.
+// The OutboxProcessor will pick these up and deliver via SendGrid.
+func (s *ReportService) enqueueReportEmails(ctx context.Context, runID, tenantID, definitionID uuid.UUID) {
+	// Fetch definition details for the email.
+	var defName, defType string
+	var recipients []uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT name, type, recipients FROM report_definitions WHERE id = $1 AND tenant_id = $2`,
+		definitionID, tenantID,
+	).Scan(&defName, &defType, &recipients)
+	if err != nil || len(recipients) == 0 {
+		return
+	}
+
+	now := time.Now().UTC()
+	subject := fmt.Sprintf("Report Ready: %s", defName)
+	body := fmt.Sprintf(
+		`<p>Hello,</p>
+<p>Your report <strong>%s</strong> (%s) has been generated.</p>
+<p><strong>Generated at:</strong> %s</p>
+<p style="color: #888; font-size: 12px;">This is an automated notification from ITD-OPMS.</p>`,
+		defName,
+		strings.ReplaceAll(defType, "_", " "),
+		now.Format("2006-01-02 15:04 UTC"),
+	)
+
+	templateData, _ := json.Marshal(map[string]string{
+		"ReportName": defName,
+		"ReportType": defType,
+		"GeneratedAt": now.Format(time.RFC3339),
+	})
+
+	var lastErr error
+	for _, recipientID := range recipients {
+		outboxID := uuid.New()
+		if _, err := s.pool.Exec(ctx,
+			`INSERT INTO notification_outbox
+			 (id, tenant_id, channel, recipient_id, template_key, template_data, subject, rendered_body, priority, status, created_at)
+			 VALUES ($1, $2, 'email', $3, 'report-run-delivery', $4, $5, $6, 5, 'pending', $7)`,
+			outboxID, tenantID, recipientID, templateData, subject, body, now,
+		); err != nil {
+			slog.Warn("failed to enqueue report email", "run_id", runID, "recipient_id", recipientID, "error", err)
+			lastErr = err
+		}
+	}
+
+	// Update delivery tracking on the report run.
+	if lastErr != nil {
+		_, _ = s.pool.Exec(ctx,
+			`UPDATE report_runs SET email_error = $1 WHERE id = $2`,
+			lastErr.Error(), runID,
+		)
+	} else {
+		_, _ = s.pool.Exec(ctx,
+			`UPDATE report_runs SET email_delivered_at = NOW() WHERE id = $1`,
+			runID,
+		)
+	}
 }
 
 func cronMatches(schedule string, at time.Time) (bool, error) {

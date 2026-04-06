@@ -22,13 +22,21 @@ import {
   UserX,
   Activity,
   ChevronRight,
+  CheckCircle,
+  ClipboardCheck,
+  RefreshCw,
+  Banknote,
 } from "lucide-react";
 import {
   useAsset,
   useAssetLifecycleEvents,
+  useAssetVerifications,
+  useVerifyAsset,
   useUpdateAsset,
   useDeleteAsset,
   useAssetTransition,
+  useAssetFinancials,
+  useSyncAssetFromERP,
 } from "@/hooks/use-cmdb";
 import { useSearchUsers } from "@/hooks/use-system";
 import { UserPicker } from "@/components/shared/pickers/user-picker";
@@ -66,6 +74,13 @@ const EVENT_ICONS: Record<string, { icon: typeof Clock; color: string }> = {
   disposed: { icon: Trash2, color: "#EF4444" },
 };
 
+const VERIFICATION_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  verified: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981", label: "Verified" },
+  unverified: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B", label: "Unverified" },
+  overdue: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444", label: "Overdue" },
+  discrepancy: { bg: "rgba(239, 68, 68, 0.1)", text: "#EF4444", label: "Discrepancy" },
+};
+
 const VALID_TRANSITIONS: Record<string, string[]> = {
   procured: ["received"],
   received: ["active"],
@@ -90,9 +105,13 @@ export default function AssetDetailPage({
   /* ---- Data hooks ---- */
   const { data: asset, isLoading } = useAsset(id);
   const { data: lifecycleEvents } = useAssetLifecycleEvents(id);
+  const { data: verifications } = useAssetVerifications(id);
   const updateAsset = useUpdateAsset(id);
   const deleteAsset = useDeleteAsset();
   const transitionAsset = useAssetTransition(id);
+  const verifyAsset = useVerifyAsset();
+  const { data: financials, isLoading: financialsLoading } = useAssetFinancials(id);
+  const syncFromERP = useSyncAssetFromERP(id);
 
   /* ---- User resolution ---- */
   const { data: allUsers } = useSearchUsers("");
@@ -110,8 +129,13 @@ export default function AssetDetailPage({
   const [pickerOwnerName, setPickerOwnerName] = useState("");
   const [pickerCustodianId, setPickerCustodianId] = useState<string | undefined>(undefined);
   const [pickerCustodianName, setPickerCustodianName] = useState("");
+  const [showVerifyForm, setShowVerifyForm] = useState(false);
+  const [verifyCondition, setVerifyCondition] = useState("good");
+  const [verifyLocationConfirmed, setVerifyLocationConfirmed] = useState(true);
+  const [verifyNotes, setVerifyNotes] = useState("");
 
   const events = lifecycleEvents ?? [];
+  const verificationList = verifications ?? [];
 
   /* ---- Handlers ---- */
   const handleDelete = useCallback(() => {
@@ -173,6 +197,23 @@ export default function AssetDetailPage({
       { onSuccess: () => setEditingCustodian(false) },
     );
   }, [updateAsset]);
+
+  const handleVerify = useCallback(() => {
+    verifyAsset.mutate(
+      {
+        assetId: id,
+        condition: verifyCondition,
+        locationConfirmed: verifyLocationConfirmed,
+        notes: verifyNotes || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowVerifyForm(false);
+          setVerifyNotes("");
+        },
+      },
+    );
+  }, [verifyAsset, id, verifyCondition, verifyLocationConfirmed, verifyNotes]);
 
   /* ---- Loading ---- */
 
@@ -359,6 +400,242 @@ export default function AssetDetailPage({
           </div>
         </motion.div>
       )}
+
+      {/* ================================================================ */}
+      {/*  2b. Verification Badge & Quick Verify                            */}
+      {/* ================================================================ */}
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.09 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck size={16} className="text-[var(--primary)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Physical Verification
+            </h2>
+          </div>
+          {!showVerifyForm && (
+            <button
+              type="button"
+              onClick={() => setShowVerifyForm(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            >
+              <CheckCircle size={14} />
+              Verify Now
+            </button>
+          )}
+        </div>
+
+        {/* Verification status badge */}
+        <div className="flex items-center gap-3 mb-3">
+          {asset.lastVerifiedAt ? (
+            <>
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{
+                  backgroundColor:
+                    (VERIFICATION_STATUS_COLORS[asset.verificationStatus ?? "verified"] ??
+                      VERIFICATION_STATUS_COLORS.verified
+                    ).bg,
+                }}
+              >
+                <CheckCircle
+                  size={16}
+                  style={{
+                    color:
+                      (VERIFICATION_STATUS_COLORS[asset.verificationStatus ?? "verified"] ??
+                        VERIFICATION_STATUS_COLORS.verified
+                      ).text,
+                  }}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    Last verified{" "}
+                    <span className="tabular-nums">
+                      {new Date(asset.lastVerifiedAt).toLocaleDateString()}
+                    </span>
+                  </p>
+                  {asset.verificationStatus && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold capitalize"
+                      style={{
+                        backgroundColor:
+                          (VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                            VERIFICATION_STATUS_COLORS.unverified
+                          ).bg,
+                        color:
+                          (VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                            VERIFICATION_STATUS_COLORS.unverified
+                          ).text,
+                      }}
+                    >
+                      {(VERIFICATION_STATUS_COLORS[asset.verificationStatus] ??
+                        { label: asset.verificationStatus }
+                      ).label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {(() => {
+                    const days = Math.floor(
+                      (Date.now() - new Date(asset.lastVerifiedAt).getTime()) /
+                        (1000 * 60 * 60 * 24),
+                    );
+                    if (days === 0) return "Verified today";
+                    if (days === 1) return "1 day ago";
+                    return `${days} days ago`;
+                  })()}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(245,158,11,0.1)]">
+                <AlertTriangle size={16} className="text-[#F59E0B]" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    Never verified
+                  </p>
+                  <span
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{
+                      backgroundColor: "rgba(245, 158, 11, 0.1)",
+                      color: "#F59E0B",
+                    }}
+                  >
+                    Unverified
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  This asset has not been physically verified yet
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Quick verify form */}
+        {showVerifyForm && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-4 space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] mb-1 block">
+                  Condition
+                </label>
+                <select
+                  value={verifyCondition}
+                  onChange={(e) => setVerifyCondition(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="good">Good</option>
+                  <option value="fair">Fair</option>
+                  <option value="poor">Poor</option>
+                  <option value="damaged">Damaged</option>
+                  <option value="missing">Missing</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={verifyLocationConfirmed}
+                    onChange={(e) => setVerifyLocationConfirmed(e.target.checked)}
+                    className="rounded border-[var(--border)]"
+                  />
+                  Location confirmed
+                </label>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[var(--text-secondary)] mb-1 block">
+                Notes (optional)
+              </label>
+              <textarea
+                value={verifyNotes}
+                onChange={(e) => setVerifyNotes(e.target.value)}
+                placeholder="Any observations..."
+                rows={2}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleVerify}
+                disabled={verifyAsset.isPending}
+                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {verifyAsset.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <CheckCircle size={14} />
+                )}
+                {verifyAsset.isPending ? "Verifying..." : "Submit Verification"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowVerifyForm(false)}
+                className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-0)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent verifications */}
+        {verificationList.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-3">
+            <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
+              Recent Verifications
+            </p>
+            <div className="space-y-2">
+              {verificationList.slice(0, 3).map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between rounded-lg bg-[var(--surface-1)] px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold capitalize"
+                      style={{
+                        backgroundColor:
+                          v.condition === "good"
+                            ? "rgba(16, 185, 129, 0.1)"
+                            : v.condition === "fair"
+                              ? "rgba(245, 158, 11, 0.1)"
+                              : "rgba(239, 68, 68, 0.1)",
+                        color:
+                          v.condition === "good"
+                            ? "#10B981"
+                            : v.condition === "fair"
+                              ? "#F59E0B"
+                              : "#EF4444",
+                      }}
+                    >
+                      {v.condition ?? "N/A"}
+                    </span>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      by {userMap.get(v.verifierId) ?? v.verifierId.slice(0, 8) + "..."}
+                    </span>
+                  </div>
+                  <span className="text-[10px] tabular-nums text-[var(--text-secondary)]">
+                    {new Date(v.verifiedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </motion.div>
 
       {/* ================================================================ */}
       {/*  3. Dashboard Cards (4-column grid)                               */}
@@ -731,6 +1008,117 @@ export default function AssetDetailPage({
           </dl>
         </motion.div>
       )}
+
+      {/* ================================================================ */}
+      {/*  6b. ERP Financials                                               */}
+      {/* ================================================================ */}
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.23 }}
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Banknote size={16} className="text-[var(--primary)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Financials
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => syncFromERP.mutate()}
+            disabled={syncFromERP.isPending}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
+          >
+            <RefreshCw
+              size={14}
+              className={syncFromERP.isPending ? "animate-spin" : ""}
+            />
+            {syncFromERP.isPending ? "Syncing..." : "Sync from ERP"}
+          </button>
+        </div>
+
+        {financialsLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 size={20} className="animate-spin text-[var(--primary)]" />
+          </div>
+        ) : financials ? (
+          <>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Purchase Price
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.purchasePrice != null
+                    ? `${financials.currency ?? "NGN"} ${financials.purchasePrice.toLocaleString()}`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Current Book Value
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.currentBookValue != null
+                    ? `${financials.currency ?? "NGN"} ${financials.currentBookValue.toLocaleString()}`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Depreciation Rate
+                </dt>
+                <dd className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {financials.depreciationRate != null
+                    ? `${financials.depreciationRate}%`
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  Cost Center
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.costCenter || "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  PO Number
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.poNumber || "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-secondary)]">
+                  ERP Asset ID
+                </dt>
+                <dd className="font-mono text-[var(--text-primary)]">
+                  {financials.erpAssetId || "N/A"}
+                </dd>
+              </div>
+            </dl>
+            {financials.erpSyncAt && (
+              <p className="mt-3 text-[10px] text-[var(--text-secondary)] tabular-nums">
+                Last synced from ERP:{" "}
+                {new Date(financials.erpSyncAt).toLocaleString()}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center py-6 text-center">
+            <Banknote size={24} className="text-[var(--text-secondary)] mb-2" />
+            <p className="text-sm text-[var(--text-secondary)]">
+              No financial data available. Click &ldquo;Sync from ERP&rdquo; to
+              fetch data.
+            </p>
+          </div>
+        )}
+      </motion.div>
 
       {/* ================================================================ */}
       {/*  7. Lifecycle Timeline                                            */}

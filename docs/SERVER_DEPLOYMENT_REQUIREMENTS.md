@@ -159,6 +159,8 @@ For deployments serving **200+ concurrent users** with high availability.
 
 ## 5. Network Requirements
 
+For a deployment-ready firewall matrix with mandatory, conditional, east-west, and egress rules, see `docs/ENTERPRISE_REQUIRED_PORTS.md`.
+
 ### 5.1 Firewall / Inbound Rules
 
 | Port  | Protocol | Source           | Service              | Required |

@@ -22,6 +22,8 @@ import {
   Pencil,
   Check,
   Users,
+  Mail,
+  MailX,
 } from "lucide-react";
 import {
   useReportDefinitions,
@@ -185,6 +187,9 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
               Completed
             </th>
             <th className="text-left py-1.5 px-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+              Delivered
+            </th>
+            <th className="text-left py-1.5 px-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
               Error
             </th>
             <th className="text-right py-1.5 pl-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
@@ -203,6 +208,27 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
               </td>
               <td className="py-2 px-4 text-[var(--text-secondary)]">
                 {run.completedAt ? new Date(run.completedAt).toLocaleString() : "--"}
+              </td>
+              <td className="py-2 px-4">
+                {run.emailDeliveredAt ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
+                    style={{ backgroundColor: "rgba(34, 197, 94, 0.1)", color: "#22C55E" }}
+                    title={new Date(run.emailDeliveredAt).toLocaleString()}
+                  >
+                    <Mail size={10} /> Sent
+                  </span>
+                ) : run.emailError ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
+                    style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#EF4444" }}
+                    title={run.emailError}
+                  >
+                    <MailX size={10} /> Failed
+                  </span>
+                ) : (
+                  <span className="text-[var(--text-secondary)] text-xs">--</span>
+                )}
               </td>
               <td className="py-2 px-4 text-[var(--text-secondary)] max-w-[180px] truncate">
                 {run.errorMessage || "--"}

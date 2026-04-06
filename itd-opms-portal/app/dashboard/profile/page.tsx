@@ -31,8 +31,17 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/providers/auth-provider";
+import {
+  useMFAMethods,
+  useSetupTOTP,
+  useVerifyTOTPSetup,
+  useGenerateBackupCodes,
+  useRemoveMFAMethod,
+  type MFAMethod,
+} from "@/hooks/use-mfa";
 
 interface ProfileFormData {
   displayName: string;
@@ -809,34 +818,76 @@ function SecurityTab({
   router: ReturnType<typeof useRouter>;
   u: Record<string, unknown> | null;
 }) {
-  const securityItems = [
-    {
-      icon: KeyRound,
-      title: "Password",
-      description: "Change your account password to keep your account secure",
-      action: "Change Password",
-      onClick: () => router.push("/auth/change-password"),
-      color: "#1B7340",
-    },
-    {
-      icon: Fingerprint,
-      title: "Two-Factor Authentication",
-      description:
-        "Add an extra layer of security with 2FA (coming soon)",
-      action: "Coming Soon",
-      onClick: undefined,
-      color: "#8B5CF6",
-      disabled: true,
-    },
-    {
-      icon: Globe,
-      title: "Active Sessions",
-      description: "View and manage your active login sessions",
-      action: "View Sessions",
-      onClick: () => router.push("/dashboard/system/sessions"),
-      color: "#3B82F6",
-    },
-  ];
+  const { data: methods = [], isLoading: methodsLoading } = useMFAMethods();
+  const setupTOTP = useSetupTOTP();
+  const verifySetup = useVerifyTOTPSetup();
+  const genBackupCodes = useGenerateBackupCodes();
+  const removeMFA = useRemoveMFAMethod();
+
+  const [mfaStep, setMfaStep] = useState<"idle" | "qr" | "verify" | "backup">("idle");
+  const [totpData, setTotpData] = useState<{ secret: string; qrCode: string } | null>(null);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+
+  const hasTOTP = methods.some((m: MFAMethod) => m.methodType === "totp");
+
+  const handleSetupTOTP = async () => {
+    try {
+      const data = await setupTOTP.mutateAsync();
+      setTotpData({ secret: data.secret, qrCode: data.qrCode });
+      setMfaStep("qr");
+    } catch {
+      toast.error("Failed to start TOTP setup");
+    }
+  };
+
+  const handleVerifySetup = async () => {
+    if (verifyCode.length < 6) return;
+    try {
+      const data = await verifySetup.mutateAsync({ code: verifyCode });
+      setBackupCodes(data.backupCodes);
+      setMfaStep("backup");
+      toast.success("Two-factor authentication enabled!");
+    } catch {
+      toast.error("Invalid code. Please try again.");
+      setVerifyCode("");
+    }
+  };
+
+  const handleRegenerateBackup = async () => {
+    try {
+      const data = await genBackupCodes.mutateAsync();
+      setBackupCodes(data.backupCodes);
+      setMfaStep("backup");
+      toast.success("New backup codes generated");
+    } catch {
+      toast.error("Failed to generate backup codes");
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    try {
+      await removeMFA.mutateAsync(id);
+      setRemoveConfirmId(null);
+      toast.success("MFA method removed");
+    } catch {
+      toast.error("Failed to remove method");
+    }
+  };
+
+  const downloadCodes = () => {
+    const text = "ITD-OPMS Backup Codes\n" + "=".repeat(30) + "\n\n" +
+      backupCodes.map((c, i) => `${i + 1}. ${c}`).join("\n") +
+      "\n\nStore these codes in a safe place. Each code can only be used once.";
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "itd-opms-backup-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <motion.div
@@ -845,62 +896,201 @@ function SecurityTab({
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.25 }}
     >
+      {/* Security Actions */}
       <div className="bg-[var(--surface-0)] border border-[var(--border)] rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-[var(--border)]">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">
-            Security & Access
-          </h3>
-          <p className="text-xs text-[var(--neutral-gray)] mt-0.5">
-            Manage your security settings and account access
-          </p>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">Security & Access</h3>
+          <p className="text-xs text-[var(--neutral-gray)] mt-0.5">Manage your security settings and account access</p>
         </div>
         <div className="divide-y divide-[var(--border)]">
-          {securityItems.map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08 }}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-5 group hover:bg-[var(--surface-1)]/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105"
-                    style={{ backgroundColor: `${item.color}12` }}
-                  >
-                    <Icon size={20} style={{ color: item.color }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-[var(--neutral-gray)] mt-0.5">
-                      {item.description}
-                    </p>
-                  </div>
+          {/* Password */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-5 group hover:bg-[var(--surface-1)]/50 transition-colors">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#1B734012" }}>
+                <KeyRound size={20} style={{ color: "#1B7340" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Password</p>
+                <p className="text-xs text-[var(--neutral-gray)] mt-0.5">Change your account password</p>
+              </div>
+            </div>
+            <button onClick={() => router.push("/auth/change-password")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-2)] hover:shadow-sm transition-all self-start sm:self-center">
+              Change Password <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {/* Two-Factor Authentication */}
+          <div className="px-6 py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#8B5CF612" }}>
+                  <Fingerprint size={20} style={{ color: "#8B5CF6" }} />
                 </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Two-Factor Authentication</p>
+                  <p className="text-xs text-[var(--neutral-gray)] mt-0.5">
+                    {hasTOTP ? "2FA is enabled on your account" : "Add an extra layer of security with an authenticator app"}
+                  </p>
+                </div>
+              </div>
+              {!hasTOTP && mfaStep === "idle" && (
                 <button
-                  onClick={item.onClick}
-                  disabled={item.disabled}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all self-start sm:self-center flex-shrink-0 ${
-                    item.disabled
-                      ? "border border-[var(--border)] text-[var(--neutral-gray)]/50 cursor-not-allowed"
-                      : "border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-2)] hover:shadow-sm"
-                  }`}
+                  onClick={handleSetupTOTP}
+                  disabled={setupTOTP.isPending}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all self-start sm:self-center"
                 >
-                  {item.action}
-                  {!item.disabled && (
-                    <ChevronRight
-                      size={14}
-                      className="group-hover:translate-x-0.5 transition-transform"
-                    />
-                  )}
+                  {setupTOTP.isPending ? <Loader2 size={14} className="animate-spin" /> : <Shield size={14} />}
+                  Enable 2FA
                 </button>
-              </motion.div>
-            );
-          })}
+              )}
+            </div>
+
+            {/* MFA Setup Wizard */}
+            <AnimatePresence mode="wait">
+              {mfaStep === "qr" && totpData && (
+                <motion.div key="qr" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-5 p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/50">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-3">Step 1: Scan QR Code</p>
+                  <p className="text-xs text-[var(--neutral-gray)] mb-4">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+                  <div className="flex flex-col items-center gap-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={totpData.qrCode} alt="TOTP QR Code" className="w-48 h-48 rounded-xl border border-[var(--border)] bg-white p-2" />
+                    <div className="w-full">
+                      <p className="text-xs text-[var(--neutral-gray)] mb-1">Or enter this code manually:</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-0)] border border-[var(--border)] text-xs font-mono tracking-wider select-all">{totpData.secret}</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(totpData.secret); toast.success("Copied to clipboard"); }}
+                          className="px-3 py-2 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--surface-2)] transition-colors"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                    <button onClick={() => setMfaStep("verify")} className="w-full py-2.5 rounded-xl text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-colors">
+                      Next: Enter Verification Code
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {mfaStep === "verify" && (
+                <motion.div key="verify" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-5 p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/50">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-3">Step 2: Verify Code</p>
+                  <p className="text-xs text-[var(--neutral-gray)] mb-4">Enter the 6-digit code from your authenticator app</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={verifyCode}
+                      onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] text-center text-lg font-mono tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleVerifySetup}
+                      disabled={verifyCode.length < 6 || verifySetup.isPending}
+                      className="px-5 py-2.5 rounded-xl text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {verifySetup.isPending ? <Loader2 size={14} className="animate-spin" /> : "Verify"}
+                    </button>
+                  </div>
+                  <button onClick={() => setMfaStep("qr")} className="mt-3 text-xs text-[var(--neutral-gray)] hover:text-[var(--text-primary)] transition-colors">
+                    Back to QR code
+                  </button>
+                </motion.div>
+              )}
+
+              {mfaStep === "backup" && backupCodes.length > 0 && (
+                <motion.div key="backup" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-5 p-5 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Backup Codes</p>
+                  <p className="text-xs text-[var(--neutral-gray)] mb-4">Save these codes in a secure location. Each code can only be used once.</p>
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    {backupCodes.map((code, i) => (
+                      <div key={i} className="px-3 py-2 rounded-lg bg-[var(--surface-0)] border border-[var(--border)] text-center font-mono text-sm tracking-wider select-all">
+                        {code}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={downloadCodes} className="flex-1 py-2 rounded-xl text-sm font-medium border border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                      Download .txt
+                    </button>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(backupCodes.join("\n")); toast.success("Codes copied"); }}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium border border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors"
+                    >
+                      Copy All
+                    </button>
+                    <button onClick={() => { setMfaStep("idle"); setBackupCodes([]); setVerifyCode(""); setTotpData(null); }} className="flex-1 py-2 rounded-xl text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-colors">
+                      Done
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Configured MFA Methods */}
+            {methods.length > 0 && mfaStep === "idle" && (
+              <div className="mt-4 space-y-2">
+                {methods.map((m: MFAMethod) => (
+                  <div key={m.id} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 size={16} className="text-green-600" />
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {m.methodType === "totp" ? "Authenticator App" : m.methodType === "backup_codes" ? "Backup Codes" : m.methodType}
+                        </p>
+                        <p className="text-xs text-[var(--neutral-gray)]">
+                          {m.lastUsedAt ? `Last used ${new Date(m.lastUsedAt).toLocaleDateString()}` : "Never used"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {m.methodType === "backup_codes" && (
+                        <button onClick={handleRegenerateBackup} disabled={genBackupCodes.isPending} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                          Regenerate
+                        </button>
+                      )}
+                      {m.methodType !== "backup_codes" && (
+                        removeConfirmId === m.id ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleRemove(m.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--error)] text-white hover:bg-[var(--error)]/90 transition-colors">
+                              Confirm
+                            </button>
+                            <button onClick={() => setRemoveConfirmId(null)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setRemoveConfirmId(m.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/10 transition-colors">
+                            Remove
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Active Sessions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-5 group hover:bg-[var(--surface-1)]/50 transition-colors">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#3B82F612" }}>
+                <Globe size={20} style={{ color: "#3B82F6" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Active Sessions</p>
+                <p className="text-xs text-[var(--neutral-gray)] mt-0.5">View and manage your active login sessions</p>
+              </div>
+            </div>
+            <button onClick={() => router.push("/dashboard/system/sessions")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-2)] hover:shadow-sm transition-all self-start sm:self-center">
+              View Sessions <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
 

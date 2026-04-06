@@ -29,6 +29,8 @@ export interface ReportRun {
   documentId?: string;
   dataSnapshot: Record<string, unknown>;
   errorMessage?: string;
+  emailDeliveredAt?: string;
+  emailError?: string;
   createdAt: string;
 }
 

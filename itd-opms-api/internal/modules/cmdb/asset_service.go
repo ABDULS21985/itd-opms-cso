@@ -46,6 +46,7 @@ const assetColumns = `
 	owner_id, custodian_id,
 	purchase_date, purchase_cost, currency,
 	classification, attributes, tags,
+	last_verified_at, last_verified_by, verification_status,
 	created_at, updated_at`
 
 // scanAsset scans a single asset row into an Asset struct.
@@ -58,6 +59,7 @@ func scanAsset(row pgx.Row) (Asset, error) {
 		&a.OwnerID, &a.CustodianID,
 		&a.PurchaseDate, &a.PurchaseCost, &a.Currency,
 		&a.Classification, &a.Attributes, &a.Tags,
+		&a.LastVerifiedAt, &a.LastVerifiedBy, &a.VerificationStatus,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
 	return a, err
@@ -75,6 +77,7 @@ func scanAssets(rows pgx.Rows) ([]Asset, error) {
 			&a.OwnerID, &a.CustodianID,
 			&a.PurchaseDate, &a.PurchaseCost, &a.Currency,
 			&a.Classification, &a.Attributes, &a.Tags,
+			&a.LastVerifiedAt, &a.LastVerifiedBy, &a.VerificationStatus,
 			&a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -860,4 +863,121 @@ func (s *AssetService) GetAssetStats(ctx context.Context) (AssetStats, error) {
 	}
 
 	return stats, nil
+}
+
+// ──────────────────────────────────────────────
+// Asset Verification
+// ──────────────────────────────────────────────
+
+// VerifyAsset creates a verification record and updates assets.last_verified_at.
+func (s *AssetService) VerifyAsset(ctx context.Context, assetID uuid.UUID, req VerifyAssetRequest) (AssetVerification, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return AssetVerification{}, apperrors.Unauthorized("authentication required")
+	}
+
+	if req.Condition != nil && !AssetVerificationConditions[*req.Condition] {
+		return AssetVerification{}, apperrors.Validation("condition", "must be one of: good, fair, poor, damaged, missing")
+	}
+
+	// Verify asset exists.
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM assets WHERE id = $1 AND tenant_id = $2)`,
+		assetID, auth.TenantID).Scan(&exists); err != nil || !exists {
+		return AssetVerification{}, apperrors.NotFound("Asset", assetID.String())
+	}
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	photoIDs := req.PhotoEvidenceIDs
+	if photoIDs == nil {
+		photoIDs = []uuid.UUID{}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return AssetVerification{}, apperrors.Internal("failed to begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var v AssetVerification
+	err = tx.QueryRow(ctx, `
+		INSERT INTO asset_verifications (
+			id, tenant_id, asset_id, verifier_id, verified_at,
+			location_confirmed, condition, notes, photo_evidence_ids
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, tenant_id, asset_id, verifier_id, verified_at,
+			location_confirmed, condition, notes, photo_evidence_ids`,
+		id, auth.TenantID, assetID, auth.UserID, now,
+		req.LocationConfirmed, req.Condition, req.Notes, photoIDs,
+	).Scan(
+		&v.ID, &v.TenantID, &v.AssetID, &v.VerifierID, &v.VerifiedAt,
+		&v.LocationConfirmed, &v.Condition, &v.Notes, &v.PhotoEvidenceIDs,
+	)
+	if err != nil {
+		return AssetVerification{}, apperrors.Internal("failed to insert verification", err)
+	}
+
+	// Update last_verified_at on the asset.
+	_, err = tx.Exec(ctx, `UPDATE assets SET last_verified_at = $1, updated_at = $2 WHERE id = $3`,
+		now, now, assetID)
+	if err != nil {
+		return AssetVerification{}, apperrors.Internal("failed to update asset last_verified_at", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return AssetVerification{}, apperrors.Internal("failed to commit verification", err)
+	}
+
+	// Audit log.
+	changes, _ := json.Marshal(map[string]any{"condition": req.Condition, "location_confirmed": req.LocationConfirmed})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "verify:asset",
+		EntityType: "asset",
+		EntityID:   assetID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return v, nil
+}
+
+// ListAssetVerifications returns verification history for an asset.
+func (s *AssetService) ListAssetVerifications(ctx context.Context, assetID uuid.UUID) ([]AssetVerification, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tenant_id, asset_id, verifier_id, verified_at,
+			location_confirmed, condition, notes, photo_evidence_ids
+		FROM asset_verifications
+		WHERE asset_id = $1 AND tenant_id = $2
+		ORDER BY verified_at DESC`,
+		assetID, auth.TenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list verifications", err)
+	}
+	defer rows.Close()
+
+	var verifications []AssetVerification
+	for rows.Next() {
+		var v AssetVerification
+		if err := rows.Scan(
+			&v.ID, &v.TenantID, &v.AssetID, &v.VerifierID, &v.VerifiedAt,
+			&v.LocationConfirmed, &v.Condition, &v.Notes, &v.PhotoEvidenceIDs,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan verification", err)
+		}
+		verifications = append(verifications, v)
+	}
+	if verifications == nil {
+		verifications = []AssetVerification{}
+	}
+	return verifications, nil
 }

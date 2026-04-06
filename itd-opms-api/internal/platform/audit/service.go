@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +85,8 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 		evidenceRefs = []uuid.UUID{}
 	}
 
+	ipAddress := normalizeIPAddress(entry.IPAddress)
+
 	query := `
 		INSERT INTO audit_events (
 			event_id, tenant_id, actor_id, actor_role, action,
@@ -93,7 +96,7 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
-			$10, $11, $12, $13,
+			$10, NULLIF($11, '')::inet, $12, $13,
 			$14
 		)`
 
@@ -108,7 +111,7 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 		entry.Changes,
 		entry.PreviousState,
 		evidenceRefs,
-		entry.IPAddress,
+		ipAddress,
 		entry.UserAgent,
 		entry.CorrelationID,
 		time.Now().UTC(),
@@ -125,6 +128,24 @@ func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 	)
 
 	return nil
+}
+
+func normalizeIPAddress(raw string) string {
+	ip := strings.TrimSpace(raw)
+	if ip == "" {
+		return ""
+	}
+
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host
+	}
+
+	ip = strings.TrimPrefix(strings.TrimSuffix(ip, "]"), "[")
+	if parsed := net.ParseIP(ip); parsed != nil {
+		return parsed.String()
+	}
+
+	return ""
 }
 
 // Query returns a paginated list of audit events matching the given filters.
@@ -192,7 +213,7 @@ func (s *AuditService) Query(ctx context.Context, filter AuditFilter, pagination
 	dataQuery := fmt.Sprintf(`
 		SELECT event_id, tenant_id, actor_id, actor_role, action,
 			   entity_type, entity_id, changes, previous_state,
-			   evidence_refs, ip_address, user_agent, correlation_id,
+			   evidence_refs, COALESCE(host(ip_address), ''), user_agent, correlation_id,
 			   checksum, timestamp
 		FROM audit_events
 		%s
@@ -247,7 +268,7 @@ func (s *AuditService) GetByID(ctx context.Context, eventID uuid.UUID) (*AuditEv
 	query := `
 		SELECT event_id, tenant_id, actor_id, actor_role, action,
 			   entity_type, entity_id, changes, previous_state,
-			   evidence_refs, ip_address, user_agent, correlation_id,
+			   evidence_refs, COALESCE(host(ip_address), ''), user_agent, correlation_id,
 			   checksum, timestamp
 		FROM audit_events
 		WHERE event_id = $1`

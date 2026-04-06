@@ -19,10 +19,14 @@ import {
   Tag,
   Zap,
   Shield,
+  BookOpen,
+  ThumbsUp,
+  ExternalLink,
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { QueuePicker } from "@/components/shared/pickers";
 import { useCreateTicket } from "@/hooks/use-itsm";
+import { useSearchKBArticles } from "@/hooks/use-knowledge";
 import { useUsers } from "@/hooks/use-system";
 
 /* ------------------------------------------------------------------ */
@@ -232,6 +236,7 @@ export default function NewTicketPage() {
   const [tags, setTags] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showKbSuggestions, setShowKbSuggestions] = useState(true);
 
   /* ---- Computed priority ---- */
   const computedPriority = useMemo(() => {
@@ -242,6 +247,19 @@ export default function NewTicketPage() {
   const priorityDisplay = computedPriority
     ? PRIORITY_DISPLAY[computedPriority]
     : null;
+
+  /* ---- KB Suggestions based on title ---- */
+  const kbSearchTerm = useMemo(() => {
+    const t = title.trim();
+    return t.length >= 3 ? t : "";
+  }, [title]);
+  const { data: kbSearchData } = useSearchKBArticles(kbSearchTerm, 1, 5);
+  const kbSuggestions = useMemo(() => {
+    if (!kbSearchData) return [];
+    if (Array.isArray(kbSearchData)) return kbSearchData;
+    if ("data" in kbSearchData && Array.isArray(kbSearchData.data)) return kbSearchData.data;
+    return [];
+  }, [kbSearchData]);
 
   /* ---- Step validation ---- */
   const validateStep = useCallback(
@@ -885,6 +903,68 @@ export default function NewTicketPage() {
                           placeholder="e.g. Microsoft Office, VPN"
                         />
                       </div>
+
+                      {/* KB Suggested Solutions */}
+                      {kbSuggestions.length > 0 && showKbSuggestions && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="rounded-xl border border-amber-200/60 bg-amber-50/40 p-4"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                              <BookOpen size={15} />
+                              Suggested Solutions
+                              <span className="text-[10px] font-normal text-amber-600">
+                                Based on your title
+                              </span>
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => setShowKbSuggestions(false)}
+                              className="text-[10px] font-medium text-amber-600 hover:text-amber-800 transition-colors"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            {kbSuggestions.slice(0, 5).map((article) => (
+                              <div
+                                key={article.id}
+                                className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/40 bg-white/80 p-3"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                    {article.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[10px] font-semibold text-[var(--primary)] uppercase">
+                                      {article.type}
+                                    </span>
+                                    {article.helpfulCount > 0 && (
+                                      <span className="flex items-center gap-0.5 text-[10px] text-[var(--neutral-gray)]">
+                                        <ThumbsUp size={9} /> {article.helpfulCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <a
+                                  href={`/dashboard/knowledge/articles/${article.slug}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-amber-300 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                                >
+                                  <ExternalLink size={11} />
+                                  View
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-[10px] text-amber-600">
+                            Check if an existing article solves your issue before creating a ticket.
+                          </p>
+                        </motion.div>
+                      )}
                     </div>
                   </div>
                 )}

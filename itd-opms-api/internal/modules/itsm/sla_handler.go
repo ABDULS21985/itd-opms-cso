@@ -56,6 +56,7 @@ func (h *SLAHandler) Routes(r chi.Router) {
 	})
 	// SLA Compliance / Breaches
 	r.With(middleware.RequirePermission("itsm.view")).Get("/sla-compliance", h.GetComplianceStats)
+	r.With(middleware.RequirePermission("itsm.view")).Get("/sla-compliance/service-requests", h.GetServiceRequestSLACompliance)
 	r.With(middleware.RequirePermission("itsm.view")).Get("/sla-breaches/{ticketId}", h.ListBreaches)
 }
 
@@ -501,6 +502,23 @@ func (h *SLAHandler) GetComplianceStats(w http.ResponseWriter, r *http.Request) 
 	}
 
 	stats, err := h.svc.GetComplianceStats(r.Context(), priority)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, stats, nil)
+}
+
+// GetServiceRequestSLACompliance handles GET /sla-compliance/service-requests.
+func (h *SLAHandler) GetServiceRequestSLACompliance(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	stats, err := h.svc.GetServiceRequestSLACompliance(r.Context())
 	if err != nil {
 		writeAppError(w, r, err)
 		return

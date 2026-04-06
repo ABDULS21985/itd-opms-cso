@@ -29,6 +29,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/knowledge"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/people"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/release"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/ssa"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
@@ -38,11 +39,13 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/dirsync"
+	inboundemail "github.com/itd-cbn/itd-opms-api/internal/platform/email"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/metrics"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/msgraph"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/notification"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/sendgrid"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/sla"
 )
 
 // Server holds all dependencies and provides the HTTP server functionality.
@@ -54,15 +57,21 @@ type Server struct {
 	natsConn *nats.Conn
 	js       nats.JetStreamContext
 	router   chi.Router
+	graph    *msgraph.Client
 
 	// Background services for graceful shutdown.
 	outboxProcessor       *notification.OutboxProcessor
 	orchestrator          *notification.Orchestrator
 	dashboardRefresh      *reporting.DashboardRefresher
 	reportScheduler       *reporting.ReportScheduler
+	queryScheduler        *reporting.QueryScheduler
+	discoveryScheduler    *cmdb.DiscoveryScheduler
 	maintenanceWorker     *system.MaintenanceWorker
 	vaultWorker           *vault.VaultWorker
 	actionReminderService *governance.ActionReminderService
+	siemExporter          *audit.SIEMExporter
+	licenseEnforcer       *auth.LicenseEnforcer
+	escalationWorker      *sla.EscalationWorker
 }
 
 // NewServer creates a new Server with all required dependencies.
@@ -73,6 +82,7 @@ func NewServer(
 	minioClient *minio.Client,
 	natsConn *nats.Conn,
 	js nats.JetStreamContext,
+	graphClient *msgraph.Client,
 ) *Server {
 	return &Server{
 		cfg:      cfg,
@@ -81,7 +91,13 @@ func NewServer(
 		minio:    minioClient,
 		natsConn: natsConn,
 		js:       js,
+		graph:    graphClient,
 	}
+}
+
+// SetDiscoveryScheduler registers the CMDB discovery background scheduler.
+func (s *Server) SetDiscoveryScheduler(scheduler *cmdb.DiscoveryScheduler) {
+	s.discoveryScheduler = scheduler
 }
 
 // Setup configures the chi router with the full middleware chain and all
@@ -117,14 +133,12 @@ func (s *Server) Setup() {
 	authService := auth.NewAuthService(s.pool, s.cfg.JWT, s.minio, s.cfg.MinIO)
 	auditService := audit.NewAuditService(s.pool)
 	revocationService := auth.NewRevocationService(s.redis)
-	authHandler := auth.NewAuthHandler(authService, auditService, revocationService)
 	auditHandler := audit.NewAuditHandler(auditService)
 	healthHandler := NewHealthHandler(s.pool, s.redis, s.natsConn, s.minio)
 
 	// --- Microsoft Graph API client (if Entra ID is enabled) ---
-	var graphClient *msgraph.Client
-	if s.cfg.EntraID.Enabled && s.cfg.EntraID.ClientID != "" {
-		graphClient = msgraph.NewClient(s.cfg.EntraID, s.cfg.Graph)
+	graphClient := s.graph
+	if graphClient != nil {
 		slog.Info("Microsoft Graph API client initialized")
 	}
 
@@ -174,6 +188,26 @@ func (s *Server) Setup() {
 		slog.Warn("no email provider configured — email notifications will be skipped")
 	}
 
+	// --- License enforcer (ESM concurrent license cap) ---
+	licenseEnforcer := auth.NewLicenseEnforcer(s.pool, s.redis, s.cfg.License)
+	s.licenseEnforcer = licenseEnforcer
+
+	// --- SIEM exporter (ESM audit event export) ---
+	siemExporter := audit.NewSIEMExporter(s.pool, s.cfg.SIEM)
+	s.siemExporter = siemExporter
+
+	// --- Escalation worker (ESM automated SLA escalation) ---
+	if s.js != nil {
+		s.escalationWorker = sla.NewEscalationWorker(s.pool, s.js, 60*time.Second)
+	}
+
+	// --- MFA service ---
+	mfaService := auth.NewMFAService(s.pool, s.cfg.MFA.EncryptionKey)
+
+	// --- Auth handler (needs email sender for password resets) ---
+	authHandler := auth.NewAuthHandler(authService, auditService, revocationService, emailSender, s.cfg.Server.FrontendURL, licenseEnforcer, mfaService)
+	mfaHandler := auth.NewMFAHandler(mfaService, authService, auditService, licenseEnforcer)
+
 	// --- Notification outbox processor ---
 	outboxProcessor := notification.NewOutboxProcessor(s.pool, emailSender, teamsSender)
 	s.outboxProcessor = outboxProcessor
@@ -193,12 +227,12 @@ func (s *Server) Setup() {
 	governanceHandler := governance.NewHandler(s.pool, auditService)
 	peopleHandler := people.NewHandler(s.pool, auditService)
 	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
-	itsmHandler := itsm.NewHandler(s.pool, auditService)
-	cmdbHandler := cmdb.NewHandler(s.pool, auditService)
+	itsmHandler := itsm.NewHandler(s.pool, auditService, s.js)
+	cmdbHandler := cmdb.NewHandler(s.pool, auditService, graphClient, s.cfg.Discovery)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)
-	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO)
+	systemHandler := system.NewHandler(s.pool, auditService, s.redis, s.natsConn, s.minio, s.cfg.MinIO, licenseEnforcer, siemExporter, s.js)
 	approvalHandler := approval.NewHandler(s.pool, auditService)
 	calendarHandler := calendar.NewHandler(s.pool, auditService)
 	vaultHandler := vault.NewHandler(s.pool, s.minio, s.cfg.MinIO, auditService)
@@ -206,10 +240,17 @@ func (s *Server) Setup() {
 	ssaHandler := ssa.NewHandler(s.pool, auditService)
 	automationHandler := automation.NewHandler(s.pool, auditService)
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
+	releaseHandler := release.NewHandler(s.pool, auditService, s.js)
 	s.maintenanceWorker = systemHandler.Maintenance
 	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
 	s.reportScheduler = reportingHandler.ReportScheduler(1 * time.Minute)
+	s.queryScheduler = reportingHandler.QueryScheduler(emailSender, s.cfg.Server.FrontendURL, 1*time.Minute)
+
+	// --- Inbound email webhook handler ---
+	inboundEmailHandler := inboundemail.NewInboundHandler(
+		s.pool, s.minio, s.cfg.MinIO, s.cfg.InboundEmail, auditService,
+	)
 
 	// --- Routes ---
 	r.Route("/api/v1", func(r chi.Router) {
@@ -217,6 +258,12 @@ func (s *Server) Setup() {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.PublicRoute)
 			healthHandler.Routes(r)
+
+			// SendGrid Inbound Parse webhook (public — verified by SendGrid signature).
+			r.Post("/webhooks/email/inbound", inboundEmailHandler.HandleInbound)
+
+			// Generic webhook receiver (public — verified by HMAC-SHA256).
+			r.Post("/webhooks/custom/{slug}", systemHandler.WebhookReceiver().HandleIncoming)
 		})
 
 		// Auth routes — mixed public/protected.
@@ -226,11 +273,12 @@ func (s *Server) Setup() {
 				r.Use(middleware.RateLimitByIP(s.redis, 1000, 1*time.Minute))
 			}
 
-			// Public: login, refresh, forgot/reset password, OIDC config.
+			// Public: login, refresh, forgot/reset password, MFA verify, OIDC config.
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/forgot-password", authHandler.ForgotPassword)
 			r.Post("/reset-password", authHandler.ResetPassword)
+			r.Post("/mfa/verify", mfaHandler.VerifyMFAChallenge)
 
 			// OIDC routes (public, used by frontend PKCE flow).
 			if oidcHandler != nil {
@@ -258,6 +306,13 @@ func (s *Server) Setup() {
 				r.Patch("/profile", authHandler.UpdateProfile)
 				r.Post("/profile/photo", authHandler.UploadProfilePhoto)
 				r.Delete("/profile/photo", authHandler.DeleteProfilePhoto)
+
+				// MFA setup & management (requires authentication).
+				r.Post("/mfa/setup/totp", mfaHandler.SetupTOTP)
+				r.Post("/mfa/setup/totp/verify", mfaHandler.VerifyTOTPSetup)
+				r.Post("/mfa/setup/backup-codes", mfaHandler.GenerateBackupCodes)
+				r.Get("/mfa/methods", mfaHandler.ListMethods)
+				r.Delete("/mfa/methods/{id}", mfaHandler.RemoveMethod)
 			})
 		})
 
@@ -332,7 +387,11 @@ func (s *Server) Setup() {
 			r.Route("/knowledge", func(r chi.Router) { knowledgeHandler.Routes(r) })
 			r.Route("/grc", func(r chi.Router) { grcHandler.Routes(r) })
 			r.Route("/reporting", func(r chi.Router) { reportingHandler.Routes(r) })
-			r.Route("/system", func(r chi.Router) { systemHandler.Routes(r) })
+			r.Route("/system", func(r chi.Router) {
+				systemHandler.Routes(r)
+				// Admin MFA reset (uses auth MFA service, registered here).
+				r.With(middleware.RequirePermission("system.manage")).Post("/users/{id}/reset-mfa", mfaHandler.AdminResetMFA)
+			})
 			r.Route("/approvals", func(r chi.Router) { approvalHandler.Routes(r) })
 			r.Route("/calendar", func(r chi.Router) { calendarHandler.Routes(r) })
 			r.Route("/vault", func(r chi.Router) { vaultHandler.Routes(r) })
@@ -340,6 +399,7 @@ func (s *Server) Setup() {
 			r.Route("/automation", func(r chi.Router) { automationHandler.Routes(r) })
 			r.Route("/ssa", func(r chi.Router) { ssaHandler.Routes(r) })
 			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
+			r.Route("/releases", func(r chi.Router) { releaseHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })
@@ -373,11 +433,26 @@ func (s *Server) Start() error {
 	if s.reportScheduler != nil {
 		s.reportScheduler.Start(ctx)
 	}
+	if s.queryScheduler != nil {
+		s.queryScheduler.Start(ctx)
+	}
+	if s.discoveryScheduler != nil {
+		s.discoveryScheduler.Start(ctx)
+	}
 	if s.maintenanceWorker != nil {
 		s.maintenanceWorker.Start(ctx)
 	}
 	if s.vaultWorker != nil {
 		s.vaultWorker.Start(ctx)
+	}
+	if s.licenseEnforcer != nil {
+		s.licenseEnforcer.Start(ctx)
+	}
+	if s.siemExporter != nil {
+		s.siemExporter.Start(ctx)
+	}
+	if s.escalationWorker != nil {
+		s.escalationWorker.Start(ctx)
 	}
 
 	// Start action reminder cron (every hour).
@@ -440,6 +515,15 @@ func (s *Server) Start() error {
 	}
 	if s.vaultWorker != nil {
 		s.vaultWorker.Stop()
+	}
+	if s.licenseEnforcer != nil {
+		s.licenseEnforcer.Stop()
+	}
+	if s.siemExporter != nil {
+		s.siemExporter.Stop()
+	}
+	if s.escalationWorker != nil {
+		s.escalationWorker.Stop()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

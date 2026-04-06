@@ -449,6 +449,21 @@ export default function UsersPage() {
       render: (item) => <StatusBadge status={getUserStatus(item)} />,
     },
     {
+      key: "mfaEnabled",
+      header: "MFA",
+      align: "center",
+      render: (item) => (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+          item.mfaEnabled
+            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            : "bg-gray-50 text-gray-400 border border-gray-200"
+        }`}>
+          <Shield size={10} />
+          {item.mfaEnabled ? "On" : "Off"}
+        </span>
+      ),
+    },
+    {
       key: "lastLoginAt",
       header: "Last Active",
       sortable: true,

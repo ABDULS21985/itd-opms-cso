@@ -2,6 +2,7 @@ package itsm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +19,7 @@ import (
 // ──────────────────────────────────────────────
 
 func newTestProblemHandler() *ProblemHandler {
-	svc := NewProblemService(nil, nil)
+	svc := NewProblemService(nil, nil, nil)
 	return NewProblemHandler(svc)
 }
 
@@ -379,6 +380,130 @@ func TestProblemHandler_UpdateKnownError_MalformedJSON(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
+// UpdateProblem — status field rejection
+// ──────────────────────────────────────────────
+
+func TestProblemHandler_UpdateProblem_RejectsStatusField(t *testing.T) {
+	h := newTestProblemHandler()
+	validUUID := uuid.New().String()
+	body := `{"title":"Updated Title","status":"resolved"}`
+	req := httptest.NewRequest(http.MethodPut, "/problems/"+validUUID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validUUID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.UpdateProblem(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 when status field is present, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Status cannot be changed via update") {
+		t.Errorf("expected status rejection message, got %q", w.Body.String())
+	}
+}
+
+func TestProblemHandler_UpdateProblem_AllowsWithoutStatus(t *testing.T) {
+	// Verify that a request body WITHOUT status decodes to nil Status,
+	// meaning the handler guard (req.Status != nil) will NOT fire.
+	body := `{"title":"Updated Title","description":"New desc"}`
+	var req UpdateProblemRequest
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&req); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if req.Status != nil {
+		t.Error("expected Status to be nil when not present in JSON body")
+	}
+	if req.Title == nil || *req.Title != "Updated Title" {
+		t.Error("expected Title to be set")
+	}
+}
+
+// ──────────────────────────────────────────────
+// TransitionProblem handler tests
+// ──────────────────────────────────────────────
+
+func TestProblemHandler_TransitionProblem_NoAuth(t *testing.T) {
+	h := newTestProblemHandler()
+	req := httptest.NewRequest(http.MethodPost, "/problems/"+uuid.New().String()+"/transition",
+		strings.NewReader(`{"targetStatus":"investigating"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", uuid.New().String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.TransitionProblem(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestProblemHandler_TransitionProblem_InvalidUUID(t *testing.T) {
+	h := newTestProblemHandler()
+	req := httptest.NewRequest(http.MethodPost, "/problems/bad/transition",
+		strings.NewReader(`{"targetStatus":"investigating"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "bad")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.TransitionProblem(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestProblemHandler_TransitionProblem_MalformedJSON(t *testing.T) {
+	h := newTestProblemHandler()
+	validUUID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodPost, "/problems/"+validUUID+"/transition",
+		strings.NewReader("{bad"))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validUUID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.TransitionProblem(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestProblemHandler_TransitionProblem_MissingTargetStatus(t *testing.T) {
+	h := newTestProblemHandler()
+	validUUID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodPost, "/problems/"+validUUID+"/transition",
+		strings.NewReader(`{"comment":"some comment"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = problemWithAuth(req)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validUUID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.TransitionProblem(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+// ──────────────────────────────────────────────
 // Route registration tests
 // ──────────────────────────────────────────────
 
@@ -396,6 +521,7 @@ func TestProblemRoutes_Registration(t *testing.T) {
 		{"CreateProblem", http.MethodPost, "/problems/"},
 		{"UpdateProblem", http.MethodPut, "/problems/" + validUUID},
 		{"DeleteProblem", http.MethodDelete, "/problems/" + validUUID},
+		{"TransitionProblem", http.MethodPost, "/problems/" + validUUID + "/transition"},
 		{"LinkIncident", http.MethodPost, "/problems/" + validUUID + "/link-incident"},
 		{"ListKnownErrors", http.MethodGet, "/problems/known-errors/"},
 		{"GetKnownError", http.MethodGet, "/problems/known-errors/" + validUUID},

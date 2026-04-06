@@ -22,6 +22,7 @@ export interface UserDetail {
   updatedAt: string;
   orgUnitId?: string;
   orgUnitName?: string;
+  mfaEnabled: boolean;
   roles: RoleBinding[];
   delegations: Delegation[];
 }
@@ -32,6 +33,7 @@ export interface UserSearchResult {
   email: string;
   photoUrl?: string;
   department?: string;
+  jobTitle?: string;
   isActive: boolean;
 }
 
@@ -573,4 +575,58 @@ export interface CustomFieldDefinition {
 export interface CustomFieldOption {
   value: string;
   label: string;
+}
+
+/* =============================================================================
+   ESM: License & SIEM Types
+   ============================================================================= */
+
+export interface LicenseUtilization {
+  current: number;
+  max: number;
+  ratio: number;
+  lastSyncedAt: string;
+}
+
+export interface SIEMStatus {
+  enabled: boolean;
+  mode: string;
+  lastExportedId: number;
+  lastExportAt: string;
+  errorCount: number;
+}
+
+/* =============================================================================
+   Webhook Endpoint Types
+   ============================================================================= */
+
+export interface WebhookEndpoint {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  secret?: string;
+  isActive: boolean;
+  payloadTransform: Record<string, unknown>;
+  targetAction: string;
+  lastReceivedAt?: string;
+  totalReceived: number;
+  totalErrors: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookLog {
+  id: string;
+  endpointId: string;
+  receivedAt: string;
+  sourceIp?: string;
+  headers?: Record<string, string>;
+  payload?: Record<string, unknown>;
+  signatureValid?: boolean;
+  actionTaken?: string;
+  actionResult?: Record<string, unknown>;
+  error?: string;
 }

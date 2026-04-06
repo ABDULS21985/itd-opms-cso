@@ -19,14 +19,20 @@ type Config struct {
 	EntraID       EntraIDConfig
 	Graph         GraphConfig
 	SendGrid      SendGridConfig
+	InboundEmail  InboundEmailConfig
 	Observability ObservabilityConfig
 	Log           LogConfig
+	SIEM          SIEMConfig
+	License       LicenseConfig
+	Discovery     DiscoveryConfig
+	MFA           MFAConfig
 }
 
 type ServerConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-	Env  string `mapstructure:"env"`
+	Host        string `mapstructure:"host"`
+	Port        int    `mapstructure:"port"`
+	Env         string `mapstructure:"env"`
+	FrontendURL string `mapstructure:"frontend_url"`
 }
 
 type DatabaseConfig struct {
@@ -116,6 +122,11 @@ type SendGridConfig struct {
 	FromName  string `mapstructure:"from_name"`
 }
 
+type InboundEmailConfig struct {
+	WebhookSecret string `mapstructure:"webhook_secret"`
+	Domain        string `mapstructure:"domain"`
+}
+
 type ObservabilityConfig struct {
 	OTLPEndpoint string `mapstructure:"otlp_endpoint"`
 	ServiceName  string `mapstructure:"service_name"`
@@ -124,6 +135,38 @@ type ObservabilityConfig struct {
 type LogConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+type SIEMConfig struct {
+	Enabled      bool          `mapstructure:"enabled"`
+	Mode         string        `mapstructure:"mode"`
+	SyslogAddr   string        `mapstructure:"syslog_addr"`
+	SyslogProto  string        `mapstructure:"syslog_proto"`
+	WebhookURL   string        `mapstructure:"webhook_url"`
+	BatchSize    int           `mapstructure:"batch_size"`
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+}
+
+type LicenseConfig struct {
+	MaxConcurrent int           `mapstructure:"max_concurrent"`
+	SyncInterval  time.Duration `mapstructure:"sync_interval"`
+}
+
+type MFAConfig struct {
+	EncryptionKey string `mapstructure:"encryption_key"`
+}
+
+type DiscoveryConfig struct {
+	ADEnabled      bool          `mapstructure:"ad_enabled"`
+	ADTenantID     string        `mapstructure:"ad_tenant_id"`
+	NetworkEnabled bool          `mapstructure:"network_enabled"`
+	SNMPCommunity  string        `mapstructure:"snmp_community"`
+	ScanTimeout    time.Duration `mapstructure:"scan_timeout"`
+	MaxConcurrent  int           `mapstructure:"max_concurrent"`
+	SCCMEndpoint   string        `mapstructure:"sccm_endpoint"`
+	SCCMAPIKey     string        `mapstructure:"sccm_api_key"`
+	SCCMUsername   string        `mapstructure:"sccm_username"`
+	SCCMPassword   string        `mapstructure:"sccm_password"`
 }
 
 // Load reads configuration from .env file and environment variables.
@@ -139,6 +182,7 @@ func Load() (*Config, error) {
 	v.SetDefault("SERVER_HOST", "0.0.0.0")
 	v.SetDefault("SERVER_PORT", 8089)
 	v.SetDefault("SERVER_ENV", "development")
+	v.SetDefault("FRONTEND_URL", "http://localhost:3004")
 	v.SetDefault("DB_HOST", "localhost")
 	v.SetDefault("DB_PORT", 5432)
 	v.SetDefault("DB_USER", "opms")
@@ -152,7 +196,7 @@ func Load() (*Config, error) {
 	v.SetDefault("REDIS_PORT", 6379)
 	v.SetDefault("REDIS_PASSWORD", "")
 	v.SetDefault("REDIS_DB", 0)
-	v.SetDefault("MINIO_ENDPOINT", "localhost:9000")
+	v.SetDefault("MINIO_ENDPOINT", "localhost:9010")
 	v.SetDefault("MINIO_ACCESS_KEY", "opms_minio")
 	v.SetDefault("MINIO_SECRET_KEY", "opms_minio_secret")
 	v.SetDefault("MINIO_USE_SSL", false)
@@ -182,6 +226,38 @@ func Load() (*Config, error) {
 	v.SetDefault("SENDGRID_FROM_EMAIL", "noreply@cbn.gov.ng")
 	v.SetDefault("SENDGRID_FROM_NAME", "ITD-OPMS")
 
+	// Inbound Email (SendGrid Inbound Parse)
+	v.SetDefault("INBOUND_EMAIL_WEBHOOK_SECRET", "")
+	v.SetDefault("INBOUND_EMAIL_DOMAIN", "itd.cbn.gov.ng")
+
+	// SIEM export
+	v.SetDefault("SIEM_ENABLED", false)
+	v.SetDefault("SIEM_MODE", "syslog")
+	v.SetDefault("SIEM_SYSLOG_ADDR", "localhost:514")
+	v.SetDefault("SIEM_SYSLOG_PROTO", "udp")
+	v.SetDefault("SIEM_WEBHOOK_URL", "")
+	v.SetDefault("SIEM_BATCH_SIZE", 100)
+	v.SetDefault("SIEM_POLL_INTERVAL", "10s")
+
+	// License enforcement
+	v.SetDefault("MAX_CONCURRENT_LICENSES", 575)
+	v.SetDefault("LICENSE_SYNC_INTERVAL", "5m")
+
+	// Discovery connectors
+	v.SetDefault("DISCOVERY_AD_ENABLED", false)
+	v.SetDefault("DISCOVERY_AD_TENANT_ID", "")
+	v.SetDefault("DISCOVERY_NETWORK_ENABLED", false)
+	v.SetDefault("DISCOVERY_SNMP_COMMUNITY", "public")
+	v.SetDefault("DISCOVERY_SCAN_TIMEOUT_SECONDS", 2)
+	v.SetDefault("DISCOVERY_MAX_CONCURRENT", 50)
+	v.SetDefault("SCCM_ENDPOINT", "")
+	v.SetDefault("SCCM_API_KEY", "")
+	v.SetDefault("SCCM_USERNAME", "")
+	v.SetDefault("SCCM_PASSWORD", "")
+
+	// MFA
+	v.SetDefault("MFA_ENCRYPTION_KEY", "")
+
 	// Read config file (ignore error if not found)
 	_ = v.ReadInConfig()
 
@@ -195,11 +271,32 @@ func Load() (*Config, error) {
 		refreshExpiry = 7 * 24 * time.Hour
 	}
 
+	siemPoll, err := time.ParseDuration(v.GetString("SIEM_POLL_INTERVAL"))
+	if err != nil {
+		siemPoll = 10 * time.Second
+	}
+
+	licenseSync, err := time.ParseDuration(v.GetString("LICENSE_SYNC_INTERVAL"))
+	if err != nil {
+		licenseSync = 5 * time.Minute
+	}
+
+	discoveryTimeout := time.Duration(v.GetInt("DISCOVERY_SCAN_TIMEOUT_SECONDS")) * time.Second
+	if discoveryTimeout <= 0 {
+		discoveryTimeout = 2 * time.Second
+	}
+
+	discoveryADTenantID := strings.TrimSpace(v.GetString("DISCOVERY_AD_TENANT_ID"))
+	if discoveryADTenantID == "" {
+		discoveryADTenantID = v.GetString("ENTRA_TENANT_ID")
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
-			Host: v.GetString("SERVER_HOST"),
-			Port: v.GetInt("SERVER_PORT"),
-			Env:  v.GetString("SERVER_ENV"),
+			Host:        v.GetString("SERVER_HOST"),
+			Port:        v.GetInt("SERVER_PORT"),
+			Env:         v.GetString("SERVER_ENV"),
+			FrontendURL: v.GetString("FRONTEND_URL"),
 		},
 		Database: DatabaseConfig{
 			Host:       v.GetString("DB_HOST"),
@@ -249,6 +346,10 @@ func Load() (*Config, error) {
 			FromEmail: v.GetString("SENDGRID_FROM_EMAIL"),
 			FromName:  v.GetString("SENDGRID_FROM_NAME"),
 		},
+		InboundEmail: InboundEmailConfig{
+			WebhookSecret: v.GetString("INBOUND_EMAIL_WEBHOOK_SECRET"),
+			Domain:        v.GetString("INBOUND_EMAIL_DOMAIN"),
+		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 			ServiceName:  v.GetString("OTEL_SERVICE_NAME"),
@@ -256,6 +357,34 @@ func Load() (*Config, error) {
 		Log: LogConfig{
 			Level:  v.GetString("LOG_LEVEL"),
 			Format: v.GetString("LOG_FORMAT"),
+		},
+		SIEM: SIEMConfig{
+			Enabled:      v.GetBool("SIEM_ENABLED"),
+			Mode:         v.GetString("SIEM_MODE"),
+			SyslogAddr:   v.GetString("SIEM_SYSLOG_ADDR"),
+			SyslogProto:  v.GetString("SIEM_SYSLOG_PROTO"),
+			WebhookURL:   v.GetString("SIEM_WEBHOOK_URL"),
+			BatchSize:    v.GetInt("SIEM_BATCH_SIZE"),
+			PollInterval: siemPoll,
+		},
+		License: LicenseConfig{
+			MaxConcurrent: v.GetInt("MAX_CONCURRENT_LICENSES"),
+			SyncInterval:  licenseSync,
+		},
+		MFA: MFAConfig{
+			EncryptionKey: v.GetString("MFA_ENCRYPTION_KEY"),
+		},
+		Discovery: DiscoveryConfig{
+			ADEnabled:      v.GetBool("DISCOVERY_AD_ENABLED"),
+			ADTenantID:     discoveryADTenantID,
+			NetworkEnabled: v.GetBool("DISCOVERY_NETWORK_ENABLED"),
+			SNMPCommunity:  v.GetString("DISCOVERY_SNMP_COMMUNITY"),
+			ScanTimeout:    discoveryTimeout,
+			MaxConcurrent:  v.GetInt("DISCOVERY_MAX_CONCURRENT"),
+			SCCMEndpoint:   v.GetString("SCCM_ENDPOINT"),
+			SCCMAPIKey:     v.GetString("SCCM_API_KEY"),
+			SCCMUsername:   v.GetString("SCCM_USERNAME"),
+			SCCMPassword:   v.GetString("SCCM_PASSWORD"),
 		},
 	}
 

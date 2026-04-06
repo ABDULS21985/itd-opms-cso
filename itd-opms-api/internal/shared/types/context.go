@@ -93,6 +93,15 @@ func GetAuthContext(ctx context.Context) *AuthContext {
 	return nil
 }
 
+// MustGetAuthContext retrieves the auth context or panics if not present.
+func MustGetAuthContext(ctx context.Context) *AuthContext {
+	auth := GetAuthContext(ctx)
+	if auth == nil {
+		panic("auth context not found in request context")
+	}
+	return auth
+}
+
 // SetCorrelationID stores the correlation ID in the context.
 func SetCorrelationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, correlationIDKey, id)

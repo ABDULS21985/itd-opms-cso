@@ -20,6 +20,7 @@ import {
   Layers3,
   ArrowRight,
   Inbox,
+  ListTree,
 } from "lucide-react";
 import {
   DataTable,
@@ -255,11 +256,13 @@ export default function TicketsPage() {
   const [focusMode, setFocusMode] = useState<
     "all" | "hot" | "major" | "unassigned"
   >("all");
+  const [hideSubtasks, setHideSubtasks] = useState(true);
 
   const { data, isLoading } = useTickets(page, 20, {
     status: status || undefined,
     priority: priority || undefined,
     type: type || undefined,
+    hideSubtasks,
   });
   const { data: stats, isLoading: statsLoading } = useTicketStats();
   const bulkUpdate = useBulkUpdateTickets();
@@ -547,6 +550,29 @@ export default function TicketsPage() {
               : "Unassigned")}
         </span>
       ),
+    },
+    {
+      key: "parentTicketNumber",
+      header: "Parent",
+      render: (item) =>
+        item.parentTicketNumber ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/dashboard/itsm/tickets/${item.parentTicketId}`);
+            }}
+            className="inline-flex items-center gap-1 text-xs font-mono font-medium text-[var(--primary)] hover:underline"
+          >
+            <ListTree size={11} />
+            {item.parentTicketNumber}
+          </button>
+        ) : item.subtaskCount ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--text-secondary)]">
+            <ListTree size={10} />
+            {item.subtaskCount}
+          </span>
+        ) : null,
     },
     {
       key: "sla",
@@ -1036,6 +1062,26 @@ export default function TicketsPage() {
                           setPage(1);
                         }}
                       />
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                          Subtasks
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHideSubtasks((v) => !v);
+                            setPage(1);
+                          }}
+                          className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+                            hideSubtasks
+                              ? "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]"
+                              : "border-[var(--primary)]/30 bg-[var(--primary)]/5 text-[var(--primary)]"
+                          }`}
+                        >
+                          <ListTree size={13} />
+                          {hideSubtasks ? "Show subtasks" : "Showing subtasks"}
+                        </button>
+                      </div>
                       {activeFilterCount > 0 && (
                         <button
                           type="button"
