@@ -38,7 +38,7 @@ describe("EmptyState", () => {
   });
 
   it("does not render action wrapper when not provided", () => {
-    const { container } = render(<EmptyState title="No items" />);
+    render(<EmptyState title="No items" />);
     // Only the icon div and heading exist
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

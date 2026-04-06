@@ -51,7 +51,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 export default function BulkVerificationPage() {
   const router = useRouter();
-  const [page, setPage] = useState(1);
+  const page = 1;
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUnverified, setFilterUnverified] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
