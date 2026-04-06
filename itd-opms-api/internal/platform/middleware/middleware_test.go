@@ -152,7 +152,7 @@ func TestSecurityHeaders(t *testing.T) {
 		"X-Content-Type-Options":    "nosniff",
 		"Referrer-Policy":           "strict-origin-when-cross-origin",
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-		"X-XSS-Protection":         "1; mode=block",
+		"X-XSS-Protection":          "1; mode=block",
 		"Permissions-Policy":        "camera=(), microphone=(), geolocation=()",
 		"Content-Security-Policy":   "default-src 'none'; frame-ancestors 'none'",
 	}
