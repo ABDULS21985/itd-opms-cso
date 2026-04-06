@@ -435,7 +435,6 @@ function StatusPipeline({ currentStatus }: { currentStatus: string }) {
         const Icon = stage.icon;
         const isPast = idx < activeIdx;
         const isCurrent = idx === activeIdx;
-        const isFuture = idx > activeIdx;
 
         let dotColor = "var(--surface-3)";
         let dotBg = "var(--surface-1)";
