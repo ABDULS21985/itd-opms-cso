@@ -15,9 +15,6 @@ import {
   XCircle,
   Users,
   GitBranch,
-  DollarSign,
-  Calendar,
-  TrendingUp,
   Plus,
   X,
   Building2,
@@ -28,9 +25,7 @@ import {
   Shield,
   FileText,
   ChevronDown,
-  Sparkles,
   AlertTriangle,
-  BarChart3,
   UserCircle,
   FolderOpen,
   Info,
@@ -93,16 +88,6 @@ const PRIORITY_COLORS: Record<string, { color: string; bg: string }> = {
 function priorityColor(priority: string) {
   return PRIORITY_COLORS[priority?.toLowerCase()] ?? { color: "var(--neutral-gray)", bg: "var(--surface-2)" };
 }
-
-const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; gradient: string }> = {
-  draft: { icon: FileText, gradient: "from-slate-400 to-slate-500" },
-  pending_approval: { icon: Clock, gradient: "from-amber-400 to-amber-500" },
-  approved: { icon: CheckCircle, gradient: "from-blue-400 to-blue-500" },
-  active: { icon: PlayCircle, gradient: "from-emerald-400 to-emerald-500" },
-  on_hold: { icon: PauseCircle, gradient: "from-amber-400 to-orange-500" },
-  completed: { icon: CheckCircle, gradient: "from-green-400 to-green-600" },
-  cancelled: { icon: XCircle, gradient: "from-red-400 to-red-500" },
-};
 
 /* ------------------------------------------------------------------ */
 /*  Section component                                                   */

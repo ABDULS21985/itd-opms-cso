@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test/test-utils";
+import { render, screen, userEvent } from "@/test/test-utils";
 import { InlineText, InlineSelect, InlineDate } from "../inline-edit";
 
 // ---------------------------------------------------------------------------

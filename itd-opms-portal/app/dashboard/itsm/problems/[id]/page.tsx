@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Bug,
   AlertTriangle,
-  CheckCircle,
   Link as LinkIcon,
   Plus,
   Loader2,
@@ -16,10 +15,8 @@ import {
   Edit,
   Trash2,
   FileText,
-  Clock,
   User,
 } from "lucide-react";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
 import { UserPicker } from "@/components/shared/pickers";
 import {
@@ -28,7 +25,6 @@ import {
   useDeleteProblem,
   useKnownErrors,
   useCreateKnownError,
-  useUpdateKnownError,
   useDeleteKnownError,
   useLinkIncidentToProblem,
 } from "@/hooks/use-itsm";
