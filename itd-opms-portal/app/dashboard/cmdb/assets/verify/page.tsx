@@ -51,7 +51,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 export default function BulkVerificationPage() {
   const router = useRouter();
-  const page = 1;
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUnverified, setFilterUnverified] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -59,7 +58,7 @@ export default function BulkVerificationPage() {
   const [locationConfirmed, setLocationConfirmed] = useState(true);
   const [notes, setNotes] = useState("");
 
-  const { data: assetsData, isLoading } = useAssets(page, 20, undefined, "active");
+  const { data: assetsData, isLoading } = useAssets(1, 20, undefined, "active");
   const verifyAsset = useVerifyAsset();
 
   /* ---- User resolution ---- */
