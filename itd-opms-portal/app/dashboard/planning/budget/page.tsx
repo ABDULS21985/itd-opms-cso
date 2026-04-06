@@ -5,9 +5,6 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Loader2,
   ChevronRight,
   Filter,
   BarChart3,

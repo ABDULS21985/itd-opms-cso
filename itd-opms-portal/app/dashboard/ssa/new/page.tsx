@@ -88,7 +88,7 @@ export default function NewSSARequestPage() {
   const router = useRouter();
   const { user } = useAuth();
   const createSSARequest = useCreateSSARequest();
-  const createServiceImpact = useCreateServiceImpact(undefined);
+  useCreateServiceImpact(undefined);
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);

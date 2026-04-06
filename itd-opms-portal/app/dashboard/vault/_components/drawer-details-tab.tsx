@@ -10,7 +10,6 @@ import {
   getFileIconColor,
   formatFileSize,
   formatDateTime,
-  statusLabel,
 } from "./vault-constants";
 
 interface DrawerDetailsTabProps {

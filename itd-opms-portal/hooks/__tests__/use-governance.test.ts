@@ -6,7 +6,6 @@ import {
   mockGet,
   mockPost,
   mockPut,
-  mockPatch,
   mockDelete,
   paginatedMeta,
 } from "./hook-test-utils";

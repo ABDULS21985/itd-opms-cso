@@ -9,8 +9,6 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity,
-  AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   Boxes,
