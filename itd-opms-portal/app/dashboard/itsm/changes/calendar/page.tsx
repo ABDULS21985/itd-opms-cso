@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  ArrowRight,
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -13,7 +11,6 @@ import {
   Loader2,
   Snowflake,
   Wrench,
-  Zap,
 } from "lucide-react";
 import { useChangeCalendar } from "@/hooks/use-itsm";
 import type { ChangeCalendarEvent } from "@/types";

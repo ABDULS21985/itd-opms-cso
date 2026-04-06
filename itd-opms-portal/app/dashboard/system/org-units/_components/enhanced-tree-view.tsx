@@ -54,8 +54,6 @@ function TreeNode({
   const isFocused = focusedId === node.id;
   const hasChildren = node.children && node.children.length > 0;
   const levelColor = getLevelColor(node.level);
-  const isHighlighted =
-    highlightedIds.size === 0 || highlightedIds.has(node.id);
   const isDimmed = highlightedIds.size > 0 && !highlightedIds.has(node.id);
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({

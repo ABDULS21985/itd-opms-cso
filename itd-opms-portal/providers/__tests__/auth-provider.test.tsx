@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { render, screen } from "@testing-library/react";
-import React from "react";
-import { server } from "@/test/mocks/server";
+import { http } from "msw";
 
 // =============================================================================
 // Mock dependencies
