@@ -6,7 +6,6 @@ import {
   Search, ChevronRight, ChevronDown, Download,
   ChevronLeft, Users, AlertTriangle, Network,
 } from "lucide-react";
-import { ChartCard } from "@/components/dashboard/charts/chart-card";
 import { LEVEL_COLORS, LEVEL_OPTIONS, flattenTree, buildBreadcrumb } from "./constants";
 import type { OrgTreeNode } from "@/types";
 
