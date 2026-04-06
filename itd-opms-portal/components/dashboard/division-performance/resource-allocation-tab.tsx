@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import type { OfficeMetrics } from "@/lib/division-constants";
-import { formatCurrency } from "@/lib/division-constants";
 import { ChartCard } from "@/components/dashboard/charts/chart-card";
 import { WaterfallChart } from "@/components/dashboard/charts/waterfall-chart";
 import { FunnelChart } from "@/components/dashboard/charts/funnel-chart";
