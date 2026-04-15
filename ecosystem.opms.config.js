@@ -47,7 +47,7 @@ module.exports = {
       name: 'opms-portal',
       cwd: './itd-opms-portal',
       script: 'npm',
-      args: 'run dev -- --port 3004',
+      args: 'run dev -- --port 3005',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -57,7 +57,7 @@ module.exports = {
       listen_timeout: 10000,
       env: {
         NODE_ENV: 'development',
-        PORT: 3004,
+        PORT: 3005,
         HOSTNAME: '0.0.0.0',
         NEXT_PUBLIC_API_URL: 'http://localhost:8089/api/v1',
       },
