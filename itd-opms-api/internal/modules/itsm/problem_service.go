@@ -222,8 +222,11 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 	}
 
 	// Verify the problem exists and belongs to the tenant.
-	_, err := s.GetProblem(ctx, id)
+	existing, err := s.GetProblem(ctx, id)
 	if err != nil {
+		return Problem{}, err
+	}
+	if err := ensureProblemMutationAllowed(auth, existing); err != nil {
 		return Problem{}, err
 	}
 
@@ -277,6 +280,14 @@ func (s *ProblemService) DeleteProblem(ctx context.Context, id uuid.UUID) error 
 		return apperrors.Unauthorized("authentication required")
 	}
 
+	existing, err := s.GetProblem(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := ensureProblemMutationAllowed(auth, existing); err != nil {
+		return err
+	}
+
 	query := `DELETE FROM problems WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.pool.Exec(ctx, query, id, auth.TenantID)
@@ -307,6 +318,14 @@ func (s *ProblemService) LinkIncident(ctx context.Context, problemID, incidentID
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetProblem(ctx, problemID)
+	if err != nil {
+		return err
+	}
+	if err := ensureProblemMutationAllowed(auth, existing); err != nil {
+		return err
 	}
 
 	query := `
@@ -356,6 +375,9 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 
 	existing, err := s.GetProblem(ctx, id)
 	if err != nil {
+		return Problem{}, err
+	}
+	if err := ensureProblemMutationAllowed(auth, existing); err != nil {
 		return Problem{}, err
 	}
 
@@ -418,12 +440,12 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 	// Publish NATS event.
 	if s.js != nil {
 		eventData, _ := json.Marshal(map[string]any{
-			"problemId":      id,
-			"problemNumber":  p.ProblemNumber,
-			"title":          p.Title,
-			"previousStatus": existing.Status,
-			"newStatus":      req.TargetStatus,
-			"comment":        req.Comment,
+			"problemId":       id,
+			"problemNumber":   p.ProblemNumber,
+			"title":           p.Title,
+			"previousStatus":  existing.Status,
+			"newStatus":       req.TargetStatus,
+			"comment":         req.Comment,
 			"actorId":         auth.UserID,
 			"ownerId":         p.OwnerID,
 			"assignedGroupId": p.AssignedGroupID,

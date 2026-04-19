@@ -812,7 +812,6 @@ func TestTicketRoutes_Registration(t *testing.T) {
 		{"AssignTicket", http.MethodPost, "/tickets/" + validUUID + "/assign"},
 		{"EscalateTicket", http.MethodPost, "/tickets/" + validUUID + "/escalate"},
 		{"AddComment", http.MethodPost, "/tickets/" + validUUID + "/comments"},
-		{"DeclareMajorIncident", http.MethodPost, "/tickets/" + validUUID + "/major-incident"},
 		{"LinkTickets", http.MethodPost, "/tickets/" + validUUID + "/link"},
 		{"ResolveTicket", http.MethodPost, "/tickets/" + validUUID + "/resolve"},
 		{"CloseTicket", http.MethodPost, "/tickets/" + validUUID + "/close"},
@@ -837,4 +836,3 @@ func TestTicketRoutes_Registration(t *testing.T) {
 		})
 	}
 }
-

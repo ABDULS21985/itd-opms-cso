@@ -3,6 +3,7 @@ package itsm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 
@@ -87,6 +89,11 @@ func (s *MajorIncidentService) DeclareMajorIncident(ctx context.Context, req Dec
 	if req.TicketID == uuid.Nil {
 		return MajorIncidentRecord{}, apperrors.BadRequest("ticketId is required")
 	}
+	if existing, err := s.GetMajorIncidentByTicketID(ctx, req.TicketID); err == nil {
+		return existing, nil
+	} else if apperrors.HTTPStatus(err) != 404 {
+		return MajorIncidentRecord{}, err
+	}
 
 	normalizedSeverity, err := normalizeMajorIncidentSeverity(req.Severity)
 	if err != nil {
@@ -106,6 +113,9 @@ func (s *MajorIncidentService) DeclareMajorIncident(ctx context.Context, req Dec
 
 	ticket, err := s.getMajorIncidentTicket(ctx, tx, auth.TenantID, req.TicketID)
 	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentDeclarationAllowed(auth, ticket); err != nil {
 		return MajorIncidentRecord{}, err
 	}
 	if ticket.Type != "incident" {
@@ -168,6 +178,13 @@ func (s *MajorIncidentService) DeclareMajorIncident(ctx context.Context, req Dec
 		stakeholderUpdatesJSON, communicationPlanJSON, now, now, now,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			existing, lookupErr := s.GetMajorIncidentByTicketID(ctx, req.TicketID)
+			if lookupErr == nil {
+				return existing, nil
+			}
+		}
 		return MajorIncidentRecord{}, apperrors.Internal("failed to create major incident record", err)
 	}
 
@@ -236,6 +253,13 @@ func (s *MajorIncidentService) PostStakeholderUpdate(ctx context.Context, majorI
 	if err := validateMajorIncidentUpdateType(req.UpdateType); err != nil {
 		return MajorIncidentRecord{}, err
 	}
+	existing, err := s.GetMajorIncidentByID(ctx, majorIncidentID)
+	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentMutationAllowed(auth, existing); err != nil {
+		return MajorIncidentRecord{}, err
+	}
 
 	now := time.Now().UTC()
 	update := MajorIncidentStakeholderUpdate{
@@ -300,6 +324,13 @@ func (s *MajorIncidentService) TransitionStatus(ctx context.Context, majorIncide
 	}
 	normalizedTarget, err := normalizeMajorIncidentStatus(targetStatus)
 	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	existing, err := s.GetMajorIncidentByID(ctx, majorIncidentID)
+	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentMutationAllowed(auth, existing); err != nil {
 		return MajorIncidentRecord{}, err
 	}
 
@@ -422,6 +453,13 @@ func (s *MajorIncidentService) ResolveMajorIncident(ctx context.Context, majorIn
 	if strings.TrimSpace(req.RootCause) == "" {
 		return MajorIncidentRecord{}, apperrors.BadRequest("rootCause is required")
 	}
+	existing, err := s.GetMajorIncidentByID(ctx, majorIncidentID)
+	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentMutationAllowed(auth, existing); err != nil {
+		return MajorIncidentRecord{}, err
+	}
 
 	now := time.Now().UTC()
 	tx, err := s.pool.Begin(ctx)
@@ -536,6 +574,13 @@ func (s *MajorIncidentService) SubmitPIR(ctx context.Context, majorIncidentID uu
 	if len(req.PIRReport) == 0 || string(req.PIRReport) == "null" {
 		return MajorIncidentRecord{}, apperrors.BadRequest("pirReport is required")
 	}
+	existing, err := s.GetMajorIncidentByID(ctx, majorIncidentID)
+	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentMutationAllowed(auth, existing); err != nil {
+		return MajorIncidentRecord{}, err
+	}
 
 	now := time.Now().UTC()
 	tx, err := s.pool.Begin(ctx)
@@ -618,6 +663,13 @@ func (s *MajorIncidentService) UpdateCommunicationPlan(ctx context.Context, majo
 	}
 	if majorIncidentID == uuid.Nil {
 		return MajorIncidentRecord{}, apperrors.BadRequest("major incident id is required")
+	}
+	existing, err := s.GetMajorIncidentByID(ctx, majorIncidentID)
+	if err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := ensureMajorIncidentMutationAllowed(auth, existing); err != nil {
+		return MajorIncidentRecord{}, err
 	}
 
 	plan := normalizeMajorIncidentCommunicationPlan(&req.CommunicationPlan)

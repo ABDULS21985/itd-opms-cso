@@ -923,7 +923,7 @@ export default function TicketDetailPage({
   const router = useRouter();
 
   const { user: currentUser } = useAuth();
-  const canManage =
+  const hasManagePermission =
     currentUser?.permissions?.includes("*") ||
     currentUser?.permissions?.includes("itsm.manage") ||
     false;
@@ -932,6 +932,14 @@ export default function TicketDetailPage({
   const { data: commentsData } = useTicketComments(id);
   const { data: historyData } = useTicketStatusHistory(id);
   const { data: breachesData } = useSLABreaches(id);
+  const canManage =
+    hasManagePermission &&
+    (!!currentUser?.permissions?.includes("*") ||
+      currentUser?.roles?.includes("admin") ||
+      currentUser?.roles?.includes("tenant_admin") ||
+      ticket?.reporterId === currentUser?.id ||
+      ticket?.assigneeId === currentUser?.id ||
+      !ticket?.assigneeId);
 
   const addComment = useAddComment(id);
   const transitionTicket = useTransitionTicket();

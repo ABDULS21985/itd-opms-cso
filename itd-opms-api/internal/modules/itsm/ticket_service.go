@@ -459,8 +459,11 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 	}
 
 	// Verify the ticket exists and belongs to the tenant.
-	_, err := s.GetTicket(ctx, id)
+	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -517,6 +520,9 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 
 	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -609,6 +615,9 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 	if err != nil {
 		return Ticket{}, err
 	}
+	if err := ensureTicketAssignmentAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
 
 	now := time.Now().UTC()
 
@@ -686,8 +695,11 @@ func (s *TicketService) EscalateTicket(ctx context.Context, id uuid.UUID, reason
 	}
 
 	// Verify the ticket exists.
-	_, err := s.GetTicket(ctx, id)
+	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return err
 	}
 
@@ -721,8 +733,11 @@ func (s *TicketService) DeclareMajorIncident(ctx context.Context, id uuid.UUID) 
 	}
 
 	// Verify the ticket exists.
-	_, err := s.GetTicket(ctx, id)
+	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return err
 	}
 
@@ -767,12 +782,18 @@ func (s *TicketService) LinkTickets(ctx context.Context, id, relatedID uuid.UUID
 	}
 
 	// Verify both tickets exist.
-	_, err := s.GetTicket(ctx, id)
+	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
 		return err
 	}
-	_, err = s.GetTicket(ctx, relatedID)
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return err
+	}
+	related, err := s.GetTicket(ctx, relatedID)
 	if err != nil {
+		return err
+	}
+	if err := ensureTicketMutationAllowed(auth, related); err != nil {
 		return err
 	}
 
@@ -835,6 +856,9 @@ func (s *TicketService) ResolveTicket(ctx context.Context, id uuid.UUID, req Res
 
 	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -903,6 +927,9 @@ func (s *TicketService) CloseTicket(ctx context.Context, id uuid.UUID) error {
 
 	existing, err := s.GetTicket(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return err
 	}
 
@@ -1457,32 +1484,67 @@ func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, 
 		}
 	}
 
-	// If the caller is changing status, validate transitions per-ticket.
-	targetIDs := ids
-	if newStatus, ok := fields["status"]; ok {
-		rows, qErr := s.pool.Query(ctx,
-			`SELECT id, status FROM tickets WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
-			auth.TenantID, ids,
+	// Fetch current ownership and state once so bulk updates honor object-level auth.
+	rows, qErr := s.pool.Query(ctx,
+		`SELECT id, status, reporter_id, assignee_id FROM tickets WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		auth.TenantID, ids,
+	)
+	if qErr != nil {
+		return 0, 0, apperrors.Internal("failed to fetch current ticket state", qErr)
+	}
+	currentStatuses := make(map[uuid.UUID]string, len(ids))
+	authorizedIDs := make([]uuid.UUID, 0, len(ids))
+	needsMutationAuth := false
+	_, updatesAssignment := fields["assigneeId"]
+	for field := range fields {
+		if field != "assigneeId" {
+			needsMutationAuth = true
+			break
+		}
+	}
+
+	for rows.Next() {
+		var (
+			tid        uuid.UUID
+			status     string
+			reporterID uuid.UUID
+			assigneeID *uuid.UUID
 		)
-		if qErr != nil {
-			return 0, 0, apperrors.Internal("failed to fetch current ticket statuses", qErr)
-		}
-		currentStatuses := make(map[uuid.UUID]string, len(ids))
-		for rows.Next() {
-			var tid uuid.UUID
-			var status string
-			if scanErr := rows.Scan(&tid, &status); scanErr != nil {
-				rows.Close()
-				return 0, 0, apperrors.Internal("failed to scan ticket status", scanErr)
-			}
-			currentStatuses[tid] = status
-		}
-		rows.Close()
-		if rowErr := rows.Err(); rowErr != nil {
-			return 0, 0, apperrors.Internal("failed to read ticket statuses", rowErr)
+		if scanErr := rows.Scan(&tid, &status, &reporterID, &assigneeID); scanErr != nil {
+			rows.Close()
+			return 0, 0, apperrors.Internal("failed to scan ticket state", scanErr)
 		}
 
-		targetIDs, failed = partitionByValidTransition(currentStatuses, newStatus, ids)
+		currentStatuses[tid] = status
+
+		ticket := Ticket{
+			ID:         tid,
+			ReporterID: reporterID,
+			AssigneeID: assigneeID,
+		}
+		allowed := true
+		if needsMutationAuth && !canMutateTicket(auth, ticket) {
+			allowed = false
+		}
+		if updatesAssignment && !canAssignTicket(auth, ticket) {
+			allowed = false
+		}
+		if allowed {
+			authorizedIDs = append(authorizedIDs, tid)
+		} else {
+			failed++
+		}
+	}
+	rows.Close()
+	if rowErr := rows.Err(); rowErr != nil {
+		return 0, 0, apperrors.Internal("failed to read ticket state", rowErr)
+	}
+
+	targetIDs := authorizedIDs
+	if newStatus, ok := fields["status"]; ok {
+		var transitionFailures int64
+		targetIDs, transitionFailures = partitionByValidTransition(currentStatuses, newStatus, authorizedIDs)
+		failed += transitionFailures
 		if len(targetIDs) == 0 {
 			return 0, failed, nil
 		}

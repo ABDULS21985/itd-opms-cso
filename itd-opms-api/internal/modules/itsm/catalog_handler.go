@@ -61,7 +61,7 @@ func (h *CatalogHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var parentID *uuid.UUID
-	if v := r.URL.Query().Get("parent_id"); v != "" {
+	if v := queryValueAny(r, "parentId", "parent_id"); v != "" {
 		parsed, err := uuid.Parse(v)
 		if err != nil {
 			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid parent_id")
@@ -194,7 +194,7 @@ func (h *CatalogHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var categoryID *uuid.UUID
-	if v := r.URL.Query().Get("category_id"); v != "" {
+	if v := queryValueAny(r, "categoryId", "category_id"); v != "" {
 		parsed, err := uuid.Parse(v)
 		if err != nil {
 			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid category_id")
@@ -393,4 +393,3 @@ func (h *CatalogHandler) BulkUpdateItemStatus(w http.ResponseWriter, r *http.Req
 
 	types.OK(w, map[string]int64{"updated": updated}, nil)
 }
-

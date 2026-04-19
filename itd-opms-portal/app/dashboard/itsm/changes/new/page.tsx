@@ -17,6 +17,7 @@ import { useCreateChange } from "@/hooks/use-itsm";
 import {
   CHANGE_CLASSIFICATIONS,
   CHANGE_TYPES,
+  type CreateChangePayload,
   RISK_LEVELS,
 } from "@/types/itsm";
 
@@ -79,7 +80,7 @@ export default function NewChangePage() {
   };
 
   const handleSubmit = async () => {
-    const body: Record<string, unknown> = {
+    const body: CreateChangePayload = {
       title: form.title,
       description: form.description,
       classification: form.classification,

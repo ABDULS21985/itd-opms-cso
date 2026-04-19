@@ -28,6 +28,7 @@ import { QueuePicker } from "@/components/shared/pickers";
 import { useCreateTicket } from "@/hooks/use-itsm";
 import { useSearchKBArticles } from "@/hooks/use-knowledge";
 import { useUsers } from "@/hooks/use-system";
+import type { UserSummary } from "@/types/itsm";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -212,7 +213,7 @@ export default function NewTicketPage() {
     : usersData?.data ?? [];
 
   const userOptions = users.map(
-    (u: { id: string; displayName?: string; email: string }) => ({
+    (u: UserSummary) => ({
       value: u.id,
       label: u.displayName || u.email,
     }),

@@ -306,6 +306,7 @@ function EditProblemForm({
   onClose: () => void;
 }) {
   const updateMutation = useUpdateProblem(problem.id);
+  const transitionMutation = useTransitionProblem();
   const [title, setTitle] = useState(problem.title);
   const [description, setDescription] = useState(problem.description ?? "");
   const [status, setStatus] = useState(problem.status);
@@ -315,20 +316,29 @@ function EditProblemForm({
   const [ownerId, setOwnerId] = useState(problem.ownerId ?? "");
   const [ownerDisplay, setOwnerDisplay] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    updateMutation.mutate(
-      {
+    try {
+      await updateMutation.mutateAsync({
         title: title || undefined,
         description: description || undefined,
-        status: status || undefined,
         rootCause: rootCause || undefined,
         workaround: workaround || undefined,
         permanentFix: permanentFix || undefined,
         ownerId: ownerId || undefined,
-      },
-      { onSuccess: onClose },
-    );
+      });
+
+      if (status !== problem.status) {
+        await transitionMutation.mutateAsync({
+          id: problem.id,
+          targetStatus: status,
+        });
+      }
+
+      onClose();
+    } catch {
+      // Error handled by hooks
+    }
   }
 
   return (
@@ -432,10 +442,10 @@ function EditProblemForm({
           </button>
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || transitionMutation.isPending}
             className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {updateMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            {updateMutation.isPending || transitionMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             Save Changes
           </button>
         </div>

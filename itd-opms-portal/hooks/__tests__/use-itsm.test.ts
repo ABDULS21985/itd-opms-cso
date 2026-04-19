@@ -384,14 +384,14 @@ describe("useCloseTicket", () => {
 });
 
 describe("useDeclareMajorIncident", () => {
-  it("calls POST /itsm/tickets/{id}/major-incident", async () => {
-    server.use(mockPost("/itsm/tickets/tk-1/major-incident"));
+  it("calls POST /itsm/major-incidents", async () => {
+    server.use(mockPost("/itsm/major-incidents", { id: "mi-1" }));
 
     const { result } = renderHook(() => useDeclareMajorIncident(), {
       wrapper: createWrapper(),
     });
 
-    result.current.mutate("tk-1" as any);
+    result.current.mutate({ ticketId: "tk-1", severity: "sev1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });
@@ -435,7 +435,7 @@ describe("useAddComment", () => {
       wrapper: createWrapper(),
     });
 
-    result.current.mutate({ body: "Comment text" } as any);
+    result.current.mutate({ content: "Comment text" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

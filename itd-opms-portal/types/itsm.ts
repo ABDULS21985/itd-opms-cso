@@ -48,6 +48,9 @@ export interface Ticket {
   status: string;
   channel: string;
   reporterId: string;
+  reporterEmail?: string;
+  emailThreadId?: string;
+  emailMessageIds?: string[];
   assigneeId?: string;
   teamQueueId?: string;
   slaPolicyId?: string;
@@ -124,6 +127,27 @@ export interface TicketStatusHistory {
   changedBy: string;
   reason?: string;
   createdAt: string;
+}
+
+export interface UserSummary {
+  id: string;
+  displayName: string;
+  email?: string;
+}
+
+export interface AddCommentPayload {
+  content: string;
+  isInternal?: boolean;
+}
+
+export interface UpdateTicketPayload {
+  category?: string;
+  subcategory?: string;
+  title?: string;
+  description?: string;
+  priority?: string;
+  tags?: string[];
+  customFields?: Record<string, unknown>;
 }
 
 export interface TicketStats {
@@ -330,6 +354,20 @@ export interface ITSMProblem {
   ownerName?: string;
 }
 
+export type UpdateProblemPayload = Partial<
+  Pick<
+    ITSMProblem,
+    | "title"
+    | "description"
+    | "rootCause"
+    | "workaround"
+    | "permanentFix"
+    | "linkedChangeId"
+    | "ownerId"
+    | "assignedGroupId"
+  >
+>;
+
 export interface KnownError {
   id: string;
   problemId: string;
@@ -413,6 +451,72 @@ export interface ChangeCalendarEvent {
   status: string;
   startTime: string;
   endTime: string;
+}
+
+export interface CreateChangePayload {
+  title: string;
+  description: string;
+  classification: string;
+  changeType: string;
+  urgency: string;
+  impact: string;
+  riskLevel?: string;
+  riskAssessment?: Record<string, unknown>;
+  implementationPlan?: string;
+  rollbackPlan?: string;
+  testPlan?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  assigneeId?: string;
+  teamQueueId?: string;
+  category?: string;
+  tags?: string[];
+}
+
+export interface UpdateChangePayload {
+  title?: string;
+  description?: string;
+  changeType?: string;
+  riskLevel?: string;
+  riskAssessment?: Record<string, unknown>;
+  implementationPlan?: string;
+  rollbackPlan?: string;
+  testPlan?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  assigneeId?: string;
+  category?: string;
+  tags?: string[];
+}
+
+export interface CreateCABMeetingPayload {
+  title: string;
+  description?: string;
+  scheduledDate: string;
+  chairId?: string;
+  attendees?: string[];
+  durationMinutes?: number;
+  location?: string;
+  meetingType?: string;
+  secretaryUserId?: string;
+  agenda?: Record<string, unknown>;
+  changeTicketIds?: string[];
+}
+
+export interface UpdateCABMeetingPayload {
+  title?: string;
+  description?: string;
+  scheduledDate?: string;
+  chairId?: string;
+  attendees?: string[];
+  minutes?: string;
+  status?: string;
+  durationMinutes?: number;
+  location?: string;
+  meetingType?: string;
+  secretaryUserId?: string;
+  agenda?: Record<string, unknown>;
+  changeTicketIds?: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -536,7 +640,7 @@ export const OLA_UC_STATUSES = [
   { value: "active", label: "Active" },
   { value: "draft", label: "Draft" },
   { value: "expired", label: "Expired" },
-  { value: "terminated", label: "Terminated" },
+  { value: "suspended", label: "Suspended" },
 ] as const;
 
 export const CHANGE_STATUSES = [

@@ -226,6 +226,18 @@ func TestParsePagination(t *testing.T) {
 	}
 }
 
+func TestParsePagination_PageSizeAlias(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test?page=2&pageSize=50", nil)
+	p := types.ParsePagination(req)
+
+	if p.Page != 2 {
+		t.Errorf("expected page 2, got %d", p.Page)
+	}
+	if p.Limit != 50 {
+		t.Errorf("expected limit 50 from pageSize alias, got %d", p.Limit)
+	}
+}
+
 func TestParsePaginationDefaults(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	p := types.ParsePagination(req)

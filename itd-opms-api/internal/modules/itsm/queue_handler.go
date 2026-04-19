@@ -48,7 +48,7 @@ func (h *QueueHandler) ListQueues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var isActive *bool
-	if v := r.URL.Query().Get("is_active"); v != "" {
+	if v := queryValueAny(r, "isActive", "is_active"); v != "" {
 		parsed, err := strconv.ParseBool(v)
 		if err != nil {
 			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid is_active parameter")

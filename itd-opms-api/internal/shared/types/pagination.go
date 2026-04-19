@@ -27,24 +27,29 @@ func DefaultPagination() PaginationParams {
 // ParsePagination extracts pagination params from the request query string.
 func ParsePagination(r *http.Request) PaginationParams {
 	p := DefaultPagination()
+	q := r.URL.Query()
 
-	if page := r.URL.Query().Get("page"); page != "" {
+	if page := q.Get("page"); page != "" {
 		if v, err := strconv.Atoi(page); err == nil && v > 0 {
 			p.Page = v
 		}
 	}
 
-	if limit := r.URL.Query().Get("limit"); limit != "" {
+	limit := q.Get("limit")
+	if limit == "" {
+		limit = q.Get("pageSize")
+	}
+	if limit != "" {
 		if v, err := strconv.Atoi(limit); err == nil && v > 0 && v <= 500 {
 			p.Limit = v
 		}
 	}
 
-	if sort := r.URL.Query().Get("sort"); sort != "" {
+	if sort := q.Get("sort"); sort != "" {
 		p.Sort = sort
 	}
 
-	if order := r.URL.Query().Get("order"); order == "asc" || order == "desc" {
+	if order := q.Get("order"); order == "asc" || order == "desc" {
 		p.Order = order
 	}
 

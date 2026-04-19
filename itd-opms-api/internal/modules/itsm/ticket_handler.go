@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +58,6 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/assign", h.AssignTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/escalate", h.EscalateTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/comments", h.AddComment)
-	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/major-incident", h.DeclareMajorIncident)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link", h.LinkTickets)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/resolve", h.ResolveTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/close", h.CloseTicket)
@@ -70,26 +70,6 @@ func (h *TicketHandler) Routes(r chi.Router) {
 
 	// Export.
 	r.With(middleware.RequirePermission("itsm.view")).Get("/export", h.ExportTickets)
-}
-
-// ──────────────────────────────────────────────
-// Query-string helpers
-// ──────────────────────────────────────────────
-
-func optionalString(r *http.Request, key string) *string {
-	if v := r.URL.Query().Get(key); v != "" {
-		return &v
-	}
-	return nil
-}
-
-func optionalUUID(r *http.Request, key string) *uuid.UUID {
-	if v := r.URL.Query().Get(key); v != "" {
-		if id, err := uuid.Parse(v); err == nil {
-			return &id
-		}
-	}
-	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -128,9 +108,9 @@ func (h *TicketHandler) ListTickets(w http.ResponseWriter, r *http.Request) {
 	status := optionalString(r, "status")
 	priority := optionalString(r, "priority")
 	ticketType := optionalString(r, "type")
-	assigneeID := optionalUUID(r, "assigneeId")
-	reporterID := optionalUUID(r, "reporterId")
-	teamQueueID := optionalUUID(r, "teamQueueId")
+	assigneeID := optionalUUIDAny(r, "assigneeId")
+	reporterID := optionalUUIDAny(r, "reporterId")
+	teamQueueID := optionalUUIDAny(r, "teamQueueId")
 
 	var hideSubtasks *bool
 	if v := r.URL.Query().Get("hideSubtasks"); v == "true" {
@@ -456,6 +436,10 @@ func (h *TicketHandler) EscalateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.Reason) == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Reason is required")
 		return
 	}
 

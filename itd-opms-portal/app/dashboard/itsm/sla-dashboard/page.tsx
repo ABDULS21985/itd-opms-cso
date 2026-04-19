@@ -106,7 +106,7 @@ function statusBadgeClass(status: string): string {
       return "bg-slate-500/10 text-slate-500 ring-1 ring-slate-500/20";
     case "expired":
       return "bg-red-500/10 text-red-600 ring-1 ring-red-500/20";
-    case "terminated":
+    case "suspended":
       return "bg-orange-500/10 text-orange-600 ring-1 ring-orange-500/20";
     default:
       return "bg-slate-500/10 text-slate-500 ring-1 ring-slate-500/20";
@@ -1010,7 +1010,7 @@ function OLAsTab() {
             <option value="active">Active</option>
             <option value="draft">Draft</option>
             <option value="expired">Expired</option>
-            <option value="terminated">Terminated</option>
+            <option value="suspended">Suspended</option>
           </select>
           <button
             onClick={() => {
@@ -1103,7 +1103,7 @@ function OLAsTab() {
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>
                   <option value="expired">Expired</option>
-                  <option value="terminated">Terminated</option>
+                  <option value="suspended">Suspended</option>
                 </select>
               </div>
               <div>
@@ -1412,7 +1412,7 @@ function UCsTab() {
             <option value="active">Active</option>
             <option value="draft">Draft</option>
             <option value="expired">Expired</option>
-            <option value="terminated">Terminated</option>
+            <option value="suspended">Suspended</option>
           </select>
           <button
             onClick={() => {
@@ -1505,7 +1505,7 @@ function UCsTab() {
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>
                   <option value="expired">Expired</option>
-                  <option value="terminated">Terminated</option>
+                  <option value="suspended">Suspended</option>
                 </select>
               </div>
               <div>

@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api-client";
+import { ApiError, apiClient } from "@/lib/api-client";
 import type {
+  AddCommentPayload,
   CatalogCategory,
   CatalogItem,
   Ticket,
@@ -24,6 +25,8 @@ import type {
   CABMeeting,
   ChangeStats,
   ChangeCalendarEvent,
+  CreateCABMeetingPayload,
+  CreateChangePayload,
   PaginatedResponse,
   OperationalLevelAgreement,
   UnderpinningContract,
@@ -33,7 +36,30 @@ import type {
   TicketKBLink,
   KBSuggestion,
   SubtasksResponse,
+  UpdateCABMeetingPayload,
+  UpdateChangePayload,
+  UpdateProblemPayload,
+  UpdateTicketPayload,
 } from "@/types";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.message) {
+    return error.message;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
+function toastMutationError(error: unknown, fallback: string) {
+  const message = getErrorMessage(error, fallback);
+  if (message === fallback) {
+    toast.error(fallback);
+    return;
+  }
+  toast.error(fallback, { description: message });
+}
 
 /* ================================================================== */
 /*  Catalog Categories — Queries                                        */
@@ -47,7 +73,7 @@ export function useCatalogCategories(parentId?: string) {
     queryKey: ["catalog-categories", parentId],
     queryFn: () =>
       apiClient.get<CatalogCategory[]>("/itsm/catalog/categories", {
-        parent_id: parentId,
+        parentId,
       }),
   });
 }
@@ -80,8 +106,8 @@ export function useCreateCatalogCategory() {
       queryClient.invalidateQueries({ queryKey: ["catalog-categories"] });
       toast.success("Category created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create category");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create category");
     },
   });
 }
@@ -99,8 +125,8 @@ export function useUpdateCatalogCategory(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["catalog-category", id] });
       toast.success("Category updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update category");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update category");
     },
   });
 }
@@ -117,8 +143,8 @@ export function useDeleteCatalogCategory() {
       queryClient.invalidateQueries({ queryKey: ["catalog-categories"] });
       toast.success("Category deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete category");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete category");
     },
   });
 }
@@ -142,7 +168,7 @@ export function useCatalogItems(
       apiClient.get<PaginatedResponse<CatalogItem>>("/itsm/catalog/items", {
         page,
         limit,
-        category_id: categoryId,
+        categoryId,
         status,
       }),
   });
@@ -200,8 +226,8 @@ export function useBulkUpdateCatalogItemStatus() {
       queryClient.invalidateQueries({ queryKey: ["catalog-items-entitled"] });
       toast.success(`${variables.ids.length} item(s) updated to ${variables.status}`);
     },
-    onError: () => {
-      toast.error("Failed to bulk update item statuses");
+    onError: (error) => {
+      toastMutationError(error, "Failed to bulk update item statuses");
     },
   });
 }
@@ -219,8 +245,8 @@ export function useCreateCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["catalog-items-entitled"] });
       toast.success("Catalog item created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create catalog item");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create catalog item");
     },
   });
 }
@@ -239,8 +265,8 @@ export function useUpdateCatalogItem(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["catalog-item", id] });
       toast.success("Catalog item updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update catalog item");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update catalog item");
     },
   });
 }
@@ -258,8 +284,8 @@ export function useDeleteCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["catalog-items-entitled"] });
       toast.success("Catalog item deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete catalog item");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete catalog item");
     },
   });
 }
@@ -354,7 +380,7 @@ export function useCreateSubtask(parentId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast.success("Subtask created");
     },
-    onError: () => toast.error("Failed to create subtask"),
+    onError: (error) => toastMutationError(error, "Failed to create subtask"),
   });
 }
 
@@ -372,7 +398,7 @@ export function useUnlinkSubtask(parentId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast.success("Subtask unlinked");
     },
-    onError: () => toast.error("Failed to unlink subtask"),
+    onError: (error) => toastMutationError(error, "Failed to unlink subtask"),
   });
 }
 
@@ -491,8 +517,8 @@ export function useCreateTicket() {
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create ticket");
     },
   });
 }
@@ -503,7 +529,7 @@ export function useCreateTicket() {
 export function useUpdateTicket(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Ticket>) =>
+    mutationFn: (body: UpdateTicketPayload) =>
       apiClient.put<Ticket>(`/itsm/tickets/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
@@ -511,8 +537,8 @@ export function useUpdateTicket(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       toast.success("Ticket updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update ticket");
     },
   });
 }
@@ -543,8 +569,8 @@ export function useTransitionTicket() {
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket status updated");
     },
-    onError: () => {
-      toast.error("Failed to transition ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to transition ticket");
     },
   });
 }
@@ -580,8 +606,8 @@ export function useAssignTicket() {
       queryClient.invalidateQueries({ queryKey: ["team-queue"] });
       toast.success("Ticket assigned successfully");
     },
-    onError: () => {
-      toast.error("Failed to assign ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to assign ticket");
     },
   });
 }
@@ -610,8 +636,8 @@ export function useResolveTicket() {
       queryClient.invalidateQueries({ queryKey: ["my-queue"] });
       toast.success("Ticket resolved");
     },
-    onError: () => {
-      toast.error("Failed to resolve ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to resolve ticket");
     },
   });
 }
@@ -630,23 +656,20 @@ export function useCloseTicket() {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       toast.success("Ticket closed");
     },
-    onError: () => {
-      toast.error("Failed to close ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to close ticket");
     },
   });
 }
 
 /**
- * POST /itsm/tickets/{id}/major-incident - declare a major incident.
+ * POST /itsm/major-incidents - declare a major incident.
  */
 export function useDeclareMajorIncident() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: string | DeclareMajorIncidentPayload) => {
-      if (typeof payload === "string") {
-        return apiClient.post(`/itsm/tickets/${payload}/major-incident`);
-      }
-      return apiClient.post<MajorIncidentRecord>("/itsm/major-incidents", {
+    mutationFn: (payload: DeclareMajorIncidentPayload) =>
+      apiClient.post<MajorIncidentRecord>("/itsm/major-incidents", {
         ticketId: payload.ticketId,
         severity: payload.severity,
         incidentCommanderId: payload.incidentCommanderId,
@@ -658,20 +681,18 @@ export function useDeclareMajorIncident() {
         estimatedAffectedUsers: payload.estimatedAffectedUsers,
         businessImpact: payload.businessImpact,
         communicationPlan: payload.communicationPlan,
-      });
-    },
+      }),
     onSuccess: (_data, payload) => {
-      const ticketId = typeof payload === "string" ? payload : payload.ticketId;
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", payload.ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
       queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
       queryClient.invalidateQueries({ queryKey: ["major-incident-stats"] });
       toast.success("Major incident declared");
     },
-    onError: () => {
-      toast.error("Failed to declare major incident");
+    onError: (error) => {
+      toastMutationError(error, "Failed to declare major incident");
     },
   });
 }
@@ -690,8 +711,8 @@ export function useTransitionMajorIncident() {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       toast.success("Major incident status updated");
     },
-    onError: () => {
-      toast.error("Failed to transition major incident");
+    onError: (error) => {
+      toastMutationError(error, "Failed to transition major incident");
     },
   });
 }
@@ -718,8 +739,8 @@ export function usePostMajorIncidentUpdate() {
       queryClient.invalidateQueries({ queryKey: ["major-incidents-active"] });
       toast.success("Stakeholder update posted");
     },
-    onError: () => {
-      toast.error("Failed to post stakeholder update");
+    onError: (error) => {
+      toastMutationError(error, "Failed to post stakeholder update");
     },
   });
 }
@@ -748,8 +769,8 @@ export function useResolveMajorIncident() {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       toast.success("Major incident resolved");
     },
-    onError: () => {
-      toast.error("Failed to resolve major incident");
+    onError: (error) => {
+      toastMutationError(error, "Failed to resolve major incident");
     },
   });
 }
@@ -775,8 +796,8 @@ export function useSubmitMajorIncidentPIR() {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
       toast.success("PIR submitted");
     },
-    onError: () => {
-      toast.error("Failed to submit PIR");
+    onError: (error) => {
+      toastMutationError(error, "Failed to submit PIR");
     },
   });
 }
@@ -799,8 +820,8 @@ export function useUpdateMajorIncidentCommunicationPlan() {
       queryClient.invalidateQueries({ queryKey: ["major-incidents"] });
       toast.success("Communication plan updated");
     },
-    onError: () => {
-      toast.error("Failed to update communication plan");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update communication plan");
     },
   });
 }
@@ -819,8 +840,8 @@ export function useEscalateTicket() {
       queryClient.invalidateQueries({ queryKey: ["ticket-history", variables.id] });
       toast.success("Ticket escalated");
     },
-    onError: () => {
-      toast.error("Failed to escalate ticket");
+    onError: (error) => {
+      toastMutationError(error, "Failed to escalate ticket");
     },
   });
 }
@@ -846,8 +867,8 @@ export function useLinkTickets() {
       });
       toast.success("Tickets linked successfully");
     },
-    onError: () => {
-      toast.error("Failed to link tickets");
+    onError: (error) => {
+      toastMutationError(error, "Failed to link tickets");
     },
   });
 }
@@ -876,7 +897,7 @@ export function useTicketComments(ticketId: string | undefined) {
 export function useAddComment(ticketId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<TicketComment>) =>
+    mutationFn: (body: AddCommentPayload) =>
       apiClient.post<TicketComment>(
         `/itsm/tickets/${ticketId}/comments`,
         body,
@@ -885,10 +906,12 @@ export function useAddComment(ticketId: string | undefined) {
       queryClient.invalidateQueries({
         queryKey: ["ticket-comments", ticketId],
       });
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       toast.success("Comment added");
     },
-    onError: () => {
-      toast.error("Failed to add comment");
+    onError: (error) => {
+      toastMutationError(error, "Failed to add comment");
     },
   });
 }
@@ -979,8 +1002,8 @@ export function useLinkArticle(ticketId: string | undefined) {
       }
       toast.success("Article linked");
     },
-    onError: () => {
-      toast.error("Failed to link article");
+    onError: (error) => {
+      toastMutationError(error, "Failed to link article");
     },
   });
 }
@@ -1000,8 +1023,8 @@ export function useUnlinkArticle(ticketId: string | undefined) {
       });
       toast.success("Article unlinked");
     },
-    onError: () => {
-      toast.error("Failed to unlink article");
+    onError: (error) => {
+      toastMutationError(error, "Failed to unlink article");
     },
   });
 }
@@ -1063,8 +1086,8 @@ export function useCreateSLAPolicy() {
       queryClient.invalidateQueries({ queryKey: ["sla-policies"] });
       toast.success("SLA policy created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create SLA policy");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create SLA policy");
     },
   });
 }
@@ -1082,8 +1105,8 @@ export function useUpdateSLAPolicy(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["sla-policy", id] });
       toast.success("SLA policy updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update SLA policy");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update SLA policy");
     },
   });
 }
@@ -1100,8 +1123,8 @@ export function useDeleteSLAPolicy() {
       queryClient.invalidateQueries({ queryKey: ["sla-policies"] });
       toast.success("SLA policy deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete SLA policy");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete SLA policy");
     },
   });
 }
@@ -1189,8 +1212,8 @@ export function useCreateBusinessHoursCalendar() {
       queryClient.invalidateQueries({ queryKey: ["business-hours"] });
       toast.success("Business hours calendar created");
     },
-    onError: () => {
-      toast.error("Failed to create business hours calendar");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create business hours calendar");
     },
   });
 }
@@ -1210,8 +1233,8 @@ export function useUpdateBusinessHoursCalendar(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["business-hours"] });
       toast.success("Business hours calendar updated");
     },
-    onError: () => {
-      toast.error("Failed to update business hours calendar");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update business hours calendar");
     },
   });
 }
@@ -1228,8 +1251,8 @@ export function useDeleteBusinessHoursCalendar() {
       queryClient.invalidateQueries({ queryKey: ["business-hours"] });
       toast.success("Business hours calendar deleted");
     },
-    onError: () => {
-      toast.error("Failed to delete business hours calendar");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete business hours calendar");
     },
   });
 }
@@ -1265,8 +1288,8 @@ export function useCreateEscalationRule() {
       queryClient.invalidateQueries({ queryKey: ["escalation-rules"] });
       toast.success("Escalation rule created");
     },
-    onError: () => {
-      toast.error("Failed to create escalation rule");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create escalation rule");
     },
   });
 }
@@ -1283,8 +1306,8 @@ export function useUpdateEscalationRule(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["escalation-rules"] });
       toast.success("Escalation rule updated");
     },
-    onError: () => {
-      toast.error("Failed to update escalation rule");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update escalation rule");
     },
   });
 }
@@ -1301,8 +1324,8 @@ export function useDeleteEscalationRule() {
       queryClient.invalidateQueries({ queryKey: ["escalation-rules"] });
       toast.success("Escalation rule deleted");
     },
-    onError: () => {
-      toast.error("Failed to delete escalation rule");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete escalation rule");
     },
   });
 }
@@ -1354,8 +1377,8 @@ export function useCreateProblem() {
       queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
       toast.success("Problem created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create problem");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create problem");
     },
   });
 }
@@ -1366,15 +1389,15 @@ export function useCreateProblem() {
 export function useUpdateProblem(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<ITSMProblem>) =>
+    mutationFn: (body: UpdateProblemPayload) =>
       apiClient.put<ITSMProblem>(`/itsm/problems/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
       queryClient.invalidateQueries({ queryKey: ["itsm-problem", id] });
       toast.success("Problem updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update problem");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update problem");
     },
   });
 }
@@ -1391,8 +1414,8 @@ export function useDeleteProblem() {
       queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
       toast.success("Problem deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete problem");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete problem");
     },
   });
 }
@@ -1424,8 +1447,8 @@ export function useTransitionProblem() {
       queryClient.invalidateQueries({ queryKey: ["known-errors"] });
       toast.success("Problem status updated");
     },
-    onError: () => {
-      toast.error("Failed to transition problem");
+    onError: (error) => {
+      toastMutationError(error, "Failed to transition problem");
     },
   });
 }
@@ -1456,8 +1479,8 @@ export function useLinkIncidentToProblem() {
       });
       toast.success("Incident linked to problem");
     },
-    onError: () => {
-      toast.error("Failed to link incident to problem");
+    onError: (error) => {
+      toastMutationError(error, "Failed to link incident to problem");
     },
   });
 }
@@ -1491,8 +1514,8 @@ export function useCreateKnownError() {
       queryClient.invalidateQueries({ queryKey: ["known-errors"] });
       toast.success("Known error created");
     },
-    onError: () => {
-      toast.error("Failed to create known error");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create known error");
     },
   });
 }
@@ -1509,8 +1532,8 @@ export function useUpdateKnownError(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["known-errors"] });
       toast.success("Known error updated");
     },
-    onError: () => {
-      toast.error("Failed to update known error");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update known error");
     },
   });
 }
@@ -1527,8 +1550,8 @@ export function useDeleteKnownError() {
       queryClient.invalidateQueries({ queryKey: ["known-errors"] });
       toast.success("Known error deleted");
     },
-    onError: () => {
-      toast.error("Failed to delete known error");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete known error");
     },
   });
 }
@@ -1545,7 +1568,7 @@ export function useSupportQueues(isActive?: boolean) {
     queryKey: ["support-queues", isActive],
     queryFn: () =>
       apiClient.get<SupportQueue[]>("/itsm/queues", {
-        is_active: isActive,
+        isActive,
       }),
   });
 }
@@ -1566,8 +1589,8 @@ export function useCreateSupportQueue() {
       queryClient.invalidateQueries({ queryKey: ["support-queues"] });
       toast.success("Support queue created");
     },
-    onError: () => {
-      toast.error("Failed to create support queue");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create support queue");
     },
   });
 }
@@ -1584,8 +1607,8 @@ export function useUpdateSupportQueue(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["support-queues"] });
       toast.success("Support queue updated");
     },
-    onError: () => {
-      toast.error("Failed to update support queue");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update support queue");
     },
   });
 }
@@ -1602,8 +1625,8 @@ export function useDeleteSupportQueue() {
       queryClient.invalidateQueries({ queryKey: ["support-queues"] });
       toast.success("Support queue deleted");
     },
-    onError: () => {
-      toast.error("Failed to delete support queue");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete support queue");
     },
   });
 }
@@ -1639,8 +1662,8 @@ export function useCreateCSATSurvey(ticketId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
       toast.success("Feedback submitted successfully");
     },
-    onError: () => {
-      toast.error("Failed to submit feedback");
+    onError: (error) => {
+      toastMutationError(error, "Failed to submit feedback");
     },
   });
 }
@@ -1780,10 +1803,11 @@ export function useSubmitServiceRequest() {
     }) => apiClient.post<ServiceRequest>("/itsm/catalog/requests", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
       toast.success("Service request submitted successfully");
     },
-    onError: () => {
-      toast.error("Failed to submit service request");
+    onError: (error) => {
+      toastMutationError(error, "Failed to submit service request");
     },
   });
 }
@@ -1804,8 +1828,8 @@ export function useApproveRequest() {
       queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
       toast.success("Request approved");
     },
-    onError: () => {
-      toast.error("Failed to approve request");
+    onError: (error) => {
+      toastMutationError(error, "Failed to approve request");
     },
   });
 }
@@ -1826,8 +1850,8 @@ export function useRejectRequest() {
       queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
       toast.success("Request rejected");
     },
-    onError: () => {
-      toast.error("Failed to reject request");
+    onError: (error) => {
+      toastMutationError(error, "Failed to reject request");
     },
   });
 }
@@ -1845,8 +1869,8 @@ export function useCancelServiceRequest() {
       queryClient.invalidateQueries({ queryKey: ["service-request", id] });
       toast.success("Request cancelled");
     },
-    onError: () => {
-      toast.error("Failed to cancel request");
+    onError: (error) => {
+      toastMutationError(error, "Failed to cancel request");
     },
   });
 }
@@ -1914,15 +1938,15 @@ export function useChangeCalendar(start: string, end: string) {
 export function useCreateChange() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
+    mutationFn: (body: CreateChangePayload) =>
       apiClient.post<Ticket>("/itsm/changes", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["changes"] });
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("Change created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create change");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create change");
     },
   });
 }
@@ -1933,15 +1957,15 @@ export function useCreateChange() {
 export function useUpdateChange(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
+    mutationFn: (body: UpdateChangePayload) =>
       apiClient.put<Ticket>(`/itsm/changes/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["changes"] });
       queryClient.invalidateQueries({ queryKey: ["change", id] });
       toast.success("Change updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update change");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update change");
     },
   });
 }
@@ -1960,8 +1984,8 @@ export function useTransitionChange(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("Change status updated");
     },
-    onError: () => {
-      toast.error("Failed to transition change");
+    onError: (error) => {
+      toastMutationError(error, "Failed to transition change");
     },
   });
 }
@@ -1980,8 +2004,8 @@ export function useSubmitCABDecision(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("CAB decision submitted");
     },
-    onError: () => {
-      toast.error("Failed to submit CAB decision");
+    onError: (error) => {
+      toastMutationError(error, "Failed to submit CAB decision");
     },
   });
 }
@@ -2000,8 +2024,8 @@ export function useCompletePIR(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("PIR completed");
     },
-    onError: () => {
-      toast.error("Failed to complete PIR");
+    onError: (error) => {
+      toastMutationError(error, "Failed to complete PIR");
     },
   });
 }
@@ -2019,8 +2043,8 @@ export function useSubmitRiskAssessment(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change", id] });
       toast.success("Risk assessment submitted");
     },
-    onError: () => {
-      toast.error("Failed to submit risk assessment");
+    onError: (error) => {
+      toastMutationError(error, "Failed to submit risk assessment");
     },
   });
 }
@@ -2039,8 +2063,8 @@ export function useImplementChange(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("Implementation started");
     },
-    onError: () => {
-      toast.error("Failed to start implementation");
+    onError: (error) => {
+      toastMutationError(error, "Failed to start implementation");
     },
   });
 }
@@ -2059,8 +2083,8 @@ export function useCompleteChange(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("Change completed");
     },
-    onError: () => {
-      toast.error("Failed to complete change");
+    onError: (error) => {
+      toastMutationError(error, "Failed to complete change");
     },
   });
 }
@@ -2079,8 +2103,8 @@ export function useRollbackChange(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["change-stats"] });
       toast.success("Change rolled back");
     },
-    onError: () => {
-      toast.error("Failed to rollback change");
+    onError: (error) => {
+      toastMutationError(error, "Failed to rollback change");
     },
   });
 }
@@ -2125,14 +2149,14 @@ export function useCABMeeting(id: string | undefined) {
 export function useCreateCABMeeting() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
+    mutationFn: (body: CreateCABMeetingPayload) =>
       apiClient.post<CABMeeting>("/itsm/cab-meetings", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
       toast.success("CAB meeting created");
     },
-    onError: () => {
-      toast.error("Failed to create CAB meeting");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create CAB meeting");
     },
   });
 }
@@ -2143,15 +2167,15 @@ export function useCreateCABMeeting() {
 export function useUpdateCABMeeting(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
+    mutationFn: (body: UpdateCABMeetingPayload) =>
       apiClient.put<CABMeeting>(`/itsm/cab-meetings/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cab-meetings"] });
       queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
       toast.success("CAB meeting updated");
     },
-    onError: () => {
-      toast.error("Failed to update CAB meeting");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update CAB meeting");
     },
   });
 }
@@ -2169,8 +2193,8 @@ export function useCompleteCABMeeting(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["cab-meeting", id] });
       toast.success("CAB meeting completed");
     },
-    onError: () => {
-      toast.error("Failed to complete CAB meeting");
+    onError: (error) => {
+      toastMutationError(error, "Failed to complete CAB meeting");
     },
   });
 }
@@ -2209,8 +2233,8 @@ export function useCreateOLA() {
       queryClient.invalidateQueries({ queryKey: ["olas"] });
       toast.success("OLA created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create OLA");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create OLA");
     },
   });
 }
@@ -2225,8 +2249,8 @@ export function useUpdateOLA(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["ola", id] });
       toast.success("OLA updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update OLA");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update OLA");
     },
   });
 }
@@ -2240,8 +2264,8 @@ export function useDeleteOLA() {
       queryClient.invalidateQueries({ queryKey: ["olas"] });
       toast.success("OLA deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete OLA");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete OLA");
     },
   });
 }
@@ -2280,8 +2304,8 @@ export function useCreateUC() {
       queryClient.invalidateQueries({ queryKey: ["ucs"] });
       toast.success("Underpinning contract created successfully");
     },
-    onError: () => {
-      toast.error("Failed to create underpinning contract");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create underpinning contract");
     },
   });
 }
@@ -2296,8 +2320,8 @@ export function useUpdateUC(id: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["uc", id] });
       toast.success("Underpinning contract updated successfully");
     },
-    onError: () => {
-      toast.error("Failed to update underpinning contract");
+    onError: (error) => {
+      toastMutationError(error, "Failed to update underpinning contract");
     },
   });
 }
@@ -2311,8 +2335,8 @@ export function useDeleteUC() {
       queryClient.invalidateQueries({ queryKey: ["ucs"] });
       toast.success("Underpinning contract deleted successfully");
     },
-    onError: () => {
-      toast.error("Failed to delete underpinning contract");
+    onError: (error) => {
+      toastMutationError(error, "Failed to delete underpinning contract");
     },
   });
 }
@@ -2339,8 +2363,8 @@ export function useCreateDependencyChainEntry() {
       queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
       toast.success("Dependency chain entry created");
     },
-    onError: () => {
-      toast.error("Failed to create dependency chain entry");
+    onError: (error) => {
+      toastMutationError(error, "Failed to create dependency chain entry");
     },
   });
 }
@@ -2354,8 +2378,8 @@ export function useDeleteDependencyChainEntry() {
       queryClient.invalidateQueries({ queryKey: ["sla-dependency-chain"] });
       toast.success("Dependency chain entry removed");
     },
-    onError: () => {
-      toast.error("Failed to remove dependency chain entry");
+    onError: (error) => {
+      toastMutationError(error, "Failed to remove dependency chain entry");
     },
   });
 }

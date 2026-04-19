@@ -2,9 +2,7 @@ package itsm
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -269,30 +267,4 @@ func (h *MajorIncidentHandler) UpdateCommunicationPlan(w http.ResponseWriter, r 
 		return
 	}
 	types.OK(w, record, nil)
-}
-
-func optionalTime(r *http.Request, keys ...string) (*time.Time, error) {
-	for _, key := range keys {
-		if value := r.URL.Query().Get(key); value != "" {
-			if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-				return &parsed, nil
-			}
-			if parsed, err := time.Parse("2006-01-02", value); err == nil {
-				return &parsed, nil
-			}
-			return nil, fmt.Errorf("invalid %s value", key)
-		}
-	}
-	return nil, nil
-}
-
-func optionalUUIDAny(r *http.Request, keys ...string) *uuid.UUID {
-	for _, key := range keys {
-		if value := r.URL.Query().Get(key); value != "" {
-			if parsed, err := uuid.Parse(value); err == nil {
-				return &parsed
-			}
-		}
-	}
-	return nil
 }

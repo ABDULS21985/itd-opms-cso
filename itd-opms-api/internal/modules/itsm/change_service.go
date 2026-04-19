@@ -243,6 +243,13 @@ func (s *ChangeService) UpdateChange(ctx context.Context, id uuid.UUID, req Upda
 	if auth == nil {
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
+	existing, err := s.GetChange(ctx, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
 
 	now := time.Now().UTC()
 
@@ -305,6 +312,13 @@ func (s *ChangeService) SubmitRiskAssessment(ctx context.Context, changeID uuid.
 	if auth == nil {
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
+	existing, err := s.GetChange(ctx, changeID)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
 
 	now := time.Now().UTC()
 
@@ -354,6 +368,9 @@ func (s *ChangeService) ImplementChange(ctx context.Context, changeID uuid.UUID,
 
 	existing, err := s.GetChange(ctx, changeID)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -421,6 +438,9 @@ func (s *ChangeService) CompleteChange(ctx context.Context, changeID uuid.UUID, 
 
 	existing, err := s.GetChange(ctx, changeID)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -507,6 +527,9 @@ func (s *ChangeService) RollbackChange(ctx context.Context, changeID uuid.UUID, 
 	if err != nil {
 		return Ticket{}, err
 	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
 
 	if err := workflow.ChangeStateMachine.Validate(existing.Status, workflow.ChangeRolledBack); err != nil {
 		return Ticket{}, apperrors.BadRequest(err.Error())
@@ -579,6 +602,9 @@ func (s *ChangeService) TransitionChange(ctx context.Context, id uuid.UUID, req 
 
 	existing, err := s.GetChange(ctx, id)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -696,6 +722,9 @@ func (s *ChangeService) SubmitCABDecision(ctx context.Context, changeID uuid.UUI
 	if err != nil {
 		return Ticket{}, err
 	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
 
 	if existing.Status != workflow.ChangeCABReview {
 		return Ticket{}, apperrors.BadRequest("change must be in cab_review status to receive a CAB decision")
@@ -794,6 +823,9 @@ func (s *ChangeService) CompletePIR(ctx context.Context, changeID uuid.UUID, req
 
 	existing, err := s.GetChange(ctx, changeID)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
