@@ -24,6 +24,7 @@ import { FormField } from "@/components/shared/form-field";
 import { UserPicker } from "@/components/shared/pickers";
 import {
   useProblem,
+  useProblemRCATemplates,
   useUpdateProblem,
   useTransitionProblem,
   useDeleteProblem,
@@ -308,12 +309,17 @@ function EditProblemForm({
 }) {
   const updateMutation = useUpdateProblem(problem.id);
   const transitionMutation = useTransitionProblem();
+  const { data: rcaTemplates } = useProblemRCATemplates();
   const [title, setTitle] = useState(problem.title);
   const [description, setDescription] = useState(problem.description ?? "");
   const [status, setStatus] = useState(problem.status);
   const [rootCause, setRootCause] = useState(problem.rootCause ?? "");
   const [workaround, setWorkaround] = useState(problem.workaround ?? "");
   const [permanentFix, setPermanentFix] = useState(problem.permanentFix ?? "");
+  const [rcaTemplateId, setRCATemplateId] = useState(problem.rcaTemplateId ?? "");
+  const [rcaData, setRCAData] = useState(
+    problem.rcaData ? JSON.stringify(problem.rcaData, null, 2) : "",
+  );
   const [ownerId, setOwnerId] = useState(problem.ownerId ?? "");
   const [ownerDisplay, setOwnerDisplay] = useState("");
 
@@ -324,6 +330,10 @@ function EditProblemForm({
         title: title || undefined,
         description: description || undefined,
         rootCause: rootCause || undefined,
+        rcaTemplateId: rcaTemplateId || undefined,
+        rcaData: rcaData.trim()
+          ? (JSON.parse(rcaData) as Record<string, unknown>)
+          : undefined,
         workaround: workaround || undefined,
         permanentFix: permanentFix || undefined,
         ownerId: ownerId || undefined,
@@ -400,6 +410,34 @@ function EditProblemForm({
           onChange={setRootCause}
           rows={3}
           placeholder="What is the identified root cause?"
+        />
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-primary)]">
+            RCA Template
+          </label>
+          <select
+            value={rcaTemplateId}
+            onChange={(e) => setRCATemplateId(e.target.value)}
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
+          >
+            <option value="">No structured template</option>
+            {(rcaTemplates ?? []).map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name} ({template.method})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <FormField
+          label="Structured RCA Data"
+          name="rca-data"
+          type="textarea"
+          value={rcaData}
+          onChange={setRCAData}
+          rows={5}
+          placeholder='{"why_1":"...", "root_cause":"..."}'
         />
 
         <FormField
@@ -622,6 +660,29 @@ export default function ProblemDetailPage({
                     )}
                   </p>
                 </div>
+                {(problem.rcaTemplateId || problem.rcaData) && (
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
+                      Structured RCA
+                    </p>
+                    <div className="rounded-lg bg-[var(--surface-2)] p-3">
+                      {problem.rcaTemplateId && (
+                        <p className="mb-2 text-xs font-mono text-[var(--text-secondary)]">
+                          Template: {problem.rcaTemplateId.slice(0, 8)}...
+                        </p>
+                      )}
+                      {problem.rcaData ? (
+                        <pre className="whitespace-pre-wrap break-words text-xs text-[var(--text-primary)]">
+                          {JSON.stringify(problem.rcaData, null, 2)}
+                        </pre>
+                      ) : (
+                        <p className="text-sm italic text-[var(--text-tertiary)]">
+                          No structured RCA data recorded
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
                     Workaround

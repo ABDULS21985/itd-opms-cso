@@ -313,6 +313,26 @@ export function useApproveProject() {
 }
 
 /**
+ * POST /planning/projects/{id}/submit-approval - start initiation approval workflow.
+ */
+export function useSubmitProjectApproval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<Project>(`/planning/projects/${id}/submit-approval`, {}),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["my-pending-approvals"] });
+      toast.success("Project approval workflow started");
+    },
+    onError: () => {
+      toast.error("Failed to submit project for approval");
+    },
+  });
+}
+
+/**
  * POST /planning/projects/{id}/dependencies - add a project dependency.
  */
 export function useAddProjectDependency(projectId: string | undefined) {

@@ -190,6 +190,22 @@ export interface LicenseComplianceStats {
   underUtilized: number;
 }
 
+export interface CMDBQualityReport {
+  totalCIs: number;
+  activeCIs: number;
+  cisMissingAsset: number;
+  cisWithoutRelationships: number;
+  totalAssets: number;
+  assetsWithoutCI: number;
+  unverifiedAssets: number;
+  staleVerifiedAssets: number;
+  latestReconciliationAt?: string;
+  latestReconciliationSource?: string;
+  latestReconciliationDiscrepancies: number;
+  completenessScore: number;
+  accuracyScore: number;
+}
+
 /* ====================================================================== */
 /*  Discovery Types                                                        */
 /* ====================================================================== */

@@ -15,6 +15,7 @@ import {
   useAssetStats,
   useLicenseComplianceStats,
   useExpiringWarranties,
+  useCMDBQualityReport,
 } from "@/hooks/use-cmdb";
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +75,7 @@ export default function ReportsPage() {
   const { data: expiring30, isLoading: exp30Loading } = useExpiringWarranties(30);
   const { data: expiring60, isLoading: exp60Loading } = useExpiringWarranties(60);
   const { data: expiring90, isLoading: exp90Loading } = useExpiringWarranties(90);
+  const { data: quality, isLoading: qualityLoading } = useCMDBQualityReport();
 
   /* ---- Derived values ---- */
   const totalAssets = assetStats?.total ?? 0;
@@ -119,6 +121,55 @@ export default function ReportsPage() {
               Overview of assets, license compliance, and warranty status
             </p>
           </div>
+        </div>
+      </motion.div>
+
+      {/* Section: CMDB Data Quality */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.03 }}
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
+          CMDB Completeness &amp; Accuracy
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="Completeness"
+            value={quality ? `${quality.completenessScore}%` : undefined}
+            color={(quality?.completenessScore ?? 0) >= 85 ? "#10B981" : "#F59E0B"}
+            icon={CheckCircle}
+            loading={qualityLoading}
+            subtext={`${quality?.assetsWithoutCI ?? 0} assets without CIs`}
+          />
+          <StatCard
+            label="Accuracy"
+            value={quality ? `${quality.accuracyScore}%` : undefined}
+            color={(quality?.accuracyScore ?? 0) >= 85 ? "#10B981" : "#F59E0B"}
+            icon={Shield}
+            loading={qualityLoading}
+            subtext={`${quality?.unverifiedAssets ?? 0} unverified assets`}
+          />
+          <StatCard
+            label="Orphan CIs"
+            value={quality?.cisMissingAsset}
+            color="#EF4444"
+            icon={AlertTriangle}
+            loading={qualityLoading}
+            subtext={`${quality?.cisWithoutRelationships ?? 0} CIs without relationships`}
+          />
+          <StatCard
+            label="Latest Reconciliation"
+            value={quality?.latestReconciliationDiscrepancies ?? 0}
+            color="#3B82F6"
+            icon={BarChart3}
+            loading={qualityLoading}
+            subtext={
+              quality?.latestReconciliationAt
+                ? `${quality.latestReconciliationSource ?? "source"} on ${new Date(quality.latestReconciliationAt).toLocaleDateString()}`
+                : "No reconciliation run recorded"
+            }
+          />
         </div>
       </motion.div>
 

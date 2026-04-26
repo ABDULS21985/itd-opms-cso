@@ -30,6 +30,7 @@ const STATUS_TABS = [
   { value: "approved", label: "Approved" },
   { value: "in_progress", label: "In Progress" },
   { value: "fulfilled", label: "Fulfilled" },
+  { value: "closed", label: "Closed" },
   { value: "rejected", label: "Rejected" },
   { value: "cancelled", label: "Cancelled" },
 ] as const;
@@ -56,6 +57,7 @@ function getActiveStep(status: string): number {
     case "fulfilled":
       return 2;
     case "completed":
+    case "closed":
       return 3;
     default:
       return 0;

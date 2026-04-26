@@ -601,6 +601,12 @@ export const navGroups: NavGroup[] = [
         permission: "system.manage",
       },
       {
+        href: "/dashboard/system/reference-data",
+        label: "Reference Data",
+        icon: DatabaseZap,
+        permission: "system.manage",
+      },
+      {
         href: "/dashboard/system/email-templates",
         label: "Email Templates",
         icon: Mail,

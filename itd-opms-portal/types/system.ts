@@ -192,6 +192,19 @@ export interface SystemSetting {
   createdAt: string;
 }
 
+export interface ReferenceData {
+  id: string;
+  tenantId?: string;
+  domain: string;
+  key: string;
+  label: string;
+  value?: Record<string, unknown>;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuditEventDetail {
   id: string;
   tenantId: string;

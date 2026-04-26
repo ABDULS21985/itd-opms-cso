@@ -64,6 +64,7 @@ export interface Ticket {
   relatedTicketIds: string[];
   linkedProblemId?: string;
   linkedAssetIds: string[];
+  linkedCiIds?: string[];
   orgUnitId?: string;
   parentTicketId?: string;
   resolutionNotes?: string;
@@ -339,9 +340,13 @@ export interface ITSMProblem {
   problemNumber: string;
   title: string;
   description?: string;
+  rcaTemplateId?: string;
+  rcaData?: Record<string, unknown>;
   rootCause?: string;
   status: string;
   linkedIncidentIds: string[];
+  linkedAssetIds?: string[];
+  linkedCiIds?: string[];
   workaround?: string;
   permanentFix?: string;
   linkedChangeId?: string;
@@ -365,8 +370,23 @@ export type UpdateProblemPayload = Partial<
     | "linkedChangeId"
     | "ownerId"
     | "assignedGroupId"
+    | "rcaTemplateId"
+    | "rcaData"
+    | "linkedAssetIds"
+    | "linkedCiIds"
   >
 >;
+
+export interface ProblemRCATemplate {
+  id: string;
+  tenantId?: string;
+  name: string;
+  method: string;
+  schema: Record<string, unknown>;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface KnownError {
   id: string;

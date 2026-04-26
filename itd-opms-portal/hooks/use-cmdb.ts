@@ -25,6 +25,7 @@ import type {
   ERPSyncLog,
   MEGAImportResult,
   MEGAValidationResult,
+  CMDBQualityReport,
   PaginatedResponse,
 } from "@/types";
 
@@ -1303,5 +1304,15 @@ export function useExportMEGAXML() {
     onError: () => {
       toast.error("Failed to export MEGA EA XML");
     },
+  });
+}
+
+/**
+ * GET /cmdb/quality-report - CMDB completeness and accuracy reporting.
+ */
+export function useCMDBQualityReport() {
+  return useQuery({
+    queryKey: ["cmdb-quality-report"],
+    queryFn: () => apiClient.get<CMDBQualityReport>("/cmdb/quality-report"),
   });
 }

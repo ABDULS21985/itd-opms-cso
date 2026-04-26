@@ -24,6 +24,7 @@ import {
   Users,
   Mail,
   MailX,
+  Printer,
 } from "lucide-react";
 import {
   useReportDefinitions,
@@ -137,6 +138,45 @@ function DownloadRunButton({ documentId }: { documentId: string }) {
   );
 }
 
+function PrintRunButton({
+  definitionId,
+  runId,
+}: {
+  definitionId: string;
+  runId: string;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handlePrint() {
+    setLoading(true);
+    try {
+      const blob = await apiClient.download(
+        `/reporting/reports/${definitionId}/runs/${runId}/print`,
+      );
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handlePrint}
+      disabled={loading}
+      title="Open print-ready report"
+      className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50"
+    >
+      {loading ? (
+        <Loader2 size={12} className="animate-spin text-[var(--text-secondary)]" />
+      ) : (
+        <Printer size={12} style={{ color: "#0EA5E9" }} />
+      )}
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Report Runs Expandable Section                                      */
 /* ------------------------------------------------------------------ */
@@ -193,7 +233,7 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
               Error
             </th>
             <th className="text-right py-1.5 pl-4 font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-              Doc
+              Output
             </th>
           </tr>
         </thead>
@@ -234,11 +274,16 @@ function ReportRunsList({ definitionId }: { definitionId: string }) {
                 {run.errorMessage || "--"}
               </td>
               <td className="py-2 pl-4 text-right">
-                {run.documentId ? (
-                  <DownloadRunButton documentId={run.documentId} />
-                ) : (
-                  <span className="text-[var(--text-secondary)]">--</span>
-                )}
+                <div className="flex items-center justify-end gap-1">
+                  {run.status === "completed" && (
+                    <PrintRunButton definitionId={definitionId} runId={run.id} />
+                  )}
+                  {run.documentId ? (
+                    <DownloadRunButton documentId={run.documentId} />
+                  ) : (
+                    <span className="text-[var(--text-secondary)]">--</span>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

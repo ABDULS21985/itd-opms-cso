@@ -25,6 +25,7 @@ import type {
   SIEMStatus,
   WebhookEndpoint,
   WebhookLog,
+  ReferenceData,
   PaginatedResponse,
 } from "@/types";
 
@@ -781,6 +782,90 @@ export function useDeleteSetting() {
     },
     onError: () => {
       toast.error("Failed to remove setting override");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  Reference Data — Queries & Mutations                                */
+/* ================================================================== */
+
+export interface CreateReferenceDataInput {
+  domain: string;
+  key: string;
+  label: string;
+  value?: Record<string, unknown>;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export type UpdateReferenceDataInput = Partial<
+  Omit<CreateReferenceDataInput, "domain" | "key">
+>;
+
+/**
+ * GET /system/reference-data - list unified operational reference data.
+ */
+export function useReferenceData(domain?: string, includeInactive = false) {
+  return useQuery({
+    queryKey: ["system-reference-data", domain, includeInactive],
+    queryFn: () =>
+      apiClient.get<ReferenceData[]>("/system/reference-data", {
+        domain,
+        includeInactive,
+      }),
+  });
+}
+
+/**
+ * POST /system/reference-data - create or upsert reference data.
+ */
+export function useCreateReferenceData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateReferenceDataInput) =>
+      apiClient.post<ReferenceData>("/system/reference-data", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-reference-data"] });
+      toast.success("Reference data saved");
+    },
+    onError: () => {
+      toast.error("Failed to save reference data");
+    },
+  });
+}
+
+/**
+ * PUT /system/reference-data/{id} - update reference data.
+ */
+export function useUpdateReferenceData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateReferenceDataInput & { id: string }) =>
+      apiClient.put<ReferenceData>(`/system/reference-data/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-reference-data"] });
+      toast.success("Reference data updated");
+    },
+    onError: () => {
+      toast.error("Failed to update reference data");
+    },
+  });
+}
+
+/**
+ * DELETE /system/reference-data/{id} - deactivate reference data.
+ */
+export function useDeactivateReferenceData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/system/reference-data/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-reference-data"] });
+      toast.success("Reference data deactivated");
+    },
+    onError: () => {
+      toast.error("Failed to deactivate reference data");
     },
   });
 }

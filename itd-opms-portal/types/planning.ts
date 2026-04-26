@@ -106,6 +106,7 @@ export interface WorkItem {
   title: string;
   description?: string;
   assigneeId?: string;
+  assignedTeamId?: string;
   reporterId?: string;
   status: string;
   priority: string;

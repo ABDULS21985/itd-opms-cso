@@ -18,6 +18,7 @@ import type {
   SLAComplianceStats,
   EscalationRule,
   ITSMProblem,
+  ProblemRCATemplate,
   KnownError,
   SupportQueue,
   CSATSurvey,
@@ -1361,6 +1362,17 @@ export function useProblem(id: string | undefined) {
   });
 }
 
+/**
+ * GET /itsm/problems/rca-templates - structured RCA templates.
+ */
+export function useProblemRCATemplates() {
+  return useQuery({
+    queryKey: ["problem-rca-templates"],
+    queryFn: () =>
+      apiClient.get<ProblemRCATemplate[]>("/itsm/problems/rca-templates"),
+  });
+}
+
 /* ================================================================== */
 /*  Problems — Mutations                                                */
 /* ================================================================== */
@@ -1481,6 +1493,41 @@ export function useLinkIncidentToProblem() {
     },
     onError: (error) => {
       toastMutationError(error, "Failed to link incident to problem");
+    },
+  });
+}
+
+/**
+ * POST /itsm/problems/{id}/configuration-links - link assets and CIs to a problem.
+ */
+export function useLinkProblemConfiguration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      problemId,
+      assetIds,
+      ciIds,
+      replace,
+    }: {
+      problemId: string;
+      assetIds?: string[];
+      ciIds?: string[];
+      replace?: boolean;
+    }) =>
+      apiClient.post(`/itsm/problems/${problemId}/configuration-links`, {
+        assetIds,
+        ciIds,
+        replace,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["itsm-problems"] });
+      queryClient.invalidateQueries({
+        queryKey: ["itsm-problem", variables.problemId],
+      });
+      toast.success("Problem configuration links updated");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to link configuration items");
     },
   });
 }

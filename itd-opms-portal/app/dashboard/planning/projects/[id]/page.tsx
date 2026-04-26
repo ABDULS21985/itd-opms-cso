@@ -45,6 +45,7 @@ import {
   useProjectStakeholders,
   useProjectDependencies,
   useApproveProject,
+  useSubmitProjectApproval,
   useUpdateProject,
   useDeleteProject,
   useAddProjectStakeholder,
@@ -96,6 +97,7 @@ function priorityColor(priority: string) {
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; gradient: string }> = {
   draft: { icon: FileText, gradient: "from-slate-400 to-slate-500" },
+  proposed: { icon: Clock, gradient: "from-amber-400 to-amber-500" },
   pending_approval: { icon: Clock, gradient: "from-amber-400 to-amber-500" },
   approved: { icon: CheckCircle, gradient: "from-blue-400 to-blue-500" },
   active: { icon: PlayCircle, gradient: "from-emerald-400 to-emerald-500" },
@@ -232,6 +234,7 @@ export default function ProjectDetailPage({
   const { data: allProjectsData } = useProjects(1, 100);
 
   const approveProject = useApproveProject();
+  const submitProjectApproval = useSubmitProjectApproval();
   const updateProject = useUpdateProject(id);
   const deleteProject = useDeleteProject();
   const addStakeholder = useAddProjectStakeholder(id);
@@ -294,6 +297,7 @@ export default function ProjectDetailPage({
 
   const isActing =
     approveProject.isPending ||
+    submitProjectApproval.isPending ||
     updateProject.isPending ||
     deleteProject.isPending;
 
@@ -442,10 +446,16 @@ export default function ProjectDetailPage({
 
     return (
       <div className="flex flex-wrap items-center gap-2">
+        {s === "proposed" && (
+          <button type="button" disabled={isActing} onClick={() => submitProjectApproval.mutate(id)} className={`${btnBase} bg-amber-600 text-white hover:bg-amber-700 shadow-sm`}>
+            {submitProjectApproval.isPending ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
+            Submit Approval
+          </button>
+        )}
         {(s === "draft" || s === "pending_approval") && (
           <button type="button" disabled={isActing} onClick={() => approveProject.mutate({ id, status: "approved" })} className={`${btnBase} bg-green-600 text-white hover:bg-green-700 shadow-sm`}>
             {approveProject.isPending ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-            Approve
+            Finalize Approval
           </button>
         )}
         {(s === "approved" || s === "on_hold") && (
