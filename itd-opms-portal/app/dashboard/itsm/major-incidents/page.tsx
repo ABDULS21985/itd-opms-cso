@@ -27,6 +27,7 @@ import {
   type Column,
 } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useActiveMajorIncidents,
   useDeclareMajorIncident,
@@ -409,6 +410,7 @@ export default function MajorIncidentsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { user: currentUser } = useAuth();
   const preselectedTicketId = searchParams.get("ticketId") ?? "";
   const isDeclareRequested = searchParams.get("declare") === "1";
 
@@ -471,9 +473,29 @@ export default function MajorIncidentsPage() {
   const incidents = incidentPage?.data ?? [];
   const active = activeIncidents ?? [];
 
+  const hasManagePermission =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.permissions?.includes("itsm.manage") ||
+    false;
+  const isPrivileged =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.roles?.includes("admin") ||
+    currentUser?.roles?.includes("tenant_admin") ||
+    false;
+
+  const declareableTickets = useMemo(() => {
+    return tickets.filter(
+      (ticket) =>
+        ticketEligible(ticket) &&
+        hasManagePermission &&
+        (isPrivileged ||
+          ticket.reporterId === currentUser?.id ||
+          ticket.assigneeId === currentUser?.id),
+    );
+  }, [currentUser?.id, hasManagePermission, isPrivileged, tickets]);
+
   const eligibleTickets = useMemo(() => {
-    return tickets
-      .filter(ticketEligible)
+    return declareableTickets
       .filter((ticket) => {
         if (!ticketSearch.trim()) {
           return true;
@@ -489,7 +511,9 @@ export default function MajorIncidentsPage() {
 
         return haystack.includes(ticketSearch.trim().toLowerCase());
       });
-  }, [ticketSearch, tickets]);
+  }, [declareableTickets, ticketSearch]);
+
+  const canDeclareAny = declareableTickets.length > 0;
 
   const filteredCommanders = useMemo(
     () => users.filter((user) => userMatches(user, commanderSearch)),
@@ -511,6 +535,9 @@ export default function MajorIncidentsPage() {
   );
 
   const selectedTicket = tickets.find((ticket) => ticket.id === form.ticketId);
+  const canDeclareSelected = declareableTickets.some(
+    (ticket) => ticket.id === form.ticketId,
+  );
 
   function syncDeclareQuery(open: boolean, ticketId?: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -529,8 +556,16 @@ export default function MajorIncidentsPage() {
   }
 
   function openDeclare(ticketId?: string) {
+    if (!canDeclareAny) {
+      return;
+    }
     const nextTicketId = ticketId ?? preselectedTicketId;
-    setForm(createInitialForm(nextTicketId));
+    const initialTicketId = declareableTickets.some(
+      (ticket) => ticket.id === nextTicketId,
+    )
+      ? nextTicketId
+      : "";
+    setForm(createInitialForm(initialTicketId));
     setTicketSearch("");
     setCommanderSearch("");
     setLeadSearch("");
@@ -703,14 +738,16 @@ export default function MajorIncidentsPage() {
             >
               Back to ITSM hub
             </Link>
-            <button
-              type="button"
-              onClick={() => openDeclare()}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition-transform hover:-translate-y-0.5"
-            >
-              <Plus size={16} />
-              Declare Major Incident
-            </button>
+            {canDeclareAny ? (
+              <button
+                type="button"
+                onClick={() => openDeclare()}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition-transform hover:-translate-y-0.5"
+              >
+                <Plus size={16} />
+                Declare Major Incident
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -869,16 +906,18 @@ export default function MajorIncidentsPage() {
             }}
             emptyTitle="No major incidents found"
             emptyDescription="Adjust the filters or declare a new major incident to start the workflow."
-            emptyAction={(
-              <button
-                type="button"
-                onClick={() => openDeclare()}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white"
-              >
-                <Plus size={16} />
-                Declare incident
-              </button>
-            )}
+            emptyAction={
+              canDeclareAny ? (
+                <button
+                  type="button"
+                  onClick={() => openDeclare()}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <Plus size={16} />
+                  Declare incident
+                </button>
+              ) : undefined
+            }
             pagination={{
               currentPage: incidentPage?.meta.page ?? page,
               totalPages: incidentPage?.meta.totalPages ?? 1,
@@ -1366,7 +1405,7 @@ export default function MajorIncidentsPage() {
                       onClick={submitDeclaration}
                       disabled={
                         declareMutation.isPending ||
-                        !form.ticketId ||
+                        !canDeclareSelected ||
                         form.channels.length === 0
                       }
                       className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"

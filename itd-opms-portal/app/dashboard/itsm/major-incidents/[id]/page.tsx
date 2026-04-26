@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useMajorIncident,
   usePostMajorIncidentUpdate,
@@ -236,6 +237,7 @@ function ActionButton({
 export default function MajorIncidentDetailPage() {
   const params = useParams<{ id: string }>();
   const id = typeof params.id === "string" ? params.id : "";
+  const { user: currentUser } = useAuth();
 
   const [now, setNow] = useState(Date.now());
   const [activeTab, setActiveTab] = useState<"updates" | "pir">("updates");
@@ -353,6 +355,22 @@ export default function MajorIncidentDetailPage() {
     incident.status === "pir_pending" ||
     incident.status === "closed" ||
     !!incident.resolvedAt;
+  const hasManagePermission =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.permissions?.includes("itsm.manage") ||
+    false;
+  const isPrivileged =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.roles?.includes("admin") ||
+    currentUser?.roles?.includes("tenant_admin") ||
+    false;
+  const canManage =
+    hasManagePermission &&
+    (isPrivileged ||
+      incident.incidentCommanderId === currentUser?.id ||
+      incident.communicationLeadId === currentUser?.id ||
+      incident.ticket?.reporterId === currentUser?.id ||
+      incident.ticket?.assigneeId === currentUser?.id);
 
   const busy =
     transitionMutation.isPending ||
@@ -634,46 +652,48 @@ export default function MajorIncidentDetailPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
-                  Post Update
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
-                  Notify stakeholders
-                </h2>
+              {canManage ? (
+                <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
+                    Post Update
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                    Notify stakeholders
+                  </h2>
 
-                <div className="mt-5 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
-                  <select
-                    value={updateType}
-                    onChange={(event) =>
-                      setUpdateType(event.target.value as UpdateType)
-                    }
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
-                  >
-                    <option value="status_update">Status update</option>
-                    <option value="comms">Communications</option>
-                    <option value="technical">Technical</option>
-                  </select>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
+                    <select
+                      value={updateType}
+                      onChange={(event) =>
+                        setUpdateType(event.target.value as UpdateType)
+                      }
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
+                    >
+                      <option value="status_update">Status update</option>
+                      <option value="comms">Communications</option>
+                      <option value="technical">Technical</option>
+                    </select>
 
-                  <textarea
-                    value={updateMessage}
-                    onChange={(event) => setUpdateMessage(event.target.value)}
-                    rows={4}
-                    placeholder="Share the latest operational picture, next milestone, and stakeholder guidance."
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary)] focus:outline-none"
-                  />
-                </div>
+                    <textarea
+                      value={updateMessage}
+                      onChange={(event) => setUpdateMessage(event.target.value)}
+                      rows={4}
+                      placeholder="Share the latest operational picture, next milestone, and stakeholder guidance."
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary)] focus:outline-none"
+                    />
+                  </div>
 
-                <div className="mt-4 flex justify-end">
-                  <ActionButton
-                    label={updateMutation.isPending ? "Posting..." : "Send update"}
-                    onClick={postUpdate}
-                    disabled={busy || !updateMessage.trim()}
-                  />
-                </div>
-              </section>
+                  <div className="mt-4 flex justify-end">
+                    <ActionButton
+                      label={updateMutation.isPending ? "Posting..." : "Send update"}
+                      onClick={postUpdate}
+                      disabled={busy || !updateMessage.trim()}
+                    />
+                  </div>
+                </section>
+              ) : null}
 
-              {showResolveForm ? (
+              {canManage && showResolveForm ? (
                 <section className="rounded-[28px] border border-emerald-500/25 bg-emerald-500/[0.04] p-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -827,7 +847,7 @@ export default function MajorIncidentDetailPage() {
                 />
               </div>
 
-              {incident.status !== "closed" ? (
+              {canManage && incident.status !== "closed" ? (
                 <div className="mt-4 flex justify-end">
                   <ActionButton
                     label={pirMutation.isPending ? "Submitting PIR..." : "Submit PIR"}
@@ -967,116 +987,118 @@ export default function MajorIncidentDetailPage() {
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
-                  Response Actions
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
-                  Next step controls
-                </h2>
+          {canManage ? (
+            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
+                    Response Actions
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                    Next step controls
+                  </h2>
+                </div>
+                <div
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl"
+                  style={{ backgroundColor: severity.surface, color: severity.color }}
+                >
+                  <Siren size={18} />
+                </div>
               </div>
-              <div
-                className="flex h-11 w-11 items-center justify-center rounded-2xl"
-                style={{ backgroundColor: severity.surface, color: severity.color }}
-              >
-                <Siren size={18} />
-              </div>
-            </div>
 
-            <div className="mt-5 space-y-3">
-              {incident.status === "declared" ? (
-                <ActionButton
-                  label="Begin Investigation"
-                  onClick={() =>
-                    transitionMutation.mutateAsync({
-                      id: incident.id,
-                      targetStatus: "investigating",
-                    })
-                  }
-                  disabled={busy}
-                />
-              ) : null}
-
-              {incident.status === "investigating" ? (
-                <ActionButton
-                  label="Begin Mitigation"
-                  onClick={() =>
-                    transitionMutation.mutateAsync({
-                      id: incident.id,
-                      targetStatus: "mitigating",
-                    })
-                  }
-                  disabled={busy}
-                />
-              ) : null}
-
-              {incident.status === "mitigating" ? (
-                <ActionButton
-                  label="Confirm Mitigated"
-                  onClick={() =>
-                    transitionMutation.mutateAsync({
-                      id: incident.id,
-                      targetStatus: "mitigated",
-                    })
-                  }
-                  disabled={busy}
-                />
-              ) : null}
-
-              {incident.status === "mitigated" ? (
-                <>
+              <div className="mt-5 space-y-3">
+                {incident.status === "declared" ? (
                   <ActionButton
-                    label="Continue Monitoring"
-                    tone="secondary"
+                    label="Begin Investigation"
                     onClick={() =>
                       transitionMutation.mutateAsync({
                         id: incident.id,
-                        targetStatus: "monitoring",
+                        targetStatus: "investigating",
                       })
                     }
                     disabled={busy}
                   />
+                ) : null}
+
+                {incident.status === "investigating" ? (
+                  <ActionButton
+                    label="Begin Mitigation"
+                    onClick={() =>
+                      transitionMutation.mutateAsync({
+                        id: incident.id,
+                        targetStatus: "mitigating",
+                      })
+                    }
+                    disabled={busy}
+                  />
+                ) : null}
+
+                {incident.status === "mitigating" ? (
+                  <ActionButton
+                    label="Confirm Mitigated"
+                    onClick={() =>
+                      transitionMutation.mutateAsync({
+                        id: incident.id,
+                        targetStatus: "mitigated",
+                      })
+                    }
+                    disabled={busy}
+                  />
+                ) : null}
+
+                {incident.status === "mitigated" ? (
+                  <>
+                    <ActionButton
+                      label="Continue Monitoring"
+                      tone="secondary"
+                      onClick={() =>
+                        transitionMutation.mutateAsync({
+                          id: incident.id,
+                          targetStatus: "monitoring",
+                        })
+                      }
+                      disabled={busy}
+                    />
+                    <ActionButton
+                      label="Confirm Resolved"
+                      onClick={() => setShowResolveForm(true)}
+                      disabled={busy}
+                    />
+                  </>
+                ) : null}
+
+                {incident.status === "monitoring" ? (
                   <ActionButton
                     label="Confirm Resolved"
                     onClick={() => setShowResolveForm(true)}
                     disabled={busy}
                   />
-                </>
-              ) : null}
+                ) : null}
 
-              {incident.status === "monitoring" ? (
-                <ActionButton
-                  label="Confirm Resolved"
-                  onClick={() => setShowResolveForm(true)}
-                  disabled={busy}
-                />
-              ) : null}
+                {(incident.status === "resolved" ||
+                  incident.status === "pir_pending") ? (
+                  <ActionButton
+                    label="Open PIR Form"
+                    tone="secondary"
+                    onClick={() => setActiveTab("pir")}
+                    disabled={busy}
+                  />
+                ) : null}
 
-              {(incident.status === "resolved" ||
-                incident.status === "pir_pending") ? (
-                <ActionButton
-                  label="Open PIR Form"
-                  tone="secondary"
-                  onClick={() => setActiveTab("pir")}
-                  disabled={busy}
-                />
-              ) : null}
-
-              {incident.status === "closed" ? (
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-sm text-emerald-800">
-                  <p className="inline-flex items-center gap-2 font-semibold">
-                    <CheckCircle2 size={16} />
-                    PIR complete and incident closed
-                  </p>
-                  <p className="mt-2 leading-6">
-                    Final closure recorded {formatDateTime(incident.closedAt)}.
-                  </p>
-                </div>
-              ) : null}
+                {incident.status === "closed" ? (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-sm text-emerald-800">
+                    <p className="inline-flex items-center gap-2 font-semibold">
+                      <CheckCircle2 size={16} />
+                      PIR complete and incident closed
+                    </p>
+                    <p className="mt-2 leading-6">
+                      Final closure recorded {formatDateTime(incident.closedAt)}.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {incident.resolutionSummary ? (
             <div className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-5">

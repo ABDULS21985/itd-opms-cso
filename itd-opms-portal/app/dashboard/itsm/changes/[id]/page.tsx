@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useChange,
   useTransitionChange,
@@ -106,6 +107,7 @@ export default function ChangeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const { user: currentUser } = useAuth();
 
   const { data: change, isLoading } = useChange(id);
   const transitionMutation = useTransitionChange(id);
@@ -138,6 +140,20 @@ export default function ChangeDetailPage() {
   const clsMeta = CLASSIFICATION_META[change.changeClassification ?? ""] ?? CLASSIFICATION_META.normal;
   const ClsIcon = clsMeta.icon;
   const transitions = CHANGE_TRANSITIONS[change.status] ?? [];
+  const hasManagePermission =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.permissions?.includes("itsm.manage") ||
+    false;
+  const isPrivileged =
+    currentUser?.permissions?.includes("*") ||
+    currentUser?.roles?.includes("admin") ||
+    currentUser?.roles?.includes("tenant_admin") ||
+    false;
+  const canManage =
+    hasManagePermission &&
+    (isPrivileged ||
+      change.reporterId === currentUser?.id ||
+      change.assigneeId === currentUser?.id);
 
   return (
     <div className="space-y-8">
@@ -170,7 +186,7 @@ export default function ChangeDetailPage() {
       </div>
 
       {/* Action Buttons */}
-      {transitions.length > 0 && (
+      {canManage && transitions.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           {transitions.map((t) => {
             const TIcon = t.icon;
@@ -197,7 +213,7 @@ export default function ChangeDetailPage() {
       )}
 
       {/* CAB Decision Form */}
-      {change.status === "cab_review" && (
+      {canManage && change.status === "cab_review" && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 space-y-4">
           <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">CAB Decision Required</h3>
           <div className="flex items-center gap-3 flex-wrap">
@@ -231,7 +247,7 @@ export default function ChangeDetailPage() {
       )}
 
       {/* PIR Form */}
-      {change.status === "pir_pending" && (
+      {canManage && change.status === "pir_pending" && (
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-6 space-y-4">
           <h3 className="text-sm font-semibold text-violet-400 uppercase tracking-wider">Post-Implementation Review</h3>
           <textarea
