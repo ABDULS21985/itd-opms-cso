@@ -225,9 +225,22 @@ export interface EvidenceCollection {
   collectorId?: string;
   reviewerId?: string;
   approvedAt?: string;
+  dueDate?: string;
+  assignedAt?: string;
   checksum?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AuditEvidencePack {
+  id: string;
+  auditId: string;
+  tenantId: string;
+  generatedBy: string;
+  format: "json" | "html" | "pdf" | string;
+  checksum: string;
+  content: Record<string, unknown>;
+  generatedAt: string;
 }
 
 export interface AccessReviewCampaign {
@@ -348,6 +361,7 @@ export interface CreateEvidenceCollectionRequest {
   description?: string;
   evidenceItemIds?: string[];
   collectorId?: string;
+  dueDate?: string;
 }
 
 export interface UpdateEvidenceCollectionRequest

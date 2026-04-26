@@ -40,6 +40,7 @@ import {
   useCreateEvidenceCollection,
   useUpdateEvidenceCollection,
   useApproveEvidenceCollection,
+  useGenerateEvidencePack,
 } from "@/hooks/use-grc";
 import {
   AUDIT_STATUS,
@@ -588,13 +589,14 @@ function CreateEvidenceModal({
   const [form, setForm] = useState<CreateEvidenceCollectionRequest>({
     title: "",
     description: "",
+    dueDate: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createEvidence.mutate(form, {
       onSuccess: () => {
-        setForm({ title: "", description: "" });
+        setForm({ title: "", description: "", dueDate: "" });
         onClose();
       },
     });
@@ -612,6 +614,22 @@ function CreateEvidenceModal({
         <div>
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Description</label>
           <textarea rows={3} value={form.description ?? ""} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Describe the evidence to be collected..." className={`${inputCls} resize-none`} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Due Date</label>
+          <input
+            type="date"
+            value={form.dueDate?.split("T")[0] ?? ""}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                dueDate: e.target.value
+                  ? new Date(e.target.value + "T00:00:00Z").toISOString()
+                  : "",
+              }))
+            }
+            className={inputCls}
+          />
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-1)]">Cancel</button>
@@ -694,6 +712,7 @@ export default function GRCAuditDetailPage({
   const { data: evidenceData, isLoading: evidenceLoading } = useEvidenceCollections(id);
   const updateEvidence = useUpdateEvidenceCollection(id, undefined);
   const approveEvidence = useApproveEvidenceCollection(id);
+  const generateEvidencePack = useGenerateEvidencePack(id);
 
   const findings = findingsData?.data ?? [];
   const evidence = evidenceData ?? [];
@@ -737,6 +756,22 @@ export default function GRCAuditDetailPage({
     // We use the apiClient directly through a hook that was already set up
     // but since useUpdateEvidenceCollection needs a fixed id, we'll use a workaround
     updateEvidence.mutate(body);
+  };
+
+  const handleGenerateEvidencePack = () => {
+    generateEvidencePack.mutate("json", {
+      onSuccess: (pack) => {
+        const blob = new Blob([JSON.stringify(pack.content, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `audit-evidence-pack-${id}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      },
+    });
   };
 
   if (isLoading) {
@@ -837,6 +872,15 @@ export default function GRCAuditDetailPage({
             </button>
           ))}
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={handleGenerateEvidencePack}
+            disabled={generateEvidencePack.isPending}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-1)] disabled:opacity-50 transition-colors"
+          >
+            <FolderArchive size={13} />
+            {generateEvidencePack.isPending ? "Generating..." : "Evidence Pack"}
+          </button>
           {audit.status !== "completed" && (
             <button type="button" onClick={() => setShowDelete(true)} className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors">
               <Trash2 size={13} /> Delete
@@ -1165,6 +1209,11 @@ export default function GRCAuditDetailPage({
                         {collection.approvedAt && (
                           <span className="flex items-center gap-1 text-emerald-600">
                             <CheckCircle2 size={12} /> Approved {formatDate(collection.approvedAt)}
+                          </span>
+                        )}
+                        {collection.dueDate && (
+                          <span className="flex items-center gap-1">
+                            <Clock3 size={12} /> Due {formatDate(collection.dueDate)}
                           </span>
                         )}
                       </div>

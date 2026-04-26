@@ -25,10 +25,14 @@ import {
   useApproveRequest,
   useRejectRequest,
   useCancelServiceRequest,
+  useStartServiceRequestFulfillment,
+  useFulfillServiceRequest,
+  useCloseServiceRequest,
   type ApprovalTask,
   type RequestTimelineEntry,
 } from "@/hooks/use-itsm";
 import { SLAGauge } from "@/app/dashboard/itsm/tickets/[id]/page";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { useAuth } from "@/providers/auth-provider";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
@@ -53,20 +57,24 @@ const PRIORITY_COLORS: Record<string, { bg: string; text: string; label: string 
 const EVENT_ICONS: Record<string, typeof Send> = {
   submitted: Send,
   approved: CheckCircle,
+  all_approved: CheckCircle,
   rejected: XCircle,
   comment: MessageSquare,
   in_progress: PlayCircle,
   fulfilled: Package,
+  closed: CheckCircle,
   cancelled: Ban,
 };
 
 const EVENT_COLORS: Record<string, string> = {
   submitted: "#3B82F6",
   approved: "#10B981",
+  all_approved: "#10B981",
   rejected: "#EF4444",
   comment: "#8B5CF6",
   in_progress: "#F59E0B",
   fulfilled: "#10B981",
+  closed: "#0EA5E9",
   cancelled: "#9CA3AF",
 };
 
@@ -81,6 +89,7 @@ function getActiveStep(status: string): number {
     case "fulfilled":
       return 2;
     case "completed":
+    case "closed":
       return 3;
     default:
       return 0;
@@ -369,11 +378,17 @@ export default function ServiceRequestDetailPage({
   const approveRequest = useApproveRequest();
   const rejectRequest = useRejectRequest();
   const cancelRequest = useCancelServiceRequest();
+  const startFulfillment = useStartServiceRequestFulfillment();
+  const fulfillRequest = useFulfillServiceRequest();
+  const closeRequest = useCloseServiceRequest();
 
   const [approveComment, setApproveComment] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const [fulfillmentNotes, setFulfillmentNotes] = useState("");
+  const [closeComment, setCloseComment] = useState("");
   const [showApproveForm, setShowApproveForm] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [showFulfillForm, setShowFulfillForm] = useState(false);
 
   /* ---- Loading ---- */
   if (isLoading) {
@@ -430,12 +445,18 @@ export default function ServiceRequestDetailPage({
 
   const canCancel =
     isRequester &&
-    ["pending_approval", "approved"].includes(request.status);
+    ["pending_approval", "approved", "in_progress"].includes(request.status);
+  const canStartFulfillment = request.status === "approved";
+  const canFulfill = ["approved", "in_progress"].includes(request.status);
+  const canClose = request.status === "fulfilled";
 
   const isActing =
     approveRequest.isPending ||
     rejectRequest.isPending ||
-    cancelRequest.isPending;
+    cancelRequest.isPending ||
+    startFulfillment.isPending ||
+    fulfillRequest.isPending ||
+    closeRequest.isPending;
 
   function handleApprove(e: React.FormEvent) {
     e.preventDefault();
@@ -472,6 +493,31 @@ export default function ServiceRequestDetailPage({
     )
       return;
     cancelRequest.mutate(id);
+  }
+
+  function handleStartFulfillment() {
+    startFulfillment.mutate({ id });
+  }
+
+  function handleFulfill(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fulfillmentNotes.trim()) return;
+    fulfillRequest.mutate(
+      { id, notes: fulfillmentNotes.trim() },
+      {
+        onSuccess: () => {
+          setShowFulfillForm(false);
+          setFulfillmentNotes("");
+        },
+      },
+    );
+  }
+
+  function handleClose() {
+    closeRequest.mutate(
+      { id, comment: closeComment.trim() || undefined },
+      { onSuccess: () => setCloseComment("") },
+    );
   }
 
   /* ---- Render form data as key-value pairs ---- */
@@ -780,6 +826,16 @@ export default function ServiceRequestDetailPage({
                   </dd>
                 </div>
               )}
+              {request.closedAt && (
+                <div>
+                  <dt className="text-xs font-medium text-[var(--neutral-gray)]">
+                    Closed
+                  </dt>
+                  <dd className="text-[var(--text-primary)] mt-0.5">
+                    {formatDate(request.closedAt)}
+                  </dd>
+                </div>
+              )}
               {request.cancelledAt && (
                 <div>
                   <dt className="text-xs font-medium text-[var(--neutral-gray)]">
@@ -824,6 +880,131 @@ export default function ServiceRequestDetailPage({
               </div>
             </motion.div>
           )}
+
+          {/* Fulfillment actions */}
+          {(canStartFulfillment || canFulfill || canClose) && (
+            <PermissionGate permission="itsm.manage" fallback={null}>
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.14 }}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+              >
+                <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+                  Fulfillment Controls
+                </h2>
+                <div className="space-y-2">
+                  {canStartFulfillment && (
+                    <button
+                      type="button"
+                      disabled={isActing}
+                      onClick={handleStartFulfillment}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "#2563EB" }}
+                    >
+                      {startFulfillment.isPending ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <PlayCircle size={16} />
+                      )}
+                      Start Fulfillment
+                    </button>
+                  )}
+
+                  {canFulfill && (
+                    <button
+                      type="button"
+                      disabled={isActing}
+                      onClick={() => setShowFulfillForm((v) => !v)}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "#10B981" }}
+                    >
+                      {fulfillRequest.isPending ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Package size={16} />
+                      )}
+                      Mark Fulfilled
+                    </button>
+                  )}
+
+                  {canClose && (
+                    <div className="space-y-2">
+                      <textarea
+                        value={closeComment}
+                        onChange={(e) => setCloseComment(e.target.value)}
+                        placeholder="Closure comment (optional)"
+                        rows={2}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 resize-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={isActing}
+                        onClick={handleClose}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        style={{ backgroundColor: "#0EA5E9" }}
+                      >
+                        {closeRequest.isPending ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <CheckCircle size={16} />
+                        )}
+                        Close Request
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </PermissionGate>
+          )}
+
+          <AnimatePresence>
+            {showFulfillForm && (
+              <PermissionGate permission="itsm.manage" fallback={null}>
+                <motion.form
+                  onSubmit={handleFulfill}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="rounded-2xl border bg-[var(--surface-0)] p-5 space-y-3"
+                  style={{ borderColor: "#10B98140" }}
+                >
+                  <label className="block text-sm font-medium text-[var(--text-primary)]">
+                    Fulfillment Notes{" "}
+                    <span className="text-[var(--error)]">*</span>
+                  </label>
+                  <textarea
+                    value={fulfillmentNotes}
+                    onChange={(e) => setFulfillmentNotes(e.target.value)}
+                    placeholder="Record what was fulfilled, evidence, and any handover notes..."
+                    rows={4}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 resize-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={fulfillRequest.isPending || !fulfillmentNotes.trim()}
+                      className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "#10B981" }}
+                    >
+                      {fulfillRequest.isPending && (
+                        <Loader2 size={12} className="animate-spin" />
+                      )}
+                      <Package size={14} />
+                      Confirm Fulfillment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowFulfillForm(false)}
+                      className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.form>
+              </PermissionGate>
+            )}
+          </AnimatePresence>
 
           {/* Action buttons */}
           {(isApprover || canCancel) && (

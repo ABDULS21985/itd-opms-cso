@@ -1701,6 +1701,7 @@ export interface ServiceRequest {
   rejectionReason?: string;
   fulfillmentNotes?: string;
   fulfilledAt?: string;
+  closedAt?: string;
   cancelledAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -1871,6 +1872,76 @@ export function useCancelServiceRequest() {
     },
     onError: (error) => {
       toastMutationError(error, "Failed to cancel request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/start-fulfillment - start fulfillment work.
+ */
+export function useStartServiceRequestFulfillment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, assignedTo }: { id: string; assignedTo?: string }) =>
+      apiClient.post<ServiceRequest>(
+        `/itsm/catalog/requests/${id}/start-fulfillment`,
+        { assignedTo },
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      toast.success("Fulfillment started");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to start fulfillment");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/fulfill - mark a service request fulfilled.
+ */
+export function useFulfillServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes: string }) =>
+      apiClient.post<ServiceRequest>(`/itsm/catalog/requests/${id}/fulfill`, {
+        fulfillmentNotes: notes,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      toast.success("Request marked fulfilled");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to fulfill request");
+    },
+  });
+}
+
+/**
+ * POST /itsm/catalog/requests/{id}/close - close a fulfilled service request.
+ */
+export function useCloseServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
+      apiClient.post<ServiceRequest>(`/itsm/catalog/requests/${id}/close`, {
+        comment,
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["service-requests"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-request", variables.id],
+      });
+      toast.success("Request closed");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to close request");
     },
   });
 }

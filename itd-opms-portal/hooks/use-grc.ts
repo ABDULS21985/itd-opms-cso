@@ -8,6 +8,7 @@ import type {
   GRCAudit,
   AuditFinding,
   EvidenceCollection,
+  AuditEvidencePack,
   AccessReviewCampaign,
   AccessReviewEntry,
   ComplianceControl,
@@ -545,6 +546,29 @@ export function useApproveEvidenceCollection(auditId: string | undefined) {
     },
     onError: () => {
       toast.error("Failed to approve evidence collection");
+    },
+  });
+}
+
+/**
+ * POST /grc/audits/{auditId}/evidence-pack - generate an audit evidence export snapshot.
+ */
+export function useGenerateEvidencePack(auditId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (format: "json" | "html" | "pdf" = "json") =>
+      apiClient.post<AuditEvidencePack>(
+        `/grc/audits/${auditId}/evidence-pack`,
+        { format },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["grc-evidence-collections", auditId],
+      });
+      toast.success("Evidence pack generated");
+    },
+    onError: () => {
+      toast.error("Failed to generate evidence pack");
     },
   });
 }
