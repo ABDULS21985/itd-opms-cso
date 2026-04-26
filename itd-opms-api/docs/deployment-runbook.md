@@ -35,6 +35,8 @@ Copy `.env.example` to `.env` and fill in production values. Key variables:
 | `DB_PASSWORD`          | PostgreSQL password                    | (secret)                                    |
 | `DB_NAME`              | Database name                          | `itd_opms`                                  |
 | `DB_SSLMODE`           | SSL mode (disable/require/verify-full) | `require`                                   |
+| `POSTGRES_ENCRYPTED_DATA_DIR` | Encrypted host path for PostgreSQL data when using `docker-compose.postgres-encrypted.yml` | `/secure/opms/postgres/data` |
+| `POSTGRES_ENCRYPTED_WAL_DIR` | Encrypted host path for archived WAL when using `docker-compose.postgres-encrypted.yml` | `/secure/opms/postgres/wal_archive` |
 | `DB_MAX_CONNS`         | Max pool connections                   | `25`                                        |
 | `DB_MIN_CONNS`         | Min pool connections                   | `5`                                         |
 | `REDIS_HOST`           | Redis hostname                         | `redis`                                     |

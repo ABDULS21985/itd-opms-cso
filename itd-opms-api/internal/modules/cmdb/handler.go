@@ -22,6 +22,7 @@ type Handler struct {
 	verification *VerificationHandler
 	verifSvc     *VerificationService
 	erp          *ERPHandler
+	mega         *MEGAHandler
 }
 
 // NewHandler creates a new CMDB Handler with all sub-handlers wired up.
@@ -46,6 +47,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any)
 	discoverySvc := NewDiscoveryService(pool, auditSvc, graphClient, discoveryCfg)
 	verifSvc := NewVerificationService(pool, auditSvc)
 	erpSvc := NewERPService(pool, auditSvc)
+	megaSvc := NewMEGAService(pool, auditSvc)
 
 	return &Handler{
 		asset:        NewAssetHandler(assetSvc),
@@ -56,6 +58,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any)
 		verification: NewVerificationHandler(verifSvc),
 		verifSvc:     verifSvc,
 		erp:          NewERPHandler(erpSvc),
+		mega:         NewMEGAHandler(megaSvc),
 	}
 }
 
@@ -100,6 +103,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// ERP integration
 	r.Route("/integrations/erp", func(r chi.Router) {
 		h.erp.Routes(r)
+	})
+
+	// MEGA Enterprise Architecture XML integration
+	r.Route("/integrations/mega", func(r chi.Router) {
+		h.mega.Routes(r)
 	})
 
 	// Asset-level financial endpoints (mounted under /assets/{id}/...)

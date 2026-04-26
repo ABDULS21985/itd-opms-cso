@@ -1,0 +1,24 @@
+# PostgreSQL encryption-at-rest production overlay.
+#
+# PostgreSQL Community Edition does not provide native TDE. Use this overlay
+# with an encrypted host block device, encrypted filesystem, or managed
+# PostgreSQL volume. The bind-mounted paths below must already live on that
+# encrypted storage before the stack is started.
+#
+# Usage:
+#   export POSTGRES_ENCRYPTED_DATA_DIR=/secure/opms/postgres/data
+#   export POSTGRES_ENCRYPTED_WAL_DIR=/secure/opms/postgres/wal_archive
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     -f docker-compose.postgres-encrypted.yml up -d
+
+services:
+  postgres:
+    volumes:
+      - type: bind
+        source: ${POSTGRES_ENCRYPTED_DATA_DIR:?set POSTGRES_ENCRYPTED_DATA_DIR to an encrypted host path}
+        target: /var/lib/postgresql/data
+      - type: bind
+        source: ${POSTGRES_ENCRYPTED_WAL_DIR:?set POSTGRES_ENCRYPTED_WAL_DIR to an encrypted host path}
+        target: /var/lib/postgresql/wal_archive
+    environment:
+      OPMS_POSTGRES_ENCRYPTION_AT_REST: host-volume

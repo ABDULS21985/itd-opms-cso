@@ -2,15 +2,21 @@
 // systems into the ITD-OPMS CMDB discovery pipeline.
 //
 // oracle_erp.go defines the pluggable Oracle ERP integration for financial
-// data — asset costs, procurement, and budgets. The current implementation
-// is a stub; swap in the real connector once CBN provides ERP API details.
+// data: asset costs, procurement, and budgets.
 
 package connectors
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -44,14 +50,14 @@ type AssetCostUpdate struct {
 
 // PurchaseOrder represents an ERP purchase order.
 type PurchaseOrder struct {
-	PONumber      string    `json:"poNumber"`
-	VendorName    string    `json:"vendorName"`
-	OrderDate     time.Time `json:"orderDate"`
-	TotalAmount   float64   `json:"totalAmount"`
-	Currency      string    `json:"currency"`
-	Status        string    `json:"status"`
-	DeliveryDate  *time.Time `json:"deliveryDate"`
-	LineItems     []POLineItem `json:"lineItems"`
+	PONumber     string       `json:"poNumber"`
+	VendorName   string       `json:"vendorName"`
+	OrderDate    time.Time    `json:"orderDate"`
+	TotalAmount  float64      `json:"totalAmount"`
+	Currency     string       `json:"currency"`
+	Status       string       `json:"status"`
+	DeliveryDate *time.Time   `json:"deliveryDate"`
+	LineItems    []POLineItem `json:"lineItems"`
 }
 
 // POLineItem is a single line on a purchase order.
@@ -74,13 +80,13 @@ type PendingDelivery struct {
 
 // BudgetAllocation represents a cost-center budget from the ERP.
 type BudgetAllocation struct {
-	CostCenter  string  `json:"costCenter"`
-	FiscalYear  int     `json:"fiscalYear"`
-	Allocated   float64 `json:"allocated"`
-	Spent       float64 `json:"spent"`
-	Committed   float64 `json:"committed"`
-	Available   float64 `json:"available"`
-	Currency    string  `json:"currency"`
+	CostCenter string  `json:"costCenter"`
+	FiscalYear int     `json:"fiscalYear"`
+	Allocated  float64 `json:"allocated"`
+	Spent      float64 `json:"spent"`
+	Committed  float64 `json:"committed"`
+	Available  float64 `json:"available"`
+	Currency   string  `json:"currency"`
 }
 
 // ──────────────────────────────────────────────
@@ -110,28 +116,421 @@ type ERPConnector interface {
 // ERPConfig holds Oracle ERP connection configuration.
 // Populated from environment variables.
 type ERPConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Endpoint string `json:"endpoint"`
-	APIKey   string `json:"-"` // never serialise
-	AuthType string `json:"authType"` // "api_key" | "oauth2" | "basic"
+	Enabled      bool          `json:"enabled"`
+	Endpoint     string        `json:"endpoint"`
+	APIKey       string        `json:"-"` // never serialise
+	APIKeyHeader string        `json:"-"`
+	Username     string        `json:"-"`
+	Password     string        `json:"-"`
+	AuthType     string        `json:"authType"` // "bearer" | "api_key" | "basic"
+	Timeout      time.Duration `json:"timeout"`
+
+	AssetFinancialsPath   string `json:"assetFinancialsPath"`
+	AssetCostsPath        string `json:"assetCostsPath"`
+	PurchaseOrderPath     string `json:"purchaseOrderPath"`
+	PendingDeliveriesPath string `json:"pendingDeliveriesPath"`
+	BudgetAllocationPath  string `json:"budgetAllocationPath"`
 }
 
 // LoadERPConfig reads ERP settings from environment variables.
 func LoadERPConfig() ERPConfig {
+	timeout := time.Duration(envInt("ERP_TIMEOUT_SECONDS", 30)) * time.Second
 	return ERPConfig{
-		Enabled:  os.Getenv("ERP_ENABLED") == "true",
-		Endpoint: os.Getenv("ERP_ENDPOINT"),
-		APIKey:   os.Getenv("ERP_API_KEY"),
-		AuthType: os.Getenv("ERP_AUTH_TYPE"),
+		Enabled:      os.Getenv("ERP_ENABLED") == "true",
+		Endpoint:     strings.TrimRight(os.Getenv("ERP_ENDPOINT"), "/"),
+		APIKey:       os.Getenv("ERP_API_KEY"),
+		APIKeyHeader: firstNonEmpty(os.Getenv("ERP_API_KEY_HEADER"), "X-API-Key"),
+		Username:     os.Getenv("ERP_USERNAME"),
+		Password:     os.Getenv("ERP_PASSWORD"),
+		AuthType:     firstNonEmpty(os.Getenv("ERP_AUTH_TYPE"), "bearer"),
+		Timeout:      timeout,
+
+		AssetFinancialsPath:   firstNonEmpty(os.Getenv("ERP_ASSET_FINANCIALS_PATH"), "/assets/{assetTag}/financials"),
+		AssetCostsPath:        firstNonEmpty(os.Getenv("ERP_ASSET_COSTS_PATH"), "/assets/costs?since={since}"),
+		PurchaseOrderPath:     firstNonEmpty(os.Getenv("ERP_PURCHASE_ORDER_PATH"), "/purchase-orders/{poNumber}"),
+		PendingDeliveriesPath: firstNonEmpty(os.Getenv("ERP_PENDING_DELIVERIES_PATH"), "/purchase-orders/pending-deliveries"),
+		BudgetAllocationPath:  firstNonEmpty(os.Getenv("ERP_BUDGET_ALLOCATION_PATH"), "/budgets/{costCenter}/{fiscalYear}"),
 	}
 }
 
 // ──────────────────────────────────────────────
-// Stub implementation
+// Oracle REST implementation
 // ──────────────────────────────────────────────
 
+// OracleERPConnector reads ERP data through configurable Oracle REST endpoints.
+// The path templates support placeholders such as {assetTag}, {since},
+// {poNumber}, {costCenter}, and {fiscalYear}. This keeps the connector usable
+// with Oracle Fusion REST APIs or an integration gateway without hard-coding
+// CBN-specific endpoint shapes in application code.
+type OracleERPConnector struct {
+	config     ERPConfig
+	httpClient *http.Client
+}
+
+// NewOracleERPConnector creates a REST-backed Oracle ERP connector.
+func NewOracleERPConnector(cfg ERPConfig) *OracleERPConnector {
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	return &OracleERPConnector{
+		config:     cfg,
+		httpClient: &http.Client{Timeout: timeout},
+	}
+}
+
+func (c *OracleERPConnector) GetAssetFinancials(assetTag string) (*AssetFinancials, error) {
+	if strings.TrimSpace(assetTag) == "" {
+		return nil, fmt.Errorf("asset tag is required")
+	}
+
+	payload, err := c.getObject(c.config.AssetFinancialsPath, map[string]string{
+		"assetTag": assetTag,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	purchaseDate := getTime(payload, "purchaseDate", "purchase_date", "datePlacedInService", "DatePlacedInService")
+	return &AssetFinancials{
+		AssetTag:         firstNonEmpty(getString(payload, "assetTag", "asset_tag", "assetNumber", "AssetNumber"), assetTag),
+		PurchaseDate:     purchaseDate,
+		PurchasePrice:    getFloat(payload, "purchasePrice", "purchase_price", "cost", "Cost", "originalCost", "OriginalCost"),
+		Currency:         firstNonEmpty(getString(payload, "currency", "Currency", "currencyCode", "CurrencyCode"), "NGN"),
+		DepreciationRate: getFloat(payload, "depreciationRate", "depreciation_rate", "DepreciationRate"),
+		CurrentBookValue: getFloat(payload, "currentBookValue", "current_book_value", "netBookValue", "NetBookValue"),
+		CostCenter:       getString(payload, "costCenter", "cost_center", "CostCenter"),
+		PONumber:         getString(payload, "poNumber", "po_number", "purchaseOrderNumber", "PurchaseOrderNumber"),
+	}, nil
+}
+
+func (c *OracleERPConnector) SyncAssetCosts(since time.Time) ([]AssetCostUpdate, error) {
+	items, err := c.getList(c.config.AssetCostsPath, map[string]string{
+		"since": since.UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	updates := make([]AssetCostUpdate, 0, len(items))
+	for _, item := range items {
+		assetTag := getString(item, "assetTag", "asset_tag", "assetNumber", "AssetNumber")
+		if strings.TrimSpace(assetTag) == "" {
+			continue
+		}
+		updates = append(updates, AssetCostUpdate{
+			AssetTag:         assetTag,
+			ERPAssetID:       getString(item, "erpAssetId", "erp_asset_id", "assetId", "AssetId"),
+			PurchasePrice:    getFloat(item, "purchasePrice", "purchase_price", "cost", "Cost", "originalCost", "OriginalCost"),
+			CurrentBookValue: getFloat(item, "currentBookValue", "current_book_value", "netBookValue", "NetBookValue"),
+			DepreciationRate: getFloat(item, "depreciationRate", "depreciation_rate", "DepreciationRate"),
+			Currency:         firstNonEmpty(getString(item, "currency", "Currency", "currencyCode", "CurrencyCode"), "NGN"),
+			CostCenter:       getString(item, "costCenter", "cost_center", "CostCenter"),
+			PONumber:         getString(item, "poNumber", "po_number", "purchaseOrderNumber", "PurchaseOrderNumber"),
+		})
+	}
+	return updates, nil
+}
+
+func (c *OracleERPConnector) GetPurchaseOrder(poNumber string) (*PurchaseOrder, error) {
+	if strings.TrimSpace(poNumber) == "" {
+		return nil, fmt.Errorf("purchase order number is required")
+	}
+
+	payload, err := c.getObject(c.config.PurchaseOrderPath, map[string]string{
+		"poNumber": poNumber,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	orderDate := getTime(payload, "orderDate", "order_date", "CreationDate", "creationDate")
+	deliveryDate := optionalTime(payload, "deliveryDate", "delivery_date", "PromisedDate", "promisedDate")
+	lineItems := parsePOLineItems(payload)
+
+	return &PurchaseOrder{
+		PONumber:     firstNonEmpty(getString(payload, "poNumber", "po_number", "orderNumber", "OrderNumber"), poNumber),
+		VendorName:   getString(payload, "vendorName", "vendor_name", "Supplier", "supplier"),
+		OrderDate:    orderDate,
+		TotalAmount:  getFloat(payload, "totalAmount", "total_amount", "Amount", "amount"),
+		Currency:     firstNonEmpty(getString(payload, "currency", "Currency", "currencyCode", "CurrencyCode"), "NGN"),
+		Status:       getString(payload, "status", "Status"),
+		DeliveryDate: deliveryDate,
+		LineItems:    lineItems,
+	}, nil
+}
+
+func (c *OracleERPConnector) GetPendingDeliveries() ([]PendingDelivery, error) {
+	items, err := c.getList(c.config.PendingDeliveriesPath, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	deliveries := make([]PendingDelivery, 0, len(items))
+	for _, item := range items {
+		expectedDate := getTime(item, "expectedDate", "expected_date", "PromisedDate", "promisedDate")
+		deliveries = append(deliveries, PendingDelivery{
+			PONumber:     getString(item, "poNumber", "po_number", "orderNumber", "OrderNumber"),
+			Description:  getString(item, "description", "Description", "itemDescription", "ItemDescription"),
+			ExpectedDate: expectedDate,
+			Quantity:     int(getFloat(item, "quantity", "Quantity")),
+			VendorName:   getString(item, "vendorName", "vendor_name", "Supplier", "supplier"),
+		})
+	}
+	return deliveries, nil
+}
+
+func (c *OracleERPConnector) GetBudgetAllocation(costCenter string, fiscalYear int) (*BudgetAllocation, error) {
+	if strings.TrimSpace(costCenter) == "" {
+		return nil, fmt.Errorf("cost center is required")
+	}
+	if fiscalYear <= 0 {
+		return nil, fmt.Errorf("fiscal year is required")
+	}
+
+	payload, err := c.getObject(c.config.BudgetAllocationPath, map[string]string{
+		"costCenter": costCenter,
+		"fiscalYear": strconv.Itoa(fiscalYear),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &BudgetAllocation{
+		CostCenter: costCenter,
+		FiscalYear: fiscalYear,
+		Allocated:  getFloat(payload, "allocated", "Allocated", "budgetAmount", "BudgetAmount"),
+		Spent:      getFloat(payload, "spent", "Spent", "actualAmount", "ActualAmount"),
+		Committed:  getFloat(payload, "committed", "Committed", "encumbranceAmount", "EncumbranceAmount"),
+		Available:  getFloat(payload, "available", "Available", "fundsAvailable", "FundsAvailable"),
+		Currency:   firstNonEmpty(getString(payload, "currency", "Currency", "currencyCode", "CurrencyCode"), "NGN"),
+	}, nil
+}
+
+func (c *OracleERPConnector) getObject(pathTemplate string, vars map[string]string) (map[string]any, error) {
+	items, err := c.getList(pathTemplate, vars)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("ERP response did not contain any records")
+	}
+	return items[0], nil
+}
+
+func (c *OracleERPConnector) getList(pathTemplate string, vars map[string]string) ([]map[string]any, error) {
+	if strings.TrimSpace(c.config.Endpoint) == "" {
+		return nil, fmt.Errorf("ERP endpoint is not configured")
+	}
+
+	endpoint := renderERPPath(pathTemplate, vars)
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = strings.TrimRight(c.config.Endpoint, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create ERP request: %w", err)
+	}
+	c.applyAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call ERP endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read ERP response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ERP endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload any
+	decoder := json.NewDecoder(strings.NewReader(string(body)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode ERP response: %w", err)
+	}
+	return extractERPRecords(payload), nil
+}
+
+func (c *OracleERPConnector) applyAuth(req *http.Request) {
+	switch strings.ToLower(strings.TrimSpace(c.config.AuthType)) {
+	case "basic":
+		if c.config.Username != "" || c.config.Password != "" {
+			req.SetBasicAuth(c.config.Username, c.config.Password)
+		}
+	case "api_key":
+		if c.config.APIKey != "" {
+			req.Header.Set(firstNonEmpty(c.config.APIKeyHeader, "X-API-Key"), c.config.APIKey)
+		}
+	default:
+		if c.config.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+		}
+	}
+	req.Header.Set("Accept", "application/json")
+}
+
+func renderERPPath(pathTemplate string, vars map[string]string) string {
+	rendered := pathTemplate
+	for key, value := range vars {
+		escaped := url.PathEscape(value)
+		if strings.Contains(rendered, "?") {
+			escaped = url.QueryEscape(value)
+		}
+		rendered = strings.ReplaceAll(rendered, "{"+key+"}", escaped)
+	}
+	return rendered
+}
+
+func extractERPRecords(payload any) []map[string]any {
+	switch value := payload.(type) {
+	case []any:
+		return mapsFromAnySlice(value)
+	case map[string]any:
+		for _, key := range []string{"items", "value", "data", "records", "results"} {
+			if raw, ok := lookupAny(value, key); ok {
+				if list, ok := raw.([]any); ok {
+					return mapsFromAnySlice(list)
+				}
+				if nested, ok := raw.(map[string]any); ok {
+					return []map[string]any{nested}
+				}
+			}
+		}
+		return []map[string]any{value}
+	default:
+		return nil
+	}
+}
+
+func mapsFromAnySlice(items []any) []map[string]any {
+	records := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if record, ok := item.(map[string]any); ok {
+			records = append(records, record)
+		}
+	}
+	return records
+}
+
+func lookupAny(payload map[string]any, key string) (any, bool) {
+	if value, ok := payload[key]; ok {
+		return value, true
+	}
+	for existingKey, value := range payload {
+		if strings.EqualFold(existingKey, key) {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func getString(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := lookupAny(payload, key)
+		if !ok || value == nil {
+			continue
+		}
+		switch v := value.(type) {
+		case string:
+			return strings.TrimSpace(v)
+		case json.Number:
+			return v.String()
+		default:
+			return strings.TrimSpace(fmt.Sprintf("%v", v))
+		}
+	}
+	return ""
+}
+
+func getFloat(payload map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		value, ok := lookupAny(payload, key)
+		if !ok || value == nil {
+			continue
+		}
+		switch v := value.(type) {
+		case float64:
+			return v
+		case int:
+			return float64(v)
+		case int64:
+			return float64(v)
+		case json.Number:
+			f, _ := v.Float64()
+			return f
+		case string:
+			f, _ := strconv.ParseFloat(strings.ReplaceAll(v, ",", ""), 64)
+			return f
+		}
+	}
+	return 0
+}
+
+func getTime(payload map[string]any, keys ...string) time.Time {
+	if parsed := optionalTime(payload, keys...); parsed != nil {
+		return *parsed
+	}
+	return time.Time{}
+}
+
+func optionalTime(payload map[string]any, keys ...string) *time.Time {
+	raw := getString(payload, keys...)
+	if raw == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02", "2006-01-02 15:04:05", "02-Jan-2006"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func parsePOLineItems(payload map[string]any) []POLineItem {
+	raw, ok := lookupAny(payload, "lineItems")
+	if !ok {
+		raw, ok = lookupAny(payload, "lines")
+	}
+	if !ok {
+		raw, ok = lookupAny(payload, "items")
+	}
+	if !ok {
+		return []POLineItem{}
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return []POLineItem{}
+	}
+	lineItems := make([]POLineItem, 0, len(items))
+	for i, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			continue
+		}
+		itemNumber := int(getFloat(item, "itemNumber", "lineNumber", "LineNumber"))
+		if itemNumber == 0 {
+			itemNumber = i + 1
+		}
+		lineItems = append(lineItems, POLineItem{
+			ItemNumber:  itemNumber,
+			Description: getString(item, "description", "Description", "itemDescription", "ItemDescription"),
+			Quantity:    int(getFloat(item, "quantity", "Quantity")),
+			UnitPrice:   getFloat(item, "unitPrice", "unit_price", "UnitPrice"),
+			AssetTag:    getString(item, "assetTag", "asset_tag", "assetNumber", "AssetNumber"),
+		})
+	}
+	return lineItems
+}
+
 // StubERPConnector returns hard-coded sample data.
-// Clearly marked as STUB — replace with real Oracle ERP calls.
+// It is used only when ERP_ENABLED=false, so local development remains usable
+// without enterprise ERP credentials.
 type StubERPConnector struct {
 	Config ERPConfig
 }
@@ -247,7 +646,29 @@ func (s *StubERPConnector) GetBudgetAllocation(costCenter string, fiscalYear int
 // NewERPConnector returns the appropriate connector based on configuration.
 // When ERP_ENABLED is false, returns the stub connector.
 func NewERPConnector(cfg ERPConfig) ERPConnector {
-	// TODO: when CBN provides Oracle ERP API details, add:
-	//   if cfg.Enabled { return NewOracleERPConnector(cfg) }
+	if cfg.Enabled {
+		return NewOracleERPConnector(cfg)
+	}
 	return NewStubERPConnector(cfg)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func envInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }

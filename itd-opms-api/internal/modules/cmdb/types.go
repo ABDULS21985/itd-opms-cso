@@ -767,3 +767,29 @@ type ERPSyncStatus struct {
 	LastSync    *ERPSyncLog `json:"lastSync"`
 	TotalSynced int         `json:"totalSynced"`
 }
+
+// MEGAExportRequest controls MEGA EA XML export filtering.
+type MEGAExportRequest struct {
+	Query                string `json:"query"`
+	CIType               string `json:"ciType"`
+	Status               string `json:"status"`
+	Limit                int    `json:"limit"`
+	IncludeRelationships bool   `json:"includeRelationships"`
+}
+
+// MEGAImportResult summarizes a MEGA EA XML import run.
+type MEGAImportResult struct {
+	Created              int      `json:"created"`
+	Updated              int      `json:"updated"`
+	Skipped              int      `json:"skipped"`
+	RelationshipsCreated int      `json:"relationshipsCreated"`
+	Errors               []string `json:"errors"`
+}
+
+// MEGAValidationResult summarizes an XML validation pass without persistence.
+type MEGAValidationResult struct {
+	Valid             bool     `json:"valid"`
+	ItemCount         int      `json:"itemCount"`
+	RelationshipCount int      `json:"relationshipCount"`
+	Errors            []string `json:"errors,omitempty"`
+}

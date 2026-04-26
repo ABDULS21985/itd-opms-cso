@@ -25,6 +25,7 @@ import { UserPicker } from "@/components/shared/pickers";
 import {
   useProblem,
   useUpdateProblem,
+  useTransitionProblem,
   useDeleteProblem,
   useKnownErrors,
   useCreateKnownError,

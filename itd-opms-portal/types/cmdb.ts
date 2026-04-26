@@ -339,3 +339,18 @@ export interface ERPSyncStatus {
   lastSync?: ERPSyncLog;
   totalSynced: number;
 }
+
+export interface MEGAImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  relationshipsCreated: number;
+  errors: string[];
+}
+
+export interface MEGAValidationResult {
+  valid: boolean;
+  itemCount: number;
+  relationshipCount: number;
+  errors?: string[];
+}

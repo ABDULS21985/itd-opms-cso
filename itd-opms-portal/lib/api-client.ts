@@ -239,6 +239,35 @@ class ApiClient {
     }
     return result;
   }
+
+  async download(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>,
+  ): Promise<Blob> {
+    const headers: Record<string, string> = {};
+
+    if (!this.isUsingCookieAuth()) {
+      const token = this.getToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+    }
+
+    const response = await fetch(this.buildUrl(path, params), {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const errorMessage =
+        error?.errors?.[0]?.message || error?.message || "Download failed";
+      throw new ApiError(response.status, errorMessage, error);
+    }
+
+    return response.blob();
+  }
 }
 
 export class ApiError extends Error {

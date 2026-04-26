@@ -215,7 +215,7 @@ export default function NewTicketPage() {
   const userOptions = users.map(
     (u: UserSummary) => ({
       value: u.id,
-      label: u.displayName || u.email,
+      label: u.displayName || u.email || "Unnamed user",
     }),
   );
 

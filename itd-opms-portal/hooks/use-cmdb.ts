@@ -23,6 +23,8 @@ import type {
   AssetFinancialView,
   ERPSyncStatus,
   ERPSyncLog,
+  MEGAImportResult,
+  MEGAValidationResult,
   PaginatedResponse,
 } from "@/types";
 
@@ -1237,6 +1239,69 @@ export function useSyncAssetFromERP(assetId: string) {
     },
     onError: () => {
       toast.error("Failed to sync asset from ERP");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  MEGA EA Integration                                                 */
+/* ================================================================== */
+
+/**
+ * POST /cmdb/integrations/mega/import - import MEGA EA XML into CMDB.
+ */
+export function useImportMEGAXML() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return apiClient.upload<MEGAImportResult>(
+        "/cmdb/integrations/mega/import",
+        formData,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cmdb-items"] });
+      queryClient.invalidateQueries({ queryKey: ["cmdb-topology"] });
+      toast.success("MEGA EA XML imported");
+    },
+    onError: () => {
+      toast.error("Failed to import MEGA EA XML");
+    },
+  });
+}
+
+/**
+ * POST /cmdb/integrations/mega/validate - validate MEGA EA XML.
+ */
+export function useValidateMEGAXML() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return apiClient.upload<MEGAValidationResult>(
+        "/cmdb/integrations/mega/validate",
+        formData,
+      );
+    },
+  });
+}
+
+/**
+ * GET /cmdb/integrations/mega/export - export CMDB CIs as MEGA EA XML.
+ */
+export function useExportMEGAXML() {
+  return useMutation({
+    mutationFn: (params?: {
+      q?: string;
+      ciType?: string;
+      status?: string;
+      limit?: number;
+      includeRelationships?: boolean;
+    }) => apiClient.download("/cmdb/integrations/mega/export", params),
+    onError: () => {
+      toast.error("Failed to export MEGA EA XML");
     },
   });
 }

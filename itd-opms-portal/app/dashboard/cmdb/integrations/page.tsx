@@ -7,6 +7,7 @@ import {
   MonitorSmartphone,
   FileSpreadsheet,
   Upload,
+  Download,
   RefreshCw,
   CheckCircle,
   XCircle,
@@ -15,6 +16,11 @@ import {
   Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  useExportMEGAXML,
+  useImportMEGAXML,
+  useValidateMEGAXML,
+} from "@/hooks/use-cmdb";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -127,6 +133,46 @@ const CONNECTORS: Connector[] = [
 
 export default function IntegrationsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [megaFile, setMegaFile] = useState<File | null>(null);
+  const importMEGA = useImportMEGAXML();
+  const validateMEGA = useValidateMEGAXML();
+  const exportMEGA = useExportMEGAXML();
+
+  async function handleMEGAExport() {
+    const blob = await exportMEGA.mutateAsync({
+      limit: 5000,
+      includeRelationships: true,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "itd-opms-mega-ci-export.xml";
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("MEGA EA XML exported");
+  }
+
+  async function handleMEGAValidate() {
+    if (!megaFile) {
+      toast.error("Select a MEGA XML file first");
+      return;
+    }
+    const result = await validateMEGA.mutateAsync(megaFile);
+    toast.success(
+      `Valid XML: ${result.itemCount} CIs, ${result.relationshipCount} relationships`,
+    );
+  }
+
+  async function handleMEGAImport() {
+    if (!megaFile) {
+      toast.error("Select a MEGA XML file first");
+      return;
+    }
+    const result = await importMEGA.mutateAsync(megaFile);
+    toast.success(
+      `Imported ${result.created} new and ${result.updated} updated CIs`,
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -357,6 +403,67 @@ export default function IntegrationsPage() {
                       Test Connection
                     </button>
                   </div>
+
+                  {connector.id === "mega_ea" && (
+                    <div className="mt-4 border-t border-[var(--border)] pt-4">
+                      <label
+                        className="block text-xs font-medium mb-1"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        MEGA XML File
+                      </label>
+                      <input
+                        type="file"
+                        accept=".xml,application/xml,text/xml"
+                        onChange={(event) =>
+                          setMegaFile(event.target.files?.[0] ?? null)
+                        }
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm"
+                        style={{ color: "var(--text-primary)" }}
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={handleMEGAValidate}
+                          disabled={!megaFile || validateMEGA.isPending}
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--border)] disabled:opacity-50"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {validateMEGA.isPending ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <CheckCircle size={14} />
+                          )}
+                          Validate XML
+                        </button>
+                        <button
+                          onClick={handleMEGAImport}
+                          disabled={!megaFile || importMEGA.isPending}
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                          style={{ backgroundColor: "var(--primary)" }}
+                        >
+                          {importMEGA.isPending ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Upload size={14} />
+                          )}
+                          Import XML
+                        </button>
+                        <button
+                          onClick={handleMEGAExport}
+                          disabled={exportMEGA.isPending}
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--border)] disabled:opacity-50"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {exportMEGA.isPending ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                          Export XML
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
