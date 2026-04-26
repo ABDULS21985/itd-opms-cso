@@ -609,10 +609,17 @@ export function useUpdateActionItem(id: string | undefined) {
 export function useCompleteAction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, evidence = "" }: { id: string; evidence?: string }) =>
-      apiClient.post(`/governance/meetings/actions/${id}/complete`, {
-        evidence,
-      }),
+    mutationFn: (input: string | { id: string; evidence?: string }) => {
+      const payload =
+        typeof input === "string" ? { id: input, evidence: "" } : input;
+
+      return apiClient.post(
+        `/governance/meetings/actions/${payload.id}/complete`,
+        {
+          evidence: payload.evidence ?? "",
+        },
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["action-items"] });
       queryClient.invalidateQueries({ queryKey: ["action-items-overdue"] });

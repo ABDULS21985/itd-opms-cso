@@ -2,6 +2,7 @@ package governance
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -404,8 +405,10 @@ func (h *MeetingHandler) CompleteAction(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		Evidence string `json:"evidence"`
 	}
-	// Body is optional — ignore EOF (empty body means no evidence provided).
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
 
 	if err := h.svc.CompleteActionItem(r.Context(), authCtx.TenantID, actionID, body.Evidence); err != nil {
 		writeAppError(w, r, err)

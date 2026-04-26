@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/middleware"
+	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
@@ -376,6 +377,10 @@ func (h *UserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := r.URL.Query().Get("q")
+	if strings.TrimSpace(query) == "" {
+		types.OK(w, []UserSearchResult{}, nil)
+		return
+	}
 
 	results, err := h.svc.SearchUsers(r.Context(), auth.TenantID, query)
 	if err != nil {

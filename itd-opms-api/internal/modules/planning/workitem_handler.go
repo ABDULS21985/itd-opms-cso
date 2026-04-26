@@ -477,6 +477,11 @@ func (h *MilestoneHandler) ListMilestones(w http.ResponseWriter, r *http.Request
 		projectID = &parsed
 	}
 
+	if h.svc == nil {
+		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Milestone service is not configured")
+		return
+	}
+
 	milestones, err := h.svc.ListMilestones(r.Context(), projectID)
 	if err != nil {
 		writeAppError(w, r, err)

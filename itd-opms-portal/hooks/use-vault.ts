@@ -220,7 +220,7 @@ export function useDocumentDownloadUrl(id: string | undefined) {
       apiClient.get<{ url: string; fileName: string }>(
         `/vault/documents/${id}/download`,
       ),
-    enabled: !!id,
+    enabled: false,
     staleTime: 4 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
   });

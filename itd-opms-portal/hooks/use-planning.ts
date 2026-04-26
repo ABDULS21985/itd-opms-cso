@@ -291,19 +291,29 @@ export function useDeleteProject() {
 export function useApproveProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      status,
-      ragStatus,
-    }: {
-      id: string;
-      status: string;
-      ragStatus?: string;
-    }) =>
-      apiClient.post(`/planning/projects/${id}/approve`, { status, ragStatus }),
+    mutationFn: (
+      input:
+        | string
+        | {
+            id: string;
+            status?: string;
+            ragStatus?: string;
+          },
+    ) => {
+      const payload =
+        typeof input === "string"
+          ? { id: input, status: "approved" }
+          : { status: "approved", ...input };
+
+      return apiClient.post(`/planning/projects/${payload.id}/approve`, {
+        status: payload.status,
+        ragStatus: payload.ragStatus,
+      });
+    },
     onSuccess: (_data, variables) => {
+      const projectId = typeof variables === "string" ? variables : variables.id;
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["project", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       toast.success("Project approved");
     },
     onError: () => {
