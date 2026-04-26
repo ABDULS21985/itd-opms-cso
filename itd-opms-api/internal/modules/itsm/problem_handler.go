@@ -28,12 +28,14 @@ func NewProblemHandler(svc *ProblemService) *ProblemHandler {
 // Routes mounts problem endpoints on the given router.
 func (h *ProblemHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.view")).Get("/", h.ListProblems)
+	r.With(middleware.RequirePermission("itsm.view")).Get("/rca-templates", h.ListRCATemplates)
 	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}", h.GetProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/", h.CreateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/transition", h.TransitionProblem)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link-incident", h.LinkIncident)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/configuration-links", h.LinkConfigurationItems)
 
 	// Known Errors
 	r.Route("/known-errors", func(r chi.Router) {
@@ -43,6 +45,23 @@ func (h *ProblemHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("itsm.manage")).Put("/{id}", h.UpdateKnownError)
 		r.With(middleware.RequirePermission("itsm.manage")).Delete("/{id}", h.DeleteKnownError)
 	})
+}
+
+// ListRCATemplates handles GET /rca-templates — lists structured RCA templates.
+func (h *ProblemHandler) ListRCATemplates(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	templates, err := h.svc.ListRCATemplates(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, templates, nil)
 }
 
 // ──────────────────────────────────────────────
@@ -223,6 +242,39 @@ func (h *ProblemHandler) LinkIncident(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// LinkConfigurationItems handles POST /{id}/configuration-links — links assets/CIs to a problem.
+func (h *ProblemHandler) LinkConfigurationItems(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	problemID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid problem ID")
+		return
+	}
+
+	var req LinkProblemConfigurationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+	if len(req.AssetIDs) == 0 && len(req.CIIDs) == 0 && !req.Replace {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "assetIds or ciIds is required")
+		return
+	}
+
+	problem, err := h.svc.LinkConfigurationItems(r.Context(), problemID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, problem, nil)
 }
 
 // ──────────────────────────────────────────────

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,7 +51,7 @@ const ticketColumns = `
 	sla_response_met, sla_resolution_met,
 	sla_paused_at, sla_paused_duration_minutes,
 	is_major_incident, related_ticket_ids, linked_problem_id,
-	linked_asset_ids, org_unit_id, parent_ticket_id, resolution_notes, resolved_at,
+	linked_asset_ids, linked_ci_ids, org_unit_id, parent_ticket_id, resolution_notes, resolved_at,
 	closed_at, first_response_at, satisfaction_score,
 	tags, custom_fields, created_at, updated_at,
 	change_classification, change_type, risk_level, risk_assessment,
@@ -71,7 +72,7 @@ const ticketSelectColumns = `
 	t.sla_response_met, t.sla_resolution_met,
 	t.sla_paused_at, t.sla_paused_duration_minutes,
 	t.is_major_incident, t.related_ticket_ids, t.linked_problem_id,
-	t.linked_asset_ids, t.org_unit_id, t.parent_ticket_id, t.resolution_notes, t.resolved_at,
+	t.linked_asset_ids, t.linked_ci_ids, t.org_unit_id, t.parent_ticket_id, t.resolution_notes, t.resolved_at,
 	t.closed_at, t.first_response_at, t.satisfaction_score,
 	t.tags, t.custom_fields, t.created_at, t.updated_at,
 	t.change_classification, t.change_type, t.risk_level, t.risk_assessment,
@@ -125,7 +126,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.LinkedCIIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 	}
@@ -147,7 +148,7 @@ func scanTicketEnriched(row pgx.Row) (Ticket, error) {
 		&t.SLAResponseMet, &t.SLAResolutionMet,
 		&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 		&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-		&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+		&t.LinkedAssetIDs, &t.LinkedCIIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 		&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 		&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 	}
@@ -178,7 +179,7 @@ func scanTickets(rows pgx.Rows) ([]Ticket, error) {
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.LinkedCIIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 		}
@@ -212,7 +213,7 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 			&t.SLAResponseMet, &t.SLAResolutionMet,
 			&t.SLAPausedAt, &t.SLAPausedDurationMinutes,
 			&t.IsMajorIncident, &t.RelatedTicketIDs, &t.LinkedProblemID,
-			&t.LinkedAssetIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
+			&t.LinkedAssetIDs, &t.LinkedCIIDs, &t.OrgUnitID, &t.ParentTicketID, &t.ResolutionNotes, &t.ResolvedAt,
 			&t.ClosedAt, &t.FirstResponseAt, &t.SatisfactionScore,
 			&t.Tags, &t.CustomFields, &t.CreatedAt, &t.UpdatedAt,
 		}
@@ -252,10 +253,14 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	// Auto-calculate priority from urgency x impact matrix unless explicitly set.
-	priority := CalculatePriority(req.Urgency, req.Impact)
+	// Auto-calculate priority from the tenant-configurable urgency x impact matrix unless explicitly set.
+	priority := s.calculatePriority(ctx, auth.TenantID, req.Urgency, req.Impact)
 	if req.Priority != nil {
 		priority = *req.Priority
+	}
+
+	if err := s.validateMandatoryTicketFields(ctx, auth.TenantID, priority, req); err != nil {
+		return Ticket{}, err
 	}
 
 	// Default channel to "portal" if not set.
@@ -275,6 +280,24 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		customFields = json.RawMessage("null")
 	}
 
+	linkedAssetIDs := req.LinkedAssetIDs
+	if linkedAssetIDs == nil {
+		linkedAssetIDs = []uuid.UUID{}
+	}
+	linkedCIIDs := req.LinkedCIIDs
+	if linkedCIIDs == nil {
+		linkedCIIDs = []uuid.UUID{}
+	}
+
+	assigneeID := req.AssigneeID
+	if assigneeID == nil && req.TeamQueueID != nil {
+		if selected, err := s.selectAutoAssignee(ctx, auth.TenantID, *req.TeamQueueID, priority, req.Category); err != nil {
+			slog.WarnContext(ctx, "ticket auto-assignment skipped", "queue_id", req.TeamQueueID, "error", err)
+		} else if selected != nil {
+			assigneeID = selected
+		}
+	}
+
 	// Derive org_unit_id from auth context; use NULL if not set.
 	var orgUnitID *uuid.UUID
 	if auth.OrgUnitID != uuid.Nil {
@@ -289,7 +312,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			reporter_id, assignee_id, team_queue_id,
 			sla_policy_id,
 			is_major_incident, related_ticket_ids,
-			linked_asset_ids, org_unit_id, parent_ticket_id, tags, custom_fields,
+			linked_asset_ids, linked_ci_ids, org_unit_id, parent_ticket_id, tags, custom_fields,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3,
@@ -298,8 +321,8 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			$12, $13, $14,
 			$15,
 			false, '{}',
-			'{}', $16, $17, $18, $19,
-			$20, $21
+			$16, $17, $18, $19, $20, $21,
+			$22, $23
 		)
 		RETURNING ` + ticketColumns
 
@@ -307,9 +330,9 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		id, auth.TenantID, req.Type,
 		req.Category, req.Subcategory, req.Title, req.Description,
 		priority, req.Urgency, req.Impact, channel,
-		auth.UserID, req.AssigneeID, req.TeamQueueID,
+		auth.UserID, assigneeID, req.TeamQueueID,
 		req.SLAPolicyID,
-		orgUnitID, req.ParentTicketID, tags, customFields,
+		linkedAssetIDs, linkedCIIDs, orgUnitID, req.ParentTicketID, tags, customFields,
 		now, now,
 	))
 	if err != nil {
@@ -336,6 +359,193 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 	}
 
 	return ticket, nil
+}
+
+func (s *TicketService) calculatePriority(ctx context.Context, tenantID uuid.UUID, urgency, impact string) string {
+	var raw json.RawMessage
+	err := s.pool.QueryRow(ctx, `
+		SELECT value
+		FROM system_settings
+		WHERE category = 'itsm'
+		  AND key = 'priority_matrix'
+		  AND (tenant_id = $1 OR tenant_id IS NULL)
+		ORDER BY tenant_id NULLS LAST
+		LIMIT 1`, tenantID).Scan(&raw)
+	if err != nil {
+		return CalculatePriority(urgency, impact)
+	}
+
+	var matrix map[string]map[string]string
+	if err := json.Unmarshal(raw, &matrix); err != nil {
+		return CalculatePriority(urgency, impact)
+	}
+	if row, ok := matrix[urgency]; ok {
+		if priority, ok := row[impact]; ok && priority != "" {
+			return priority
+		}
+	}
+	return CalculatePriority(urgency, impact)
+}
+
+func (s *TicketService) validateMandatoryTicketFields(ctx context.Context, tenantID uuid.UUID, priority string, req CreateTicketRequest) error {
+	var raw json.RawMessage
+	err := s.pool.QueryRow(ctx, `
+		SELECT value
+		FROM system_settings
+		WHERE category = 'itsm'
+		  AND key = 'ticket_mandatory_fields_by_priority'
+		  AND (tenant_id = $1 OR tenant_id IS NULL)
+		ORDER BY tenant_id NULLS LAST
+		LIMIT 1`, tenantID).Scan(&raw)
+	if err != nil {
+		return nil
+	}
+
+	var byPriority map[string][]string
+	if err := json.Unmarshal(raw, &byPriority); err != nil {
+		return nil
+	}
+
+	fields := byPriority[priority]
+	for _, field := range fields {
+		if !ticketFieldPresent(req, field) {
+			return apperrors.Validation(field, fmt.Sprintf("%s is required for priority %s", field, priority))
+		}
+	}
+	return nil
+}
+
+func ticketFieldPresent(req CreateTicketRequest, field string) bool {
+	switch field {
+	case "type":
+		return req.Type != ""
+	case "category":
+		return req.Category != nil && strings.TrimSpace(*req.Category) != ""
+	case "subcategory":
+		return req.Subcategory != nil && strings.TrimSpace(*req.Subcategory) != ""
+	case "title":
+		return strings.TrimSpace(req.Title) != ""
+	case "description":
+		return strings.TrimSpace(req.Description) != ""
+	case "urgency":
+		return strings.TrimSpace(req.Urgency) != ""
+	case "impact":
+		return strings.TrimSpace(req.Impact) != ""
+	case "assigneeId":
+		return req.AssigneeID != nil && *req.AssigneeID != uuid.Nil
+	case "teamQueueId":
+		return req.TeamQueueID != nil && *req.TeamQueueID != uuid.Nil
+	case "linkedAssetIds":
+		return len(req.LinkedAssetIDs) > 0
+	case "linkedCiIds":
+		return len(req.LinkedCIIDs) > 0
+	default:
+		if strings.HasPrefix(field, "customFields.") && len(req.CustomFields) > 0 {
+			var data map[string]any
+			if err := json.Unmarshal(req.CustomFields, &data); err == nil {
+				key := strings.TrimPrefix(field, "customFields.")
+				value, ok := data[key]
+				return ok && value != nil && fmt.Sprint(value) != ""
+			}
+		}
+	}
+	return false
+}
+
+func nilIfEmptyUUIDSlice(values []uuid.UUID) any {
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+func (s *TicketService) selectAutoAssignee(ctx context.Context, tenantID, queueID uuid.UUID, priority string, category *string) (*uuid.UUID, error) {
+	var teamID *uuid.UUID
+	var rule string
+	var priorityFilter []string
+	err := s.pool.QueryRow(ctx, `
+		SELECT team_id, auto_assign_rule, priority_filter
+		FROM support_queues
+		WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
+		queueID, tenantID,
+	).Scan(&teamID, &rule, &priorityFilter)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NotFound("SupportQueue", queueID.String())
+		}
+		return nil, apperrors.Internal("failed to load support queue", err)
+	}
+
+	if len(priorityFilter) > 0 {
+		allowed := false
+		for _, p := range priorityFilter {
+			if p == priority {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return nil, apperrors.Validation("priority", "ticket priority is not accepted by the selected queue")
+		}
+	}
+
+	if rule == AutoAssignRuleManual {
+		return nil, nil
+	}
+
+	categoryValue := ""
+	if category != nil {
+		categoryValue = *category
+	}
+
+	orderExpr := `COUNT(t.id) ASC, COALESCE(MAX(t.updated_at), 'epoch'::timestamptz) ASC, u.created_at ASC`
+	joins := ""
+	needsCategoryArg := false
+	if rule == AutoAssignRuleRoundRobin {
+		orderExpr = `COALESCE(MAX(t.created_at), 'epoch'::timestamptz) ASC, COUNT(t.id) ASC, u.created_at ASC`
+	}
+	if rule == AutoAssignRuleSkillsBased && categoryValue != "" {
+		joins = `
+			LEFT JOIN user_skills us ON us.user_id = u.id
+			LEFT JOIN skills sk ON sk.id = us.skill_id`
+		needsCategoryArg = true
+		orderExpr = `MAX(CASE
+				WHEN lower(sk.name) = lower($3)
+				  OR lower(sk.name) LIKE '%' || lower($3) || '%'
+				  OR lower($3) LIKE '%' || lower(sk.name) || '%'
+				THEN 1 ELSE 0 END) DESC,
+			COUNT(t.id) ASC,
+			COALESCE(MAX(t.updated_at), 'epoch'::timestamptz) ASC,
+			u.created_at ASC`
+	}
+
+	query := fmt.Sprintf(`
+		SELECT u.id
+		FROM users u
+		%s
+		LEFT JOIN tickets t ON t.assignee_id = u.id
+			AND t.tenant_id = u.tenant_id
+			AND t.status NOT IN ('resolved', 'closed', 'cancelled')
+		WHERE u.tenant_id = $1
+		  AND u.is_active = true
+		  AND ($2::uuid IS NULL OR u.org_unit_id = $2)
+		GROUP BY u.id, u.created_at
+		ORDER BY %s
+		LIMIT 1`, joins, orderExpr)
+
+	args := []any{tenantID, teamID}
+	if needsCategoryArg {
+		args = append(args, categoryValue)
+	}
+
+	var assigneeID uuid.UUID
+	if err := s.pool.QueryRow(ctx, query, args...).Scan(&assigneeID); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, apperrors.Internal("failed to select auto-assignee", err)
+	}
+	return &assigneeID, nil
 }
 
 // GetTicket retrieves a single ticket by ID.
@@ -476,15 +686,18 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 			title = COALESCE($3, title),
 			description = COALESCE($4, description),
 			priority = COALESCE($5, priority),
-			tags = COALESCE($6, tags),
-			custom_fields = COALESCE($7, custom_fields),
-			updated_at = $8
-		WHERE id = $9 AND tenant_id = $10
+			linked_asset_ids = COALESCE($6::uuid[], linked_asset_ids),
+			linked_ci_ids = COALESCE($7::uuid[], linked_ci_ids),
+			tags = COALESCE($8, tags),
+			custom_fields = COALESCE($9, custom_fields),
+			updated_at = $10
+		WHERE id = $11 AND tenant_id = $12
 		RETURNING ` + ticketColumns
 
 	ticket, err := scanTicket(s.pool.QueryRow(ctx, updateQuery,
 		req.Category, req.Subcategory, req.Title,
-		req.Description, req.Priority, req.Tags, req.CustomFields,
+		req.Description, req.Priority, nilIfEmptyUUIDSlice(req.LinkedAssetIDs), nilIfEmptyUUIDSlice(req.LinkedCIIDs),
+		req.Tags, req.CustomFields,
 		now, id, auth.TenantID,
 	))
 	if err != nil {
@@ -840,6 +1053,103 @@ func (s *TicketService) LinkTickets(ctx context.Context, id, relatedID uuid.UUID
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
+	return nil
+}
+
+// LinkConfigurationItems links related CMDB assets and CIs to a ticket.
+func (s *TicketService) LinkConfigurationItems(ctx context.Context, id uuid.UUID, req LinkTicketConfigurationRequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
+
+	if err := s.ensureAssetsBelongToTenant(ctx, auth.TenantID, req.AssetIDs); err != nil {
+		return Ticket{}, err
+	}
+	if err := s.ensureCIsBelongToTenant(ctx, auth.TenantID, req.CIIDs); err != nil {
+		return Ticket{}, err
+	}
+
+	now := time.Now().UTC()
+	query := `
+		UPDATE tickets SET
+			linked_asset_ids = CASE
+				WHEN $1 THEN $2::uuid[]
+				ELSE ARRAY(SELECT DISTINCT unnest(linked_asset_ids || $2::uuid[]))
+			END,
+			linked_ci_ids = CASE
+				WHEN $1 THEN $3::uuid[]
+				ELSE ARRAY(SELECT DISTINCT unnest(linked_ci_ids || $3::uuid[]))
+			END,
+			updated_at = $4
+		WHERE id = $5 AND tenant_id = $6
+		RETURNING ` + ticketColumns
+
+	ticket, err := scanTicket(s.pool.QueryRow(ctx, query,
+		req.Replace, req.AssetIDs, req.CIIDs, now, id, auth.TenantID,
+	))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to link ticket configuration items", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"asset_ids": req.AssetIDs,
+		"ci_ids":    req.CIIDs,
+		"replace":   req.Replace,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "link_configuration:ticket",
+		EntityType: "ticket",
+		EntityID:   id,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return ticket, nil
+}
+
+func (s *TicketService) ensureAssetsBelongToTenant(ctx context.Context, tenantID uuid.UUID, assetIDs []uuid.UUID) error {
+	if len(assetIDs) == 0 {
+		return nil
+	}
+	var count int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM assets WHERE tenant_id = $1 AND id = ANY($2)`,
+		tenantID, assetIDs,
+	).Scan(&count); err != nil {
+		return apperrors.Internal("failed to validate linked assets", err)
+	}
+	if count != len(assetIDs) {
+		return apperrors.NotFound("Asset", "one or more linked assets")
+	}
+	return nil
+}
+
+func (s *TicketService) ensureCIsBelongToTenant(ctx context.Context, tenantID uuid.UUID, ciIDs []uuid.UUID) error {
+	if len(ciIDs) == 0 {
+		return nil
+	}
+	var count int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM cmdb_items WHERE tenant_id = $1 AND id = ANY($2)`,
+		tenantID, ciIDs,
+	).Scan(&count); err != nil {
+		return apperrors.Internal("failed to validate linked CIs", err)
+	}
+	if count != len(ciIDs) {
+		return apperrors.NotFound("CMDBItem", "one or more linked CIs")
+	}
 	return nil
 }
 
@@ -1702,6 +2012,8 @@ func (s *TicketService) CreateSubtask(ctx context.Context, parentID uuid.UUID, r
 	impact := parent.Impact
 	createReq := CreateTicketRequest{
 		Type:           parent.Type,
+		Category:       parent.Category,
+		Subcategory:    parent.Subcategory,
 		Title:          req.Title,
 		Description:    req.Description,
 		Priority:       req.Priority,
@@ -1709,6 +2021,8 @@ func (s *TicketService) CreateSubtask(ctx context.Context, parentID uuid.UUID, r
 		Impact:         impact,
 		AssigneeID:     req.AssigneeID,
 		TeamQueueID:    parent.TeamQueueID,
+		LinkedAssetIDs: parent.LinkedAssetIDs,
+		LinkedCIIDs:    parent.LinkedCIIDs,
 		ParentTicketID: &parentID,
 	}
 

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/approval"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
@@ -22,15 +23,17 @@ import (
 
 // AssetService handles business logic for hardware/software asset lifecycle management.
 type AssetService struct {
-	pool     *pgxpool.Pool
-	auditSvc *audit.AuditService
+	pool        *pgxpool.Pool
+	auditSvc    *audit.AuditService
+	approvalSvc *approval.Service
 }
 
 // NewAssetService creates a new AssetService.
 func NewAssetService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *AssetService {
 	return &AssetService{
-		pool:     pool,
-		auditSvc: auditSvc,
+		pool:        pool,
+		auditSvc:    auditSvc,
+		approvalSvc: approval.NewService(pool, auditSvc),
 	}
 }
 
@@ -160,9 +163,9 @@ func (s *AssetService) CreateAsset(ctx context.Context, req CreateAssetRequest) 
 	// Log initial "procured" lifecycle event.
 	eventID := uuid.New()
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO asset_lifecycle_events (id, asset_id, event_type, performed_by, details, evidence_document_id, timestamp)
-		VALUES ($1, $2, 'procured', $3, '{}', NULL, $4)`,
-		eventID, id, auth.UserID, now,
+		INSERT INTO asset_lifecycle_events (id, asset_id, tenant_id, event_type, performed_by, details, evidence_document_id, created_at)
+		VALUES ($1, $2, $3, 'procured', $4, '{}', NULL, $5)`,
+		eventID, id, auth.TenantID, auth.UserID, now,
 	)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to insert lifecycle event for asset creation", "error", err)
@@ -479,9 +482,9 @@ func (s *AssetService) TransitionAssetStatus(ctx context.Context, id uuid.UUID, 
 		"new_status":      newStatus,
 	})
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO asset_lifecycle_events (id, asset_id, event_type, performed_by, details, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		eventID, id, newStatus, auth.UserID, details, now,
+		INSERT INTO asset_lifecycle_events (id, asset_id, tenant_id, event_type, performed_by, details, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		eventID, id, auth.TenantID, lifecycleEventType(existing.Status, newStatus), auth.UserID, details, now,
 	)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to insert lifecycle event for status transition", "error", err)
@@ -504,6 +507,28 @@ func (s *AssetService) TransitionAssetStatus(ctx context.Context, id uuid.UUID, 
 	}
 
 	return asset, nil
+}
+
+func lifecycleEventType(fromStatus, toStatus string) string {
+	switch toStatus {
+	case AssetStatusProcured:
+		return LifecycleEventProcured
+	case AssetStatusReceived:
+		return LifecycleEventReceived
+	case AssetStatusActive:
+		if fromStatus == AssetStatusMaintenance {
+			return LifecycleEventMaintenanceEnd
+		}
+		return LifecycleEventDeployed
+	case AssetStatusMaintenance:
+		return LifecycleEventMaintenanceStart
+	case AssetStatusRetired:
+		return LifecycleEventRetired
+	case AssetStatusDisposed:
+		return LifecycleEventDisposed
+	default:
+		return LifecycleEventTransferred
+	}
 }
 
 // ──────────────────────────────────────────────
@@ -628,12 +653,35 @@ func (s *AssetService) CreateDisposal(ctx context.Context, req CreateDisposalReq
 	id := uuid.New()
 	now := time.Now().UTC()
 
+	asset, err := s.GetAsset(ctx, req.AssetID)
+	if err != nil {
+		return AssetDisposal{}, err
+	}
+	if asset.Status == AssetStatusDisposed || !IsValidAssetTransition(asset.Status, AssetStatusDisposed) {
+		return AssetDisposal{}, apperrors.BadRequest(fmt.Sprintf("asset in '%s' status cannot enter disposal workflow", asset.Status))
+	}
+
 	witnessIDs := req.WitnessIDs
 	if witnessIDs == nil {
 		witnessIDs = []uuid.UUID{}
 	}
 
 	dataWipeConfirmed := req.DataWipeConfirmed
+	metadata, _ := json.Marshal(map[string]any{
+		"asset_id":        req.AssetID,
+		"asset_tag":       asset.AssetTag,
+		"asset_name":      asset.Name,
+		"disposal_method": req.DisposalMethod,
+	})
+	chain, err := s.approvalSvc.StartApproval(ctx, auth.TenantID, auth.UserID, approval.StartApprovalRequest{
+		EntityType: "asset_disposal",
+		EntityID:   id,
+		Urgency:    approval.UrgencyNormal,
+		Metadata:   metadata,
+	})
+	if err != nil {
+		return AssetDisposal{}, err
+	}
 
 	query := `
 		INSERT INTO asset_disposals (
@@ -651,7 +699,7 @@ func (s *AssetService) CreateDisposal(ctx context.Context, req CreateDisposalReq
 
 	disposal, err := scanDisposal(s.pool.QueryRow(ctx, query,
 		id, req.AssetID, auth.TenantID, req.DisposalMethod, req.Reason,
-		req.ApprovalChainID, witnessIDs,
+		chain.ID, witnessIDs,
 		dataWipeConfirmed,
 		now, now,
 	))
@@ -766,8 +814,37 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 	if err != nil {
 		return AssetDisposal{}, err
 	}
+	if !isValidDisposalTransition(existing.Status, req.Status) {
+		return AssetDisposal{}, apperrors.BadRequest(
+			fmt.Sprintf("invalid disposal status transition from '%s' to '%s'", existing.Status, req.Status),
+		)
+	}
+	if req.Status == DisposalStatusApproved {
+		approved, err := s.hasCompletedApproval(ctx, auth.TenantID, "asset_disposal", id)
+		if err != nil {
+			return AssetDisposal{}, err
+		}
+		if !approved {
+			return AssetDisposal{}, apperrors.BadRequest("Asset disposal must complete its configured approval workflow before approval")
+		}
+	}
+	if req.Status == DisposalStatusCompleted {
+		if req.DisposalDate == nil {
+			return AssetDisposal{}, apperrors.Validation("disposalDate", "disposal date is required to complete disposal")
+		}
+		if req.DisposalCertificateDocID == nil {
+			return AssetDisposal{}, apperrors.Validation("disposalCertificateDocId", "disposal certificate is required to complete disposal")
+		}
+		if !existing.DataWipeConfirmed {
+			return AssetDisposal{}, apperrors.Validation("dataWipeConfirmed", "data wipe must be confirmed before completing disposal")
+		}
+	}
 
 	now := time.Now().UTC()
+	approvedBy := req.ApprovedBy
+	if req.Status == DisposalStatusApproved && approvedBy == nil {
+		approvedBy = &auth.UserID
+	}
 
 	query := `
 		UPDATE asset_disposals SET
@@ -780,7 +857,7 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 		RETURNING ` + disposalColumns
 
 	disposal, err := scanDisposal(s.pool.QueryRow(ctx, query,
-		req.Status, req.ApprovedBy, req.DisposalDate,
+		req.Status, approvedBy, req.DisposalDate,
 		req.DisposalCertificateDocID,
 		now, id, auth.TenantID,
 	))
@@ -789,7 +866,7 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 	}
 
 	// If completed, transition asset to 'disposed' and create lifecycle event.
-	if req.Status == "completed" {
+	if req.Status == DisposalStatusCompleted {
 		_, err = s.pool.Exec(ctx, `
 			UPDATE assets SET status = 'disposed', updated_at = $1
 			WHERE id = $2 AND tenant_id = $3`,
@@ -806,9 +883,9 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 			"disposal_method": existing.DisposalMethod,
 		})
 		_, err = s.pool.Exec(ctx, `
-			INSERT INTO asset_lifecycle_events (id, asset_id, event_type, performed_by, details, timestamp)
-			VALUES ($1, $2, 'disposed', $3, $4, $5)`,
-			eventID, existing.AssetID, auth.UserID, details, now,
+			INSERT INTO asset_lifecycle_events (id, asset_id, tenant_id, event_type, performed_by, details, created_at)
+			VALUES ($1, $2, $3, 'disposed', $4, $5, $6)`,
+			eventID, existing.AssetID, auth.TenantID, auth.UserID, details, now,
 		)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to insert lifecycle event for disposal completion", "error", err)
@@ -832,6 +909,38 @@ func (s *AssetService) UpdateDisposalStatus(ctx context.Context, id uuid.UUID, r
 	}
 
 	return disposal, nil
+}
+
+func isValidDisposalTransition(from, to string) bool {
+	allowed := map[string][]string{
+		DisposalStatusPendingApproval: {DisposalStatusApproved, DisposalStatusCancelled},
+		DisposalStatusApproved:        {DisposalStatusCompleted, DisposalStatusCancelled},
+	}
+	for _, candidate := range allowed[from] {
+		if candidate == to {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *AssetService) hasCompletedApproval(ctx context.Context, tenantID uuid.UUID, entityType string, entityID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM approval_chains
+			WHERE tenant_id = $1
+			  AND entity_type = $2
+			  AND entity_id = $3
+			  AND status = 'approved'
+		)`,
+		tenantID, entityType, entityID,
+	).Scan(&exists)
+	if err != nil {
+		return false, apperrors.Internal("failed to check approval workflow status", err)
+	}
+	return exists, nil
 }
 
 // ──────────────────────────────────────────────

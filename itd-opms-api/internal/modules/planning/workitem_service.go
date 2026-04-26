@@ -76,29 +76,29 @@ func (s *WorkItemService) CreateWorkItem(ctx context.Context, req CreateWorkItem
 	query := `
 		INSERT INTO work_items (
 			id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
+			description, assignee_id, assigned_team_id, reporter_id, status, priority,
 			estimated_hours, due_date, sort_order, tags, metadata,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, $14, $15, $16,
-			$17, $18
+			$7, $8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17,
+			$18, $19
 		)
 		RETURNING id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
+			description, assignee_id, assigned_team_id, reporter_id, status, priority,
 			estimated_hours, actual_hours, due_date, completed_at,
 			sort_order, tags, metadata, created_at, updated_at`
 
 	var item WorkItem
 	err := s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.ProjectID, req.ParentID, wiType, req.Title,
-		req.Description, req.AssigneeID, reporterID, status, priority,
+		req.Description, req.AssigneeID, req.AssignedTeamID, reporterID, status, priority,
 		req.EstimatedHours, req.DueDate, sortOrder, req.Tags, req.Metadata,
 		now, now,
 	).Scan(
 		&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-		&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+		&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 		&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 		&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -136,7 +136,7 @@ func (s *WorkItemService) GetWorkItem(ctx context.Context, id uuid.UUID) (WorkIt
 
 	query := `
 		SELECT id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
+			description, assignee_id, assigned_team_id, reporter_id, status, priority,
 			estimated_hours, actual_hours, due_date, completed_at,
 			sort_order, tags, metadata, created_at, updated_at
 		FROM work_items
@@ -145,7 +145,7 @@ func (s *WorkItemService) GetWorkItem(ctx context.Context, id uuid.UUID) (WorkIt
 	var item WorkItem
 	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
 		&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-		&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+		&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 		&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 		&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -208,7 +208,7 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUI
 	// Fetch paginated results.
 	dataQuery := fmt.Sprintf(`
 		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
-			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.description, wi.assignee_id, wi.assigned_team_id, wi.reporter_id, wi.status, wi.priority,
 			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
 			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
 		FROM work_items wi
@@ -234,7 +234,7 @@ func (s *WorkItemService) ListWorkItems(ctx context.Context, projectID *uuid.UUI
 		var item WorkItem
 		if err := rows.Scan(
 			&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-			&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+			&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 			&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 			&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
@@ -265,14 +265,14 @@ func (s *WorkItemService) GetWBSTree(ctx context.Context, projectID uuid.UUID) (
 	query := `
 		WITH RECURSIVE wbs AS (
 			SELECT id, tenant_id, project_id, parent_id, type, title,
-				description, assignee_id, reporter_id, status, priority,
+				description, assignee_id, assigned_team_id, reporter_id, status, priority,
 				estimated_hours, actual_hours, due_date, completed_at,
 				sort_order, tags, metadata, created_at, updated_at
 			FROM work_items
 			WHERE project_id = $1 AND tenant_id = $2 AND parent_id IS NULL
 			UNION ALL
 			SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
-				wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+				wi.description, wi.assignee_id, wi.assigned_team_id, wi.reporter_id, wi.status, wi.priority,
 				wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
 				wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
 			FROM work_items wi
@@ -294,7 +294,7 @@ func (s *WorkItemService) GetWBSTree(ctx context.Context, projectID uuid.UUID) (
 		var item WorkItem
 		if err := rows.Scan(
 			&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-			&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+			&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 			&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 			&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
@@ -357,32 +357,33 @@ func (s *WorkItemService) UpdateWorkItem(ctx context.Context, id uuid.UUID, req 
 			title = COALESCE($3, title),
 			description = COALESCE($4, description),
 			assignee_id = COALESCE($5, assignee_id),
-			reporter_id = COALESCE($6, reporter_id),
-			priority = COALESCE($7, priority),
-			estimated_hours = COALESCE($8, estimated_hours),
-			actual_hours = COALESCE($9, actual_hours),
-			due_date = COALESCE($10, due_date),
-			sort_order = COALESCE($11, sort_order),
-			tags = COALESCE($12, tags),
-			metadata = COALESCE($13, metadata),
-			updated_at = $14
-		WHERE id = $15 AND tenant_id = $16
+			assigned_team_id = COALESCE($6, assigned_team_id),
+			reporter_id = COALESCE($7, reporter_id),
+			priority = COALESCE($8, priority),
+			estimated_hours = COALESCE($9, estimated_hours),
+			actual_hours = COALESCE($10, actual_hours),
+			due_date = COALESCE($11, due_date),
+			sort_order = COALESCE($12, sort_order),
+			tags = COALESCE($13, tags),
+			metadata = COALESCE($14, metadata),
+			updated_at = $15
+		WHERE id = $16 AND tenant_id = $17
 		RETURNING id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
+			description, assignee_id, assigned_team_id, reporter_id, status, priority,
 			estimated_hours, actual_hours, due_date, completed_at,
 			sort_order, tags, metadata, created_at, updated_at`
 
 	var item WorkItem
 	err = s.pool.QueryRow(ctx, updateQuery,
 		req.ParentID, req.Type, req.Title,
-		req.Description, req.AssigneeID, req.ReporterID,
+		req.Description, req.AssigneeID, req.AssignedTeamID, req.ReporterID,
 		req.Priority, req.EstimatedHours, req.ActualHours,
 		req.DueDate, req.SortOrder,
 		req.Tags, req.Metadata,
 		now, id, auth.TenantID,
 	).Scan(
 		&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-		&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+		&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 		&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 		&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -445,14 +446,14 @@ func (s *WorkItemService) TransitionWorkItem(ctx context.Context, id uuid.UUID, 
 			updated_at = $3
 		WHERE id = $4 AND tenant_id = $5
 		RETURNING id, tenant_id, project_id, parent_id, type, title,
-			description, assignee_id, reporter_id, status, priority,
+			description, assignee_id, assigned_team_id, reporter_id, status, priority,
 			estimated_hours, actual_hours, due_date, completed_at,
 			sort_order, tags, metadata, created_at, updated_at`
 
 	var item WorkItem
 	err = s.pool.QueryRow(ctx, query, newStatus, completedAt, now, id, auth.TenantID).Scan(
 		&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-		&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+		&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 		&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 		&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -593,7 +594,7 @@ func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID *u
 
 	query := fmt.Sprintf(`
 		SELECT wi.id, wi.tenant_id, wi.project_id, wi.parent_id, wi.type, wi.title,
-			wi.description, wi.assignee_id, wi.reporter_id, wi.status, wi.priority,
+			wi.description, wi.assignee_id, wi.assigned_team_id, wi.reporter_id, wi.status, wi.priority,
 			wi.estimated_hours, wi.actual_hours, wi.due_date, wi.completed_at,
 			wi.sort_order, wi.tags, wi.metadata, wi.created_at, wi.updated_at
 		FROM work_items wi
@@ -615,7 +616,7 @@ func (s *WorkItemService) ListOverdueWorkItems(ctx context.Context, projectID *u
 		var item WorkItem
 		if err := rows.Scan(
 			&item.ID, &item.TenantID, &item.ProjectID, &item.ParentID, &item.Type, &item.Title,
-			&item.Description, &item.AssigneeID, &item.ReporterID, &item.Status, &item.Priority,
+			&item.Description, &item.AssigneeID, &item.AssignedTeamID, &item.ReporterID, &item.Status, &item.Priority,
 			&item.EstimatedHours, &item.ActualHours, &item.DueDate, &item.CompletedAt,
 			&item.SortOrder, &item.Tags, &item.Metadata, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
@@ -1027,6 +1028,8 @@ func workItemColumnForField(field string) string {
 		return "priority"
 	case "assigneeId":
 		return "assignee_id"
+	case "assignedTeamId":
+		return "assigned_team_id"
 	case "dueDate":
 		return "due_date"
 	default:

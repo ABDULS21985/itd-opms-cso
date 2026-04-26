@@ -27,6 +27,7 @@ type ServiceRequest struct {
 	FulfillmentNotes *string         `json:"fulfillmentNotes"`
 	FulfilledAt      *time.Time      `json:"fulfilledAt"`
 	CancelledAt      *time.Time      `json:"cancelledAt"`
+	ClosedAt         *time.Time      `json:"closedAt"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
 	// SLA fields
@@ -76,6 +77,7 @@ const (
 	RequestStatusRejected        = "rejected"
 	RequestStatusInProgress      = "in_progress"
 	RequestStatusFulfilled       = "fulfilled"
+	RequestStatusClosed          = "closed"
 	RequestStatusCancelled       = "cancelled"
 )
 
@@ -109,6 +111,22 @@ type ApproveRequestRequest struct {
 // RejectRequestRequest is the payload for rejecting a service request.
 type RejectRequestRequest struct {
 	Reason string `json:"reason" validate:"required"`
+}
+
+// StartFulfillmentRequest is the payload for assigning and starting fulfillment.
+type StartFulfillmentRequest struct {
+	AssignedTo *uuid.UUID `json:"assignedTo"`
+	Comment    *string    `json:"comment"`
+}
+
+// FulfillRequestRequest is the payload for marking a request fulfilled.
+type FulfillRequestRequest struct {
+	FulfillmentNotes string `json:"fulfillmentNotes" validate:"required"`
+}
+
+// CloseRequestRequest is the payload for formally closing a fulfilled request.
+type CloseRequestRequest struct {
+	Comment *string `json:"comment"`
 }
 
 // ──────────────────────────────────────────────

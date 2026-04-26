@@ -59,6 +59,7 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/escalate", h.EscalateTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/comments", h.AddComment)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link", h.LinkTickets)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/configuration-links", h.LinkConfigurationItems)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/resolve", h.ResolveTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/close", h.CloseTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/subtasks", h.CreateSubtask)
@@ -298,6 +299,11 @@ func (h *TicketHandler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 
 	if req.Title == "" {
 		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Title is required")
+		return
+	}
+
+	if req.Category == nil || *req.Category == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "Category is required")
 		return
 	}
 
@@ -555,6 +561,40 @@ func (h *TicketHandler) LinkTickets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// LinkConfigurationItems handles POST /{id}/configuration-links.
+func (h *TicketHandler) LinkConfigurationItems(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid ticket ID")
+		return
+	}
+
+	var req LinkTicketConfigurationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	if len(req.AssetIDs) == 0 && len(req.CIIDs) == 0 && !req.Replace {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "assetIds or ciIds are required")
+		return
+	}
+
+	ticket, err := h.svc.LinkConfigurationItems(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, ticket, nil)
 }
 
 // ResolveTicket handles POST /{id}/resolve — resolves a ticket with resolution notes.

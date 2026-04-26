@@ -210,6 +210,7 @@ type Ticket struct {
 	RelatedTicketIDs         []uuid.UUID     `json:"relatedTicketIds"`
 	LinkedProblemID          *uuid.UUID      `json:"linkedProblemId"`
 	LinkedAssetIDs           []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs              []uuid.UUID     `json:"linkedCiIds"`
 	OrgUnitID                *uuid.UUID      `json:"orgUnitId"`
 	ParentTicketID           *uuid.UUID      `json:"parentTicketId"`
 	ResolutionNotes          *string         `json:"resolutionNotes"`
@@ -337,8 +338,12 @@ type Problem struct {
 	Title             string      `json:"title"`
 	Description       *string     `json:"description"`
 	RootCause         *string     `json:"rootCause"`
+	RCATemplateID     *uuid.UUID  `json:"rcaTemplateId"`
+	RCAData           json.RawMessage `json:"rcaData"`
 	Status            string      `json:"status"`
 	LinkedIncidentIDs []uuid.UUID `json:"linkedIncidentIds"`
+	LinkedAssetIDs    []uuid.UUID `json:"linkedAssetIds"`
+	LinkedCIIDs       []uuid.UUID `json:"linkedCiIds"`
 	Workaround        *string     `json:"workaround"`
 	PermanentFix      *string     `json:"permanentFix"`
 	LinkedChangeID    *uuid.UUID  `json:"linkedChangeId"`
@@ -350,6 +355,19 @@ type Problem struct {
 	// Enrichment fields (populated via LEFT JOINs on SELECT queries).
 	AssignedGroupName *string `json:"assignedGroupName,omitempty"`
 	OwnerName         *string `json:"ownerName,omitempty"`
+}
+
+// ProblemRCATemplate describes a structured RCA method such as 5-Whys or Ishikawa.
+type ProblemRCATemplate struct {
+	ID        uuid.UUID       `json:"id"`
+	TenantID  *uuid.UUID      `json:"tenantId"`
+	Name      string          `json:"name"`
+	Method    string          `json:"method"`
+	Schema    json.RawMessage `json:"schema"`
+	IsActive  bool            `json:"isActive"`
+	CreatedBy *uuid.UUID      `json:"createdBy"`
+	CreatedAt time.Time       `json:"createdAt"`
+	UpdatedAt time.Time       `json:"updatedAt"`
 }
 
 // KnownError represents a documented known error with a workaround.
@@ -579,6 +597,8 @@ type CreateTicketRequest struct {
 	AssigneeID     *uuid.UUID      `json:"assigneeId"`
 	TeamQueueID    *uuid.UUID      `json:"teamQueueId"`
 	SLAPolicyID    *uuid.UUID      `json:"slaPolicyId"`
+	LinkedAssetIDs []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs    []uuid.UUID     `json:"linkedCiIds"`
 	Tags           []string        `json:"tags"`
 	CustomFields   json.RawMessage `json:"customFields"`
 	ParentTicketID *uuid.UUID      `json:"parentTicketId,omitempty"` // set internally for subtask creation
@@ -620,13 +640,15 @@ type CreateSubtaskRequest struct {
 
 // UpdateTicketRequest is the payload for updating ticket metadata.
 type UpdateTicketRequest struct {
-	Category     *string         `json:"category"`
-	Subcategory  *string         `json:"subcategory"`
-	Title        *string         `json:"title"`
-	Description  *string         `json:"description"`
-	Priority     *string         `json:"priority"`
-	Tags         []string        `json:"tags"`
-	CustomFields json.RawMessage `json:"customFields"`
+	Category       *string         `json:"category"`
+	Subcategory    *string         `json:"subcategory"`
+	Title          *string         `json:"title"`
+	Description    *string         `json:"description"`
+	Priority       *string         `json:"priority"`
+	LinkedAssetIDs []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs    []uuid.UUID     `json:"linkedCiIds"`
+	Tags           []string        `json:"tags"`
+	CustomFields   json.RawMessage `json:"customFields"`
 }
 
 // TransitionTicketRequest is the payload for changing ticket status.
@@ -650,6 +672,13 @@ type AddCommentRequest struct {
 // LinkTicketsRequest is the payload for linking two tickets.
 type LinkTicketsRequest struct {
 	RelatedTicketID uuid.UUID `json:"relatedTicketId" validate:"required"`
+}
+
+// LinkTicketConfigurationRequest links or replaces related assets/CIs for a ticket.
+type LinkTicketConfigurationRequest struct {
+	AssetIDs []uuid.UUID `json:"assetIds"`
+	CIIDs    []uuid.UUID `json:"ciIds"`
+	Replace  bool        `json:"replace"`
 }
 
 // ResolveTicketRequest is the payload for resolving a ticket.
@@ -827,24 +856,32 @@ type CreateDependencyChainRequest struct {
 
 // CreateProblemRequest is the payload for creating a problem record.
 type CreateProblemRequest struct {
-	Title           string     `json:"title" validate:"required"`
-	Description     *string    `json:"description"`
-	Status          string     `json:"status"`
-	OwnerID         *uuid.UUID `json:"ownerId"`
-	AssignedGroupID *uuid.UUID `json:"assignedGroupId"`
+	Title           string          `json:"title" validate:"required"`
+	Description     *string         `json:"description"`
+	Status          string          `json:"status"`
+	RCATemplateID   *uuid.UUID      `json:"rcaTemplateId"`
+	RCAData         json.RawMessage `json:"rcaData"`
+	LinkedAssetIDs  []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs     []uuid.UUID     `json:"linkedCiIds"`
+	OwnerID         *uuid.UUID      `json:"ownerId"`
+	AssignedGroupID *uuid.UUID      `json:"assignedGroupId"`
 }
 
 // UpdateProblemRequest is the payload for updating a problem record.
 type UpdateProblemRequest struct {
-	Title           *string    `json:"title"`
-	Description     *string    `json:"description"`
-	RootCause       *string    `json:"rootCause"`
-	Status          *string    `json:"status"`
-	Workaround      *string    `json:"workaround"`
-	PermanentFix    *string    `json:"permanentFix"`
-	LinkedChangeID  *uuid.UUID `json:"linkedChangeId"`
-	OwnerID         *uuid.UUID `json:"ownerId"`
-	AssignedGroupID *uuid.UUID `json:"assignedGroupId"`
+	Title           *string         `json:"title"`
+	Description     *string         `json:"description"`
+	RootCause       *string         `json:"rootCause"`
+	RCATemplateID   *uuid.UUID      `json:"rcaTemplateId"`
+	RCAData         json.RawMessage `json:"rcaData"`
+	LinkedAssetIDs  []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs     []uuid.UUID     `json:"linkedCiIds"`
+	Status          *string         `json:"status"`
+	Workaround      *string         `json:"workaround"`
+	PermanentFix    *string         `json:"permanentFix"`
+	LinkedChangeID  *uuid.UUID      `json:"linkedChangeId"`
+	OwnerID         *uuid.UUID      `json:"ownerId"`
+	AssignedGroupID *uuid.UUID      `json:"assignedGroupId"`
 }
 
 // TransitionProblemRequest is the payload for changing problem status.
@@ -856,6 +893,13 @@ type TransitionProblemRequest struct {
 // LinkIncidentToProblemRequest is the payload for linking an incident to a problem.
 type LinkIncidentToProblemRequest struct {
 	IncidentID uuid.UUID `json:"incidentId" validate:"required"`
+}
+
+// LinkProblemConfigurationRequest links assets/CIs to a problem.
+type LinkProblemConfigurationRequest struct {
+	AssetIDs []uuid.UUID `json:"assetIds"`
+	CIIDs    []uuid.UUID `json:"ciIds"`
+	Replace  bool        `json:"replace"`
 }
 
 // CreateKnownErrorRequest is the payload for creating a known error.

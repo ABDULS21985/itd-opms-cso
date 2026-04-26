@@ -2,6 +2,7 @@ package grc
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -33,6 +34,7 @@ func (h *AuditMgmtHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("grc.manage")).Post("/", h.CreateAudit)
 	r.With(middleware.RequirePermission("grc.manage")).Put("/{id}", h.UpdateAudit)
 	r.With(middleware.RequirePermission("grc.manage")).Delete("/{id}", h.DeleteAudit)
+	r.With(middleware.RequirePermission("grc.manage")).Post("/{id}/evidence-pack", h.GenerateEvidencePack)
 
 	// Findings
 	r.Route("/{auditId}/findings", func(r chi.Router) {
@@ -54,6 +56,40 @@ func (h *AuditMgmtHandler) Routes(r chi.Router) {
 
 	// Readiness
 	r.With(middleware.RequirePermission("grc.view")).Get("/{id}/readiness", h.GetReadinessScore)
+}
+
+// GenerateEvidencePack handles POST /{id}/evidence-pack — generates an evidence export snapshot.
+func (h *AuditMgmtHandler) GenerateEvidencePack(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	auditID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid audit ID")
+		return
+	}
+
+	req := GenerateEvidencePackRequest{Format: r.URL.Query().Get("format")}
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+			return
+		}
+	}
+	if req.Format == "" {
+		req.Format = r.URL.Query().Get("format")
+	}
+
+	pack, err := h.svc.GenerateEvidencePack(r.Context(), auditID, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.Created(w, pack)
 }
 
 // ──────────────────────────────────────────────

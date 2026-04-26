@@ -256,6 +256,7 @@ type WorkItem struct {
 	Title          string          `json:"title"`
 	Description    *string         `json:"description"`
 	AssigneeID     *uuid.UUID      `json:"assigneeId"`
+	AssignedTeamID *uuid.UUID      `json:"assignedTeamId"`
 	ReporterID     *uuid.UUID      `json:"reporterId"`
 	Status         string          `json:"status"`
 	Priority       string          `json:"priority"`
@@ -500,6 +501,7 @@ type CreateWorkItemRequest struct {
 	Title          string          `json:"title" validate:"required"`
 	Description    *string         `json:"description"`
 	AssigneeID     *uuid.UUID      `json:"assigneeId"`
+	AssignedTeamID *uuid.UUID      `json:"assignedTeamId"`
 	ReporterID     *uuid.UUID      `json:"reporterId"`
 	Status         *string         `json:"status"`
 	Priority       *string         `json:"priority"`
@@ -517,6 +519,7 @@ type UpdateWorkItemRequest struct {
 	Title          *string         `json:"title"`
 	Description    *string         `json:"description"`
 	AssigneeID     *uuid.UUID      `json:"assigneeId"`
+	AssignedTeamID *uuid.UUID      `json:"assignedTeamId"`
 	ReporterID     *uuid.UUID      `json:"reporterId"`
 	Status         *string         `json:"status"`
 	Priority       *string         `json:"priority"`

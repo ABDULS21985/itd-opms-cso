@@ -60,6 +60,38 @@ type UserSearchResult struct {
 	IsActive    bool      `json:"isActive"`
 }
 
+// ReferenceData is a tenant-scoped configurable lookup value.
+type ReferenceData struct {
+	ID        uuid.UUID       `json:"id"`
+	TenantID  *uuid.UUID      `json:"tenantId"`
+	Domain    string          `json:"domain"`
+	Key       string          `json:"key"`
+	Label     string          `json:"label"`
+	Value     json.RawMessage `json:"value"`
+	SortOrder int             `json:"sortOrder"`
+	IsActive  bool            `json:"isActive"`
+	CreatedAt time.Time       `json:"createdAt"`
+	UpdatedAt time.Time       `json:"updatedAt"`
+}
+
+// CreateReferenceDataRequest is the payload for creating lookup data.
+type CreateReferenceDataRequest struct {
+	Domain    string          `json:"domain"`
+	Key       string          `json:"key"`
+	Label     string          `json:"label"`
+	Value     json.RawMessage `json:"value"`
+	SortOrder *int            `json:"sortOrder"`
+	IsActive  *bool           `json:"isActive"`
+}
+
+// UpdateReferenceDataRequest is the payload for updating lookup data.
+type UpdateReferenceDataRequest struct {
+	Label     *string         `json:"label"`
+	Value     json.RawMessage `json:"value"`
+	SortOrder *int            `json:"sortOrder"`
+	IsActive  *bool           `json:"isActive"`
+}
+
 // UpdateUserRequest is the admin user update payload.
 type UpdateUserRequest struct {
 	DisplayName *string    `json:"displayName"`

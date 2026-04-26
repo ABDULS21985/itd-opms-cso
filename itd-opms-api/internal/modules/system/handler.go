@@ -31,6 +31,7 @@ type Handler struct {
 	template *EmailTemplateHandler
 	webhook  *WebhookHandler
 	receiver *WebhookReceiverHandler
+	reference *ReferenceHandler
 
 	// Maintenance exposes the background worker for lifecycle management.
 	Maintenance *MaintenanceWorker
@@ -63,6 +64,7 @@ func NewHandler(
 	templateSvc := NewEmailTemplateService(pool, auditSvc)
 	webhookSvc := NewWebhookService(pool, auditSvc)
 	webhookReceiver := NewWebhookReceiverHandler(pool, auditSvc, webhookSvc, js)
+	referenceSvc := NewReferenceService(pool, auditSvc)
 
 	return &Handler{
 		user:        NewUserHandler(userSvc),
@@ -76,6 +78,7 @@ func NewHandler(
 		template:    NewEmailTemplateHandler(templateSvc),
 		webhook:     NewWebhookHandler(webhookSvc, webhookReceiver),
 		receiver:    webhookReceiver,
+		reference:   NewReferenceHandler(referenceSvc),
 		Maintenance:     NewMaintenanceWorker(pool),
 		licenseEnforcer: licenseEnforcer,
 		siemExporter:    siemExporter,
@@ -131,6 +134,9 @@ func (h *Handler) Routes(r chi.Router) {
 
 		// System settings (NFR-024)
 		r.Route("/settings", func(r chi.Router) { h.settings.Routes(r) })
+
+		// Unified reference data management (priorities, CI types, locations, resolver groups)
+		r.Route("/reference-data", func(r chi.Router) { h.reference.Routes(r) })
 
 		// Email templates
 		r.Route("/email-templates", func(r chi.Router) { h.template.Routes(r) })

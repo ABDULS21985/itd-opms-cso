@@ -310,6 +310,13 @@ func (h *OIDCHandler) provisionUser(ctx context.Context, claims *EntraClaims) (*
 		)
 	}
 
+	mappedRoles := MapGroupsToRoles(claims.Groups, h.cfg.GroupRoleMapping)
+	if len(mappedRoles) > 0 {
+		if err := h.applyMappedRoles(ctx, user.ID, user.TenantID, mappedRoles); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	// Fetch roles and permissions.
 	authService := &AuthService{pool: h.pool}
 	roles, permissions, err := authService.getUserRolesAndPermissions(ctx, user.ID)
@@ -318,4 +325,28 @@ func (h *OIDCHandler) provisionUser(ctx context.Context, claims *EntraClaims) (*
 	}
 
 	return &user, roles, permissions, nil
+}
+
+func (h *OIDCHandler) applyMappedRoles(ctx context.Context, userID, tenantID uuid.UUID, roleNames []string) error {
+	for _, roleName := range roleNames {
+		roleName = strings.TrimSpace(roleName)
+		if roleName == "" {
+			continue
+		}
+		tag, err := h.pool.Exec(ctx, `
+			INSERT INTO role_bindings (user_id, role_id, tenant_id, scope_type, granted_by)
+			SELECT $1, r.id, $2, 'tenant', $1
+			FROM roles r
+			WHERE r.name = $3
+			ON CONFLICT DO NOTHING`,
+			userID, tenantID, roleName,
+		)
+		if err != nil {
+			return fmt.Errorf("assign mapped role %q: %w", roleName, err)
+		}
+		if tag.RowsAffected() == 0 {
+			slog.WarnContext(ctx, "mapped Entra group role not found or already assigned", "role", roleName, "userID", userID)
+		}
+	}
+	return nil
 }

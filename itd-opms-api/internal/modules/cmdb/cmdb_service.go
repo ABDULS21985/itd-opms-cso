@@ -33,6 +33,89 @@ func NewCMDBService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *CMDBServi
 	}
 }
 
+// GetQualityReport returns CMDB completeness and accuracy indicators for SACM governance.
+func (s *CMDBService) GetQualityReport(ctx context.Context) (CMDBQualityReport, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return CMDBQualityReport{}, apperrors.Unauthorized("authentication required")
+	}
+
+	var report CMDBQualityReport
+	report.GeneratedAt = time.Now().UTC()
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*)::int AS total_cis,
+			COUNT(*) FILTER (WHERE status = 'active')::int AS active_cis,
+			COUNT(*) FILTER (WHERE asset_id IS NULL)::int AS cis_missing_asset,
+			COUNT(*) FILTER (
+				WHERE NOT EXISTS (
+					SELECT 1
+					FROM cmdb_relationships r
+					WHERE r.is_active = true
+					  AND (r.source_ci_id = ci.id OR r.target_ci_id = ci.id)
+				)
+			)::int AS cis_without_relationships
+		FROM cmdb_items ci
+		WHERE tenant_id = $1`,
+		auth.TenantID,
+	).Scan(&report.TotalCIs, &report.ActiveCIs, &report.CIsMissingAsset, &report.CIsWithoutRelationships)
+	if err != nil {
+		return CMDBQualityReport{}, apperrors.Internal("failed to compute CI quality metrics", err)
+	}
+
+	err = s.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE a.status <> 'disposed')::int AS total_assets,
+			COUNT(*) FILTER (
+				WHERE a.status <> 'disposed'
+				  AND NOT EXISTS (
+				  	SELECT 1 FROM cmdb_items ci
+				  	WHERE ci.tenant_id = a.tenant_id AND ci.asset_id = a.id
+				  )
+			)::int AS assets_without_ci,
+			COUNT(*) FILTER (
+				WHERE a.status <> 'disposed'
+				  AND COALESCE(a.verification_status, 'unverified') <> 'verified'
+			)::int AS unverified_assets,
+			COUNT(*) FILTER (
+				WHERE a.status <> 'disposed'
+				  AND (a.last_verified_at IS NULL OR a.last_verified_at < NOW() - INTERVAL '90 days')
+			)::int AS stale_verified_assets
+		FROM assets a
+		WHERE a.tenant_id = $1`,
+		auth.TenantID,
+	).Scan(&report.TotalAssets, &report.AssetsWithoutCI, &report.UnverifiedAssets, &report.StaleVerifiedAssets)
+	if err != nil {
+		return CMDBQualityReport{}, apperrors.Internal("failed to compute asset quality metrics", err)
+	}
+
+	_ = s.pool.QueryRow(ctx, `
+		SELECT source, completed_at, discrepancies
+		FROM reconciliation_runs
+		WHERE tenant_id = $1 AND status = 'completed'
+		ORDER BY completed_at DESC NULLS LAST, started_at DESC
+		LIMIT 1`,
+		auth.TenantID,
+	).Scan(&report.LatestReconciliationSource, &report.LatestReconciliationAt, &report.LatestDiscrepancies)
+
+	report.CompletenessScore = percentageScore(report.TotalCIs+report.TotalAssets, report.CIsMissingAsset+report.CIsWithoutRelationships+report.AssetsWithoutCI)
+	report.AccuracyScore = percentageScore(report.TotalCIs+report.TotalAssets, report.LatestDiscrepancies+report.UnverifiedAssets+report.StaleVerifiedAssets)
+
+	return report, nil
+}
+
+func percentageScore(total, issues int) float64 {
+	if total <= 0 {
+		return 100
+	}
+	score := 100 - (float64(issues)/float64(total))*100
+	if score < 0 {
+		return 0
+	}
+	return score
+}
+
 // ──────────────────────────────────────────────
 // Scan helpers
 // ──────────────────────────────────────────────

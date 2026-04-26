@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -85,11 +86,12 @@ type JWTConfig struct {
 }
 
 type EntraIDConfig struct {
-	TenantID     string `mapstructure:"tenant_id"`
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
-	RedirectURI  string `mapstructure:"redirect_uri"`
-	Enabled      bool   `mapstructure:"enabled"`
+	TenantID         string            `mapstructure:"tenant_id"`
+	ClientID         string            `mapstructure:"client_id"`
+	ClientSecret     string            `mapstructure:"client_secret"`
+	RedirectURI      string            `mapstructure:"redirect_uri"`
+	Enabled          bool              `mapstructure:"enabled"`
+	GroupRoleMapping map[string]string `mapstructure:"group_role_mapping"`
 }
 
 // Issuer returns the OIDC issuer URL for this Entra ID tenant.
@@ -217,6 +219,7 @@ func Load() (*Config, error) {
 	v.SetDefault("ENTRA_CLIENT_SECRET", "")
 	v.SetDefault("ENTRA_REDIRECT_URI", "http://localhost:3000/auth/callback")
 	v.SetDefault("ENTRA_ENABLED", false)
+	v.SetDefault("ENTRA_GROUP_ROLE_MAPPING_JSON", "{}")
 
 	// Microsoft Graph
 	v.SetDefault("GRAPH_SERVICE_ACCOUNT_ID", "")
@@ -290,6 +293,12 @@ func Load() (*Config, error) {
 	if discoveryADTenantID == "" {
 		discoveryADTenantID = v.GetString("ENTRA_TENANT_ID")
 	}
+	groupRoleMapping := map[string]string{}
+	if rawMapping := strings.TrimSpace(v.GetString("ENTRA_GROUP_ROLE_MAPPING_JSON")); rawMapping != "" {
+		if err := json.Unmarshal([]byte(rawMapping), &groupRoleMapping); err != nil {
+			return nil, fmt.Errorf("invalid ENTRA_GROUP_ROLE_MAPPING_JSON: %w", err)
+		}
+	}
 
 	cfg := &Config{
 		Server: ServerConfig{
@@ -332,11 +341,12 @@ func Load() (*Config, error) {
 			RefreshExpiry: refreshExpiry,
 		},
 		EntraID: EntraIDConfig{
-			TenantID:     v.GetString("ENTRA_TENANT_ID"),
-			ClientID:     v.GetString("ENTRA_CLIENT_ID"),
-			ClientSecret: v.GetString("ENTRA_CLIENT_SECRET"),
-			RedirectURI:  v.GetString("ENTRA_REDIRECT_URI"),
-			Enabled:      v.GetBool("ENTRA_ENABLED"),
+			TenantID:         v.GetString("ENTRA_TENANT_ID"),
+			ClientID:         v.GetString("ENTRA_CLIENT_ID"),
+			ClientSecret:     v.GetString("ENTRA_CLIENT_SECRET"),
+			RedirectURI:      v.GetString("ENTRA_REDIRECT_URI"),
+			Enabled:          v.GetBool("ENTRA_ENABLED"),
+			GroupRoleMapping: groupRoleMapping,
 		},
 		Graph: GraphConfig{
 			ServiceAccountID: v.GetString("GRAPH_SERVICE_ACCOUNT_ID"),

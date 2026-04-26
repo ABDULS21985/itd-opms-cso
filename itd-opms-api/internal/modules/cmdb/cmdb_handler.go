@@ -29,6 +29,7 @@ func NewCMDBCIHandler(svc *CMDBService) *CMDBCIHandler {
 // Routes mounts CMDB CI endpoints on the given router.
 func (h *CMDBCIHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("cmdb.view")).Get("/topology", h.GetTopology)
+	r.With(middleware.RequirePermission("cmdb.view")).Get("/quality-report", h.GetQualityReport)
 	r.Route("/items", func(r chi.Router) {
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/", h.ListCMDBItems)
 		r.With(middleware.RequirePermission("cmdb.view")).Get("/search", h.SearchCMDBItems)
@@ -48,6 +49,23 @@ func (h *CMDBCIHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("cmdb.manage")).Post("/", h.CreateReconciliationRun)
 		r.With(middleware.RequirePermission("cmdb.manage")).Put("/{id}/complete", h.CompleteReconciliationRun)
 	})
+}
+
+// GetQualityReport handles GET /quality-report — returns CMDB completeness/accuracy metrics.
+func (h *CMDBCIHandler) GetQualityReport(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	report, err := h.svc.GetQualityReport(r.Context())
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, report, nil)
 }
 
 // GetTopology handles GET /topology — returns a graph payload of CIs and relationships.

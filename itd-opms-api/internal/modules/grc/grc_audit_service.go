@@ -2,6 +2,7 @@ package grc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -608,30 +609,37 @@ func (s *AuditMgmtService) CreateEvidenceCollection(ctx context.Context, auditID
 	id := uuid.New()
 	now := time.Now().UTC()
 	initialStatus := EvidenceStatusPending
+	var assignedAt *time.Time
+	if req.CollectorID != nil {
+		assignedAt = &now
+	}
 
 	query := `
 		INSERT INTO evidence_collections (
 			id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id,
+			due_date, assigned_at,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8,
-			$9, $10
+			$9, $10,
+			$11, $12
 		)
 		RETURNING id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id, reviewer_id,
-			approved_at, checksum, created_at, updated_at`
+			due_date, assigned_at, approved_at, checksum, created_at, updated_at`
 
 	var ec EvidenceCollection
 	err := s.pool.QueryRow(ctx, query,
 		id, auditID, auth.TenantID, req.Title, req.Description,
 		initialStatus, req.EvidenceItemIDs, req.CollectorID,
+		req.DueDate, assignedAt,
 		now, now,
 	).Scan(
 		&ec.ID, &ec.AuditID, &ec.TenantID, &ec.Title, &ec.Description,
 		&ec.Status, &ec.EvidenceItemIDs, &ec.CollectorID, &ec.ReviewerID,
-		&ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
+		&ec.DueDate, &ec.AssignedAt, &ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
 	)
 	if err != nil {
 		return EvidenceCollection{}, apperrors.Internal("failed to create evidence collection", err)
@@ -662,7 +670,7 @@ func (s *AuditMgmtService) GetEvidenceCollection(ctx context.Context, id uuid.UU
 	query := `
 		SELECT id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id, reviewer_id,
-			approved_at, checksum, created_at, updated_at
+			due_date, assigned_at, approved_at, checksum, created_at, updated_at
 		FROM evidence_collections
 		WHERE id = $1 AND tenant_id = $2`
 
@@ -670,7 +678,7 @@ func (s *AuditMgmtService) GetEvidenceCollection(ctx context.Context, id uuid.UU
 	err := s.pool.QueryRow(ctx, query, id, auth.TenantID).Scan(
 		&ec.ID, &ec.AuditID, &ec.TenantID, &ec.Title, &ec.Description,
 		&ec.Status, &ec.EvidenceItemIDs, &ec.CollectorID, &ec.ReviewerID,
-		&ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
+		&ec.DueDate, &ec.AssignedAt, &ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -692,7 +700,7 @@ func (s *AuditMgmtService) ListEvidenceCollections(ctx context.Context, auditID 
 	query := `
 		SELECT id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id, reviewer_id,
-			approved_at, checksum, created_at, updated_at
+			due_date, assigned_at, approved_at, checksum, created_at, updated_at
 		FROM evidence_collections
 		WHERE audit_id = $1 AND tenant_id = $2
 			AND ($3::text IS NULL OR status = $3)
@@ -710,7 +718,7 @@ func (s *AuditMgmtService) ListEvidenceCollections(ctx context.Context, auditID 
 		if err := rows.Scan(
 			&ec.ID, &ec.AuditID, &ec.TenantID, &ec.Title, &ec.Description,
 			&ec.Status, &ec.EvidenceItemIDs, &ec.CollectorID, &ec.ReviewerID,
-			&ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
+			&ec.DueDate, &ec.AssignedAt, &ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
 		); err != nil {
 			return nil, apperrors.Internal("failed to scan evidence collection", err)
 		}
@@ -749,23 +757,28 @@ func (s *AuditMgmtService) UpdateEvidenceCollection(ctx context.Context, id uuid
 			evidence_item_ids = COALESCE($4, evidence_item_ids),
 			collector_id = COALESCE($5, collector_id),
 			reviewer_id = COALESCE($6, reviewer_id),
-			checksum = COALESCE($7, checksum),
+			due_date = COALESCE($7, due_date),
+			assigned_at = CASE
+				WHEN $5::uuid IS NOT NULL AND collector_id IS DISTINCT FROM $5 THEN $8
+				ELSE assigned_at
+			END,
+			checksum = COALESCE($9, checksum),
 			updated_at = $8
-		WHERE id = $9 AND tenant_id = $10
+		WHERE id = $10 AND tenant_id = $11
 		RETURNING id, audit_id, tenant_id, title, description,
 			status, evidence_item_ids, collector_id, reviewer_id,
-			approved_at, checksum, created_at, updated_at`
+			due_date, assigned_at, approved_at, checksum, created_at, updated_at`
 
 	var ec EvidenceCollection
 	err := s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.Status,
 		req.EvidenceItemIDs, req.CollectorID, req.ReviewerID,
-		req.Checksum,
-		now, id, auth.TenantID,
+		req.DueDate, now, req.Checksum,
+		id, auth.TenantID,
 	).Scan(
 		&ec.ID, &ec.AuditID, &ec.TenantID, &ec.Title, &ec.Description,
 		&ec.Status, &ec.EvidenceItemIDs, &ec.CollectorID, &ec.ReviewerID,
-		&ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
+		&ec.DueDate, &ec.AssignedAt, &ec.ApprovedAt, &ec.Checksum, &ec.CreatedAt, &ec.UpdatedAt,
 	)
 	if err != nil {
 		return EvidenceCollection{}, apperrors.Internal("failed to update evidence collection", err)
@@ -833,6 +846,139 @@ func (s *AuditMgmtService) ApproveEvidenceCollection(ctx context.Context, id uui
 	}
 
 	return nil
+}
+
+// GenerateEvidencePack captures a point-in-time evidence pack for audit export.
+func (s *AuditMgmtService) GenerateEvidencePack(ctx context.Context, auditID uuid.UUID, req GenerateEvidencePackRequest) (AuditEvidencePack, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return AuditEvidencePack{}, apperrors.Unauthorized("authentication required")
+	}
+
+	format := req.Format
+	if format == "" {
+		format = "json"
+	}
+	if format != "json" && format != "html" && format != "pdf" {
+		return AuditEvidencePack{}, apperrors.Validation("format", "format must be json, html, or pdf")
+	}
+
+	auditRecord, err := s.GetAudit(ctx, auditID)
+	if err != nil {
+		return AuditEvidencePack{}, err
+	}
+	collections, err := s.ListEvidenceCollections(ctx, auditID, nil)
+	if err != nil {
+		return AuditEvidencePack{}, err
+	}
+	findings, _, err := s.ListFindings(ctx, auditID, nil, 1, 10000)
+	if err != nil {
+		return AuditEvidencePack{}, err
+	}
+
+	evidenceItems, err := s.listEvidenceItemsForAudit(ctx, auth.TenantID, auditID)
+	if err != nil {
+		return AuditEvidencePack{}, err
+	}
+
+	snapshot := map[string]any{
+		"audit":              auditRecord,
+		"findings":           findings,
+		"evidenceCollections": collections,
+		"evidenceItems":       evidenceItems,
+		"generatedAt":         time.Now().UTC(),
+		"format":              format,
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		return AuditEvidencePack{}, apperrors.Internal("failed to marshal evidence pack", err)
+	}
+	checksumBytes := sha256.Sum256(snapshotJSON)
+	checksum := fmt.Sprintf("%x", checksumBytes[:])
+
+	packID := uuid.New()
+	var pack AuditEvidencePack
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO audit_evidence_packs (
+			id, tenant_id, audit_id, generated_by,
+			format, status, pack_snapshot, checksum, generated_at
+		) VALUES ($1, $2, $3, $4, $5, 'generated', $6, $7, NOW())
+		RETURNING id, tenant_id, audit_id, generated_by, format, status,
+			document_id, pack_snapshot, checksum, generated_at`,
+		packID, auth.TenantID, auditID, auth.UserID, format, snapshotJSON, checksum,
+	).Scan(
+		&pack.ID, &pack.TenantID, &pack.AuditID, &pack.GeneratedBy,
+		&pack.Format, &pack.Status, &pack.DocumentID, &pack.PackSnapshot,
+		&pack.Checksum, &pack.GeneratedAt,
+	)
+	if err != nil {
+		return AuditEvidencePack{}, apperrors.Internal("failed to save evidence pack", err)
+	}
+
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "generate:evidence_pack",
+		EntityType: "grc_audit",
+		EntityID:   auditID,
+		Changes:    snapshotJSON,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return pack, nil
+}
+
+func (s *AuditMgmtService) listEvidenceItemsForAudit(ctx context.Context, tenantID, auditID uuid.UUID) ([]map[string]any, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, entity_type, entity_id, document_id, description,
+			collected_by, collected_at, is_immutable
+		FROM evidence_items
+		WHERE tenant_id = $1
+		  AND (
+		  	(entity_type = 'grc_audit' AND entity_id = $2)
+		  	OR id IN (
+		  		SELECT unnest(evidence_item_ids)
+		  		FROM evidence_collections
+		  		WHERE tenant_id = $1 AND audit_id = $2
+		  	)
+		  )
+		ORDER BY collected_at DESC`,
+		tenantID, auditID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list evidence items", err)
+	}
+	defer rows.Close()
+
+	items := []map[string]any{}
+	for rows.Next() {
+		var (
+			id, entityID, documentID, collectedBy uuid.UUID
+			entityType                            string
+			description                           *string
+			collectedAt                           time.Time
+			isImmutable                           bool
+		)
+		if err := rows.Scan(&id, &entityType, &entityID, &documentID, &description, &collectedBy, &collectedAt, &isImmutable); err != nil {
+			return nil, apperrors.Internal("failed to scan evidence item", err)
+		}
+		items = append(items, map[string]any{
+			"id":          id,
+			"entityType":  entityType,
+			"entityId":    entityID,
+			"documentId":  documentID,
+			"description": description,
+			"collectedBy": collectedBy,
+			"collectedAt": collectedAt,
+			"isImmutable": isImmutable,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate evidence items", err)
+	}
+
+	return items, nil
 }
 
 // ──────────────────────────────────────────────

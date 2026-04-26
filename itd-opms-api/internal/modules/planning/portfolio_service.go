@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/approval"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
@@ -433,15 +434,17 @@ func (s *PortfolioService) GetPortfolioAnalytics(ctx context.Context, id uuid.UU
 
 // ProjectService handles business logic for project management.
 type ProjectService struct {
-	pool     *pgxpool.Pool
-	auditSvc *audit.AuditService
+	pool        *pgxpool.Pool
+	auditSvc    *audit.AuditService
+	approvalSvc *approval.Service
 }
 
 // NewProjectService creates a new ProjectService.
 func NewProjectService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *ProjectService {
 	return &ProjectService{
-		pool:     pool,
-		auditSvc: auditSvc,
+		pool:        pool,
+		auditSvc:    auditSvc,
+		approvalSvc: approval.NewService(pool, auditSvc),
 	}
 }
 
@@ -667,9 +670,12 @@ func (s *ProjectService) UpdateProject(ctx context.Context, id uuid.UUID, req Up
 	}
 
 	// Verify the project exists and belongs to the tenant.
-	_, err := s.GetProject(ctx, id)
+	existing, err := s.GetProject(ctx, id)
 	if err != nil {
 		return Project{}, err
+	}
+	if req.Status != nil && *req.Status != existing.Status {
+		return Project{}, apperrors.BadRequest("Project status changes must use the project workflow endpoints")
 	}
 
 	now := time.Now().UTC()
@@ -773,6 +779,49 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
+// SubmitProjectApproval starts the configured approval workflow for a proposed project.
+func (s *ProjectService) SubmitProjectApproval(ctx context.Context, id uuid.UUID) (Project, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Project{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetProject(ctx, id)
+	if err != nil {
+		return Project{}, err
+	}
+	if existing.Status != ProjectStatusProposed {
+		return Project{}, apperrors.BadRequest(fmt.Sprintf("project approval can only be submitted from '%s' status", ProjectStatusProposed))
+	}
+
+	metadata, _ := json.Marshal(map[string]any{
+		"title": existing.Title,
+		"code":  existing.Code,
+	})
+	_, err = s.approvalSvc.StartApproval(ctx, auth.TenantID, auth.UserID, approval.StartApprovalRequest{
+		EntityType: "project",
+		EntityID:   id,
+		Urgency:    approval.UrgencyNormal,
+		Metadata:   metadata,
+	})
+	if err != nil {
+		return Project{}, err
+	}
+
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "submit_approval:project",
+		EntityType: "project",
+		EntityID:   id,
+		Changes:    metadata,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return s.GetProject(ctx, id)
+}
+
 // ApproveProject transitions a project to a new status with validation.
 // Valid transitions: proposed->approved, approved->active, active->on_hold/completed, on_hold->active/cancelled
 func (s *ProjectService) ApproveProject(ctx context.Context, id uuid.UUID, req ApproveProjectRequest) (Project, error) {
@@ -791,6 +840,15 @@ func (s *ProjectService) ApproveProject(ctx context.Context, id uuid.UUID, req A
 		return Project{}, apperrors.BadRequest(
 			fmt.Sprintf("invalid status transition from '%s' to '%s'", existing.Status, req.Status),
 		)
+	}
+	if existing.Status == ProjectStatusProposed && req.Status == ProjectStatusApproved {
+		approved, err := s.hasCompletedApproval(ctx, auth.TenantID, "project", id)
+		if err != nil {
+			return Project{}, err
+		}
+		if !approved {
+			return Project{}, apperrors.BadRequest("Project must complete its configured approval workflow before approval")
+		}
 	}
 
 	now := time.Now().UTC()
@@ -833,6 +891,25 @@ func (s *ProjectService) ApproveProject(ctx context.Context, id uuid.UUID, req A
 	}
 
 	return p, nil
+}
+
+func (s *ProjectService) hasCompletedApproval(ctx context.Context, tenantID uuid.UUID, entityType string, entityID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM approval_chains
+			WHERE tenant_id = $1
+			  AND entity_type = $2
+			  AND entity_id = $3
+			  AND status = 'approved'
+		)`,
+		tenantID, entityType, entityID,
+	).Scan(&exists)
+	if err != nil {
+		return false, apperrors.Internal("failed to check approval workflow status", err)
+	}
+	return exists, nil
 }
 
 // isValidProjectTransition checks whether a project status transition is allowed.

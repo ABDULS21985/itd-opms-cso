@@ -195,7 +195,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 		)
 		RETURNING id, tenant_id, request_number, catalog_item_id, requester_id,
 			status, form_data, assigned_to, priority, ticket_id,
-			rejection_reason, fulfillment_notes, fulfilled_at, cancelled_at,
+			rejection_reason, fulfillment_notes, fulfilled_at, cancelled_at, closed_at,
 			created_at, updated_at,
 			sla_policy_id, sla_resolution_target, sla_resolution_met,
 			sla_fulfillment_target, sla_fulfillment_met,
@@ -210,7 +210,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 	).Scan(
 		&sr.ID, &sr.TenantID, &sr.RequestNumber, &sr.CatalogItemID, &sr.RequesterID,
 		&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
-		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
+		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt, &sr.ClosedAt,
 		&sr.CreatedAt, &sr.UpdatedAt,
 		&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
 		&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
@@ -336,7 +336,7 @@ func (s *RequestService) ListMyRequests(ctx context.Context, status *string, lim
 	dataQuery := `
 		SELECT sr.id, sr.tenant_id, sr.request_number, sr.catalog_item_id, sr.requester_id,
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
-			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
+			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at, sr.closed_at,
 			sr.created_at, sr.updated_at,
 			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
 			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
@@ -362,7 +362,7 @@ func (s *RequestService) ListMyRequests(ctx context.Context, status *string, lim
 		if err := rows.Scan(
 			&sr.ID, &sr.TenantID, &sr.RequestNumber, &sr.CatalogItemID, &sr.RequesterID,
 			&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
-			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
+			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt, &sr.ClosedAt,
 			&sr.CreatedAt, &sr.UpdatedAt,
 			&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
 			&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
@@ -400,7 +400,7 @@ func (s *RequestService) GetRequestDetail(ctx context.Context, id uuid.UUID) (Se
 	srQuery := `
 		SELECT sr.id, sr.tenant_id, sr.request_number, sr.catalog_item_id, sr.requester_id,
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
-			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
+			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at, sr.closed_at,
 			sr.created_at, sr.updated_at,
 			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
 			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
@@ -414,7 +414,7 @@ func (s *RequestService) GetRequestDetail(ctx context.Context, id uuid.UUID) (Se
 	err := s.pool.QueryRow(ctx, srQuery, id, auth.TenantID).Scan(
 		&detail.ID, &detail.TenantID, &detail.RequestNumber, &detail.CatalogItemID, &detail.RequesterID,
 		&detail.Status, &detail.FormData, &detail.AssignedTo, &detail.Priority, &detail.TicketID,
-		&detail.RejectionReason, &detail.FulfillmentNotes, &detail.FulfilledAt, &detail.CancelledAt,
+		&detail.RejectionReason, &detail.FulfillmentNotes, &detail.FulfilledAt, &detail.CancelledAt, &detail.ClosedAt,
 		&detail.CreatedAt, &detail.UpdatedAt,
 		&detail.SLAPolicyID, &detail.SLAResolutionTarget, &detail.SLAResolutionMet,
 		&detail.SLAFulfillmentTarget, &detail.SLAFulfillmentMet,
@@ -532,7 +532,7 @@ func (s *RequestService) ListPendingApprovals(ctx context.Context, limit, offset
 		SELECT DISTINCT ON (sr.id)
 			sr.id, sr.tenant_id, sr.request_number, sr.catalog_item_id, sr.requester_id,
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
-			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
+			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at, sr.closed_at,
 			sr.created_at, sr.updated_at,
 			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
 			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
@@ -560,7 +560,7 @@ func (s *RequestService) ListPendingApprovals(ctx context.Context, limit, offset
 		if err := rows.Scan(
 			&sr.ID, &sr.TenantID, &sr.RequestNumber, &sr.CatalogItemID, &sr.RequesterID,
 			&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
-			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
+			&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt, &sr.ClosedAt,
 			&sr.CreatedAt, &sr.UpdatedAt,
 			&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
 			&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,
@@ -858,6 +858,235 @@ func (s *RequestService) RejectRequest(ctx context.Context, requestID uuid.UUID,
 // CancelRequest
 // ──────────────────────────────────────────────
 
+// StartFulfillment assigns an approved request and moves it into fulfillment.
+func (s *RequestService) StartFulfillment(ctx context.Context, requestID uuid.UUID, req StartFulfillmentRequest) (ServiceRequest, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var currentStatus string
+	err = tx.QueryRow(ctx,
+		`SELECT status FROM service_requests WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		requestID, auth.TenantID,
+	).Scan(&currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ServiceRequest{}, apperrors.NotFound("ServiceRequest", requestID.String())
+		}
+		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
+	}
+
+	if currentStatus != RequestStatusApproved && currentStatus != RequestStatusInProgress {
+		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot start fulfillment from %s", currentStatus))
+	}
+
+	assignedTo := auth.UserID
+	if req.AssignedTo != nil {
+		assignedTo = *req.AssignedTo
+	}
+
+	now := time.Now().UTC()
+	_, err = tx.Exec(ctx,
+		`UPDATE service_requests
+		 SET status = $1,
+		     assigned_to = $2,
+		     updated_at = $3
+		 WHERE id = $4`,
+		RequestStatusInProgress, assignedTo, now, requestID,
+	)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to start fulfillment", err)
+	}
+
+	desc := "Fulfillment started"
+	if req.Comment != nil && strings.TrimSpace(*req.Comment) != "" {
+		desc = fmt.Sprintf("Fulfillment started: %s", strings.TrimSpace(*req.Comment))
+	}
+	if err := s.addTimelineEntry(ctx, tx, requestID, auth.UserID, "in_progress", &desc, nil); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to add timeline entry", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to commit transaction", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": currentStatus,
+		"new_status":      RequestStatusInProgress,
+		"assigned_to":     assignedTo,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "start_fulfillment:service_request",
+		EntityType: "service_request",
+		EntityID:   requestID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return s.getRequestByID(ctx, requestID, auth.TenantID)
+}
+
+// FulfillRequest marks a request as fulfilled and records fulfillment notes.
+func (s *RequestService) FulfillRequest(ctx context.Context, requestID uuid.UUID, req FulfillRequestRequest) (ServiceRequest, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
+	}
+	if strings.TrimSpace(req.FulfillmentNotes) == "" {
+		return ServiceRequest{}, apperrors.Validation("fulfillmentNotes", "fulfillment notes are required")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var currentStatus string
+	err = tx.QueryRow(ctx,
+		`SELECT status FROM service_requests WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		requestID, auth.TenantID,
+	).Scan(&currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ServiceRequest{}, apperrors.NotFound("ServiceRequest", requestID.String())
+		}
+		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
+	}
+
+	if currentStatus != RequestStatusApproved && currentStatus != RequestStatusInProgress {
+		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot be fulfilled from %s", currentStatus))
+	}
+
+	now := time.Now().UTC()
+	_, err = tx.Exec(ctx,
+		`UPDATE service_requests
+		 SET status = $1,
+		     fulfillment_notes = $2,
+		     fulfilled_at = $3,
+		     updated_at = $3,
+		     sla_fulfillment_met = CASE
+		         WHEN sla_fulfillment_target IS NOT NULL THEN
+		             ($3 <= sla_fulfillment_target + make_interval(mins => sla_paused_duration_minutes))
+		         ELSE sla_fulfillment_met
+		     END,
+		     sla_paused_at = NULL
+		 WHERE id = $4`,
+		RequestStatusFulfilled, strings.TrimSpace(req.FulfillmentNotes), now, requestID,
+	)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to fulfill request", err)
+	}
+
+	desc := fmt.Sprintf("Request fulfilled: %s", strings.TrimSpace(req.FulfillmentNotes))
+	if err := s.addTimelineEntry(ctx, tx, requestID, auth.UserID, "fulfilled", &desc, nil); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to add timeline entry", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to commit transaction", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status":   currentStatus,
+		"new_status":        RequestStatusFulfilled,
+		"fulfillment_notes": strings.TrimSpace(req.FulfillmentNotes),
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "fulfill:service_request",
+		EntityType: "service_request",
+		EntityID:   requestID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return s.getRequestByID(ctx, requestID, auth.TenantID)
+}
+
+// CloseRequest formally closes a fulfilled request.
+func (s *RequestService) CloseRequest(ctx context.Context, requestID uuid.UUID, req CloseRequestRequest) (ServiceRequest, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var currentStatus string
+	err = tx.QueryRow(ctx,
+		`SELECT status FROM service_requests WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		requestID, auth.TenantID,
+	).Scan(&currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ServiceRequest{}, apperrors.NotFound("ServiceRequest", requestID.String())
+		}
+		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
+	}
+
+	if currentStatus != RequestStatusFulfilled {
+		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot be closed from %s", currentStatus))
+	}
+
+	now := time.Now().UTC()
+	_, err = tx.Exec(ctx,
+		`UPDATE service_requests
+		 SET status = $1, closed_at = $2, updated_at = $2
+		 WHERE id = $3`,
+		RequestStatusClosed, now, requestID,
+	)
+	if err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to close request", err)
+	}
+
+	desc := "Request closed"
+	if req.Comment != nil && strings.TrimSpace(*req.Comment) != "" {
+		desc = fmt.Sprintf("Request closed: %s", strings.TrimSpace(*req.Comment))
+	}
+	if err := s.addTimelineEntry(ctx, tx, requestID, auth.UserID, "closed", &desc, nil); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to add timeline entry", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ServiceRequest{}, apperrors.Internal("failed to commit transaction", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"previous_status": currentStatus,
+		"new_status":      RequestStatusClosed,
+		"comment":         req.Comment,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "close:service_request",
+		EntityType: "service_request",
+		EntityID:   requestID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return s.getRequestByID(ctx, requestID, auth.TenantID)
+}
+
 // CancelRequest allows the original requester to cancel their service request.
 func (s *RequestService) CancelRequest(ctx context.Context, requestID uuid.UUID) (ServiceRequest, error) {
 	auth := types.GetAuthContext(ctx)
@@ -889,7 +1118,7 @@ func (s *RequestService) CancelRequest(ctx context.Context, requestID uuid.UUID)
 		return ServiceRequest{}, apperrors.Unauthorized("only the requester can cancel this request")
 	}
 
-	if currentStatus == RequestStatusFulfilled || currentStatus == RequestStatusCancelled {
+	if currentStatus == RequestStatusFulfilled || currentStatus == RequestStatusClosed || currentStatus == RequestStatusCancelled {
 		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("cannot cancel a request that is %s", currentStatus))
 	}
 
@@ -950,7 +1179,7 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 	query := `
 		SELECT sr.id, sr.tenant_id, sr.request_number, sr.catalog_item_id, sr.requester_id,
 			sr.status, sr.form_data, sr.assigned_to, sr.priority, sr.ticket_id,
-			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at,
+			sr.rejection_reason, sr.fulfillment_notes, sr.fulfilled_at, sr.cancelled_at, sr.closed_at,
 			sr.created_at, sr.updated_at,
 			sr.sla_policy_id, sr.sla_resolution_target, sr.sla_resolution_met,
 			sr.sla_fulfillment_target, sr.sla_fulfillment_met,
@@ -964,7 +1193,7 @@ func (s *RequestService) getRequestByID(ctx context.Context, id, tenantID uuid.U
 	err := s.pool.QueryRow(ctx, query, id, tenantID).Scan(
 		&sr.ID, &sr.TenantID, &sr.RequestNumber, &sr.CatalogItemID, &sr.RequesterID,
 		&sr.Status, &sr.FormData, &sr.AssignedTo, &sr.Priority, &sr.TicketID,
-		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt,
+		&sr.RejectionReason, &sr.FulfillmentNotes, &sr.FulfilledAt, &sr.CancelledAt, &sr.ClosedAt,
 		&sr.CreatedAt, &sr.UpdatedAt,
 		&sr.SLAPolicyID, &sr.SLAResolutionTarget, &sr.SLAResolutionMet,
 		&sr.SLAFulfillmentTarget, &sr.SLAFulfillmentMet,

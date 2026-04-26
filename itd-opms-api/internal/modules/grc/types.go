@@ -261,10 +261,26 @@ type EvidenceCollection struct {
 	EvidenceItemIDs []uuid.UUID `json:"evidenceItemIds"`
 	CollectorID     *uuid.UUID  `json:"collectorId"`
 	ReviewerID      *uuid.UUID  `json:"reviewerId"`
+	DueDate         *time.Time  `json:"dueDate"`
+	AssignedAt      *time.Time  `json:"assignedAt"`
 	ApprovedAt      *time.Time  `json:"approvedAt"`
 	Checksum        *string     `json:"checksum"`
 	CreatedAt       time.Time   `json:"createdAt"`
 	UpdatedAt       time.Time   `json:"updatedAt"`
+}
+
+// AuditEvidencePack records a generated audit evidence export snapshot.
+type AuditEvidencePack struct {
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenantId"`
+	AuditID       uuid.UUID       `json:"auditId"`
+	GeneratedBy   uuid.UUID       `json:"generatedBy"`
+	Format        string          `json:"format"`
+	Status        string          `json:"status"`
+	DocumentID    *uuid.UUID      `json:"documentId"`
+	PackSnapshot  json.RawMessage `json:"packSnapshot"`
+	Checksum      *string         `json:"checksum"`
+	GeneratedAt   time.Time       `json:"generatedAt"`
 }
 
 // AccessReviewCampaign represents a periodic user access review campaign.
@@ -423,6 +439,7 @@ type CreateEvidenceCollectionRequest struct {
 	Description     *string     `json:"description"`
 	EvidenceItemIDs []uuid.UUID `json:"evidenceItemIds"`
 	CollectorID     *uuid.UUID  `json:"collectorId"`
+	DueDate         *time.Time  `json:"dueDate"`
 }
 
 // UpdateEvidenceCollectionRequest is the payload for updating an evidence collection (partial update).
@@ -433,7 +450,13 @@ type UpdateEvidenceCollectionRequest struct {
 	EvidenceItemIDs []uuid.UUID `json:"evidenceItemIds"`
 	CollectorID     *uuid.UUID  `json:"collectorId"`
 	ReviewerID      *uuid.UUID  `json:"reviewerId"`
+	DueDate         *time.Time  `json:"dueDate"`
 	Checksum        *string     `json:"checksum"`
+}
+
+// GenerateEvidencePackRequest is the payload for generating an audit evidence pack.
+type GenerateEvidencePackRequest struct {
+	Format string `json:"format"`
 }
 
 // CreateAccessReviewCampaignRequest is the payload for creating an access review campaign.

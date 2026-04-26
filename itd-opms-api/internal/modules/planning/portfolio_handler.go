@@ -246,6 +246,7 @@ func (h *ProjectHandler) Routes(r chi.Router) {
 		r.With(middleware.RequirePermission("planning.view")).Get("/", h.GetProject)
 		r.With(middleware.RequirePermission("planning.manage")).Put("/", h.UpdateProject)
 		r.With(middleware.RequirePermission("planning.manage")).Delete("/", h.DeleteProject)
+		r.With(middleware.RequirePermission("planning.manage")).Post("/submit-approval", h.SubmitProjectApproval)
 		r.With(middleware.RequirePermission("planning.manage")).Post("/approve", h.ApproveProject)
 
 		// Dependencies
@@ -434,6 +435,29 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.NoContent(w)
+}
+
+// SubmitProjectApproval handles POST /{id}/submit-approval — starts project initiation approval.
+func (h *ProjectHandler) SubmitProjectApproval(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid project ID")
+		return
+	}
+
+	project, err := h.svc.SubmitProjectApproval(r.Context(), projectID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, project, nil)
 }
 
 // ApproveProject handles POST /{id}/approve — transitions project status.

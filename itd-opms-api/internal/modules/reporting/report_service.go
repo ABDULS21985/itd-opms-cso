@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -510,6 +511,60 @@ func (s *ReportService) GetReportRun(ctx context.Context, id uuid.UUID) (ReportR
 	}
 
 	return rr, nil
+}
+
+// RenderReportRunPrintHTML renders a print-ready HTML view suitable for browser PDF export.
+func (s *ReportService) RenderReportRunPrintHTML(ctx context.Context, id uuid.UUID) (string, error) {
+	rr, err := s.GetReportRun(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	title := "Report Run " + rr.ID.String()
+	generatedAt := ""
+	if rr.GeneratedAt != nil {
+		generatedAt = rr.GeneratedAt.Format(time.RFC3339)
+	}
+	body := "{}"
+	if len(rr.DataSnapshot) > 0 {
+		var pretty any
+		if json.Unmarshal(rr.DataSnapshot, &pretty) == nil {
+			if formatted, err := json.MarshalIndent(pretty, "", "  "); err == nil {
+				body = string(formatted)
+			} else {
+				body = string(rr.DataSnapshot)
+			}
+		} else {
+			body = string(rr.DataSnapshot)
+		}
+	}
+
+	return fmt.Sprintf(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>%s</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, sans-serif; color: #111827; line-height: 1.45; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    .meta { color: #4b5563; font-size: 12px; margin-bottom: 18px; }
+    pre { white-space: pre-wrap; word-break: break-word; border: 1px solid #d1d5db; padding: 12px; border-radius: 4px; background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <h1>%s</h1>
+  <div class="meta">Status: %s | Generated: %s | Run ID: %s</div>
+  <pre>%s</pre>
+</body>
+</html>`,
+		html.EscapeString(title),
+		html.EscapeString(title),
+		html.EscapeString(rr.Status),
+		html.EscapeString(generatedAt),
+		html.EscapeString(rr.ID.String()),
+		html.EscapeString(body),
+	), nil
 }
 
 // ListReportRuns returns a filtered, paginated list of report runs for a definition.

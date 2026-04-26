@@ -43,13 +43,15 @@ func NewProblemService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats
 
 // problemBaseColumns is used in RETURNING clauses (no JOINs available).
 const problemBaseColumns = `id, tenant_id, problem_number, title, description,
-	root_cause, status, linked_incident_ids, workaround,
+	root_cause, rca_template_id, rca_data, status, linked_incident_ids,
+	linked_asset_ids, linked_ci_ids, workaround,
 	permanent_fix, linked_change_id, owner_id, assigned_group_id,
 	created_at, updated_at`
 
 // problemSelectColumns includes enrichment via LEFT JOINs.
 const problemSelectColumns = `p.id, p.tenant_id, p.problem_number, p.title, p.description,
-	p.root_cause, p.status, p.linked_incident_ids, p.workaround,
+	p.root_cause, p.rca_template_id, p.rca_data, p.status, p.linked_incident_ids,
+	p.linked_asset_ids, p.linked_ci_ids, p.workaround,
 	p.permanent_fix, p.linked_change_id, p.owner_id, p.assigned_group_id,
 	p.created_at, p.updated_at,
 	ou.name AS assigned_group_name,
@@ -63,7 +65,8 @@ func scanProblemBase(row pgx.Row) (Problem, error) {
 	var p Problem
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.RootCause, &p.RCATemplateID, &p.RCAData, &p.Status, &p.LinkedIncidentIDs,
+		&p.LinkedAssetIDs, &p.LinkedCIIDs, &p.Workaround,
 		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
@@ -74,7 +77,8 @@ func scanProblemEnriched(row pgx.Row) (Problem, error) {
 	var p Problem
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.ProblemNumber, &p.Title, &p.Description,
-		&p.RootCause, &p.Status, &p.LinkedIncidentIDs, &p.Workaround,
+		&p.RootCause, &p.RCATemplateID, &p.RCAData, &p.Status, &p.LinkedIncidentIDs,
+		&p.LinkedAssetIDs, &p.LinkedCIIDs, &p.Workaround,
 		&p.PermanentFix, &p.LinkedChangeID, &p.OwnerID, &p.AssignedGroupID,
 		&p.CreatedAt, &p.UpdatedAt,
 		&p.AssignedGroupName, &p.OwnerName,
@@ -99,10 +103,12 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 	query := `
 		INSERT INTO problems (
 			id, tenant_id, title, description,
+			rca_template_id, rca_data, linked_asset_ids, linked_ci_ids,
 			status, owner_id, assigned_group_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4,
-			$5, $6, $7, $8, $9
+			$5, $6, $7, $8,
+			$9, $10, $11, $12, $13
 		)
 		RETURNING ` + problemBaseColumns
 
@@ -110,9 +116,14 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 	if status == "" {
 		status = "logged"
 	}
+	rcaData := req.RCAData
+	if rcaData == nil {
+		rcaData = json.RawMessage("{}")
+	}
 
 	p, err := scanProblemBase(s.pool.QueryRow(ctx, query,
 		id, auth.TenantID, req.Title, req.Description,
+		req.RCATemplateID, rcaData, nilIfEmptyUUIDSlice(req.LinkedAssetIDs), nilIfEmptyUUIDSlice(req.LinkedCIIDs),
 		status, req.OwnerID, req.AssignedGroupID, now, now,
 	))
 	if err != nil {
@@ -214,6 +225,44 @@ func (s *ProblemService) ListProblems(ctx context.Context, status *string, assig
 	return problems, total, nil
 }
 
+// ListRCATemplates returns tenant and global structured RCA templates.
+func (s *ProblemService) ListRCATemplates(ctx context.Context) ([]ProblemRCATemplate, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return nil, apperrors.Unauthorized("authentication required")
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tenant_id, name, method, schema, is_active, created_by, created_at, updated_at
+		FROM problem_rca_templates
+		WHERE is_active = true
+		  AND (tenant_id = $1 OR tenant_id IS NULL)
+		ORDER BY tenant_id NULLS FIRST, name ASC`,
+		auth.TenantID,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to list RCA templates", err)
+	}
+	defer rows.Close()
+
+	templates := []ProblemRCATemplate{}
+	for rows.Next() {
+		var tmpl ProblemRCATemplate
+		if err := rows.Scan(
+			&tmpl.ID, &tmpl.TenantID, &tmpl.Name, &tmpl.Method, &tmpl.Schema,
+			&tmpl.IsActive, &tmpl.CreatedBy, &tmpl.CreatedAt, &tmpl.UpdatedAt,
+		); err != nil {
+			return nil, apperrors.Internal("failed to scan RCA template", err)
+		}
+		templates = append(templates, tmpl)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate RCA templates", err)
+	}
+
+	return templates, nil
+}
+
 // UpdateProblem updates an existing problem using COALESCE partial update.
 func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req UpdateProblemRequest) (Problem, error) {
 	auth := types.GetAuthContext(ctx)
@@ -238,17 +287,23 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 			title = COALESCE($1, title),
 			description = COALESCE($2, description),
 			root_cause = COALESCE($3, root_cause),
-			workaround = COALESCE($4, workaround),
-			permanent_fix = COALESCE($5, permanent_fix),
-			linked_change_id = COALESCE($6, linked_change_id),
-			owner_id = COALESCE($7, owner_id),
-			assigned_group_id = COALESCE($8, assigned_group_id),
-			updated_at = $9
-		WHERE id = $10 AND tenant_id = $11
+			rca_template_id = COALESCE($4, rca_template_id),
+			rca_data = COALESCE($5, rca_data),
+			linked_asset_ids = COALESCE($6, linked_asset_ids),
+			linked_ci_ids = COALESCE($7, linked_ci_ids),
+			workaround = COALESCE($8, workaround),
+			permanent_fix = COALESCE($9, permanent_fix),
+			linked_change_id = COALESCE($10, linked_change_id),
+			owner_id = COALESCE($11, owner_id),
+			assigned_group_id = COALESCE($12, assigned_group_id),
+			updated_at = $13
+		WHERE id = $14 AND tenant_id = $15
 		RETURNING ` + problemBaseColumns
 
 	p, err := scanProblemBase(s.pool.QueryRow(ctx, updateQuery,
 		req.Title, req.Description, req.RootCause,
+		req.RCATemplateID, req.RCAData,
+		nilIfEmptyUUIDSlice(req.LinkedAssetIDs), nilIfEmptyUUIDSlice(req.LinkedCIIDs),
 		req.Workaround, req.PermanentFix,
 		req.LinkedChangeID, req.OwnerID, req.AssignedGroupID,
 		now, id, auth.TenantID,
@@ -271,6 +326,128 @@ func (s *ProblemService) UpdateProblem(ctx context.Context, id uuid.UUID, req Up
 	}
 
 	return p, nil
+}
+
+// LinkConfigurationItems links assets and CIs to a problem investigation.
+func (s *ProblemService) LinkConfigurationItems(ctx context.Context, problemID uuid.UUID, req LinkProblemConfigurationRequest) (Problem, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Problem{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetProblem(ctx, problemID)
+	if err != nil {
+		return Problem{}, err
+	}
+	if err := ensureProblemMutationAllowed(auth, existing); err != nil {
+		return Problem{}, err
+	}
+
+	if err := s.ensureProblemAssetsBelongToTenant(ctx, auth.TenantID, req.AssetIDs); err != nil {
+		return Problem{}, err
+	}
+	if err := s.ensureProblemCIsBelongToTenant(ctx, auth.TenantID, req.CIIDs); err != nil {
+		return Problem{}, err
+	}
+
+	assetIDs := req.AssetIDs
+	ciIDs := req.CIIDs
+	if !req.Replace {
+		assetIDs = mergeUUIDs(existing.LinkedAssetIDs, req.AssetIDs)
+		ciIDs = mergeUUIDs(existing.LinkedCIIDs, req.CIIDs)
+	}
+
+	_, err = s.pool.Exec(ctx, `
+		UPDATE problems
+		SET linked_asset_ids = $1,
+		    linked_ci_ids = $2,
+		    updated_at = NOW()
+		WHERE id = $3 AND tenant_id = $4`,
+		assetIDs, ciIDs, problemID, auth.TenantID,
+	)
+	if err != nil {
+		return Problem{}, apperrors.Internal("failed to link configuration items to problem", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"linked_asset_ids": assetIDs,
+		"linked_ci_ids":    ciIDs,
+		"replace":          req.Replace,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "link_configuration:problem",
+		EntityType: "problem",
+		EntityID:   problemID,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return s.GetProblem(ctx, problemID)
+}
+
+func mergeUUIDs(existing, incoming []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(existing)+len(incoming))
+	merged := make([]uuid.UUID, 0, len(existing)+len(incoming))
+	for _, id := range existing {
+		if id == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		merged = append(merged, id)
+	}
+	for _, id := range incoming {
+		if id == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		merged = append(merged, id)
+	}
+	return merged
+}
+
+func (s *ProblemService) ensureProblemAssetsBelongToTenant(ctx context.Context, tenantID uuid.UUID, assetIDs []uuid.UUID) error {
+	if len(assetIDs) == 0 {
+		return nil
+	}
+	var count int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM assets WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		tenantID, assetIDs,
+	).Scan(&count)
+	if err != nil {
+		return apperrors.Internal("failed to validate linked assets", err)
+	}
+	if count != len(assetIDs) {
+		return apperrors.Validation("assetIds", "one or more assets do not belong to this tenant")
+	}
+	return nil
+}
+
+func (s *ProblemService) ensureProblemCIsBelongToTenant(ctx context.Context, tenantID uuid.UUID, ciIDs []uuid.UUID) error {
+	if len(ciIDs) == 0 {
+		return nil
+	}
+	var count int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM cmdb_items WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+		tenantID, ciIDs,
+	).Scan(&count)
+	if err != nil {
+		return apperrors.Internal("failed to validate linked CIs", err)
+	}
+	if count != len(ciIDs) {
+		return apperrors.Validation("ciIds", "one or more CIs do not belong to this tenant")
+	}
+	return nil
 }
 
 // DeleteProblem deletes a problem by ID.

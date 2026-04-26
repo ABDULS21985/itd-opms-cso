@@ -218,6 +218,10 @@ func (s *TenantService) CreateTenant(ctx context.Context, req CreateTenantReques
 	t.UserCount = 0
 	t.Children = []TenantSummary{}
 
+	if err := s.bootstrapTenantDefaults(ctx, t.ID, auth.UserID); err != nil {
+		return nil, fmt.Errorf("bootstrap tenant defaults: %w", err)
+	}
+
 	changes, _ := json.Marshal(req)
 	_ = s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:      auth.TenantID,
@@ -231,6 +235,96 @@ func (s *TenantService) CreateTenant(ctx context.Context, req CreateTenantReques
 	})
 
 	return &t, nil
+}
+
+func (s *TenantService) bootstrapTenantDefaults(ctx context.Context, tenantID, createdBy uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO role_bindings (user_id, role_id, tenant_id, scope_type, granted_by)
+		SELECT $1, r.id, $2, 'tenant', $1
+		FROM roles r
+		WHERE r.name = 'global_admin'
+		ON CONFLICT DO NOTHING`,
+		createdBy, tenantID,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO system_settings (tenant_id, category, key, value, description)
+		SELECT $1, category, key, value, description
+		FROM system_settings
+		WHERE tenant_id IS NULL
+		  AND (
+		  	(category = 'itsm' AND key IN ('priority_matrix', 'ticket_mandatory_fields_by_priority'))
+		  	OR (category = 'grc' AND key = 'audit_log_retention_years')
+		  	OR (category = 'nfr' AND key IN ('availability_target_business_hours', 'dr_targets'))
+		  )
+		ON CONFLICT (tenant_id, category, key) DO NOTHING`,
+		tenantID,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO reference_data (tenant_id, domain, key, label, value, sort_order, is_active)
+		SELECT $1, domain, key, label, value, sort_order, is_active
+		FROM reference_data
+		WHERE tenant_id IS NULL
+		  AND domain IN ('itsm.priority', 'itsm.category', 'cmdb.ci_type', 'cmdb.location')
+		ON CONFLICT (tenant_id, domain, key) DO NOTHING`,
+		tenantID,
+	)
+	if err != nil {
+		return err
+	}
+
+	step := func(name string) json.RawMessage {
+		raw, _ := json.Marshal([]map[string]any{{
+			"stepOrder":       1,
+			"name":            name,
+			"mode":            "any_of",
+			"quorum":          1,
+			"approverType":    "role:global_admin",
+			"approverIds":     []string{createdBy.String()},
+			"timeoutHours":    72,
+			"allowDelegation": true,
+		}})
+		return raw
+	}
+
+	workflows := []struct {
+		Name        string
+		Description string
+		EntityType  string
+		Steps       json.RawMessage
+	}{
+		{"Default Policy Approval", "Single-step policy approval workflow.", "policy", step("Policy approval")},
+		{"Default Project Initiation Approval", "Single-step project initiation and baseline approval workflow.", "project", step("Project approval")},
+		{"Default Asset Disposal Approval", "Single-step asset disposal approval workflow.", "asset_disposal", step("Disposal approval")},
+	}
+
+	for _, wf := range workflows {
+		_, err = s.pool.Exec(ctx, `
+			INSERT INTO workflow_definitions (
+				id, tenant_id, name, description, entity_type, steps,
+				is_active, version, auto_assign_rules, created_by, created_at, updated_at
+			)
+			SELECT gen_random_uuid(), $1, $2, $3, $4, $5::jsonb,
+				true, 1, '{}'::jsonb, $6, NOW(), NOW()
+			WHERE NOT EXISTS (
+				SELECT 1 FROM workflow_definitions
+				WHERE tenant_id = $1 AND entity_type = $4 AND name = $2
+			)`,
+			tenantID, wf.Name, wf.Description, wf.EntityType, wf.Steps, createdBy,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // UpdateTenant updates a tenant's name, config, or active status.

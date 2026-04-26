@@ -448,7 +448,7 @@ func (s *Service) StartApproval(ctx context.Context, tenantID, createdBy uuid.UU
 
 	// Create steps for the first step order.
 	firstStep := wfDef.Steps[0]
-	chain.Steps, err = s.createStepsForOrder(ctx, chainID, firstStep, now)
+	chain.Steps, err = s.createStepsForOrder(ctx, tenantID, chainID, firstStep, now)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (s *Service) StartApproval(ctx context.Context, tenantID, createdBy uuid.UU
 }
 
 // createStepsForOrder creates approval_steps rows for a given workflow step definition.
-func (s *Service) createStepsForOrder(ctx context.Context, chainID uuid.UUID, stepDef WorkflowStepDef, now time.Time) ([]ApprovalStep, error) {
+func (s *Service) createStepsForOrder(ctx context.Context, tenantID, chainID uuid.UUID, stepDef WorkflowStepDef, now time.Time) ([]ApprovalStep, error) {
 	stepQuery := `
 		INSERT INTO approval_steps (
 			id, chain_id, step_order, approver_id, decision,
@@ -493,7 +493,19 @@ func (s *Service) createStepsForOrder(ctx context.Context, chainID uuid.UUID, st
 		stepDeadline = &d
 	}
 
-	for _, approverIDStr := range stepDef.ApproverIDs {
+	approverIDStrings := stepDef.ApproverIDs
+	if len(approverIDStrings) == 0 && stepDef.ApproverType != "" {
+		resolved, err := s.resolveApproverIDs(ctx, tenantID, stepDef.ApproverType)
+		if err != nil {
+			return nil, err
+		}
+		approverIDStrings = resolved
+	}
+	if len(approverIDStrings) == 0 {
+		return nil, apperrors.BadRequest(fmt.Sprintf("No approvers resolved for workflow step %d", stepDef.StepOrder))
+	}
+
+	for _, approverIDStr := range approverIDStrings {
 		approverID, err := uuid.Parse(approverIDStr)
 		if err != nil {
 			return nil, apperrors.BadRequest(fmt.Sprintf("Invalid approver ID: %s", approverIDStr))
@@ -549,6 +561,46 @@ func (s *Service) createStepsForOrder(ctx context.Context, chainID uuid.UUID, st
 	}
 
 	return steps, nil
+}
+
+func (s *Service) resolveApproverIDs(ctx context.Context, tenantID uuid.UUID, approverType string) ([]string, error) {
+	const rolePrefix = "role:"
+	if len(approverType) <= len(rolePrefix) || approverType[:len(rolePrefix)] != rolePrefix {
+		return nil, apperrors.BadRequest(fmt.Sprintf("Unsupported approver type: %s", approverType))
+	}
+
+	roleName := approverType[len(rolePrefix):]
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT u.id
+		FROM role_bindings rb
+		JOIN roles r ON r.id = rb.role_id
+		JOIN users u ON u.id = rb.user_id
+		WHERE rb.tenant_id = $1
+		  AND rb.is_active = true
+		  AND u.is_active = true
+		  AND r.name = $2
+		  AND (rb.expires_at IS NULL OR rb.expires_at > NOW())
+		ORDER BY u.id`,
+		tenantID, roleName,
+	)
+	if err != nil {
+		return nil, apperrors.Internal("failed to resolve role approvers", err)
+	}
+	defer rows.Close()
+
+	approverIDs := []string{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.Internal("failed to scan role approver", err)
+		}
+		approverIDs = append(approverIDs, id.String())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Internal("failed to iterate role approvers", err)
+	}
+
+	return approverIDs, nil
 }
 
 // GetApprovalChain retrieves an approval chain with all its steps (joined with user names).
@@ -769,15 +821,15 @@ func (s *Service) ProcessDecision(ctx context.Context, tenantID, userID uuid.UUI
 
 	// Handle rejection — immediately reject the chain.
 	if req.Decision == DecisionRejected {
-		return s.rejectChain(ctx, sChainID, now)
+		return s.rejectChain(ctx, sChainID, userID, now)
 	}
 
 	// Handle approval — check if all steps at the current step_order are approved.
-	return s.tryAdvanceChain(ctx, tenantID, sChainID, sStepOrder, wfDefID, now)
+	return s.tryAdvanceChain(ctx, tenantID, sChainID, sStepOrder, wfDefID, userID, now)
 }
 
 // rejectChain sets the chain to rejected and skips all remaining pending steps.
-func (s *Service) rejectChain(ctx context.Context, chainID uuid.UUID, now time.Time) error {
+func (s *Service) rejectChain(ctx context.Context, chainID, actorID uuid.UUID, now time.Time) error {
 	// Set chain status to rejected.
 	chainUpdate := `UPDATE approval_chains SET status = $1, completed_at = $2 WHERE id = $3`
 	_, err := s.pool.Exec(ctx, chainUpdate, ChainStatusRejected, now, chainID)
@@ -792,11 +844,11 @@ func (s *Service) rejectChain(ctx context.Context, chainID uuid.UUID, now time.T
 		return apperrors.Internal("failed to skip pending steps", err)
 	}
 
-	return nil
+	return s.applyEntityApprovalOutcome(ctx, chainID, ChainStatusRejected, actorID, now)
 }
 
 // tryAdvanceChain checks if the current step order is fully approved and advances to the next step or completes the chain.
-func (s *Service) tryAdvanceChain(ctx context.Context, tenantID, chainID uuid.UUID, currentStepOrder int, wfDefID uuid.UUID, now time.Time) error {
+func (s *Service) tryAdvanceChain(ctx context.Context, tenantID, chainID uuid.UUID, currentStepOrder int, wfDefID, actorID uuid.UUID, now time.Time) error {
 	// Load the workflow definition to know step details.
 	wfDef, err := s.GetWorkflowDefinition(ctx, tenantID, wfDefID)
 	if err != nil {
@@ -876,11 +928,11 @@ func (s *Service) tryAdvanceChain(ctx context.Context, tenantID, chainID uuid.UU
 		if err != nil {
 			return apperrors.Internal("failed to approve chain", err)
 		}
-		return nil
+		return s.applyEntityApprovalOutcome(ctx, chainID, ChainStatusApproved, actorID, now)
 	}
 
 	// Create the next set of steps and advance current_step.
-	_, err = s.createStepsForOrder(ctx, chainID, *nextStepDef, now)
+	_, err = s.createStepsForOrder(ctx, tenantID, chainID, *nextStepDef, now)
 	if err != nil {
 		return err
 	}
@@ -889,6 +941,71 @@ func (s *Service) tryAdvanceChain(ctx context.Context, tenantID, chainID uuid.UU
 	_, err = s.pool.Exec(ctx, advanceQuery, nextStepDef.StepOrder, chainID)
 	if err != nil {
 		return apperrors.Internal("failed to advance chain step", err)
+	}
+
+	return nil
+}
+
+func (s *Service) applyEntityApprovalOutcome(ctx context.Context, chainID uuid.UUID, outcome string, actorID uuid.UUID, now time.Time) error {
+	var entityType string
+	var entityID, tenantID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT entity_type, entity_id, tenant_id FROM approval_chains WHERE id = $1`,
+		chainID,
+	).Scan(&entityType, &entityID, &tenantID)
+	if err != nil {
+		return apperrors.Internal("failed to load approval chain entity", err)
+	}
+
+	switch entityType {
+	case "policy":
+		if outcome == ChainStatusApproved {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE policies SET status = 'approved', updated_at = $1
+				 WHERE id = $2 AND tenant_id = $3 AND status = 'in_review'`,
+				now, entityID, tenantID,
+			)
+		} else if outcome == ChainStatusRejected {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE policies SET status = 'draft', updated_at = $1
+				 WHERE id = $2 AND tenant_id = $3 AND status = 'in_review'`,
+				now, entityID, tenantID,
+			)
+		}
+	case "project":
+		if outcome == ChainStatusApproved {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE projects SET status = 'approved', updated_at = $1
+				 WHERE id = $2 AND tenant_id = $3 AND status = 'proposed'`,
+				now, entityID, tenantID,
+			)
+		} else if outcome == ChainStatusRejected {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE projects SET status = 'cancelled', updated_at = $1
+				 WHERE id = $2 AND tenant_id = $3 AND status = 'proposed'`,
+				now, entityID, tenantID,
+			)
+		}
+	case "asset_disposal":
+		if outcome == ChainStatusApproved {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE asset_disposals
+				 SET status = 'approved', approved_by = COALESCE(approved_by, $1), updated_at = $2
+				 WHERE id = $3 AND tenant_id = $4 AND status = 'pending_approval'`,
+				actorID, now, entityID, tenantID,
+			)
+		} else if outcome == ChainStatusRejected {
+			_, err = s.pool.Exec(ctx,
+				`UPDATE asset_disposals SET status = 'cancelled', updated_at = $1
+				 WHERE id = $2 AND tenant_id = $3 AND status = 'pending_approval'`,
+				now, entityID, tenantID,
+			)
+		}
+	default:
+		return nil
+	}
+	if err != nil {
+		return apperrors.Internal("failed to apply approval outcome to entity", err)
 	}
 
 	return nil

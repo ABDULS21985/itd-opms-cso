@@ -2,6 +2,7 @@ package itsm
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -33,6 +34,9 @@ func (h *RequestHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.view")).Get("/{id}", h.GetRequestDetail)
 	r.With(middleware.RequirePermission("itsm.view")).Post("/{id}/approve", h.ApproveRequest)
 	r.With(middleware.RequirePermission("itsm.view")).Post("/{id}/reject", h.RejectRequest)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/start-fulfillment", h.StartFulfillment)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/fulfill", h.FulfillRequest)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/close", h.CloseRequest)
 	r.With(middleware.RequirePermission("itsm.view")).Post("/{id}/cancel", h.CancelRequest)
 }
 
@@ -189,6 +193,101 @@ func (h *RequestHandler) RejectRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sr, err := h.svc.RejectRequest(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, sr, nil)
+}
+
+// StartFulfillment handles POST /{id}/start-fulfillment — assigns and starts fulfillment.
+func (h *RequestHandler) StartFulfillment(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request ID")
+		return
+	}
+
+	var req StartFulfillmentRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+			return
+		}
+	}
+
+	sr, err := h.svc.StartFulfillment(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, sr, nil)
+}
+
+// FulfillRequest handles POST /{id}/fulfill — marks a request fulfilled.
+func (h *RequestHandler) FulfillRequest(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request ID")
+		return
+	}
+
+	var req FulfillRequestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+	if req.FulfillmentNotes == "" {
+		types.ErrorMessage(w, http.StatusBadRequest, "VALIDATION_ERROR", "fulfillmentNotes is required")
+		return
+	}
+
+	sr, err := h.svc.FulfillRequest(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, sr, nil)
+}
+
+// CloseRequest handles POST /{id}/close — formally closes a fulfilled request.
+func (h *RequestHandler) CloseRequest(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request ID")
+		return
+	}
+
+	var req CloseRequestRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+			return
+		}
+	}
+
+	sr, err := h.svc.CloseRequest(r.Context(), id, req)
 	if err != nil {
 		writeAppError(w, r, err)
 		return

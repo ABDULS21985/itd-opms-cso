@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itd-cbn/itd-opms-api/internal/modules/approval"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
@@ -18,15 +19,17 @@ import (
 
 // PolicyService handles business logic for policy management.
 type PolicyService struct {
-	pool     *pgxpool.Pool
-	auditSvc *audit.AuditService
+	pool        *pgxpool.Pool
+	auditSvc    *audit.AuditService
+	approvalSvc *approval.Service
 }
 
 // NewPolicyService creates a new PolicyService.
 func NewPolicyService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *PolicyService {
 	return &PolicyService{
-		pool:     pool,
-		auditSvc: auditSvc,
+		pool:        pool,
+		auditSvc:    auditSvc,
+		approvalSvc: approval.NewService(pool, auditSvc),
 	}
 }
 
@@ -280,11 +283,11 @@ func (s *PolicyService) UpdatePolicy(ctx context.Context, tenantID, policyID, up
 
 	versionQuery := `
 		INSERT INTO policy_versions (
-			id, policy_id, version, title, content, changes_summary, created_by, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			id, tenant_id, policy_id, version, title, content, changes_summary, created_by, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	_, err = s.pool.Exec(ctx, versionQuery,
-		versionID, policyID, newVersion, p.Title, p.Content, changeSummary, updatedBy, now,
+		versionID, tenantID, policyID, newVersion, p.Title, p.Content, changeSummary, updatedBy, now,
 	)
 	if err != nil {
 		return nil, apperrors.Internal("failed to create policy version", err)
@@ -321,6 +324,32 @@ func (s *PolicyService) UpdateStatus(ctx context.Context, tenantID, policyID, ac
 		return nil, apperrors.BadRequest(
 			fmt.Sprintf("Invalid status transition from '%s' to '%s'", existing.Status, newStatus),
 		)
+	}
+
+	if newStatus == PolicyStatusInReview {
+		metadata, _ := json.Marshal(map[string]any{
+			"title":   existing.Title,
+			"version": existing.Version,
+		})
+		_, err := s.approvalSvc.StartApproval(ctx, tenantID, actorID, approval.StartApprovalRequest{
+			EntityType: "policy",
+			EntityID:   policyID,
+			Urgency:    approval.UrgencyNormal,
+			Metadata:   metadata,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if newStatus == PolicyStatusApproved {
+		approved, err := s.hasCompletedApproval(ctx, tenantID, "policy", policyID)
+		if err != nil {
+			return nil, err
+		}
+		if !approved {
+			return nil, apperrors.BadRequest("Policy must complete its configured approval workflow before it can be approved")
+		}
 	}
 
 	now := time.Now().UTC()
@@ -360,6 +389,25 @@ func (s *PolicyService) UpdateStatus(ctx context.Context, tenantID, policyID, ac
 	}
 
 	return &p, nil
+}
+
+func (s *PolicyService) hasCompletedApproval(ctx context.Context, tenantID uuid.UUID, entityType string, entityID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM approval_chains
+			WHERE tenant_id = $1
+			  AND entity_type = $2
+			  AND entity_id = $3
+			  AND status = 'approved'
+		)`,
+		tenantID, entityType, entityID,
+	).Scan(&exists)
+	if err != nil {
+		return false, apperrors.Internal("failed to check approval workflow status", err)
+	}
+	return exists, nil
 }
 
 // isValidTransition checks whether a policy status transition is allowed.
