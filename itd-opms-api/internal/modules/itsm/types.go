@@ -332,25 +332,25 @@ type SLABreachEntry struct {
 
 // Problem represents a root-cause investigation linked to incidents.
 type Problem struct {
-	ID                uuid.UUID   `json:"id"`
-	TenantID          uuid.UUID   `json:"tenantId"`
-	ProblemNumber     string      `json:"problemNumber"`
-	Title             string      `json:"title"`
-	Description       *string     `json:"description"`
-	RootCause         *string     `json:"rootCause"`
-	RCATemplateID     *uuid.UUID  `json:"rcaTemplateId"`
+	ID                uuid.UUID       `json:"id"`
+	TenantID          uuid.UUID       `json:"tenantId"`
+	ProblemNumber     string          `json:"problemNumber"`
+	Title             string          `json:"title"`
+	Description       *string         `json:"description"`
+	RootCause         *string         `json:"rootCause"`
+	RCATemplateID     *uuid.UUID      `json:"rcaTemplateId"`
 	RCAData           json.RawMessage `json:"rcaData"`
-	Status            string      `json:"status"`
-	LinkedIncidentIDs []uuid.UUID `json:"linkedIncidentIds"`
-	LinkedAssetIDs    []uuid.UUID `json:"linkedAssetIds"`
-	LinkedCIIDs       []uuid.UUID `json:"linkedCiIds"`
-	Workaround        *string     `json:"workaround"`
-	PermanentFix      *string     `json:"permanentFix"`
-	LinkedChangeID    *uuid.UUID  `json:"linkedChangeId"`
-	OwnerID           *uuid.UUID  `json:"ownerId"`
-	AssignedGroupID   *uuid.UUID  `json:"assignedGroupId"`
-	CreatedAt         time.Time   `json:"createdAt"`
-	UpdatedAt         time.Time   `json:"updatedAt"`
+	Status            string          `json:"status"`
+	LinkedIncidentIDs []uuid.UUID     `json:"linkedIncidentIds"`
+	LinkedAssetIDs    []uuid.UUID     `json:"linkedAssetIds"`
+	LinkedCIIDs       []uuid.UUID     `json:"linkedCiIds"`
+	Workaround        *string         `json:"workaround"`
+	PermanentFix      *string         `json:"permanentFix"`
+	LinkedChangeID    *uuid.UUID      `json:"linkedChangeId"`
+	OwnerID           *uuid.UUID      `json:"ownerId"`
+	AssignedGroupID   *uuid.UUID      `json:"assignedGroupId"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
 
 	// Enrichment fields (populated via LEFT JOINs on SELECT queries).
 	AssignedGroupName *string `json:"assignedGroupName,omitempty"`

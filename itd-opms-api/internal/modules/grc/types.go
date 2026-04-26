@@ -96,11 +96,11 @@ const (
 // ──────────────────────────────────────────────
 
 const (
-	FindingStatusOpen              = "open"
+	FindingStatusOpen               = "open"
 	FindingStatusRemediationPlanned = "remediation_planned"
-	FindingStatusInRemediation     = "in_remediation"
-	FindingStatusClosed            = "closed"
-	FindingStatusAccepted          = "accepted"
+	FindingStatusInRemediation      = "in_remediation"
+	FindingStatusClosed             = "closed"
+	FindingStatusAccepted           = "accepted"
 )
 
 // ──────────────────────────────────────────────
@@ -152,12 +152,12 @@ const (
 // ──────────────────────────────────────────────
 
 const (
-	FrameworkISO27001  = "ISO_27001"
-	FrameworkNIST      = "NIST_CSF"
-	FrameworkCOBIT     = "COBIT"
-	FrameworkPCIDSS    = "PCI_DSS"
-	FrameworkSOC2      = "SOC2"
-	FrameworkNDPR      = "NDPR"
+	FrameworkISO27001      = "ISO_27001"
+	FrameworkNIST          = "NIST_CSF"
+	FrameworkCOBIT         = "COBIT"
+	FrameworkPCIDSS        = "PCI_DSS"
+	FrameworkSOC2          = "SOC2"
+	FrameworkNDPR          = "NDPR"
 	FrameworkCBNGuidelines = "CBN_IT_GUIDELINES"
 )
 
@@ -271,16 +271,16 @@ type EvidenceCollection struct {
 
 // AuditEvidencePack records a generated audit evidence export snapshot.
 type AuditEvidencePack struct {
-	ID            uuid.UUID       `json:"id"`
-	TenantID      uuid.UUID       `json:"tenantId"`
-	AuditID       uuid.UUID       `json:"auditId"`
-	GeneratedBy   uuid.UUID       `json:"generatedBy"`
-	Format        string          `json:"format"`
-	Status        string          `json:"status"`
-	DocumentID    *uuid.UUID      `json:"documentId"`
-	PackSnapshot  json.RawMessage `json:"packSnapshot"`
-	Checksum      *string         `json:"checksum"`
-	GeneratedAt   time.Time       `json:"generatedAt"`
+	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenantId"`
+	AuditID      uuid.UUID       `json:"auditId"`
+	GeneratedBy  uuid.UUID       `json:"generatedBy"`
+	Format       string          `json:"format"`
+	Status       string          `json:"status"`
+	DocumentID   *uuid.UUID      `json:"documentId"`
+	PackSnapshot json.RawMessage `json:"packSnapshot"`
+	Checksum     *string         `json:"checksum"`
+	GeneratedAt  time.Time       `json:"generatedAt"`
 }
 
 // AccessReviewCampaign represents a periodic user access review campaign.

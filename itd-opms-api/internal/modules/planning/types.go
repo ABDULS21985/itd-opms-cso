@@ -160,35 +160,35 @@ type Portfolio struct {
 
 // Project represents a managed IT project within a portfolio.
 type Project struct {
-	ID               uuid.UUID       `json:"id"`
-	TenantID         uuid.UUID       `json:"tenantId"`
-	PortfolioID      *uuid.UUID      `json:"portfolioId"`
-	DivisionID       *uuid.UUID      `json:"divisionId"`
-	Title            string          `json:"title"`
-	Code             string          `json:"code"`
-	Description      *string         `json:"description"`
-	Charter          *string         `json:"charter"`
-	Scope            *string         `json:"scope"`
-	BusinessCase     *string         `json:"businessCase"`
-	SponsorID        *uuid.UUID      `json:"sponsorId"`
-	ProjectManagerID *uuid.UUID      `json:"projectManagerId"`
-	Status           string          `json:"status"`
-	RAGStatus        string          `json:"ragStatus"`
-	Priority         string          `json:"priority"`
-	PlannedStart     *time.Time      `json:"plannedStart"`
-	PlannedEnd       *time.Time      `json:"plannedEnd"`
-	ActualStart      *time.Time      `json:"actualStart"`
-	ActualEnd        *time.Time      `json:"actualEnd"`
-	BudgetApproved   *float64        `json:"budgetApproved"`
-	BudgetSpent      *float64        `json:"budgetSpent"`
-	CompletionPct    *float64        `json:"completionPct"`
+	ID                 uuid.UUID       `json:"id"`
+	TenantID           uuid.UUID       `json:"tenantId"`
+	PortfolioID        *uuid.UUID      `json:"portfolioId"`
+	DivisionID         *uuid.UUID      `json:"divisionId"`
+	Title              string          `json:"title"`
+	Code               string          `json:"code"`
+	Description        *string         `json:"description"`
+	Charter            *string         `json:"charter"`
+	Scope              *string         `json:"scope"`
+	BusinessCase       *string         `json:"businessCase"`
+	SponsorID          *uuid.UUID      `json:"sponsorId"`
+	ProjectManagerID   *uuid.UUID      `json:"projectManagerId"`
+	Status             string          `json:"status"`
+	RAGStatus          string          `json:"ragStatus"`
+	Priority           string          `json:"priority"`
+	PlannedStart       *time.Time      `json:"plannedStart"`
+	PlannedEnd         *time.Time      `json:"plannedEnd"`
+	ActualStart        *time.Time      `json:"actualStart"`
+	ActualEnd          *time.Time      `json:"actualEnd"`
+	BudgetApproved     *float64        `json:"budgetApproved"`
+	BudgetSpent        *float64        `json:"budgetSpent"`
+	CompletionPct      *float64        `json:"completionPct"`
 	DivisionName       string          `json:"divisionName,omitempty"`
 	PortfolioName      string          `json:"portfolioName,omitempty"`
 	SponsorName        string          `json:"sponsorName,omitempty"`
 	ProjectManagerName string          `json:"projectManagerName,omitempty"`
 	Metadata           json.RawMessage `json:"metadata"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	UpdatedAt        time.Time       `json:"updatedAt"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
 }
 
 // ProjectDivisionAssignment represents a division assigned to collaborate on a project.
@@ -665,26 +665,26 @@ type EscalateIssueRequest struct {
 
 // ValidDocumentCategories is the set of allowed project document categories.
 var ValidDocumentCategories = map[string]bool{
-	"project_charter":        true,
-	"project_approval":       true,
-	"business_case":          true,
-	"business_requirements":  true,
-	"solution_architecture":  true,
-	"solution_design":        true,
-	"solution_brief":         true,
+	"project_charter":         true,
+	"project_approval":        true,
+	"business_case":           true,
+	"business_requirements":   true,
+	"solution_architecture":   true,
+	"solution_design":         true,
+	"solution_brief":          true,
 	"technical_specification": true,
-	"test_plan":              true,
-	"test_results":           true,
-	"user_manual":            true,
-	"training_material":      true,
-	"deployment_guide":       true,
-	"meeting_minutes":        true,
-	"status_report":          true,
-	"risk_register":          true,
-	"change_request":         true,
-	"sign_off":               true,
-	"closure_report":         true,
-	"other":                  true,
+	"test_plan":               true,
+	"test_results":            true,
+	"user_manual":             true,
+	"training_material":       true,
+	"deployment_guide":        true,
+	"meeting_minutes":         true,
+	"status_report":           true,
+	"risk_register":           true,
+	"change_request":          true,
+	"sign_off":                true,
+	"closure_report":          true,
+	"other":                   true,
 }
 
 // ──────────────────────────────────────────────

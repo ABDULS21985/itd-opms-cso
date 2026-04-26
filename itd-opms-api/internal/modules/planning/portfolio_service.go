@@ -915,10 +915,10 @@ func (s *ProjectService) hasCompletedApproval(ctx context.Context, tenantID uuid
 // isValidProjectTransition checks whether a project status transition is allowed.
 func isValidProjectTransition(from, to string) bool {
 	allowed := map[string][]string{
-		"proposed":  {"approved"},
-		"approved":  {"active"},
-		"active":    {"on_hold", "completed"},
-		"on_hold":   {"active", "cancelled"},
+		"proposed": {"approved"},
+		"approved": {"active"},
+		"active":   {"on_hold", "completed"},
+		"on_hold":  {"active", "cancelled"},
 	}
 	targets, ok := allowed[from]
 	if !ok {

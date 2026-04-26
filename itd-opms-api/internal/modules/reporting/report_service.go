@@ -838,8 +838,8 @@ func (s *ReportService) enqueueReportEmails(ctx context.Context, runID, tenantID
 	)
 
 	templateData, _ := json.Marshal(map[string]string{
-		"ReportName": defName,
-		"ReportType": defType,
+		"ReportName":  defName,
+		"ReportType":  defType,
 		"GeneratedAt": now.Format(time.RFC3339),
 	})
 

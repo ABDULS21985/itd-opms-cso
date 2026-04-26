@@ -127,7 +127,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 
 	// Calculate SLA targets if catalog item has an SLA policy.
 	var slaPolicyID *uuid.UUID
-	var slaResolutionTarget *time.Time // approval deadline
+	var slaResolutionTarget *time.Time  // approval deadline
 	var slaFulfillmentTarget *time.Time // fulfillment deadline
 	if catalogSLAPolicyID != nil {
 		var priorityTargetsRaw json.RawMessage

@@ -39,6 +39,7 @@ func (h *ReportHandler) Routes(r chi.Router) {
 
 	r.Route("/{definitionId}/runs", func(r chi.Router) {
 		r.With(middleware.RequirePermission("reporting.view")).Get("/", h.ListReportRuns)
+		r.With(middleware.RequirePermission("reporting.view")).Get("/{runId}/print", h.GetReportRunPrintHTML)
 		r.With(middleware.RequirePermission("reporting.view")).Get("/{runId}", h.GetReportRun)
 	})
 }
@@ -307,4 +308,29 @@ func (h *ReportHandler) GetReportRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	types.OK(w, run, nil)
+}
+
+// GetReportRunPrintHTML handles GET /{definitionId}/runs/{runId}/print — renders a print-ready report view.
+func (h *ReportHandler) GetReportRunPrintHTML(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	runID, err := uuid.Parse(chi.URLParam(r, "runId"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid run ID")
+		return
+	}
+
+	markup, err := h.svc.RenderReportRunPrintHTML(r.Context(), runID)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(markup))
 }

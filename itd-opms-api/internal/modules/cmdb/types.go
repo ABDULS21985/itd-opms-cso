@@ -320,20 +320,20 @@ type CMDBTopologyResponse struct {
 
 // CMDBQualityReport summarizes completeness and accuracy indicators for SACM.
 type CMDBQualityReport struct {
-	TotalCIs                    int       `json:"totalCis"`
-	ActiveCIs                   int       `json:"activeCis"`
-	CIsMissingAsset             int       `json:"cisMissingAsset"`
-	CIsWithoutRelationships     int       `json:"cisWithoutRelationships"`
-	TotalAssets                 int       `json:"totalAssets"`
-	AssetsWithoutCI             int       `json:"assetsWithoutCi"`
-	UnverifiedAssets            int       `json:"unverifiedAssets"`
-	StaleVerifiedAssets         int       `json:"staleVerifiedAssets"`
-	LatestReconciliationSource  *string   `json:"latestReconciliationSource"`
-	LatestReconciliationAt      *time.Time `json:"latestReconciliationAt"`
-	LatestDiscrepancies         int       `json:"latestDiscrepancies"`
-	CompletenessScore           float64   `json:"completenessScore"`
-	AccuracyScore               float64   `json:"accuracyScore"`
-	GeneratedAt                 time.Time `json:"generatedAt"`
+	TotalCIs                   int        `json:"totalCis"`
+	ActiveCIs                  int        `json:"activeCis"`
+	CIsMissingAsset            int        `json:"cisMissingAsset"`
+	CIsWithoutRelationships    int        `json:"cisWithoutRelationships"`
+	TotalAssets                int        `json:"totalAssets"`
+	AssetsWithoutCI            int        `json:"assetsWithoutCi"`
+	UnverifiedAssets           int        `json:"unverifiedAssets"`
+	StaleVerifiedAssets        int        `json:"staleVerifiedAssets"`
+	LatestReconciliationSource *string    `json:"latestReconciliationSource"`
+	LatestReconciliationAt     *time.Time `json:"latestReconciliationAt"`
+	LatestDiscrepancies        int        `json:"latestDiscrepancies"`
+	CompletenessScore          float64    `json:"completenessScore"`
+	AccuracyScore              float64    `json:"accuracyScore"`
+	GeneratedAt                time.Time  `json:"generatedAt"`
 }
 
 // ReconciliationRun records a discovery/reconciliation pass against an external source.

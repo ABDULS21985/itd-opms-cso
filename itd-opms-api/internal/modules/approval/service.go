@@ -455,10 +455,10 @@ func (s *Service) StartApproval(ctx context.Context, tenantID, createdBy uuid.UU
 
 	// Audit log.
 	changes, _ := json.Marshal(map[string]any{
-		"entity_type":  req.EntityType,
-		"entity_id":    req.EntityID,
-		"workflow_id":  wfID,
-		"urgency":      urgency,
+		"entity_type": req.EntityType,
+		"entity_id":   req.EntityID,
+		"workflow_id": wfID,
+		"urgency":     urgency,
 	})
 	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
 		TenantID:   tenantID,

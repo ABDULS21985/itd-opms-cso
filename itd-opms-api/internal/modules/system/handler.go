@@ -20,17 +20,17 @@ import (
 // It composes sub-handlers for user, role, tenant, org unit, health,
 // settings, audit explorer, session, and email template management.
 type Handler struct {
-	user     *UserHandler
-	role     *RoleHandler
-	tenant   *TenantHandler
-	org      *OrgHandler
-	health   *SystemHealthHandler
-	settings *SettingsHandler
-	auditExp *AuditExplorerHandler
-	session  *SessionHandler
-	template *EmailTemplateHandler
-	webhook  *WebhookHandler
-	receiver *WebhookReceiverHandler
+	user      *UserHandler
+	role      *RoleHandler
+	tenant    *TenantHandler
+	org       *OrgHandler
+	health    *SystemHealthHandler
+	settings  *SettingsHandler
+	auditExp  *AuditExplorerHandler
+	session   *SessionHandler
+	template  *EmailTemplateHandler
+	webhook   *WebhookHandler
+	receiver  *WebhookReceiverHandler
 	reference *ReferenceHandler
 
 	// Maintenance exposes the background worker for lifecycle management.
@@ -67,18 +67,18 @@ func NewHandler(
 	referenceSvc := NewReferenceService(pool, auditSvc)
 
 	return &Handler{
-		user:        NewUserHandler(userSvc),
-		role:        NewRoleHandler(roleSvc),
-		tenant:      NewTenantHandler(tenantSvc),
-		org:         NewOrgHandler(orgSvc),
-		health:      NewSystemHealthHandler(healthSvc),
-		settings:    NewSettingsHandler(settingsSvc),
-		auditExp:    NewAuditExplorerHandler(auditExpSvc),
-		session:     NewSessionHandler(sessionSvc),
-		template:    NewEmailTemplateHandler(templateSvc),
-		webhook:     NewWebhookHandler(webhookSvc, webhookReceiver),
-		receiver:    webhookReceiver,
-		reference:   NewReferenceHandler(referenceSvc),
+		user:            NewUserHandler(userSvc),
+		role:            NewRoleHandler(roleSvc),
+		tenant:          NewTenantHandler(tenantSvc),
+		org:             NewOrgHandler(orgSvc),
+		health:          NewSystemHealthHandler(healthSvc),
+		settings:        NewSettingsHandler(settingsSvc),
+		auditExp:        NewAuditExplorerHandler(auditExpSvc),
+		session:         NewSessionHandler(sessionSvc),
+		template:        NewEmailTemplateHandler(templateSvc),
+		webhook:         NewWebhookHandler(webhookSvc, webhookReceiver),
+		receiver:        webhookReceiver,
+		reference:       NewReferenceHandler(referenceSvc),
 		Maintenance:     NewMaintenanceWorker(pool),
 		licenseEnforcer: licenseEnforcer,
 		siemExporter:    siemExporter,

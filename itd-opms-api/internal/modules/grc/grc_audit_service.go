@@ -882,8 +882,8 @@ func (s *AuditMgmtService) GenerateEvidencePack(ctx context.Context, auditID uui
 	}
 
 	snapshot := map[string]any{
-		"audit":              auditRecord,
-		"findings":           findings,
+		"audit":               auditRecord,
+		"findings":            findings,
 		"evidenceCollections": collections,
 		"evidenceItems":       evidenceItems,
 		"generatedAt":         time.Now().UTC(),

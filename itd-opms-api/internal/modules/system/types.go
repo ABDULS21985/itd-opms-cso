@@ -587,18 +587,18 @@ type TemplatePreviewRequest struct {
 
 // OrgAnalyticsResponse contains aggregated org structure analytics.
 type OrgAnalyticsResponse struct {
-	TotalUnits       int                `json:"totalUnits"`
-	ActiveUnits      int                `json:"activeUnits"`
-	InactiveUnits    int                `json:"inactiveUnits"`
-	MaxDepth         int                `json:"maxDepth"`
-	AvgSpanOfControl float64            `json:"avgSpanOfControl"`
-	VacantLeadership float64            `json:"vacantLeadership"`
-	TotalHeadcount   int                `json:"totalHeadcount"`
-	HeadcountByLevel []LevelHeadcount   `json:"headcountByLevel"`
-	SpanDistribution []SpanRange        `json:"spanDistribution"`
-	UnitsByLevel     []LevelCount       `json:"unitsByLevel"`
-	RecentChanges    []OrgRecentChange  `json:"recentChanges"`
-	GrowthTimeline   []OrgGrowthPoint   `json:"growthTimeline"`
+	TotalUnits       int               `json:"totalUnits"`
+	ActiveUnits      int               `json:"activeUnits"`
+	InactiveUnits    int               `json:"inactiveUnits"`
+	MaxDepth         int               `json:"maxDepth"`
+	AvgSpanOfControl float64           `json:"avgSpanOfControl"`
+	VacantLeadership float64           `json:"vacantLeadership"`
+	TotalHeadcount   int               `json:"totalHeadcount"`
+	HeadcountByLevel []LevelHeadcount  `json:"headcountByLevel"`
+	SpanDistribution []SpanRange       `json:"spanDistribution"`
+	UnitsByLevel     []LevelCount      `json:"unitsByLevel"`
+	RecentChanges    []OrgRecentChange `json:"recentChanges"`
+	GrowthTimeline   []OrgGrowthPoint  `json:"growthTimeline"`
 }
 
 // LevelHeadcount holds headcount and unit count for a single org level.
