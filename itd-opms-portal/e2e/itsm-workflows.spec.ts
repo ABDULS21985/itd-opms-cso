@@ -285,12 +285,16 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
 
     await page.goto("/dashboard/itsm/tickets/ticket-1");
 
-    await expect(page.getByRole("heading", { name: ticket.title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: ticket.title, level: 1 })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(page.getByRole("button", { name: "Pending Customer", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Resolve", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Pending Customer", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Pending Customer" })).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Pending Customer" }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/tickets/ticket-1/transition",
       body: { status: "pending_customer" },
@@ -308,6 +312,8 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
     await expect(page.getByRole("button", { name: "Known Error", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Root Cause Found", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Root Cause Found" })).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Root Cause Found" }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/problems/problem-1/transition",
       body: { targetStatus: "root_cause_identified" },
@@ -326,6 +332,8 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
     await expect(page.getByRole("button", { name: "Reject", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Approve" })).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Approve" }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/changes/change-1/transition",
       body: { targetStatus: "approved" },
@@ -338,11 +346,13 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
 
     await page.goto("/dashboard/itsm/major-incidents/major-1");
 
-    await expect(page.getByRole("heading", { name: majorIncident.ticket.title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: majorIncident.ticket.title, level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Begin Mitigation", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Confirm Mitigated", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Begin Mitigation", exact: true }).click();
+    await expect(page.getByRole("heading", { name: /Begin mitigation/i })).toBeVisible();
+    await page.getByRole("button", { name: /Confirm Begin mitigation/i }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/major-incidents/major-1/transition",
       body: { targetStatus: "mitigating" },

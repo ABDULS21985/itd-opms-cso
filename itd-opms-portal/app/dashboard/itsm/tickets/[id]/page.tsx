@@ -1133,6 +1133,45 @@ export default function TicketDetailPage({
     resolveTicket.isPending ||
     closeTicket.isPending;
 
+  const transitions = ticket
+    ? mergeTicketTransitions(
+        allowedTransitions,
+        STATUS_TRANSITIONS[ticket.status] ?? [],
+      )
+    : [];
+
+  function openWorkflowDrawer(transition: ITSMWorkflowTransition) {
+    setSelectedTransition(transition);
+    setWorkflowDrawerOpen(true);
+  }
+
+  useEffect(() => {
+    function handleTicketKeys(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable ||
+        !canManage ||
+        isActing
+      ) {
+        return;
+      }
+      if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setShowAssignForm(true);
+      }
+      if (event.key.toLowerCase() === "r") {
+        const resolveTransition = transitions.find((item) => item.value === "resolved");
+        if (resolveTransition) {
+          event.preventDefault();
+          openWorkflowDrawer(resolveTransition);
+        }
+      }
+    }
+    document.addEventListener("keydown", handleTicketKeys);
+    return () => document.removeEventListener("keydown", handleTicketKeys);
+  }, [canManage, isActing, transitions]);
+
   /* ---- Copy ticket ID ---- */
   function copyTicketNumber() {
     if (!ticket) return;
@@ -1329,16 +1368,6 @@ export default function TicketDetailPage({
     ring: "ring-gray-500/30",
   };
 
-  const transitions = mergeTicketTransitions(
-    allowedTransitions,
-    STATUS_TRANSITIONS[ticket.status] ?? [],
-  );
-
-  function openWorkflowDrawer(transition: ITSMWorkflowTransition) {
-    setSelectedTransition(transition);
-    setWorkflowDrawerOpen(true);
-  }
-
   function submitWorkflowAction(payload: WorkflowActionPayload) {
     const closeDrawer = () => {
       setWorkflowDrawerOpen(false);
@@ -1377,33 +1406,6 @@ export default function TicketDetailPage({
       { onSuccess: closeDrawer },
     );
   }
-
-  useEffect(() => {
-    function handleTicketKeys(event: KeyboardEvent) {
-      const target = event.target as HTMLElement;
-      if (
-        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
-        target.isContentEditable ||
-        !canManage ||
-        isActing
-      ) {
-        return;
-      }
-      if (event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        setShowAssignForm(true);
-      }
-      if (event.key.toLowerCase() === "r") {
-        const resolveTransition = transitions.find((item) => item.value === "resolved");
-        if (resolveTransition) {
-          event.preventDefault();
-          openWorkflowDrawer(resolveTransition);
-        }
-      }
-    }
-    document.addEventListener("keydown", handleTicketKeys);
-    return () => document.removeEventListener("keydown", handleTicketKeys);
-  }, [canManage, isActing, transitions]);
 
   function handleAssign(e: React.FormEvent) {
     e.preventDefault();

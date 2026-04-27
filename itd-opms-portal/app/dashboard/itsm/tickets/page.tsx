@@ -316,14 +316,6 @@ function BulkWorkflowPreviewModal({
           </button>
         </div>
       </div>
-      <BulkWorkflowPreviewModal
-        open={!!bulkPreview}
-        target={bulkPreview?.target ?? null}
-        tickets={bulkPreviewTickets}
-        onClose={() => setBulkPreview(null)}
-        onConfirm={confirmBulkPreview}
-        isSubmitting={bulkUpdate.isPending}
-      />
     </div>
   );
 }
@@ -1463,6 +1455,14 @@ export default function TicketsPage() {
           </div>
         </div>
       </div>
+      <BulkWorkflowPreviewModal
+        open={!!bulkPreview}
+        target={bulkPreview?.target ?? null}
+        tickets={bulkPreviewTickets}
+        onClose={() => setBulkPreview(null)}
+        onConfirm={confirmBulkPreview}
+        isSubmitting={bulkUpdate.isPending}
+      />
     </div>
   );
 }
