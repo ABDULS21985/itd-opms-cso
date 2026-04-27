@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 )
 
 // ──────────────────────────────────────────────
@@ -989,35 +991,17 @@ func CalculatePriority(urgency, impact string) string {
 // Ticket status transition map
 // ──────────────────────────────────────────────
 
-// validTicketTransitions defines the allowed state machine transitions for tickets.
-var validTicketTransitions = map[string][]string{
-	TicketStatusLogged:          {TicketStatusClassified, TicketStatusAssigned, TicketStatusCancelled},
-	TicketStatusClassified:      {TicketStatusAssigned, TicketStatusCancelled},
-	TicketStatusAssigned:        {TicketStatusInProgress, TicketStatusCancelled},
-	TicketStatusInProgress:      {TicketStatusPendingCustomer, TicketStatusPendingVendor, TicketStatusResolved, TicketStatusCancelled},
-	TicketStatusPendingCustomer: {TicketStatusInProgress, TicketStatusResolved, TicketStatusCancelled},
-	TicketStatusPendingVendor:   {TicketStatusInProgress, TicketStatusResolved, TicketStatusCancelled},
-	TicketStatusResolved:        {TicketStatusClosed, TicketStatusInProgress},
-	TicketStatusClosed:          {},
-	TicketStatusCancelled:       {},
-}
+// validTicketTransitions is retained for legacy tests and callers, but is
+// derived from the platform workflow state machine so there is one source of truth.
+var validTicketTransitions = workflow.TicketStateMachine.Transitions()
 
 // IsValidTicketTransition checks whether a status transition from -> to is allowed.
 func IsValidTicketTransition(from, to string) bool {
-	allowed, ok := validTicketTransitions[from]
-	if !ok {
-		return false
-	}
-	for _, s := range allowed {
-		if s == to {
-			return true
-		}
-	}
-	return false
+	return workflow.TicketStateMachine.IsValid(from, to)
 }
 
-// Problem status transitions are enforced via workflow.ProblemStateMachine.
-// Change status transitions are enforced via workflow.ChangeStateMachine.
+// Problem, change, service request, and major incident transitions are enforced
+// via the state machines in internal/platform/workflow.
 
 // ──────────────────────────────────────────────
 // Change classification constants

@@ -41,6 +41,8 @@ import type {
   UpdateChangePayload,
   UpdateProblemPayload,
   UpdateTicketPayload,
+  ITSMWorkflowDefinition,
+  ITSMWorkflowTransitionResponse,
 } from "@/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -60,6 +62,41 @@ function toastMutationError(error: unknown, fallback: string) {
     return;
   }
   toast.error(fallback, { description: message });
+}
+
+export type ITSMWorkflowEntity =
+  | "ticket"
+  | "problem"
+  | "service_request"
+  | "change"
+  | "major_incident"
+  | "release"
+  | "catalog_item"
+  | "cab_meeting";
+
+export function useITSMWorkflow(entity: ITSMWorkflowEntity | undefined) {
+  return useQuery({
+    queryKey: ["itsm-workflow", entity],
+    queryFn: () => apiClient.get<ITSMWorkflowDefinition>(`/itsm/workflows/${entity}`),
+    enabled: !!entity,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useITSMAllowedTransitions(
+  entity: ITSMWorkflowEntity | undefined,
+  status: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["itsm-workflow-transitions", entity, status],
+    queryFn: () =>
+      apiClient.get<ITSMWorkflowTransitionResponse>(
+        `/itsm/workflows/${entity}/transitions`,
+        { status },
+      ),
+    enabled: !!entity && !!status,
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 /* ================================================================== */

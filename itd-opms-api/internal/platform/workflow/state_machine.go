@@ -1,6 +1,9 @@
 package workflow
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // StateMachine defines a generic finite state machine with named transitions.
 type StateMachine struct {
@@ -37,7 +40,55 @@ func (sm *StateMachine) Validate(from, to string) error {
 
 // AllowedFrom returns the list of valid target states from the given state.
 func (sm *StateMachine) AllowedFrom(from string) []string {
-	return sm.transitions[from]
+	allowed, ok := sm.transitions[from]
+	if !ok {
+		return nil
+	}
+	if len(allowed) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), allowed...)
+}
+
+// HasState returns true if the state is known to the machine.
+func (sm *StateMachine) HasState(state string) bool {
+	if _, ok := sm.transitions[state]; ok {
+		return true
+	}
+	for _, allowed := range sm.transitions {
+		for _, target := range allowed {
+			if target == state {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// States returns all known states in stable lexical order.
+func (sm *StateMachine) States() []string {
+	seen := make(map[string]struct{}, len(sm.transitions))
+	for from, allowed := range sm.transitions {
+		seen[from] = struct{}{}
+		for _, target := range allowed {
+			seen[target] = struct{}{}
+		}
+	}
+	states := make([]string, 0, len(seen))
+	for state := range seen {
+		states = append(states, state)
+	}
+	sort.Strings(states)
+	return states
+}
+
+// Transitions returns a defensive copy of the transition map.
+func (sm *StateMachine) Transitions() map[string][]string {
+	out := make(map[string][]string, len(sm.transitions))
+	for from, allowed := range sm.transitions {
+		out[from] = append([]string(nil), allowed...)
+	}
+	return out
 }
 
 // ──────────────────────────────────────────────
@@ -152,4 +203,80 @@ var TicketStateMachine = NewStateMachine("ticket", map[string][]string{
 	TicketResolved:        {TicketClosed, TicketInProgress},
 	TicketClosed:          {},
 	TicketCancelled:       {},
+})
+
+// Service request statuses.
+const (
+	ServiceRequestPendingApproval = "pending_approval"
+	ServiceRequestApproved        = "approved"
+	ServiceRequestRejected        = "rejected"
+	ServiceRequestInProgress      = "in_progress"
+	ServiceRequestFulfilled       = "fulfilled"
+	ServiceRequestClosed          = "closed"
+	ServiceRequestCancelled       = "cancelled"
+)
+
+// ServiceRequestStateMachine enforces service catalog request fulfillment.
+var ServiceRequestStateMachine = NewStateMachine("service_request", map[string][]string{
+	ServiceRequestPendingApproval: {ServiceRequestApproved, ServiceRequestRejected, ServiceRequestCancelled},
+	ServiceRequestApproved:        {ServiceRequestInProgress, ServiceRequestFulfilled, ServiceRequestCancelled},
+	ServiceRequestInProgress:      {ServiceRequestFulfilled, ServiceRequestCancelled},
+	ServiceRequestFulfilled:       {ServiceRequestClosed},
+	ServiceRequestRejected:        {},
+	ServiceRequestClosed:          {},
+	ServiceRequestCancelled:       {},
+})
+
+// Major incident statuses.
+const (
+	MajorIncidentDeclared      = "declared"
+	MajorIncidentInvestigating = "investigating"
+	MajorIncidentMitigating    = "mitigating"
+	MajorIncidentMitigated     = "mitigated"
+	MajorIncidentMonitoring    = "monitoring"
+	MajorIncidentResolved      = "resolved"
+	MajorIncidentPIRPending    = "pir_pending"
+	MajorIncidentClosed        = "closed"
+)
+
+// MajorIncidentStateMachine enforces the dedicated major incident workflow.
+var MajorIncidentStateMachine = NewStateMachine("major_incident", map[string][]string{
+	MajorIncidentDeclared:      {MajorIncidentInvestigating},
+	MajorIncidentInvestigating: {MajorIncidentMitigating},
+	MajorIncidentMitigating:    {MajorIncidentMitigated},
+	MajorIncidentMitigated:     {MajorIncidentMonitoring, MajorIncidentResolved},
+	MajorIncidentMonitoring:    {MajorIncidentResolved},
+	MajorIncidentResolved:      {MajorIncidentPIRPending},
+	MajorIncidentPIRPending:    {MajorIncidentClosed},
+	MajorIncidentClosed:        {},
+})
+
+// Service catalog item statuses.
+const (
+	CatalogItemActive     = "active"
+	CatalogItemInactive   = "inactive"
+	CatalogItemDeprecated = "deprecated"
+)
+
+// CatalogItemStateMachine protects catalog item availability states.
+var CatalogItemStateMachine = NewStateMachine("catalog_item", map[string][]string{
+	CatalogItemActive:     {CatalogItemInactive, CatalogItemDeprecated},
+	CatalogItemInactive:   {CatalogItemActive, CatalogItemDeprecated},
+	CatalogItemDeprecated: {CatalogItemInactive},
+})
+
+// CAB meeting statuses.
+const (
+	CABMeetingScheduled  = "scheduled"
+	CABMeetingInProgress = "in_progress"
+	CABMeetingCompleted  = "completed"
+	CABMeetingCancelled  = "cancelled"
+)
+
+// CABMeetingStateMachine enforces CAB meeting lifecycle transitions.
+var CABMeetingStateMachine = NewStateMachine("cab_meeting", map[string][]string{
+	CABMeetingScheduled:  {CABMeetingInProgress, CABMeetingCancelled},
+	CABMeetingInProgress: {CABMeetingCompleted, CABMeetingCancelled},
+	CABMeetingCompleted:  {},
+	CABMeetingCancelled:  {},
 })

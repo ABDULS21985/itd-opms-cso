@@ -125,6 +125,20 @@ func TestProblemTransition_LoggedToResolved_Blocked(t *testing.T) {
 	}
 }
 
+func TestCreateProblem_RejectsNonLoggedInitialStatus(t *testing.T) {
+	svc := NewProblemService(nil, nil, nil)
+	_, err := svc.CreateProblem(authenticatedCtx(), CreateProblemRequest{
+		Title:  "Problem",
+		Status: "resolved",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-logged initial status")
+	}
+	if got := err.Error(); got != "problem status must start as logged; use the transition endpoint for lifecycle changes" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Problem status transition — exhaustive validation
 // (follows ticket_service_test.go pattern)
@@ -133,11 +147,11 @@ func TestProblemTransition_LoggedToResolved_Blocked(t *testing.T) {
 func TestProblemTransition_AllValidPaths(t *testing.T) {
 	// Every valid transition defined in the ProblemStateMachine.
 	validTransitions := map[string][]string{
-		"logged":               {"investigating"},
-		"investigating":        {"root_cause_identified", "known_error"},
+		"logged":                {"investigating"},
+		"investigating":         {"root_cause_identified", "known_error"},
 		"root_cause_identified": {"known_error", "resolved"},
-		"known_error":          {"resolved"},
-		"resolved":             {"investigating"}, // reopen
+		"known_error":           {"resolved"},
+		"resolved":              {"investigating"}, // reopen
 	}
 
 	for from, toStatuses := range validTransitions {
@@ -215,10 +229,10 @@ func TestProblemTransition_SkipSteps(t *testing.T) {
 	invalidSkips := []struct {
 		from, to string
 	}{
-		{"logged", "resolved"},              // must go through investigating first
-		{"logged", "root_cause_identified"},  // must go through investigating
-		{"logged", "known_error"},            // must go through investigating
-		{"investigating", "resolved"},        // must go through RCI or known_error first
+		{"logged", "resolved"},                     // must go through investigating first
+		{"logged", "root_cause_identified"},        // must go through investigating
+		{"logged", "known_error"},                  // must go through investigating
+		{"investigating", "resolved"},              // must go through RCI or known_error first
 		{"root_cause_identified", "investigating"}, // can't go back to investigating from RCI
 	}
 

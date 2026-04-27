@@ -114,7 +114,10 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 
 	status := req.Status
 	if status == "" {
-		status = "logged"
+		status = workflow.ProblemLogged
+	}
+	if status != workflow.ProblemLogged {
+		return Problem{}, apperrors.BadRequest("problem status must start as logged; use the transition endpoint for lifecycle changes")
 	}
 	rcaData := req.RCAData
 	if rcaData == nil {

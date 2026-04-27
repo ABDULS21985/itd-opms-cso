@@ -249,6 +249,9 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 	if auth == nil {
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
+	if req.Type == TicketTypeChange {
+		return Ticket{}, apperrors.BadRequest("change tickets must be created through the change management workflow")
+	}
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -724,6 +727,104 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 // Status Transitions
 // ──────────────────────────────────────────────
 
+type ticketStatusTransitionOptions struct {
+	targetStatus     string
+	reason           *string
+	resolutionNotes  *string
+	resolvedAt       *time.Time
+	closedAt         *time.Time
+	slaResolutionMet *bool
+	auditAction      string
+	auditExtra       map[string]any
+}
+
+func (s *TicketService) applyTicketStatusTransition(ctx context.Context, auth *types.AuthContext, existing Ticket, opts ticketStatusTransitionOptions) (Ticket, error) {
+	if opts.targetStatus == "" {
+		return Ticket{}, apperrors.BadRequest("target status is required")
+	}
+	if !IsValidTicketTransition(existing.Status, opts.targetStatus) {
+		return Ticket{}, apperrors.BadRequest(
+			fmt.Sprintf("invalid status transition from '%s' to '%s'", existing.Status, opts.targetStatus),
+		)
+	}
+
+	now := time.Now().UTC()
+
+	var slaPausedAt *time.Time
+	slaPausedDurationMinutes := existing.SLAPausedDurationMinutes
+	isPending := opts.targetStatus == TicketStatusPendingCustomer || opts.targetStatus == TicketStatusPendingVendor
+	wasPending := existing.Status == TicketStatusPendingCustomer || existing.Status == TicketStatusPendingVendor
+
+	switch {
+	case isPending:
+		slaPausedAt = &now
+	case wasPending && existing.SLAPausedAt != nil:
+		pausedMinutes := int(math.Round(now.Sub(*existing.SLAPausedAt).Minutes()))
+		slaPausedDurationMinutes += pausedMinutes
+		slaPausedAt = nil
+	default:
+		slaPausedAt = existing.SLAPausedAt
+	}
+
+	query := `
+		UPDATE tickets SET
+			status = $1,
+			sla_paused_at = $2,
+			sla_paused_duration_minutes = $3,
+			resolution_notes = COALESCE($4, resolution_notes),
+			resolved_at = COALESCE($5, resolved_at),
+			sla_resolution_met = COALESCE($6, sla_resolution_met),
+			closed_at = COALESCE($7, closed_at),
+			updated_at = $8
+		WHERE id = $9 AND tenant_id = $10
+		RETURNING ` + ticketColumns
+
+	ticket, err := scanTicket(s.pool.QueryRow(ctx, query,
+		opts.targetStatus, slaPausedAt, slaPausedDurationMinutes,
+		opts.resolutionNotes, opts.resolvedAt, opts.slaResolutionMet, opts.closedAt,
+		now, existing.ID, auth.TenantID,
+	))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to transition ticket status", err)
+	}
+
+	historyID := uuid.New()
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		historyID, existing.ID, existing.Status, opts.targetStatus, auth.UserID, opts.reason, now,
+	)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to insert ticket status history", "error", err)
+	}
+
+	changes := map[string]any{
+		"previous_status": existing.Status,
+		"new_status":      opts.targetStatus,
+		"reason":          opts.reason,
+	}
+	for key, value := range opts.auditExtra {
+		changes[key] = value
+	}
+	changesJSON, _ := json.Marshal(changes)
+	auditAction := opts.auditAction
+	if auditAction == "" {
+		auditAction = "transition:ticket"
+	}
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     auditAction,
+		EntityType: "ticket",
+		EntityID:   existing.ID,
+		Changes:    changesJSON,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return ticket, nil
+}
+
 // TransitionStatus validates and performs a status transition on a ticket.
 func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req TransitionTicketRequest) (Ticket, error) {
 	auth := types.GetAuthContext(ctx)
@@ -739,78 +840,10 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 		return Ticket{}, err
 	}
 
-	// Validate status transition.
-	if !IsValidTicketTransition(existing.Status, req.Status) {
-		return Ticket{}, apperrors.BadRequest(
-			fmt.Sprintf("invalid status transition from '%s' to '%s'", existing.Status, req.Status),
-		)
-	}
-
-	now := time.Now().UTC()
-
-	// Handle SLA pause/resume for pending_customer and pending_vendor transitions.
-	var slaPausedAt *time.Time
-	slaPausedDurationMinutes := existing.SLAPausedDurationMinutes
-	isPending := req.Status == "pending_customer" || req.Status == "pending_vendor"
-	wasPending := existing.Status == "pending_customer" || existing.Status == "pending_vendor"
-
-	if isPending {
-		// Pause SLA clock.
-		slaPausedAt = &now
-	} else if wasPending && existing.SLAPausedAt != nil {
-		// Resume SLA clock — calculate how long it was paused.
-		pausedMinutes := int(math.Round(now.Sub(*existing.SLAPausedAt).Minutes()))
-		slaPausedDurationMinutes += pausedMinutes
-		slaPausedAt = nil // clear the paused_at
-	} else {
-		slaPausedAt = existing.SLAPausedAt
-	}
-
-	query := `
-		UPDATE tickets SET
-			status = $1,
-			sla_paused_at = $2,
-			sla_paused_duration_minutes = $3,
-			updated_at = $4
-		WHERE id = $5 AND tenant_id = $6
-		RETURNING ` + ticketColumns
-
-	ticket, err := scanTicket(s.pool.QueryRow(ctx, query,
-		req.Status, slaPausedAt, slaPausedDurationMinutes, now, id, auth.TenantID,
-	))
-	if err != nil {
-		return Ticket{}, apperrors.Internal("failed to transition ticket status", err)
-	}
-
-	// Insert status history record.
-	historyID := uuid.New()
-	_, err = s.pool.Exec(ctx, `
-		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		historyID, id, existing.Status, req.Status, auth.UserID, req.Reason, now,
-	)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to insert ticket status history", "error", err)
-	}
-
-	// Log audit event.
-	changes, _ := json.Marshal(map[string]any{
-		"previous_status": existing.Status,
-		"new_status":      req.Status,
-		"reason":          req.Reason,
+	return s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
+		targetStatus: req.Status,
+		reason:       req.Reason,
 	})
-	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
-		TenantID:   auth.TenantID,
-		ActorID:    auth.UserID,
-		Action:     "transition:ticket",
-		EntityType: "ticket",
-		EntityID:   id,
-		Changes:    changes,
-	}); auditErr != nil {
-		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
-	}
-
-	return ticket, nil
 }
 
 // ──────────────────────────────────────────────
@@ -852,10 +885,6 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 			team_queue_id = COALESCE($2, team_queue_id),
 			first_response_at = COALESCE($3, first_response_at),
 			sla_response_met = COALESCE($4, sla_response_met),
-			status = CASE
-				WHEN status = 'new' THEN 'assigned'
-				ELSE status
-			END,
 			updated_at = $5
 		WHERE id = $6 AND tenant_id = $7
 		RETURNING ` + ticketColumns
@@ -866,19 +895,6 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 	))
 	if err != nil {
 		return Ticket{}, apperrors.Internal("failed to assign ticket", err)
-	}
-
-	// Insert status history if status changed to assigned.
-	if existing.Status == "logged" {
-		historyID := uuid.New()
-		_, err = s.pool.Exec(ctx, `
-			INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			historyID, id, existing.Status, "assigned", auth.UserID, nil, now,
-		)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to insert ticket status history for assignment", "error", err)
-		}
 	}
 
 	// Log audit event.
@@ -895,6 +911,14 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 		Changes:    changes,
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	if existing.Status == TicketStatusLogged {
+		reason := "Ticket assigned"
+		return s.applyTicketStatusTransition(ctx, auth, ticket, ticketStatusTransitionOptions{
+			targetStatus: TicketStatusAssigned,
+			reason:       &reason,
+		})
 	}
 
 	return ticket, nil
@@ -1181,51 +1205,17 @@ func (s *TicketService) ResolveTicket(ctx context.Context, id uuid.UUID, req Res
 		slaResolutionMet = &met
 	}
 
-	query := `
-		UPDATE tickets SET
-			status = 'resolved',
-			resolution_notes = $1,
-			resolved_at = $2,
-			sla_resolution_met = COALESCE($3, sla_resolution_met),
-			updated_at = $4
-		WHERE id = $5 AND tenant_id = $6
-		RETURNING ` + ticketColumns
-
-	ticket, err := scanTicket(s.pool.QueryRow(ctx, query,
-		req.ResolutionNotes, now, slaResolutionMet, now, id, auth.TenantID,
-	))
-	if err != nil {
-		return Ticket{}, apperrors.Internal("failed to resolve ticket", err)
-	}
-
-	// Insert status history record.
-	historyID := uuid.New()
-	_, err = s.pool.Exec(ctx, `
-		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		historyID, id, existing.Status, "resolved", auth.UserID, &req.ResolutionNotes, now,
-	)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to insert ticket status history", "error", err)
-	}
-
-	// Log audit event.
-	changes, _ := json.Marshal(map[string]any{
-		"previous_status":  existing.Status,
-		"resolution_notes": req.ResolutionNotes,
+	return s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
+		targetStatus:     TicketStatusResolved,
+		reason:           &req.ResolutionNotes,
+		resolutionNotes:  &req.ResolutionNotes,
+		resolvedAt:       &now,
+		slaResolutionMet: slaResolutionMet,
+		auditAction:      "resolve:ticket",
+		auditExtra: map[string]any{
+			"resolution_notes": req.ResolutionNotes,
+		},
 	})
-	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
-		TenantID:   auth.TenantID,
-		ActorID:    auth.UserID,
-		Action:     "resolve:ticket",
-		EntityType: "ticket",
-		EntityID:   id,
-		Changes:    changes,
-	}); auditErr != nil {
-		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
-	}
-
-	return ticket, nil
 }
 
 // CloseTicket sets the ticket to closed status.
@@ -1245,46 +1235,12 @@ func (s *TicketService) CloseTicket(ctx context.Context, id uuid.UUID) error {
 
 	now := time.Now().UTC()
 
-	result, err := s.pool.Exec(ctx, `
-		UPDATE tickets SET status = 'closed', closed_at = $1, updated_at = $2
-		WHERE id = $3 AND tenant_id = $4`,
-		now, now, id, auth.TenantID,
-	)
-	if err != nil {
-		return apperrors.Internal("failed to close ticket", err)
-	}
-
-	if result.RowsAffected() == 0 {
-		return apperrors.NotFound("Ticket", id.String())
-	}
-
-	// Insert status history record.
-	historyID := uuid.New()
-	_, err = s.pool.Exec(ctx, `
-		INSERT INTO ticket_status_history (id, ticket_id, from_status, to_status, changed_by, reason, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		historyID, id, existing.Status, "closed", auth.UserID, nil, now,
-	)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to insert ticket status history", "error", err)
-	}
-
-	// Log audit event.
-	changes, _ := json.Marshal(map[string]any{
-		"previous_status": existing.Status,
+	_, err = s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
+		targetStatus: TicketStatusClosed,
+		closedAt:     &now,
+		auditAction:  "close:ticket",
 	})
-	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
-		TenantID:   auth.TenantID,
-		ActorID:    auth.UserID,
-		Action:     "close:ticket",
-		EntityType: "ticket",
-		EntityID:   id,
-		Changes:    changes,
-	}); auditErr != nil {
-		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
-	}
-
-	return nil
+	return err
 }
 
 // ──────────────────────────────────────────────
@@ -1852,12 +1808,42 @@ func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, 
 
 	targetIDs := authorizedIDs
 	if newStatus, ok := fields["status"]; ok {
-		var transitionFailures int64
-		targetIDs, transitionFailures = partitionByValidTransition(currentStatuses, newStatus, authorizedIDs)
-		failed += transitionFailures
-		if len(targetIDs) == 0 {
-			return 0, failed, nil
+		transitionedIDs := make([]uuid.UUID, 0, len(authorizedIDs))
+		for _, ticketID := range authorizedIDs {
+			current, ok := currentStatuses[ticketID]
+			if !ok || !IsValidTicketTransition(current, newStatus) {
+				failed++
+				continue
+			}
+			existing, getErr := s.GetTicket(ctx, ticketID)
+			if getErr != nil {
+				failed++
+				continue
+			}
+			reason := "Bulk status update"
+			if _, transErr := s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
+				targetStatus: newStatus,
+				reason:       &reason,
+				auditAction:  "bulk_transition:ticket",
+			}); transErr != nil {
+				failed++
+				continue
+			}
+			transitionedIDs = append(transitionedIDs, ticketID)
 		}
+		targetIDs = transitionedIDs
+		delete(fields, "status")
+		if len(targetIDs) == 0 || len(fields) == 0 {
+			return int64(len(targetIDs)), failed, nil
+		}
+	}
+
+	if len(targetIDs) == 0 {
+		return 0, failed, nil
+	}
+
+	if len(fields) == 0 {
+		return int64(len(targetIDs)), failed, nil
 	}
 
 	// Build dynamic SET clause.

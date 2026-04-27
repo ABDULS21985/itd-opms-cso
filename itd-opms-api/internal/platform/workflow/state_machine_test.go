@@ -110,6 +110,41 @@ func TestStateMachine_AllowedFrom(t *testing.T) {
 	}
 }
 
+func TestStateMachine_AllowedFromDefensiveCopy(t *testing.T) {
+	sm := NewStateMachine("test", map[string][]string{
+		"a": {"b"},
+	})
+
+	allowed := sm.AllowedFrom("a")
+	allowed[0] = "mutated"
+
+	if !sm.IsValid("a", "b") {
+		t.Fatal("mutating AllowedFrom result should not mutate the state machine")
+	}
+}
+
+func TestStateMachine_HasStateAndStates(t *testing.T) {
+	sm := NewStateMachine("test", map[string][]string{
+		"b": {"c"},
+		"a": {"b"},
+	})
+
+	if !sm.HasState("a") || !sm.HasState("c") {
+		t.Fatal("expected source and target states to be known")
+	}
+	if sm.HasState("missing") {
+		t.Fatal("unexpected missing state")
+	}
+
+	got := sm.States()
+	want := []string{"a", "b", "c"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("States() = %v, want %v", got, want)
+		}
+	}
+}
+
 // ──────────────────────────────────────────────
 // ProblemStateMachine — valid transitions
 // ──────────────────────────────────────────────
@@ -523,5 +558,63 @@ func TestTicketStatusConstants(t *testing.T) {
 		if actual[name] != want {
 			t.Errorf("Ticket%s = %q, want %q", name, actual[name], want)
 		}
+	}
+}
+
+func TestServiceRequestStateMachine(t *testing.T) {
+	valid := [][2]string{
+		{ServiceRequestPendingApproval, ServiceRequestApproved},
+		{ServiceRequestPendingApproval, ServiceRequestRejected},
+		{ServiceRequestPendingApproval, ServiceRequestCancelled},
+		{ServiceRequestApproved, ServiceRequestInProgress},
+		{ServiceRequestApproved, ServiceRequestFulfilled},
+		{ServiceRequestApproved, ServiceRequestCancelled},
+		{ServiceRequestInProgress, ServiceRequestFulfilled},
+		{ServiceRequestInProgress, ServiceRequestCancelled},
+		{ServiceRequestFulfilled, ServiceRequestClosed},
+	}
+	for _, tt := range valid {
+		if !ServiceRequestStateMachine.IsValid(tt[0], tt[1]) {
+			t.Errorf("expected service request transition %s -> %s to be valid", tt[0], tt[1])
+		}
+	}
+	if ServiceRequestStateMachine.IsValid(ServiceRequestRejected, ServiceRequestCancelled) {
+		t.Error("rejected service requests must be terminal")
+	}
+	if ServiceRequestStateMachine.IsValid(ServiceRequestFulfilled, ServiceRequestCancelled) {
+		t.Error("fulfilled service requests must close, not cancel")
+	}
+}
+
+func TestMajorIncidentStateMachine(t *testing.T) {
+	valid := [][2]string{
+		{MajorIncidentDeclared, MajorIncidentInvestigating},
+		{MajorIncidentInvestigating, MajorIncidentMitigating},
+		{MajorIncidentMitigating, MajorIncidentMitigated},
+		{MajorIncidentMitigated, MajorIncidentMonitoring},
+		{MajorIncidentMitigated, MajorIncidentResolved},
+		{MajorIncidentMonitoring, MajorIncidentResolved},
+		{MajorIncidentResolved, MajorIncidentPIRPending},
+		{MajorIncidentPIRPending, MajorIncidentClosed},
+	}
+	for _, tt := range valid {
+		if !MajorIncidentStateMachine.IsValid(tt[0], tt[1]) {
+			t.Errorf("expected major incident transition %s -> %s to be valid", tt[0], tt[1])
+		}
+	}
+	if MajorIncidentStateMachine.IsValid(MajorIncidentMitigated, MajorIncidentPIRPending) {
+		t.Error("major incidents must pass through resolved before PIR pending")
+	}
+}
+
+func TestCABMeetingStateMachine(t *testing.T) {
+	if !CABMeetingStateMachine.IsValid(CABMeetingScheduled, CABMeetingInProgress) {
+		t.Fatal("scheduled CAB meeting should be startable")
+	}
+	if !CABMeetingStateMachine.IsValid(CABMeetingInProgress, CABMeetingCompleted) {
+		t.Fatal("in-progress CAB meeting should be completable")
+	}
+	if CABMeetingStateMachine.IsValid(CABMeetingCompleted, CABMeetingScheduled) {
+		t.Fatal("completed CAB meeting should be terminal")
 	}
 }

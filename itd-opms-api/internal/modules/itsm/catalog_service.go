@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -273,6 +274,9 @@ func (s *CatalogService) CreateItem(ctx context.Context, req CreateCatalogItemRe
 	if req.Status != nil {
 		status = *req.Status
 	}
+	if !workflow.CatalogItemStateMachine.HasState(status) {
+		return CatalogItem{}, apperrors.Validation("status", fmt.Sprintf("invalid status %q: must be one of active, inactive, deprecated", status))
+	}
 
 	approvalRequired := false
 	if req.ApprovalRequired != nil {
@@ -445,9 +449,14 @@ func (s *CatalogService) UpdateItem(ctx context.Context, id uuid.UUID, req Updat
 	}
 
 	// Verify the item exists and belongs to the tenant.
-	_, err := s.GetItem(ctx, id)
+	existing, err := s.GetItem(ctx, id)
 	if err != nil {
 		return CatalogItem{}, err
+	}
+	if req.Status != nil && *req.Status != existing.Status {
+		if err := workflow.CatalogItemStateMachine.Validate(existing.Status, *req.Status); err != nil {
+			return CatalogItem{}, apperrors.Validation("status", err.Error())
+		}
 	}
 
 	now := time.Now().UTC()
@@ -663,13 +672,7 @@ func (s *CatalogService) BulkUpdateItemStatus(ctx context.Context, ids []uuid.UU
 		return 0, apperrors.Unauthorized("authentication required")
 	}
 
-	// Validate status.
-	validStatuses := map[string]bool{
-		CatalogItemStatusActive:     true,
-		CatalogItemStatusInactive:   true,
-		CatalogItemStatusDeprecated: true,
-	}
-	if !validStatuses[status] {
+	if !workflow.CatalogItemStateMachine.HasState(status) {
 		return 0, apperrors.Validation("status", fmt.Sprintf("invalid status %q: must be one of active, inactive, deprecated", status))
 	}
 

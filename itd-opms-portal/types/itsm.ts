@@ -130,6 +130,42 @@ export interface TicketStatusHistory {
   createdAt: string;
 }
 
+export interface ITSMWorkflowTransition {
+  value: string;
+  label: string;
+  reason?: string;
+  requiredFields?: string[];
+  checklist?: ITSMWorkflowChecklistItem[];
+  slaImpact?: string;
+  decisionTrail?: string[];
+}
+
+export interface ITSMWorkflowChecklistItem {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+export interface ITSMWorkflowTransitionResponse {
+  entity: string;
+  status: string;
+  transitions: ITSMWorkflowTransition[];
+  blockedTransitions?: ITSMWorkflowTransition[];
+  nextAction?: string;
+}
+
+export interface ITSMWorkflowStatus {
+  value: string;
+  label: string;
+  terminal: boolean;
+  transitions: ITSMWorkflowTransition[];
+}
+
+export interface ITSMWorkflowDefinition {
+  entity: string;
+  statuses: ITSMWorkflowStatus[];
+}
+
 export interface UserSummary {
   id: string;
   displayName: string;

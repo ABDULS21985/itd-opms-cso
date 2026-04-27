@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -48,6 +49,13 @@ func NewRequestService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *Reques
 		pool:     pool,
 		auditSvc: auditSvc,
 	}
+}
+
+func validateServiceRequestTransition(current, target string) error {
+	if err := workflow.ServiceRequestStateMachine.Validate(current, target); err != nil {
+		return apperrors.Validation("status", err.Error())
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -624,6 +632,9 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 	if currentStatus != RequestStatusPendingApproval {
 		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request is not pending approval (current: %s)", currentStatus))
 	}
+	if err := validateServiceRequestTransition(currentStatus, RequestStatusApproved); err != nil {
+		return ServiceRequest{}, err
+	}
 
 	// Find the user's pending approval task for this request.
 	var taskID uuid.UUID
@@ -677,8 +688,19 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 		return ServiceRequest{}, apperrors.Internal("failed to count pending approvals", err)
 	}
 
-	// If all tasks are approved, transition request to "approved".
-	if pendingCount == 0 {
+	approvalComplete := pendingCount == 0 || reqApprovalMode == "any_of"
+	if reqApprovalMode == "any_of" {
+		_, err = tx.Exec(ctx,
+			`UPDATE approval_tasks SET status = $1 WHERE request_id = $2 AND status = 'pending'`,
+			ApprovalTaskStatusSkipped, requestID,
+		)
+		if err != nil {
+			return ServiceRequest{}, apperrors.Internal("failed to skip remaining approval tasks", err)
+		}
+	}
+
+	// If the approval mode is complete, transition request to "approved".
+	if approvalComplete {
 		// Mark SLA resolution (approval phase) as met and resume the SLA clock.
 		_, err = tx.Exec(ctx,
 			`UPDATE service_requests
@@ -705,7 +727,7 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 		return ServiceRequest{}, apperrors.Internal("failed to add timeline entry", err)
 	}
 
-	if pendingCount == 0 {
+	if approvalComplete {
 		allApprovedDesc := "All approvals completed — request approved"
 		if err := s.addTimelineEntry(ctx, tx, requestID, auth.UserID, "all_approved", &allApprovedDesc, nil); err != nil {
 			return ServiceRequest{}, apperrors.Internal("failed to add timeline entry", err)
@@ -770,6 +792,9 @@ func (s *RequestService) RejectRequest(ctx context.Context, requestID uuid.UUID,
 	}
 	if currentStatus != RequestStatusPendingApproval {
 		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request is not pending approval (current: %s)", currentStatus))
+	}
+	if err := validateServiceRequestTransition(currentStatus, RequestStatusRejected); err != nil {
+		return ServiceRequest{}, err
 	}
 
 	// Find the user's pending approval task.
@@ -883,8 +908,10 @@ func (s *RequestService) StartFulfillment(ctx context.Context, requestID uuid.UU
 		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
 	}
 
-	if currentStatus != RequestStatusApproved && currentStatus != RequestStatusInProgress {
-		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot start fulfillment from %s", currentStatus))
+	if currentStatus != RequestStatusInProgress {
+		if err := validateServiceRequestTransition(currentStatus, RequestStatusInProgress); err != nil {
+			return ServiceRequest{}, err
+		}
 	}
 
 	assignedTo := auth.UserID
@@ -964,8 +991,8 @@ func (s *RequestService) FulfillRequest(ctx context.Context, requestID uuid.UUID
 		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
 	}
 
-	if currentStatus != RequestStatusApproved && currentStatus != RequestStatusInProgress {
-		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot be fulfilled from %s", currentStatus))
+	if err := validateServiceRequestTransition(currentStatus, RequestStatusFulfilled); err != nil {
+		return ServiceRequest{}, err
 	}
 
 	now := time.Now().UTC()
@@ -1041,8 +1068,8 @@ func (s *RequestService) CloseRequest(ctx context.Context, requestID uuid.UUID, 
 		return ServiceRequest{}, apperrors.Internal("failed to lock service request", err)
 	}
 
-	if currentStatus != RequestStatusFulfilled {
-		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("request cannot be closed from %s", currentStatus))
+	if err := validateServiceRequestTransition(currentStatus, RequestStatusClosed); err != nil {
+		return ServiceRequest{}, err
 	}
 
 	now := time.Now().UTC()
@@ -1118,8 +1145,8 @@ func (s *RequestService) CancelRequest(ctx context.Context, requestID uuid.UUID)
 		return ServiceRequest{}, apperrors.Unauthorized("only the requester can cancel this request")
 	}
 
-	if currentStatus == RequestStatusFulfilled || currentStatus == RequestStatusClosed || currentStatus == RequestStatusCancelled {
-		return ServiceRequest{}, apperrors.Validation("status", fmt.Sprintf("cannot cancel a request that is %s", currentStatus))
+	if err := validateServiceRequestTransition(currentStatus, RequestStatusCancelled); err != nil {
+		return ServiceRequest{}, err
 	}
 
 	now := time.Now().UTC()

@@ -18,6 +18,7 @@ import (
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/metrics"
+	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
@@ -479,21 +480,38 @@ func (s *MajorIncidentService) ResolveMajorIncident(ctx context.Context, majorIn
 	duration := int(now.Sub(current.DeclaredAt).Minutes())
 	scheduled := addBusinessDays(now, 5)
 
+	if err := validateMajorIncidentTransition(current.Status, MajorIncidentStatusResolved); err != nil {
+		return MajorIncidentRecord{}, err
+	}
+	if err := validateMajorIncidentTransition(MajorIncidentStatusResolved, MajorIncidentStatusPIRPending); err != nil {
+		return MajorIncidentRecord{}, err
+	}
+
 	if _, err := tx.Exec(ctx, `
 		UPDATE major_incident_records
 		SET status = $3,
 			resolution_summary = $4,
 			root_cause_summary = $5,
 			resolved_at = $6,
-			pir_scheduled_date = $7,
-			total_duration_minutes = $8,
-			updated_at = $9
+			total_duration_minutes = $7,
+			updated_at = $8
 		WHERE id = $1 AND tenant_id = $2`,
-		majorIncidentID, auth.TenantID, MajorIncidentStatusPIRPending,
+		majorIncidentID, auth.TenantID, MajorIncidentStatusResolved,
 		strings.TrimSpace(req.ResolutionSummary), strings.TrimSpace(req.RootCause),
-		now, scheduled, duration, now,
+		now, duration, now,
 	); err != nil {
 		return MajorIncidentRecord{}, apperrors.Internal("failed to resolve major incident", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE major_incident_records
+		SET status = $3,
+			pir_scheduled_date = $4,
+			updated_at = $5
+		WHERE id = $1 AND tenant_id = $2`,
+		majorIncidentID, auth.TenantID, MajorIncidentStatusPIRPending, scheduled, now,
+	); err != nil {
+		return MajorIncidentRecord{}, apperrors.Internal("failed to move major incident to PIR pending", err)
 	}
 
 	if err := s.ensurePIRActionItem(ctx, tx, current, auth.UserID, scheduled); err != nil {
@@ -593,8 +611,25 @@ func (s *MajorIncidentService) SubmitPIR(ctx context.Context, majorIncidentID uu
 	if err != nil {
 		return MajorIncidentRecord{}, err
 	}
-	if current.Status != MajorIncidentStatusPIRPending && current.Status != MajorIncidentStatusResolved {
-		return MajorIncidentRecord{}, apperrors.BadRequest("major incident must be resolved or pir_pending before submitting PIR")
+	if current.Status == MajorIncidentStatusResolved {
+		if err := validateMajorIncidentTransition(current.Status, MajorIncidentStatusPIRPending); err != nil {
+			return MajorIncidentRecord{}, err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE major_incident_records
+			SET status = $3, updated_at = $4
+			WHERE id = $1 AND tenant_id = $2`,
+			majorIncidentID, auth.TenantID, MajorIncidentStatusPIRPending, now,
+		); err != nil {
+			return MajorIncidentRecord{}, apperrors.Internal("failed to move major incident to PIR pending", err)
+		}
+		current.Status = MajorIncidentStatusPIRPending
+	}
+	if current.Status != MajorIncidentStatusPIRPending {
+		return MajorIncidentRecord{}, apperrors.BadRequest("major incident must be pir_pending before submitting PIR")
+	}
+	if err := validateMajorIncidentTransition(current.Status, MajorIncidentStatusClosed); err != nil {
+		return MajorIncidentRecord{}, err
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -1489,20 +1524,10 @@ func normalizeMajorIncidentStatus(status string) (string, error) {
 }
 
 func validateMajorIncidentTransition(current, target string) error {
-	allowed := map[string][]string{
-		MajorIncidentStatusDeclared:      {MajorIncidentStatusInvestigating},
-		MajorIncidentStatusInvestigating: {MajorIncidentStatusMitigating},
-		MajorIncidentStatusMitigating:    {MajorIncidentStatusMitigated},
-		MajorIncidentStatusMitigated:     {MajorIncidentStatusMonitoring, MajorIncidentStatusResolved},
-		MajorIncidentStatusMonitoring:    {MajorIncidentStatusResolved},
-		MajorIncidentStatusResolved:      {MajorIncidentStatusPIRPending},
-		MajorIncidentStatusPIRPending:    {MajorIncidentStatusClosed},
-		MajorIncidentStatusClosed:        {},
+	if err := workflow.MajorIncidentStateMachine.Validate(current, target); err != nil {
+		return apperrors.BadRequest(err.Error())
 	}
-	if slices.Contains(allowed[current], target) {
-		return nil
-	}
-	return apperrors.BadRequest(fmt.Sprintf("invalid major incident transition: %s -> %s", current, target))
+	return nil
 }
 
 func validateMajorIncidentUpdateType(updateType string) error {

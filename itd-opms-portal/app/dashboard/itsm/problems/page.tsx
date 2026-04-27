@@ -33,6 +33,7 @@ import {
   useKnownErrors,
   useProblems,
   useTransitionProblem,
+  useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 import type { ITSMProblem, KnownError } from "@/types";
 
@@ -143,6 +144,26 @@ const PROBLEM_TRANSITIONS: Record<
     { value: "investigating", label: "Reopen", icon: RotateCcw, accent: "#2563EB" },
   ],
 };
+
+function mergeProblemTransitions(
+  backend:
+    | { transitions: { value: string; label: string }[] }
+    | undefined,
+  local: { value: string; label: string; icon: LucideIcon; accent: string }[],
+) {
+  if (!backend) {
+    return local;
+  }
+  return backend.transitions.map((transition) => {
+    const meta = local.find((item) => item.value === transition.value);
+    return {
+      value: transition.value,
+      label: meta?.label ?? transition.label,
+      icon: meta?.icon ?? ArrowRight,
+      accent: meta?.accent ?? "#2563EB",
+    };
+  });
+}
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -471,9 +492,16 @@ function ProblemCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const transitionProblem = useTransitionProblem();
+  const { data: allowedTransitions } = useITSMAllowedTransitions(
+    "problem",
+    problem.status,
+  );
   const statusMeta = getStatusMeta(problem.status);
   const incidentCount = problem.linkedIncidentIds.length;
-  const transitions = PROBLEM_TRANSITIONS[problem.status] ?? [];
+  const transitions = mergeProblemTransitions(
+    allowedTransitions,
+    PROBLEM_TRANSITIONS[problem.status] ?? [],
+  );
 
   const highlights = [
     {

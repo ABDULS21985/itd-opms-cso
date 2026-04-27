@@ -24,6 +24,7 @@ type Handler struct {
 	change        *ChangeHandler
 	cabMeeting    *CABMeetingHandler
 	slaMgmt       *SLAManagementHandler
+	workflow      *WorkflowHandler
 }
 
 // NewHandler creates a new ITSM Handler with all sub-handlers wired up.
@@ -53,6 +54,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 		change:        NewChangeHandler(changeSvc),
 		cabMeeting:    NewCABMeetingHandler(changeSvc),
 		slaMgmt:       NewSLAManagementHandler(slaMgmtSvc),
+		workflow:      NewWorkflowHandler(),
 	}
 }
 
@@ -106,6 +108,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// CAB meetings
 	r.Route("/cab-meetings", func(r chi.Router) {
 		h.cabMeeting.Routes(r)
+	})
+
+	// Workflow definitions and allowed transitions
+	r.Route("/workflows", func(r chi.Router) {
+		h.workflow.Routes(r)
 	})
 
 	// OLA/UC management, dependency chain, consistency check (ESM BRD)

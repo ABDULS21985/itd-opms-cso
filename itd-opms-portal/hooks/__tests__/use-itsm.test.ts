@@ -73,7 +73,57 @@ import {
   useCSATStats,
   useCreateCSATSurvey,
   useBulkUpdateTickets,
+  useITSMAllowedTransitions,
+  useITSMWorkflow,
 } from "@/hooks/use-itsm";
+
+describe("ITSM workflow hooks", () => {
+  it("fetches a workflow definition", async () => {
+    const workflow = {
+      entity: "ticket",
+      statuses: [
+        {
+          value: "logged",
+          label: "Logged",
+          terminal: false,
+          transitions: [{ value: "assigned", label: "Assign" }],
+        },
+      ],
+    };
+    server.use(mockGet("/itsm/workflows/ticket", workflow));
+
+    const { result } = renderHook(() => useITSMWorkflow("ticket"), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(workflow);
+  });
+
+  it("fetches allowed transitions for the current status", async () => {
+    let requestedStatus = "";
+    const response = {
+      entity: "ticket",
+      status: "in_progress",
+      transitions: [{ value: "resolved", label: "Resolve" }],
+    };
+    server.use(
+      http.get(`${API}/itsm/workflows/ticket/transitions`, ({ request }) => {
+        requestedStatus = new URL(request.url).searchParams.get("status") ?? "";
+        return HttpResponse.json({ status: "success", data: response });
+      }),
+    );
+
+    const { result } = renderHook(
+      () => useITSMAllowedTransitions("ticket", "in_progress"),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(requestedStatus).toBe("in_progress");
+    expect(result.current.data).toEqual(response);
+  });
+});
 
 /* ================================================================== */
 /*  Catalog Categories                                                 */

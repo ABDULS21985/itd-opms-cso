@@ -1177,6 +1177,18 @@ func (s *ChangeService) UpdateCABMeeting(ctx context.Context, id uuid.UUID, req 
 		return CABMeeting{}, apperrors.Unauthorized("authentication required")
 	}
 
+	if req.Status != nil {
+		existing, err := s.GetCABMeeting(ctx, id)
+		if err != nil {
+			return CABMeeting{}, err
+		}
+		if *req.Status != existing.Status {
+			if err := workflow.CABMeetingStateMachine.Validate(existing.Status, *req.Status); err != nil {
+				return CABMeeting{}, apperrors.BadRequest(err.Error())
+			}
+		}
+	}
+
 	now := time.Now().UTC()
 
 	query := `
@@ -1232,6 +1244,14 @@ func (s *ChangeService) CompleteCABMeeting(ctx context.Context, id uuid.UUID) (C
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return CABMeeting{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetCABMeeting(ctx, id)
+	if err != nil {
+		return CABMeeting{}, err
+	}
+	if err := workflow.CABMeetingStateMachine.Validate(existing.Status, workflow.CABMeetingCompleted); err != nil {
+		return CABMeeting{}, apperrors.BadRequest(err.Error())
 	}
 
 	now := time.Now().UTC()

@@ -24,6 +24,7 @@ import {
   useTransitionChange,
   useSubmitCABDecision,
   useCompletePIR,
+  useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 import { CAB_DECISIONS } from "@/types/itsm";
 
@@ -86,6 +87,26 @@ const CHANGE_TRANSITIONS: Record<string, { value: string; label: string; icon: L
   investigating: [{ value: "scheduled", label: "Re-schedule", icon: Calendar, accent: "#2563EB" }],
 };
 
+function mergeChangeTransitions(
+  backend:
+    | { transitions: { value: string; label: string }[] }
+    | undefined,
+  local: { value: string; label: string; icon: LucideIcon; accent: string }[],
+) {
+  if (!backend) {
+    return local;
+  }
+  return backend.transitions.map((transition) => {
+    const meta = local.find((item) => item.value === transition.value);
+    return {
+      value: transition.value,
+      label: meta?.label ?? transition.label,
+      icon: meta?.icon ?? GitBranch,
+      accent: meta?.accent ?? "#2563EB",
+    };
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Info Row Component                                                 */
 /* ------------------------------------------------------------------ */
@@ -113,6 +134,10 @@ export default function ChangeDetailPage() {
   const transitionMutation = useTransitionChange(id);
   const cabDecisionMutation = useSubmitCABDecision(id);
   const pirMutation = useCompletePIR(id);
+  const { data: allowedTransitions } = useITSMAllowedTransitions(
+    "change",
+    change?.status,
+  );
 
   const [activeTab, setActiveTab] = useState<"overview" | "planning" | "pir">("overview");
   const [cabDecision, setCabDecision] = useState("");
@@ -139,7 +164,10 @@ export default function ChangeDetailPage() {
 
   const clsMeta = CLASSIFICATION_META[change.changeClassification ?? ""] ?? CLASSIFICATION_META.normal;
   const ClsIcon = clsMeta.icon;
-  const transitions = CHANGE_TRANSITIONS[change.status] ?? [];
+  const transitions = mergeChangeTransitions(
+    allowedTransitions,
+    CHANGE_TRANSITIONS[change.status] ?? [],
+  );
   const hasManagePermission =
     currentUser?.permissions?.includes("*") ||
     currentUser?.permissions?.includes("itsm.manage") ||

@@ -72,6 +72,7 @@ import {
   useSubtasks,
   useCreateSubtask,
   useUnlinkSubtask,
+  useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 import type {
   TicketComment,
@@ -158,6 +159,26 @@ const STATUS_TRANSITIONS: Record<
   closed: [],
   cancelled: [],
 };
+
+function mergeTicketTransitions(
+  backend:
+    | { transitions: { value: string; label: string }[] }
+    | undefined,
+  local: { value: string; label: string; icon?: React.ElementType; variant?: string }[],
+) {
+  if (!backend) {
+    return local;
+  }
+  return backend.transitions.map((transition) => {
+    const meta = local.find((item) => item.value === transition.value);
+    return {
+      value: transition.value,
+      label: meta?.label ?? transition.label,
+      icon: meta?.icon,
+      variant: meta?.variant,
+    };
+  });
+}
 
 /** Ordered pipeline stages */
 const STATUS_PIPELINE = [
@@ -946,6 +967,11 @@ export default function TicketDetailPage({
   const assignTicket = useAssignTicket();
   const resolveTicket = useResolveTicket();
   const closeTicket = useCloseTicket();
+  const workflowEntity = ticket?.type === "change" ? "change" : "ticket";
+  const { data: allowedTransitions } = useITSMAllowedTransitions(
+    workflowEntity,
+    ticket?.status,
+  );
 
   /* ---- KB link hooks ---- */
   const { data: kbLinks = [] } = useTicketKBLinks(id);
@@ -1288,7 +1314,10 @@ export default function TicketDetailPage({
     ring: "ring-gray-500/30",
   };
 
-  const transitions = STATUS_TRANSITIONS[ticket.status] ?? [];
+  const transitions = mergeTicketTransitions(
+    allowedTransitions,
+    STATUS_TRANSITIONS[ticket.status] ?? [],
+  );
 
   function handleTransition(newStatus: string) {
     if (newStatus === "resolved") {

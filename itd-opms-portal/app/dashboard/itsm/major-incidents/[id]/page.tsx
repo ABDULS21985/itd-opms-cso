@@ -25,6 +25,7 @@ import {
   useResolveMajorIncident,
   useSubmitMajorIncidentPIR,
   useTransitionMajorIncident,
+  useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 
 type UpdateType = "status_update" | "comms" | "technical";
@@ -261,6 +262,13 @@ export default function MajorIncidentDetailPage() {
   const updateMutation = usePostMajorIncidentUpdate();
   const resolveMutation = useResolveMajorIncident();
   const pirMutation = useSubmitMajorIncidentPIR();
+  const { data: allowedTransitionData } = useITSMAllowedTransitions(
+    "major_incident",
+    incident?.status,
+  );
+  const canTransitionTo = (targetStatus: string) =>
+    !allowedTransitionData ||
+    allowedTransitionData.transitions.some((transition) => transition.value === targetStatus);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -1007,7 +1015,7 @@ export default function MajorIncidentDetailPage() {
               </div>
 
               <div className="mt-5 space-y-3">
-                {incident.status === "declared" ? (
+                {incident.status === "declared" && canTransitionTo("investigating") ? (
                   <ActionButton
                     label="Begin Investigation"
                     onClick={() =>
@@ -1020,7 +1028,7 @@ export default function MajorIncidentDetailPage() {
                   />
                 ) : null}
 
-                {incident.status === "investigating" ? (
+                {incident.status === "investigating" && canTransitionTo("mitigating") ? (
                   <ActionButton
                     label="Begin Mitigation"
                     onClick={() =>
@@ -1033,7 +1041,7 @@ export default function MajorIncidentDetailPage() {
                   />
                 ) : null}
 
-                {incident.status === "mitigating" ? (
+                {incident.status === "mitigating" && canTransitionTo("mitigated") ? (
                   <ActionButton
                     label="Confirm Mitigated"
                     onClick={() =>
@@ -1048,26 +1056,30 @@ export default function MajorIncidentDetailPage() {
 
                 {incident.status === "mitigated" ? (
                   <>
-                    <ActionButton
-                      label="Continue Monitoring"
-                      tone="secondary"
-                      onClick={() =>
-                        transitionMutation.mutateAsync({
-                          id: incident.id,
-                          targetStatus: "monitoring",
-                        })
-                      }
-                      disabled={busy}
-                    />
-                    <ActionButton
-                      label="Confirm Resolved"
-                      onClick={() => setShowResolveForm(true)}
-                      disabled={busy}
-                    />
+                    {canTransitionTo("monitoring") ? (
+                      <ActionButton
+                        label="Continue Monitoring"
+                        tone="secondary"
+                        onClick={() =>
+                          transitionMutation.mutateAsync({
+                            id: incident.id,
+                            targetStatus: "monitoring",
+                          })
+                        }
+                        disabled={busy}
+                      />
+                    ) : null}
+                    {canTransitionTo("resolved") ? (
+                      <ActionButton
+                        label="Confirm Resolved"
+                        onClick={() => setShowResolveForm(true)}
+                        disabled={busy}
+                      />
+                    ) : null}
                   </>
                 ) : null}
 
-                {incident.status === "monitoring" ? (
+                {incident.status === "monitoring" && canTransitionTo("resolved") ? (
                   <ActionButton
                     label="Confirm Resolved"
                     onClick={() => setShowResolveForm(true)}
