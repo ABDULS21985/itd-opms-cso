@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
@@ -26,13 +27,19 @@ import (
 type TicketService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	js       nats.JetStreamContext
 }
 
 // NewTicketService creates a new TicketService.
-func NewTicketService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *TicketService {
+func NewTicketService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js ...nats.JetStreamContext) *TicketService {
+	var stream nats.JetStreamContext
+	if len(js) > 0 {
+		stream = js[0]
+	}
 	return &TicketService{
 		pool:     pool,
 		auditSvc: auditSvc,
+		js:       stream,
 	}
 }
 
@@ -822,6 +829,8 @@ func (s *TicketService) applyTicketStatusTransition(ctx context.Context, auth *t
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
+	s.publishTicketStatusChanged(ctx, auth, existing, ticket, opts)
+
 	return ticket, nil
 }
 
@@ -913,6 +922,8 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
+	s.publishTicketAssigned(ctx, auth, existing, ticket)
+
 	if existing.Status == TicketStatusLogged {
 		reason := "Ticket assigned"
 		return s.applyTicketStatusTransition(ctx, auth, ticket, ticketStatusTransitionOptions{
@@ -954,6 +965,8 @@ func (s *TicketService) EscalateTicket(ctx context.Context, id uuid.UUID, reason
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	s.publishTicketEscalated(ctx, auth, existing, reason)
 
 	return nil
 }
@@ -1003,6 +1016,8 @@ func (s *TicketService) DeclareMajorIncident(ctx context.Context, id uuid.UUID) 
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	s.publishTicketMajorIncidentFlagged(ctx, auth, existing)
 
 	return nil
 }

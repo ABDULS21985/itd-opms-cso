@@ -629,6 +629,8 @@ func (s *ProblemService) TransitionProblem(ctx context.Context, id uuid.UUID, re
 			"actorId":         auth.UserID,
 			"ownerId":         p.OwnerID,
 			"assignedGroupId": p.AssignedGroupID,
+			"recipientIds":    notificationRecipientIDs(p.OwnerID),
+			"actionUrl":       notificationProblemURL(id),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type":       "itsm.problem.transitioned",

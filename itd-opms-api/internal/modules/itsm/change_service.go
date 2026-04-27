@@ -415,6 +415,9 @@ func (s *ChangeService) ImplementChange(ctx context.Context, changeID uuid.UUID,
 		eventData, _ := json.Marshal(map[string]any{
 			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
 			"previousStatus": existing.Status, "newStatus": workflow.ChangeImplementing, "actorId": auth.UserID,
+			"reporterId": t.ReporterID, "assigneeId": t.AssigneeID,
+			"recipientIds": notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":    notificationChangeURL(changeID),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type": "itsm.change.implementing", "tenantId": auth.TenantID,
@@ -502,6 +505,9 @@ func (s *ChangeService) CompleteChange(ctx context.Context, changeID uuid.UUID, 
 			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
 			"previousStatus": existing.Status, "newStatus": targetStatus,
 			"success": req.Success, "actorId": auth.UserID,
+			"reporterId": t.ReporterID, "assigneeId": t.AssigneeID,
+			"recipientIds": notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":    notificationChangeURL(changeID),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type": "itsm.change.completed", "tenantId": auth.TenantID,
@@ -575,6 +581,9 @@ func (s *ChangeService) RollbackChange(ctx context.Context, changeID uuid.UUID, 
 			"changeId": changeID, "ticketNumber": t.TicketNumber, "title": t.Title,
 			"previousStatus": existing.Status, "newStatus": workflow.ChangeRolledBack,
 			"reason": req.Reason, "actorId": auth.UserID,
+			"reporterId": t.ReporterID, "assigneeId": t.AssigneeID,
+			"recipientIds": notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":    notificationChangeURL(changeID),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type": "itsm.change.rolled_back", "tenantId": auth.TenantID,
@@ -683,6 +692,9 @@ func (s *ChangeService) TransitionChange(ctx context.Context, id uuid.UUID, req 
 			"comment":        req.Comment,
 			"actorId":        auth.UserID,
 			"assigneeId":     t.AssigneeID,
+			"reporterId":     t.ReporterID,
+			"recipientIds":   notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":      notificationChangeURL(id),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type":       "itsm.change.transitioned",
@@ -793,6 +805,10 @@ func (s *ChangeService) SubmitCABDecision(ctx context.Context, changeID uuid.UUI
 			"decision":     req.Decision,
 			"notes":        req.Notes,
 			"actorId":      auth.UserID,
+			"reporterId":   t.ReporterID,
+			"assigneeId":   t.AssigneeID,
+			"recipientIds": notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":    notificationChangeURL(changeID),
 		})
 		payload, _ := json.Marshal(map[string]any{
 			"type":       "itsm.cab.decision",

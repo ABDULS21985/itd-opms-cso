@@ -278,6 +278,11 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"email", "teams", "in_app"},
 			Priority:      8,
 		},
+		"itsm.ticket.transitioned": {
+			EmailTemplate: "ticket-status-changed",
+			Channels:      []string{"in_app"},
+			Priority:      5,
+		},
 		"cmdb.warranty.expiring": {
 			EmailTemplate: "license_renewal_reminder",
 			Channels:      []string{"email", "in_app"},
@@ -352,10 +357,35 @@ func resolveNotificationConfig(eventType string) *notificationConfig {
 			Channels:      []string{"in_app"},
 			Priority:      6,
 		},
+		"itsm.change.implementing": {
+			EmailTemplate: "change_transition",
+			Channels:      []string{"in_app"},
+			Priority:      6,
+		},
+		"itsm.change.completed": {
+			EmailTemplate: "change_transition",
+			Channels:      []string{"in_app"},
+			Priority:      6,
+		},
+		"itsm.change.rolled_back": {
+			EmailTemplate: "change_transition",
+			Channels:      []string{"email", "in_app"},
+			Priority:      8,
+		},
 		"itsm.cab.decision": {
 			EmailTemplate: "cab_decision",
 			Channels:      []string{"email", "in_app"},
 			Priority:      7,
+		},
+		"itsm.service_request.submitted": {
+			EmailTemplate: "service-request-status-changed",
+			Channels:      []string{"in_app"},
+			Priority:      4,
+		},
+		"itsm.service_request.transitioned": {
+			EmailTemplate: "service-request-status-changed",
+			Channels:      []string{"in_app"},
+			Priority:      5,
 		},
 		"release.created": {
 			EmailTemplate: "release_notification",
@@ -436,6 +466,9 @@ func (o *Orchestrator) resolveRecipients(ctx context.Context, eventData map[stri
 			}
 		}
 	}
+	for _, uid := range collectAssociatedUserIDs(eventData) {
+		addUserRecipient(uid)
+	}
 	if recipientEmail, ok := eventData["recipientEmail"].(string); ok {
 		addEmailRecipient(recipientEmail)
 	}
@@ -448,6 +481,59 @@ func (o *Orchestrator) resolveRecipients(ctx context.Context, eventData map[stri
 	}
 
 	return recipients, nil
+}
+
+func collectAssociatedUserIDs(eventData map[string]any) []uuid.UUID {
+	var ids []uuid.UUID
+	seen := map[uuid.UUID]struct{}{}
+	add := func(value any) {
+		id, ok := parseEventUUID(value)
+		if !ok || id == uuid.Nil {
+			return
+		}
+		if _, exists := seen[id]; exists {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	for _, key := range []string{
+		"requesterId",
+		"reporterId",
+		"assigneeId",
+		"assignedTo",
+		"ownerId",
+		"incidentCommanderId",
+		"communicationLeadId",
+	} {
+		add(eventData[key])
+	}
+	for _, key := range []string{
+		"approverIds",
+		"watcherIds",
+		"stakeholderIds",
+	} {
+		if values, ok := eventData[key].([]any); ok {
+			for _, value := range values {
+				add(value)
+			}
+		}
+	}
+
+	return ids
+}
+
+func parseEventUUID(value any) (uuid.UUID, bool) {
+	switch v := value.(type) {
+	case string:
+		id, err := uuid.Parse(v)
+		return id, err == nil
+	case uuid.UUID:
+		return v, true
+	default:
+		return uuid.Nil, false
+	}
 }
 
 func channelOverride(value any) []string {

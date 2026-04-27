@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/workflow"
@@ -41,13 +42,19 @@ type approvalApprover struct {
 type RequestService struct {
 	pool     *pgxpool.Pool
 	auditSvc *audit.AuditService
+	js       nats.JetStreamContext
 }
 
 // NewRequestService creates a new RequestService.
-func NewRequestService(pool *pgxpool.Pool, auditSvc *audit.AuditService) *RequestService {
+func NewRequestService(pool *pgxpool.Pool, auditSvc *audit.AuditService, js ...nats.JetStreamContext) *RequestService {
+	var stream nats.JetStreamContext
+	if len(js) > 0 {
+		stream = js[0]
+	}
 	return &RequestService{
 		pool:     pool,
 		auditSvc: auditSvc,
+		js:       stream,
 	}
 }
 
@@ -312,6 +319,7 @@ func (s *RequestService) SubmitRequest(ctx context.Context, req SubmitServiceReq
 	}
 
 	sr.CatalogItemName = &itemName
+	s.publishServiceRequestEvent(ctx, auth, sr, "new", sr.Status, "itsm.service_request.submitted", nil)
 	return sr, nil
 }
 
@@ -755,8 +763,11 @@ func (s *RequestService) ApproveRequest(ctx context.Context, requestID uuid.UUID
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	// Return the updated request.
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil && approvalComplete {
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", req.Comment)
+	}
+	return updated, err
 }
 
 // ──────────────────────────────────────────────
@@ -875,8 +886,12 @@ func (s *RequestService) RejectRequest(ctx context.Context, requestID uuid.UUID,
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	// Return the updated request.
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil {
+		reason := req.Reason
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", &reason)
+	}
+	return updated, err
 }
 
 // ──────────────────────────────────────────────
@@ -960,7 +975,11 @@ func (s *RequestService) StartFulfillment(ctx context.Context, requestID uuid.UU
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil {
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", req.Comment)
+	}
+	return updated, err
 }
 
 // FulfillRequest marks a request as fulfilled and records fulfillment notes.
@@ -1040,7 +1059,12 @@ func (s *RequestService) FulfillRequest(ctx context.Context, requestID uuid.UUID
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil {
+		notes := strings.TrimSpace(req.FulfillmentNotes)
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", &notes)
+	}
+	return updated, err
 }
 
 // CloseRequest formally closes a fulfilled request.
@@ -1111,7 +1135,11 @@ func (s *RequestService) CloseRequest(ctx context.Context, requestID uuid.UUID, 
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil {
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", req.Comment)
+	}
+	return updated, err
 }
 
 // CancelRequest allows the original requester to cancel their service request.
@@ -1193,8 +1221,11 @@ func (s *RequestService) CancelRequest(ctx context.Context, requestID uuid.UUID)
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
-	// Return the updated request.
-	return s.getRequestByID(ctx, requestID, auth.TenantID)
+	updated, err := s.getRequestByID(ctx, requestID, auth.TenantID)
+	if err == nil {
+		s.publishServiceRequestEvent(ctx, auth, updated, currentStatus, updated.Status, "itsm.service_request.transitioned", nil)
+	}
+	return updated, err
 }
 
 // ──────────────────────────────────────────────

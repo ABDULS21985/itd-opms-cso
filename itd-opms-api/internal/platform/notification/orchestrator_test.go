@@ -3,6 +3,8 @@ package notification
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // ──────────────────────────────────────────────
@@ -21,11 +23,15 @@ func TestResolveNotificationConfig_KnownTypes(t *testing.T) {
 		{"governance.approval.required", "approval_request", 7, 3},
 		{"itsm.ticket.assigned", "assignment_notification", 6, 2},
 		{"itsm.ticket.escalated", "escalation_notification", 8, 3},
+		{"itsm.ticket.transitioned", "ticket-status-changed", 5, 1},
 		{"cmdb.warranty.expiring", "license_renewal_reminder", 5, 2},
 		{"cmdb.license.noncompliant", "license_renewal_reminder", 7, 2},
 		{"grc.audit.scheduled", "audit_evidence_request", 6, 2},
 		{"grc.access_review.required", "audit_evidence_request", 6, 2},
 		{"itsm.incident.major", "major_incident", 10, 3},
+		{"itsm.problem.transitioned", "problem_transition", 5, 1},
+		{"itsm.change.transitioned", "change_transition", 6, 1},
+		{"itsm.service_request.transitioned", "service-request-status-changed", 5, 1},
 		{"governance.action_due_soon", "action_due_reminder", 5, 2},
 		{"governance.action_overdue", "action_overdue_reminder", 7, 3},
 		{"governance.action_critical_overdue", "action_critical_overdue", 9, 3},
@@ -192,6 +198,36 @@ func TestIsTypeDisabled(t *testing.T) {
 	}
 }
 
+func TestCollectAssociatedUserIDs(t *testing.T) {
+	requesterID := uuid.New()
+	reporterID := uuid.New()
+	assigneeID := uuid.New()
+	watcherID := uuid.New()
+
+	got := collectAssociatedUserIDs(map[string]any{
+		"requesterId": requesterID.String(),
+		"reporterId":  reporterID.String(),
+		"assigneeId":  assigneeID.String(),
+		"assignedTo":  assigneeID.String(),
+		"watcherIds":  []any{watcherID.String(), "not-a-uuid"},
+	})
+
+	want := map[uuid.UUID]bool{
+		requesterID: true,
+		reporterID:  true,
+		assigneeID:  true,
+		watcherID:   true,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d unique IDs, got %d: %v", len(want), len(got), got)
+	}
+	for _, id := range got {
+		if !want[id] {
+			t.Fatalf("unexpected ID collected: %s", id)
+		}
+	}
+}
+
 // ──────────────────────────────────────────────
 // isInQuietHours
 // ──────────────────────────────────────────────
@@ -249,10 +285,10 @@ func TestIsInQuietHours(t *testing.T) {
 
 func TestExtractActionURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		data     json.RawMessage
-		wantNil  bool
-		wantURL  string
+		name    string
+		data    json.RawMessage
+		wantNil bool
+		wantURL string
 	}{
 		{
 			name:    "extracts actionUrl from valid JSON",
