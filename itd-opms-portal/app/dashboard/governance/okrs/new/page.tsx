@@ -385,7 +385,7 @@ export default function CreateOKRPage() {
                         }
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6 mt-2">
                       <ReviewField
                         label="Level"
                         value={findLabel(LEVELS, level)}

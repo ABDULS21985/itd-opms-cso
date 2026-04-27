@@ -263,7 +263,7 @@ function StatusSelector({
       <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
         Project Status
       </label>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {STATUSES.map((opt) => {
           const Icon = opt.icon;
           const isActive = value === opt.value;

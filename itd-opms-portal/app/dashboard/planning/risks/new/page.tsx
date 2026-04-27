@@ -445,7 +445,7 @@ export default function NewRiskPage() {
                         Identity
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Project"
@@ -485,7 +485,7 @@ export default function NewRiskPage() {
                         Assessment
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField
                         label="Likelihood"
                         value={findLabel(LIKELIHOOD_LEVELS, likelihood)}

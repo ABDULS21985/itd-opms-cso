@@ -139,7 +139,7 @@ export function DetailPanel({
         </div>
 
         {/* Stats cards */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3 text-center">
             <Users size={16} className="mx-auto mb-1 text-[var(--primary)]" />
             <p className="text-lg font-bold text-[var(--text-primary)]">

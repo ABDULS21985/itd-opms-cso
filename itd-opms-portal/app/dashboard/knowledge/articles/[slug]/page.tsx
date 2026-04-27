@@ -291,7 +291,7 @@ export default function ArticleDetailPage({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
-        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
         <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
           <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full opacity-[0.06]" style={{ background: "radial-gradient(circle, #6366F1, transparent)" }} />

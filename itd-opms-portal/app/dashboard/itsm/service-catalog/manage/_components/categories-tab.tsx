@@ -163,7 +163,7 @@ function IconPicker({
       <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
         Choose an icon
       </p>
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
         {ICON_NAMES.map((name) => {
           const Icon = ICON_MAP[name];
           const isActive = currentIcon === name;

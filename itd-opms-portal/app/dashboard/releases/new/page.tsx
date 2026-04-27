@@ -371,7 +371,7 @@ export default function NewReleasePage() {
               {/* Review summary */}
               <div className="rounded-xl border border-white/10 p-6 space-y-4 mt-6">
                 <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">Review Summary</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
                   <div>
                     <span className="text-white/40">Type</span>
                     <p className="text-white font-medium capitalize">{form.releaseType}</p>

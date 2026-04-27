@@ -301,7 +301,7 @@ function EditAuditModal({
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Scope</label>
           <textarea rows={3} value={form.scope} onChange={(e) => setForm((f) => ({ ...f, scope: e.target.value }))} className={`${inputCls} resize-none`} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Auditor</label>
             <input type="text" value={form.auditor} onChange={(e) => setForm((f) => ({ ...f, auditor: e.target.value }))} className={inputCls} />
@@ -311,7 +311,7 @@ function EditAuditModal({
             <input type="text" value={form.auditBody} onChange={(e) => setForm((f) => ({ ...f, auditBody: e.target.value }))} className={inputCls} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Start Date</label>
             <input type="date" value={form.scheduledStart} onChange={(e) => setForm((f) => ({ ...f, scheduledStart: e.target.value }))} className={inputCls} />
@@ -388,7 +388,7 @@ function CreateFindingModal({
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Description</label>
           <textarea rows={3} value={form.description ?? ""} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Detailed description of the finding..." className={`${inputCls} resize-none`} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
               Severity <span className="text-[var(--error)]">*</span>
@@ -505,7 +505,7 @@ function FindingDetailModal({
               <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Description</label>
               <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={`${inputCls} resize-none`} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">Severity</label>
                 <select value={form.severity} onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value }))} className={inputCls}>
@@ -987,7 +987,7 @@ export default function GRCAuditDetailPage({
               {/* Schedule */}
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5 space-y-3">
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">Schedule</h2>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <p className="text-xs text-[var(--text-secondary)]">Start</p>
                     <p className="text-sm font-medium text-[var(--text-primary)]">{formatDate(audit.scheduledStart)}</p>

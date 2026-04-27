@@ -206,7 +206,7 @@ export default function ProjectBudgetPage({
 
       {/* ── Summary Cards ── */}
       {summary && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <SummaryCard
             label="Approved Budget"
             value={NGN.format(summary.approvedBudget)}
@@ -803,7 +803,7 @@ function AddEntryModal({
             placeholder="Enter cost description"
             required
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Amount (NGN)"
               name="amount"
@@ -827,7 +827,7 @@ function AddEntryModal({
               ]}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Category"
               name="categoryId"
@@ -845,7 +845,7 @@ function AddEntryModal({
               onChange={setEntryDate}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Vendor Name"
               name="vendorName"

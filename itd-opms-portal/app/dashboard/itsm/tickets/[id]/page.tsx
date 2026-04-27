@@ -2587,7 +2587,7 @@ export default function TicketDetailPage({
                             rows={3}
                             className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--neutral-gray)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 resize-none"
                           />
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">
                                 Priority

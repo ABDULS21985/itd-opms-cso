@@ -376,6 +376,7 @@ export default function HealthPage() {
                 <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-1)]">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--neutral-gray)]">Module Record Counts</h3>
                 </div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
@@ -394,6 +395,7 @@ export default function HealthPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>
@@ -469,7 +471,7 @@ export default function HealthPage() {
                     <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--neutral-gray)]">{siemData.mode}</span>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <p className="text-xs text-[var(--neutral-gray)]">Events Exported</p>
                     <p className="text-lg font-bold text-[var(--text-primary)] tabular-nums">{siemData.lastExportedId.toLocaleString()}</p>

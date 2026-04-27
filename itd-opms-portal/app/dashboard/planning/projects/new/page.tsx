@@ -555,7 +555,7 @@ export default function NewProjectPage() {
                         Identity
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Title" value={title} />
                       <ReviewField label="Code" value={code} />
                       <ReviewField
@@ -640,7 +640,7 @@ export default function NewProjectPage() {
                         Team &amp; Priority
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField
                         label="Sponsor"
                         value={findLabel(userOptions, sponsorId)}
@@ -677,7 +677,7 @@ export default function NewProjectPage() {
                         Schedule &amp; Budget
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField
                         label="Planned Start"
                         value={

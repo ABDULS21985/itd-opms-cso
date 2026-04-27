@@ -1006,7 +1006,7 @@ function SecurityTab({
                 <motion.div key="backup" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-5 p-5 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5">
                   <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Backup Codes</p>
                   <p className="text-xs text-[var(--neutral-gray)] mb-4">Save these codes in a secure location. Each code can only be used once.</p>
-                  <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 mb-4">
                     {backupCodes.map((code, i) => (
                       <div key={i} className="px-3 py-2 rounded-lg bg-[var(--surface-0)] border border-[var(--border)] text-center font-mono text-sm tracking-wider select-all">
                         {code}

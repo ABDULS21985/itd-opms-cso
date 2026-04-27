@@ -481,7 +481,7 @@ export default function PortfolioAnalyticsPage() {
                 size={180}
                 showValue
               />
-              <div className="grid grid-cols-2 gap-4 w-full mt-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 w-full mt-2">
                 <div className="text-center p-2 rounded-lg" style={{ backgroundColor: "var(--surface-2)" }}>
                   <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Approved</p>
                   <p className="text-sm font-bold text-[var(--text-primary)]">
@@ -761,7 +761,7 @@ export default function PortfolioAnalyticsPage() {
             <div className="space-y-3">
               <DonutChart data={statusBreakdown} height={160} innerRadius={35} outerRadius={60}
                 centerLabel="Status" showLabel />
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {statusBreakdown.map((s) => (
                   <div key={s.name} className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />

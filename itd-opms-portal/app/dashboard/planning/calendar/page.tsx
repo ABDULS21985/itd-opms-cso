@@ -698,15 +698,15 @@ export default function CalendarPage() {
         </div>
       </motion.section>
 
-      <div className={`${PANEL_CLASS} flex min-h-0 flex-1 overflow-hidden`}>
+      <div className={`${PANEL_CLASS} flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row`}>
         <AnimatePresence mode="wait">
           {sidebarOpen && (
             <motion.aside
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="flex-shrink-0 overflow-y-auto border-r bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.84))]"
+              className="w-full flex-shrink-0 overflow-y-auto border-b bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.84))] lg:w-[320px] lg:border-b-0 lg:border-r"
               style={{ borderColor: "var(--border)" }}
             >
               <div className="space-y-5 p-4">
@@ -2096,7 +2096,7 @@ function MaintenanceWindowModal({
           </div>
 
           {/* Window Type + Impact Level */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label
                 className="block text-xs font-medium mb-1.5"
@@ -2175,7 +2175,7 @@ function MaintenanceWindowModal({
           </div>
 
           {/* Start / End Time */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label
                 className="block text-xs font-medium mb-1.5"
@@ -2460,7 +2460,7 @@ function FreezePeriodModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label
                 className="block text-xs font-medium mb-1.5"

@@ -130,7 +130,7 @@ function CreateVendorModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Name *</label>
               <input
@@ -170,7 +170,7 @@ function CreateVendorModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Contact Name</label>
               <input
@@ -196,7 +196,7 @@ function CreateVendorModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Phone</label>
               <input

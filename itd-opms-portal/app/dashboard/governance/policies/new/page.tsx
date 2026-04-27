@@ -438,7 +438,7 @@ export default function NewPolicyPage() {
                         Identity
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Category"
@@ -483,7 +483,7 @@ export default function NewPolicyPage() {
                         value={ownerDisplay || "—"}
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-x-6 gap-y-1 mt-2">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 lg:grid-cols-3 sm:gap-x-6 mt-2">
                       <ReviewField
                         label="Effective"
                         value={

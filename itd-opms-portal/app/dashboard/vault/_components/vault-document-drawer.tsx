@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Eye, History, Clock, Share2, MessageSquare, GitBranch } from "lucide-react";
 import {
@@ -58,6 +58,16 @@ export function VaultDocumentDrawer({
   onUploadVersion,
 }: VaultDocumentDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>("details");
+  const [drawerWidth, setDrawerWidth] = useState(420);
+
+  useEffect(() => {
+    const update = () => {
+      setDrawerWidth(Math.min(420, window.innerWidth));
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const { data: selectedDoc } = useDocument(documentId || undefined);
   const { data: versions, isLoading: versionsLoading } = useDocumentVersions(
@@ -79,13 +89,13 @@ export function VaultDocumentDrawer({
       {documentId && selectedDoc && (
         <motion.div
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 420, opacity: 1 }}
+          animate={{ width: drawerWidth, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.25 }}
           className="flex-shrink-0 overflow-hidden border-l"
           style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-0)" }}
         >
-          <div className="flex h-full w-[420px] flex-col">
+          <div className="flex h-full w-full flex-col" style={{ width: drawerWidth }}>
             {/* Header */}
             <div
               className="flex items-center justify-between border-b px-4 py-3"

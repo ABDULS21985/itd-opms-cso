@@ -168,7 +168,7 @@ export function DrawerDetailsTab({
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
           Actions
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <ActionButton icon={Download} label="Download" onClick={() => onDownload(doc.id)} />
 
           {doc.lockedBy ? (

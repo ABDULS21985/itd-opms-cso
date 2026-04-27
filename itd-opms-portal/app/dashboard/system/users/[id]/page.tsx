@@ -852,7 +852,7 @@ export default function UserDetailPage() {
               </select>
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Start Date" required>
                 <input
                   type="date"
@@ -1483,7 +1483,7 @@ function SessionsTab({
                   </button>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <SessionDetail label="IP Address" value={session.ipAddress || "--"} icon={Hash} />
                   <SessionDetail label="Last Active" value={timeAgo(session.lastActive)} icon={Clock} />
                   <SessionDetail label="Created" value={formatDateTime(session.createdAt)} icon={Calendar} />

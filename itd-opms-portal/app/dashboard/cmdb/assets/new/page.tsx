@@ -625,7 +625,7 @@ export default function NewAssetPage() {
                         Identity
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Name" value={name} />
                       <ReviewField label="Asset Tag" value={assetTag} />
                       <ReviewField
@@ -666,7 +666,7 @@ export default function NewAssetPage() {
                         Specifications &amp; Location
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       {isHardwareType && (
                         <>
                           <ReviewField label="Manufacturer" value={manufacturer} />
@@ -696,7 +696,7 @@ export default function NewAssetPage() {
                         Ownership &amp; Classification
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField
                         label="Owner"
                         value={ownerDisplay || "—"}

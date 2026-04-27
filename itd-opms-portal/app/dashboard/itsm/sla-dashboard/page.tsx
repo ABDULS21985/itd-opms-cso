@@ -1187,8 +1187,8 @@ function OLAsTab() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
@@ -1606,8 +1606,8 @@ function UCsTab() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
@@ -1996,8 +1996,8 @@ function ConsistencyTab() {
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-            <table className="w-full">
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">

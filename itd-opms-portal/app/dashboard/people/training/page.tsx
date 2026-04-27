@@ -344,7 +344,7 @@ function TrainingFormDialog({
             placeholder="e.g., Amazon Web Services, Coursera"
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Type"
               name="type"
@@ -367,7 +367,7 @@ function TrainingFormDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Cost"
               name="cost"

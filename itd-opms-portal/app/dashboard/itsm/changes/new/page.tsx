@@ -343,7 +343,7 @@ export default function NewChangePage() {
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-white">Review Summary</h2>
                 <div className="rounded-xl border border-white/10 p-6 space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
                     <div>
                       <span className="text-white/40">Classification</span>
                       <p className="text-white font-medium capitalize">{form.classification}</p>

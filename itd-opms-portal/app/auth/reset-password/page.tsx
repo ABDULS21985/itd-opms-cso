@@ -212,7 +212,7 @@ function ResetPasswordForm() {
                   ))}
                 </div>
                 {/* Check list */}
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                   {[
                     { key: "length", label: "8+ characters" },
                     { key: "hasUpper", label: "Uppercase letter" },

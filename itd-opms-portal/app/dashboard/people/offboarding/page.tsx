@@ -2497,7 +2497,7 @@ export default function OffboardingPage() {
                         }}
                       />
                     </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-[20px] bg-[var(--surface-0)] p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
                           Completed

@@ -328,7 +328,7 @@ export default function CreateRACIMatrixPage() {
                         Details
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Entity Type"

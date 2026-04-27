@@ -387,7 +387,7 @@ export default function EditChangeRequestPage({
                     }}
                     description="The project this change request applies to"
                   />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
                         Priority
@@ -487,7 +487,7 @@ export default function EditChangeRequestPage({
                         Request
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-6">
                       <ReviewField label="Title" value={title} />
                       <ReviewField
                         label="Project"

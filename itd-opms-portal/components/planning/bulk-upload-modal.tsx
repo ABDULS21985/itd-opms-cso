@@ -390,7 +390,7 @@ export function BulkUploadModal({ open, onClose }: BulkUploadModalProps) {
                     className="space-y-4"
                   >
                     {/* Summary cards */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <SummaryCard
                         label="Total Rows"
                         value={validationResult.totalRows}
@@ -622,7 +622,7 @@ export function BulkUploadModal({ open, onClose }: BulkUploadModalProps) {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <SummaryCard
                         label="Total Rows"
                         value={importResult.totalRows}

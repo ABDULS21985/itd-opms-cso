@@ -829,7 +829,7 @@ export default function NewSSARequestPage() {
                           <MemoryStick size={14} className="text-[var(--text-secondary)]" />
                           Resource Allocation
                         </h3>
-                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                           <FormField
                             label="No. of CPUs"
                             name="vcpuCount"
@@ -1160,7 +1160,7 @@ export default function NewSSARequestPage() {
                           label="Business Justification"
                           value={justification.length > 250 ? justification.slice(0, 250) + "..." : justification}
                         />
-                        <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2">
+                        <div className="mt-2 grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-6">
                           <ReviewField label="Space Allocated" value={`${presentSpaceAllocatedGb} GB`} />
                           <ReviewField label="Space In Use" value={`${presentSpaceInUseGb} GB`} />
                         </div>

@@ -303,7 +303,7 @@ export default function ITSMIntelligencePage() {
               mobile-ready approvals, evidence packs, and NFR readiness in one operator workspace.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {metricCards.map((metric) => (
               <div key={metric.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <p className="text-2xl font-bold text-slate-950">{metric.value}</p>

@@ -316,7 +316,7 @@ function ValidationEditor({
       />
 
       {isTextLike && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <BuilderInput
             label="Min Length"
             type="number"
@@ -366,7 +366,7 @@ function ValidationEditor({
       )}
 
       {isNumber && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <BuilderInput
             label="Minimum"
             type="number"

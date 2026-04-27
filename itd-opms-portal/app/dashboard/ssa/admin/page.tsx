@@ -296,7 +296,7 @@ function RequestCard({
         </div>
 
         {/* Resource specs */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <div className="rounded-lg bg-[var(--surface-1)] px-2 py-1.5 text-center">
             <Cpu size={11} className="mx-auto text-[var(--neutral-gray)] mb-0.5" />
             <p className="text-[10px] text-[var(--neutral-gray)]">vCPU</p>

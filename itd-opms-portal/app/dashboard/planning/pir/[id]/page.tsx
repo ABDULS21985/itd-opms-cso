@@ -535,7 +535,7 @@ export default function PIRDetailPage({
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="grid grid-cols-2 gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5 sm:grid-cols-4"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5 sm:grid-cols-4"
         >
           <div>
             <p className="text-xs font-medium text-[var(--neutral-gray)]">

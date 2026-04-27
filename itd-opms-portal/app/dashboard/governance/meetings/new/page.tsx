@@ -693,7 +693,7 @@ export default function CreateMeetingPage() {
                           label="Meeting Details"
                           onEdit={() => goTo(0)}
                         >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                          <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-2 sm:gap-x-6">
                             <ReviewField label="Title" value={title} />
                             <ReviewField
                               label="Type"
@@ -721,7 +721,7 @@ export default function CreateMeetingPage() {
                           label="Schedule & Attendees"
                           onEdit={() => goTo(1)}
                         >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                          <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-2 sm:gap-x-6">
                             <ReviewField
                               label="Scheduled At"
                               value={
