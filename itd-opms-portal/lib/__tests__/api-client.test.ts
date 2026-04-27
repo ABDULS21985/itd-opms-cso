@@ -315,6 +315,58 @@ describe("authentication header", () => {
 });
 
 // =============================================================================
+// Blob requests
+// =============================================================================
+describe("apiClient.blob", () => {
+  it("sends auth through the shared client path in dev mode", async () => {
+    localStorage.setItem("opms-token", "blob-token");
+    localStorage.setItem("opms-auth-mode", "dev");
+
+    server.use(
+      http.post(`${API_BASE}/blob-export`, async ({ request }) => {
+        const authHeader = request.headers.get("Authorization");
+        const contentType = request.headers.get("Content-Type");
+        const body = await request.json();
+        return new HttpResponse(JSON.stringify({ authHeader, contentType, body }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const blob = await apiClient.blob("/blob-export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report: "tickets" }),
+    });
+    const result = JSON.parse(await blob.text()) as {
+      authHeader: string;
+      contentType: string;
+      body: { report: string };
+    };
+
+    expect(result.authHeader).toBe("Bearer blob-token");
+    expect(result.contentType).toBe("application/json");
+    expect(result.body).toEqual({ report: "tickets" });
+  });
+
+  it("does not attach Authorization header in OIDC mode", async () => {
+    localStorage.setItem("opms-token", "should-not-be-sent");
+    localStorage.setItem("opms-auth-mode", "oidc");
+
+    server.use(
+      http.post(`${API_BASE}/blob-export`, ({ request }) => {
+        return new HttpResponse(request.headers.get("Authorization") ?? "", {
+          headers: { "Content-Type": "text/plain" },
+        });
+      }),
+    );
+
+    const blob = await apiClient.blob("/blob-export", { method: "POST" });
+    expect(await blob.text()).toBe("");
+  });
+});
+
+// =============================================================================
 // Error handling
 // =============================================================================
 describe("error handling", () => {

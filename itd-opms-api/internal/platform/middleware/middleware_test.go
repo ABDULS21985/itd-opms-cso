@@ -150,7 +150,7 @@ func TestSecurityHeaders(t *testing.T) {
 		"X-Content-Type-Options":    "nosniff",
 		"Referrer-Policy":           "strict-origin-when-cross-origin",
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-		"X-XSS-Protection":         "1; mode=block",
+		"X-XSS-Protection":          "1; mode=block",
 		"Permissions-Policy":        "camera=(), microphone=(), geolocation=()",
 		"Content-Security-Policy":   "default-src 'none'; frame-ancestors 'none'",
 	}
@@ -449,7 +449,7 @@ func TestAuth_BearerCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestAuth_TokenInQueryParam(t *testing.T) {
+func TestAuth_RejectsTokenInQueryParam(t *testing.T) {
 	token := generateTestToken(t, uuid.New(), uuid.New(), "test@test.com", nil, nil)
 
 	handler := middleware.Auth(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -460,8 +460,77 @@ func TestAuth_TokenInQueryParam(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with token in query param, got %d", w.Code)
+	}
+}
+
+func TestAuth_SSEStreamCookie(t *testing.T) {
+	userID := uuid.New()
+	tenantID := uuid.New()
+	token, _, err := auth.GenerateSSEStreamToken(
+		testSecret,
+		userID,
+		tenantID,
+		"stream@test.com",
+		[]string{"agent"},
+		[]string{"notifications.view"},
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("failed to generate stream token: %v", err)
+	}
+
+	var capturedAuth *types.AuthContext
+	handler := middleware.Auth(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = types.GetAuthContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/stream", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SSEStreamTokenCookieName, Value: token})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200 with token in query param, got %d", w.Code)
+		t.Errorf("expected 200 with valid SSE stream cookie, got %d", w.Code)
+	}
+	if capturedAuth == nil {
+		t.Fatal("expected AuthContext to be set")
+	}
+	if capturedAuth.UserID != userID {
+		t.Errorf("expected user ID %s, got %s", userID, capturedAuth.UserID)
+	}
+	if capturedAuth.TenantID != tenantID {
+		t.Errorf("expected tenant ID %s, got %s", tenantID, capturedAuth.TenantID)
+	}
+}
+
+func TestAuth_SSEStreamCookieOnlyWorksForStreamRoute(t *testing.T) {
+	token, _, err := auth.GenerateSSEStreamToken(
+		testSecret,
+		uuid.New(),
+		uuid.New(),
+		"stream@test.com",
+		nil,
+		nil,
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("failed to generate stream token: %v", err)
+	}
+
+	handler := middleware.Auth(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SSEStreamTokenCookieName, Value: token})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 when stream cookie is used outside stream route, got %d", w.Code)
 	}
 }
 

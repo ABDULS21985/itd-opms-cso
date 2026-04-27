@@ -30,6 +30,13 @@ type AuthConfig struct {
 	RevocationService *auth.RevocationService
 }
 
+type authTokenSource string
+
+const (
+	authTokenSourceBearer    authTokenSource = "bearer"
+	authTokenSourceSSECookie authTokenSource = "sse_cookie"
+)
+
 // Auth returns a middleware that validates JWT Bearer tokens from the
 // Authorization header using the dev-mode HS256 secret.
 // For dual-mode (Entra ID + dev JWT), use AuthDualMode instead.
@@ -52,7 +59,7 @@ func AuthDualMode(cfg AuthConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			tokenString := extractBearerToken(r)
+			tokenString, tokenSource := extractAuthToken(r)
 			if tokenString == "" {
 				slog.Warn("missing or malformed authorization header",
 					"path", r.URL.Path,
@@ -65,6 +72,38 @@ func AuthDualMode(cfg AuthConfig) func(http.Handler) http.Handler {
 			}
 
 			var authCtx *types.AuthContext
+
+			if tokenSource == authTokenSourceSSECookie {
+				claims, err := auth.ValidateSSEStreamToken(tokenString, cfg.JWTSecret)
+				if err != nil {
+					slog.Warn("invalid SSE stream token",
+						"error", err.Error(),
+						"path", r.URL.Path,
+						"correlation_id", types.GetCorrelationID(r.Context()),
+					)
+					types.ErrorMessage(w, http.StatusUnauthorized,
+						"UNAUTHORIZED", "Invalid or expired stream token",
+					)
+					return
+				}
+
+				issuedAt := time.Now()
+				if claims.IssuedAt != nil {
+					issuedAt = claims.IssuedAt.Time
+				}
+				authCtx = &types.AuthContext{
+					UserID:      claims.UserID,
+					TenantID:    claims.TenantID,
+					Email:       claims.Email,
+					Roles:       claims.Roles,
+					Permissions: claims.Permissions,
+					IssuedAt:    issuedAt,
+				}
+
+				ctx := types.SetAuthContext(r.Context(), authCtx)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
 
 			// Try Entra ID OIDC validation first (if enabled).
 			if cfg.EntraIDEnabled && cfg.OIDCValidator != nil {
@@ -192,22 +231,27 @@ func PublicRoute(next http.Handler) http.Handler {
 	})
 }
 
-// extractBearerToken pulls the token from the "Authorization: Bearer <token>" header.
-// Falls back to the "token" query parameter for SSE connections (EventSource cannot
-// set custom headers).
-func extractBearerToken(r *http.Request) string {
+// extractAuthToken pulls the normal API token from "Authorization: Bearer <token>".
+// For the notification stream only, it can also use the scoped, short-lived
+// httpOnly SSE cookie minted by POST /notifications/stream-token.
+func extractAuthToken(r *http.Request) (string, authTokenSource) {
 	header := r.Header.Get("Authorization")
 	if header != "" {
 		parts := strings.SplitN(header, " ", 2)
 		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			return strings.TrimSpace(parts[1])
+			return strings.TrimSpace(parts[1]), authTokenSourceBearer
 		}
 	}
 
-	// Fallback: check query parameter (used by EventSource/SSE).
-	if token := r.URL.Query().Get("token"); token != "" {
-		return token
+	if isNotificationStreamRequest(r) {
+		if cookie, err := r.Cookie(auth.SSEStreamTokenCookieName); err == nil {
+			return strings.TrimSpace(cookie.Value), authTokenSourceSSECookie
+		}
 	}
 
-	return ""
+	return "", ""
+}
+
+func isNotificationStreamRequest(r *http.Request) bool {
+	return r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/notifications/stream")
 }

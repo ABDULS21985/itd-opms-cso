@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { render, screen } from "@testing-library/react";
 import {
   QueryClient,
@@ -25,13 +25,34 @@ vi.mock("sonner", () => ({
   toast: vi.fn(),
 }));
 
-// Mock auth lib
-vi.mock("@/lib/auth", () => ({
-  getToken: vi.fn().mockReturnValue(null),
+const mockApiPost = vi.fn();
+
+vi.mock("@/lib/api-client", () => ({
+  API_BASE_URL: "http://localhost:8089/api/v1",
+  apiClient: {
+    post: (...args: unknown[]) => mockApiPost(...args),
+  },
 }));
 
 // Import the mock to control it in tests
 import { useAuth } from "@/providers/auth-provider";
+
+const eventSourceInstances: MockEventSource[] = [];
+
+class MockEventSource {
+  url: string;
+  withCredentials: boolean;
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  addEventListener = vi.fn();
+  close = vi.fn();
+
+  constructor(url: string, init?: EventSourceInit) {
+    this.url = url;
+    this.withCredentials = init?.withCredentials ?? false;
+    eventSourceInstances.push(this);
+  }
+}
 
 // =============================================================================
 // Helper wrapper with QueryClient
@@ -57,6 +78,7 @@ function createWrapper() {
 // Setup / Teardown
 // =============================================================================
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(useAuth).mockReturnValue({
     user: null,
     isLoggedIn: false,
@@ -67,9 +89,13 @@ beforeEach(() => {
     refreshUser: vi.fn(),
     isEntraIDEnabled: false,
   });
+  mockApiPost.mockResolvedValue({ expiresAt: new Date(Date.now() + 60000).toISOString() });
+  eventSourceInstances.length = 0;
+  vi.stubGlobal("EventSource", MockEventSource);
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -156,5 +182,41 @@ describe("connection behavior", () => {
     });
 
     expect(typeof result.current.unreadCount).toBe("number");
+  });
+
+  it("requests a scoped stream token and opens SSE without a token in the URL", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "agent@example.com",
+        displayName: "Agent",
+        roles: ["agent"],
+        permissions: ["notifications.view"],
+        tenantId: "tenant-1",
+      },
+      isLoggedIn: true,
+      isLoading: false,
+      login: vi.fn(),
+      loginWithEntraID: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+      isEntraIDEnabled: false,
+    });
+
+    const Wrapper = createWrapper();
+    renderHook(() => useNotificationStream(), {
+      wrapper: Wrapper,
+    });
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith("/notifications/stream-token");
+      expect(eventSourceInstances).toHaveLength(1);
+    });
+
+    expect(eventSourceInstances[0].url).toBe(
+      "http://localhost:8089/api/v1/notifications/stream",
+    );
+    expect(eventSourceInstances[0].url).not.toContain("token=");
+    expect(eventSourceInstances[0].withCredentials).toBe(true);
   });
 });

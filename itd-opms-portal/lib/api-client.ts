@@ -268,6 +268,35 @@ class ApiClient {
 
     return response.blob();
   }
+
+  async blob(path: string, options: RequestOptions = {}): Promise<Blob> {
+    const { params, ...fetchOptions } = options;
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (!this.isUsingCookieAuth()) {
+      const token = this.getToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+    }
+
+    const response = await fetch(this.buildUrl(path, params), {
+      ...fetchOptions,
+      headers,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const errorMessage =
+        error?.errors?.[0]?.message || error?.message || "Download failed";
+      throw new ApiError(response.status, errorMessage, error);
+    }
+
+    return response.blob();
+  }
 }
 
 export class ApiError extends Error {

@@ -19,7 +19,7 @@ import (
 
 func newTestHandler() *Handler {
 	// Service is nil; only auth-guard paths are safe to exercise.
-	return NewHandler(nil)
+	return NewHandler(nil, "test-stream-secret")
 }
 
 // setAuthCtx returns a new request whose context carries the given AuthContext.
@@ -219,6 +219,7 @@ func TestRoutes_AllEndpointsRegistered(t *testing.T) {
 	}{
 		{"list notifications", http.MethodGet, "/notifications/", http.StatusUnauthorized},
 		{"unread count", http.MethodGet, "/notifications/unread-count", http.StatusUnauthorized},
+		{"issue stream token", http.MethodPost, "/notifications/stream-token", http.StatusUnauthorized},
 		{"mark as read", http.MethodPost, "/notifications/" + uuid.New().String() + "/read", http.StatusUnauthorized},
 		{"mark all as read", http.MethodPost, "/notifications/read-all", http.StatusUnauthorized},
 		{"get preferences", http.MethodGet, "/notifications/preferences", http.StatusUnauthorized},
@@ -279,6 +280,48 @@ func TestNewHandler_ReturnsNonNil(t *testing.T) {
 	h := NewHandler(nil)
 	if h == nil {
 		t.Fatal("expected non-nil Handler")
+	}
+}
+
+func TestIssueStreamToken_SetsHttpOnlyCookie(t *testing.T) {
+	h := newTestHandler()
+	req := httptest.NewRequest(http.MethodPost, "/stream-token", nil)
+	req = setAuthCtx(req, &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Email:       "test@example.com",
+		Roles:       []string{"agent"},
+		Permissions: []string{"notifications.view"},
+	})
+	w := httptest.NewRecorder()
+
+	h.IssueStreamToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var streamCookie *http.Cookie
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == "opms-sse-token" {
+			streamCookie = cookie
+			break
+		}
+	}
+	if streamCookie == nil {
+		t.Fatal("expected opms-sse-token cookie to be set")
+	}
+	if streamCookie.Value == "" {
+		t.Fatal("expected non-empty stream token cookie")
+	}
+	if !streamCookie.HttpOnly {
+		t.Fatal("expected stream token cookie to be httpOnly")
+	}
+	if streamCookie.Path != "/api/v1/notifications/stream" {
+		t.Fatalf("expected stream cookie path /api/v1/notifications/stream, got %q", streamCookie.Path)
+	}
+	if strings.Contains(w.Body.String(), streamCookie.Value) {
+		t.Fatal("stream token must not be returned in the response body")
 	}
 }
 

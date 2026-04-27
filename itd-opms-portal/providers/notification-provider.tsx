@@ -11,8 +11,8 @@ import {
 } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQueryClient } from "@tanstack/react-query";
-import { getToken } from "@/lib/auth";
 import { toast } from "sonner";
+import { apiClient, API_BASE_URL } from "@/lib/api-client";
 
 /* ------------------------------------------------------------------ */
 /*  Context                                                            */
@@ -30,8 +30,6 @@ const NotificationContext = createContext<NotificationContextType>({
   unreadCount: 0,
 });
 
-import { API_BASE_URL } from "@/lib/api-client";
-
 /* ------------------------------------------------------------------ */
 /*  Provider                                                           */
 /* ------------------------------------------------------------------ */
@@ -40,6 +38,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user, isLoggedIn } = useAuth();
   const queryClient = useQueryClient();
   const eventSourceRef = useRef<EventSource | null>(null);
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -62,17 +61,37 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
   }, []);
 
-  const connect = useCallback(() => {
-    const token = getToken();
-    if (!token) return;
-
+  const connect = useCallback(async () => {
     // Close any existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
-    const url = `${API_BASE_URL}/notifications/stream?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(url);
+    const scheduleReconnect = () => {
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        return;
+      }
+
+      const delay = Math.min(
+        BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current),
+        30000,
+      );
+      reconnectAttemptsRef.current += 1;
+      reconnectTimerRef.current = setTimeout(() => {
+        void connectRef.current?.();
+      }, delay);
+    };
+
+    try {
+      await apiClient.post<{ expiresAt: string }>("/notifications/stream-token");
+    } catch {
+      setIsConnected(false);
+      scheduleReconnect();
+      return;
+    }
+
+    const url = `${API_BASE_URL}/notifications/stream`;
+    const eventSource = new EventSource(url, { withCredentials: true });
 
     eventSource.onopen = () => {
       setIsConnected(true);
@@ -153,20 +172,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       eventSource.close();
       eventSourceRef.current = null;
 
-      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        const delay = Math.min(
-          BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current),
-          30000,
-        );
-        reconnectAttemptsRef.current += 1;
-        reconnectTimerRef.current = setTimeout(() => {
-          connect();
-        }, delay);
-      }
+      scheduleReconnect();
     };
 
     eventSourceRef.current = eventSource;
   }, [queryClient]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     if (!isLoggedIn || !user) {
@@ -174,7 +188,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    connect();
+    void connect();
 
     return () => {
       cleanup();

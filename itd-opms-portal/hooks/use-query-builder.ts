@@ -128,16 +128,13 @@ function useBlobExport(
 ) {
   return useMutation({
     mutationFn: async (data: ExecuteQueryInput) => {
-      const res = await fetch(`/api/v1/reporting/reports/query/${endpoint}`, {
+      return apiClient.blob(`/reporting/reports/query/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Export failed");
-      return res.blob();
     },
     onSuccess: (blob) => {
       const url = URL.createObjectURL(blob);

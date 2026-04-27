@@ -4,22 +4,32 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/itd-cbn/itd-opms-api/internal/platform/auth"
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
 )
 
+const streamTokenTTL = 1 * time.Minute
+
 // Handler provides HTTP handlers for notification endpoints.
 type Handler struct {
-	svc *Service
+	svc               *Service
+	streamTokenSecret string
 }
 
 // NewHandler creates a new Handler.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, streamTokenSecret ...string) *Handler {
+	secret := ""
+	if len(streamTokenSecret) > 0 {
+		secret = streamTokenSecret[0]
+	}
+	return &Handler{svc: svc, streamTokenSecret: secret}
 }
 
 // Routes mounts the notification routes on the given chi router.
@@ -33,10 +43,62 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/", h.ListNotifications)
 	r.Get("/unread-count", h.GetUnreadCount)
+	r.Post("/stream-token", h.IssueStreamToken)
 	r.Post("/{id}/read", h.MarkAsRead)
 	r.Post("/read-all", h.MarkAllAsRead)
 	r.Get("/preferences", h.GetPreferences)
 	r.Put("/preferences", h.UpdatePreferences)
+}
+
+// IssueStreamToken mints a short-lived, scoped SSE token and stores it in an
+// httpOnly cookie for EventSource authentication. The token is intentionally
+// not returned in the response body.
+func (h *Handler) IssueStreamToken(w http.ResponseWriter, r *http.Request) {
+	authCtx := types.GetAuthContext(r.Context())
+	if authCtx == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	if h.streamTokenSecret == "" {
+		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Stream token signing is not configured")
+		return
+	}
+
+	token, expiresAt, err := auth.GenerateSSEStreamToken(
+		h.streamTokenSecret,
+		authCtx.UserID,
+		authCtx.TenantID,
+		authCtx.Email,
+		authCtx.Roles,
+		authCtx.Permissions,
+		streamTokenTTL,
+	)
+	if err != nil {
+		slog.Error("failed to issue SSE stream token",
+			"error", err.Error(),
+			"user_id", authCtx.UserID,
+			"correlation_id", types.GetCorrelationID(r.Context()),
+		)
+		types.ErrorMessage(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to issue stream token")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     auth.SSEStreamTokenCookieName,
+		Value:    token,
+		Path:     "/api/v1/notifications/stream",
+		Expires:  expiresAt,
+		MaxAge:   int(streamTokenTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	types.OK(w, map[string]time.Time{"expiresAt": expiresAt}, nil)
+}
+
+func isSecureRequest(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // ListNotifications handles GET /notifications.

@@ -164,7 +164,7 @@ func (s *Server) Setup() {
 
 	// --- Notification service ---
 	notifService := notification.NewService(s.pool, graphClient)
-	notifHandler := notification.NewHandler(notifService)
+	notifHandler := notification.NewHandler(notifService, s.cfg.JWT.Secret)
 	sseHandler := notification.NewSSEHandler(notifService)
 
 	// --- Directory sync service ---
