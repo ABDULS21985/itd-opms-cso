@@ -12,6 +12,8 @@ import {
   ListChecks,
   Clock,
   Radar,
+  Brain,
+  Smartphone,
   ArrowRight,
   X,
 } from "lucide-react";
@@ -186,6 +188,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         label: "My Queue",
         href: "/dashboard/itsm/my-queue",
         icon: <Inbox size={16} />,
+        permission: "itsm.view",
+      },
+      {
+        id: "action-itsm-intelligence",
+        label: "Operations Intelligence",
+        href: "/dashboard/itsm/intelligence",
+        icon: <Brain size={16} />,
+        permission: "itsm.view",
+      },
+      {
+        id: "action-mobile-approvals",
+        label: "Mobile Approvals",
+        href: "/dashboard/itsm/mobile-approvals",
+        icon: <Smartphone size={16} />,
         permission: "itsm.view",
       },
       {

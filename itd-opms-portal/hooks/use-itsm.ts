@@ -43,6 +43,21 @@ import type {
   UpdateTicketPayload,
   ITSMWorkflowDefinition,
   ITSMWorkflowTransitionResponse,
+  CopilotRequest,
+  CopilotResponse,
+  ImpactMapResponse,
+  ITSMEvidencePack,
+  ITSMEvidencePackRequest,
+  OperationsSnapshotResponse,
+  PlaybookPreviewRequest,
+  PlaybookPreviewResponse,
+  ProcessMiningResponse,
+  SLAForecastRequest,
+  SLAForecastResponse,
+  TriageRequest,
+  TriageSuggestion,
+  WorkflowSimulationRequest,
+  WorkflowSimulationResult,
 } from "@/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -96,6 +111,96 @@ export function useITSMAllowedTransitions(
       ),
     enabled: !!entity && !!status,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useTriageAssistant() {
+  return useMutation({
+    mutationFn: (body: TriageRequest) =>
+      apiClient.post<TriageSuggestion>("/itsm/intelligence/triage", body),
+    onError: (error) => toastMutationError(error, "Failed to run triage assistant"),
+  });
+}
+
+export function useAgentCopilot() {
+  return useMutation({
+    mutationFn: (body: CopilotRequest) =>
+      apiClient.post<CopilotResponse>("/itsm/intelligence/copilot", body),
+    onError: (error) => toastMutationError(error, "Failed to generate copilot guidance"),
+  });
+}
+
+export function useWorkflowSimulation() {
+  return useMutation({
+    mutationFn: (body: WorkflowSimulationRequest) =>
+      apiClient.post<WorkflowSimulationResult>(
+        "/itsm/intelligence/workflow-simulation",
+        body,
+      ),
+    onError: (error) => toastMutationError(error, "Failed to simulate workflow"),
+  });
+}
+
+export function useImpactMap(
+  entityType: string | undefined,
+  entityId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["itsm-impact-map", entityType, entityId],
+    queryFn: () =>
+      apiClient.get<ImpactMapResponse>("/itsm/intelligence/impact-map", {
+        entityType,
+        entityId,
+      }),
+    enabled: !!entityType && !!entityId,
+  });
+}
+
+export function useProcessMining() {
+  return useQuery({
+    queryKey: ["itsm-process-mining"],
+    queryFn: () =>
+      apiClient.get<ProcessMiningResponse>("/itsm/intelligence/process-mining"),
+    staleTime: 60_000,
+  });
+}
+
+export function useGenerateITSMEvidencePack() {
+  return useMutation({
+    mutationFn: (body: ITSMEvidencePackRequest) =>
+      apiClient.post<ITSMEvidencePack>("/itsm/intelligence/evidence-pack", body),
+    onSuccess: () => toast.success("Evidence pack generated"),
+    onError: (error) => toastMutationError(error, "Failed to generate evidence pack"),
+  });
+}
+
+export function useSLAForecast() {
+  return useMutation({
+    mutationFn: (body: SLAForecastRequest) =>
+      apiClient.post<SLAForecastResponse>("/itsm/intelligence/sla-forecast", body),
+    onError: (error) => toastMutationError(error, "Failed to forecast SLA risk"),
+  });
+}
+
+export function usePlaybookPreview() {
+  return useMutation({
+    mutationFn: (body: PlaybookPreviewRequest) =>
+      apiClient.post<PlaybookPreviewResponse>(
+        "/itsm/intelligence/playbooks/preview",
+        body,
+      ),
+    onError: (error) => toastMutationError(error, "Failed to preview playbook"),
+  });
+}
+
+export function useOperationsSnapshot() {
+  return useQuery({
+    queryKey: ["itsm-operations-snapshot"],
+    queryFn: () =>
+      apiClient.get<OperationsSnapshotResponse>(
+        "/itsm/intelligence/operations-snapshot",
+      ),
+    staleTime: 60_000,
   });
 }
 
@@ -1911,6 +2016,7 @@ export function useApproveRequest() {
         queryKey: ["service-request", variables.id],
       });
       queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["itsm-operations-snapshot"] });
       toast.success("Request approved");
     },
     onError: (error) => {
@@ -1933,6 +2039,7 @@ export function useRejectRequest() {
         queryKey: ["service-request", variables.id],
       });
       queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["itsm-operations-snapshot"] });
       toast.success("Request rejected");
     },
     onError: (error) => {

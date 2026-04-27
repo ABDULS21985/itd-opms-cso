@@ -166,6 +166,242 @@ export interface ITSMWorkflowDefinition {
   statuses: ITSMWorkflowStatus[];
 }
 
+export interface IntelligenceReference {
+  id?: string;
+  label: string;
+  type: string;
+  confidence: number;
+  reason: string;
+  metadata?: string[];
+}
+
+export interface TriageRequest {
+  title: string;
+  description: string;
+  type?: string;
+  urgency?: string;
+  impact?: string;
+  channel?: string;
+  affectedService?: string;
+  tags?: string[];
+}
+
+export interface TriageSuggestion {
+  category: string;
+  subcategory: string;
+  priority: string;
+  queue?: IntelligenceReference;
+  assignee?: IntelligenceReference;
+  relatedCis: IntelligenceReference[];
+  knownErrors: IntelligenceReference[];
+  kbArticles: IntelligenceReference[];
+  requiredFields: string[];
+  explanation: string[];
+  confidence: number;
+}
+
+export interface CopilotRequest {
+  ticket?: {
+    id?: string;
+    ticketNumber?: string;
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    urgency: string;
+    impact: string;
+    category?: string;
+    assigneeName?: string;
+    teamQueueName?: string;
+    resolutionNotes?: string;
+  };
+  comments: Array<{
+    authorName?: string;
+    content: string;
+    isInternal: boolean;
+    createdAt: string;
+  }>;
+  history: Array<{
+    fromStatus: string;
+    toStatus: string;
+    reason?: string;
+    createdAt: string;
+  }>;
+}
+
+export interface CopilotResponse {
+  summary: string;
+  nextAction: string;
+  customerReply: string;
+  internalNote: string;
+  kbDraftTitle: string;
+  kbDraftBody: string;
+  decisionQuality: string[];
+}
+
+export interface WorkflowSimulationRequest {
+  entity: string;
+  currentStatus: string;
+  targetStatus: string;
+  priority?: string;
+  isMajorIncident?: boolean;
+  pirRequired?: boolean;
+  pirCompleted?: boolean;
+  cabRequired?: boolean;
+  cabDecision?: string;
+  providedFields?: Record<string, string>;
+  checkedChecklist?: string[];
+}
+
+export interface WorkflowSimulationResult {
+  allowed: boolean;
+  message: string;
+  blockers: string[];
+  requiredFields: string[];
+  checklist: ITSMWorkflowChecklistItem[];
+  sideEffects: string[];
+  notifications: string[];
+  auditTrail: string[];
+}
+
+export interface ImpactMapNode {
+  id: string;
+  label: string;
+  type: string;
+  status?: string;
+  severity?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface ImpactMapEdge {
+  source: string;
+  target: string;
+  label: string;
+}
+
+export interface ImpactMapResponse {
+  entityType: string;
+  entityId: string;
+  nodes: ImpactMapNode[];
+  edges: ImpactMapEdge[];
+  signals: string[];
+}
+
+export interface ProcessBottleneck {
+  id: string;
+  label: string;
+  count: number;
+  ageHours: number;
+  severity: string;
+  reasons: string[];
+}
+
+export interface ProcessMiningResponse {
+  generatedAt: string;
+  queueBottlenecks: ProcessBottleneck[];
+  approvalDelays: ProcessBottleneck[];
+  slaHotspots: ProcessBottleneck[];
+  reassignmentLoops: ProcessBottleneck[];
+  recommendations: string[];
+  metrics: Record<string, number>;
+}
+
+export interface ITSMEvidencePackRequest {
+  entityType: string;
+  entityId: string;
+  purpose?: string;
+  format?: string;
+}
+
+export interface ITSMEvidencePack {
+  id: string;
+  entityType: string;
+  entityId: string;
+  purpose: string;
+  format: string;
+  generatedAt: string;
+  checksum: string;
+  sections: Array<{ title: string; items: unknown[] }>;
+  snapshot: Record<string, unknown>;
+}
+
+export interface SLAForecastRequest {
+  priority: string;
+  status: string;
+  createdAt?: string;
+  slaResponseTarget?: string;
+  slaResolutionTarget?: string;
+  queueOpenCount?: number;
+  assigneeOpenCount?: number;
+  similarHistoricalHours?: number;
+}
+
+export interface SLAForecastResponse {
+  breachProbability: number;
+  riskLabel: string;
+  minutesRemaining: number;
+  drivers: string[];
+  recommendations: string[];
+}
+
+export interface PlaybookPreviewRequest {
+  entityType: string;
+  entityId?: string;
+  transition: string;
+  priority?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface PlaybookPreviewResponse {
+  actions: Array<{
+    type: string;
+    label: string;
+    description: string;
+    required: boolean;
+  }>;
+  warnings: string[];
+}
+
+export interface OperationsTask {
+  id: string;
+  label: string;
+  type: string;
+  status: string;
+  dueAt?: string;
+  actionUrl: string;
+  reason: string;
+}
+
+export interface OperationsSnapshotResponse {
+  waitingOnMe: OperationsTask[];
+  mobileApprovals: OperationsTask[];
+  savedWorkspaces: Array<{
+    key: string;
+    label: string;
+    description: string;
+    filters: string[];
+  }>;
+  ciHealth: Array<{
+    id: string;
+    label: string;
+    ciType: string;
+    confidence: number;
+    staleSince?: string;
+    reason: string;
+  }>;
+  drReadiness: Array<{
+    key: string;
+    label: string;
+    status: string;
+    evidence: string;
+  }>;
+  personalPreference: {
+    defaultQueue: string;
+    density: string;
+    savedFilters: string[];
+  };
+}
+
 export interface UserSummary {
   id: string;
   displayName: string;

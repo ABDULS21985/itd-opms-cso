@@ -308,6 +308,12 @@ export const navGroups: NavGroup[] = [
         permission: "itsm.view",
       },
       {
+        href: "/dashboard/itsm/intelligence",
+        label: "Intelligence",
+        icon: Brain,
+        permission: "itsm.view",
+      },
+      {
         href: "/dashboard/itsm/service-catalog",
         label: "Service Catalog",
         icon: BookOpen,
@@ -323,6 +329,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/itsm/my-queue",
         label: "My Queue",
         icon: TicketCheck,
+        permission: "itsm.view",
+      },
+      {
+        href: "/dashboard/itsm/mobile-approvals",
+        label: "Mobile Approvals",
+        icon: MonitorSmartphone,
         permission: "itsm.view",
       },
       {

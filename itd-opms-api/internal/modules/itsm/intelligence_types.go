@@ -45,9 +45,9 @@ type TriageSuggestion struct {
 
 // CopilotRequest provides current record context for operator assistance.
 type CopilotRequest struct {
-	Ticket   *CopilotTicketContext    `json:"ticket,omitempty"`
-	Comments []CopilotCommentContext  `json:"comments"`
-	History  []CopilotHistoryContext  `json:"history"`
+	Ticket   *CopilotTicketContext   `json:"ticket,omitempty"`
+	Comments []CopilotCommentContext `json:"comments"`
+	History  []CopilotHistoryContext `json:"history"`
 }
 
 type CopilotTicketContext struct {
@@ -69,7 +69,7 @@ type CopilotCommentContext struct {
 	AuthorName string    `json:"authorName,omitempty"`
 	Content    string    `json:"content"`
 	IsInternal bool      `json:"isInternal"`
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 type CopilotHistoryContext struct {
@@ -81,10 +81,10 @@ type CopilotHistoryContext struct {
 
 // CopilotResponse contains summaries and drafted operator work products.
 type CopilotResponse struct {
-	Summary        string   `json:"summary"`
-	NextAction     string   `json:"nextAction"`
-	CustomerReply  string   `json:"customerReply"`
-	InternalNote   string   `json:"internalNote"`
+	Summary         string   `json:"summary"`
+	NextAction      string   `json:"nextAction"`
+	CustomerReply   string   `json:"customerReply"`
+	InternalNote    string   `json:"internalNote"`
 	KBDraftTitle    string   `json:"kbDraftTitle"`
 	KBDraftBody     string   `json:"kbDraftBody"`
 	DecisionQuality []string `json:"decisionQuality"`
@@ -107,14 +107,14 @@ type WorkflowSimulationRequest struct {
 
 // WorkflowSimulationResult describes whether a transition would be executable.
 type WorkflowSimulationResult struct {
-	Allowed        bool     `json:"allowed"`
-	Message        string   `json:"message"`
-	Blockers       []string `json:"blockers"`
-	RequiredFields []string `json:"requiredFields"`
-	Checklist       []ITSMWorkflowChecklistItem `json:"checklist"`
-	SideEffects    []string `json:"sideEffects"`
-	Notifications  []string `json:"notifications"`
-	AuditTrail      []string `json:"auditTrail"`
+	Allowed        bool                        `json:"allowed"`
+	Message        string                      `json:"message"`
+	Blockers       []string                    `json:"blockers"`
+	RequiredFields []string                    `json:"requiredFields"`
+	Checklist      []ITSMWorkflowChecklistItem `json:"checklist"`
+	SideEffects    []string                    `json:"sideEffects"`
+	Notifications  []string                    `json:"notifications"`
+	AuditTrail     []string                    `json:"auditTrail"`
 }
 
 // ImpactMapResponse represents business-service impact around a record.
@@ -143,13 +143,13 @@ type ImpactMapEdge struct {
 
 // ProcessMiningResponse highlights queue and workflow bottlenecks.
 type ProcessMiningResponse struct {
-	GeneratedAt       time.Time                 `json:"generatedAt"`
-	QueueBottlenecks  []ProcessBottleneck       `json:"queueBottlenecks"`
-	ApprovalDelays    []ProcessBottleneck       `json:"approvalDelays"`
-	SLAHotspots       []ProcessBottleneck       `json:"slaHotspots"`
-	ReassignmentLoops []ProcessBottleneck       `json:"reassignmentLoops"`
-	Recommendations   []string                  `json:"recommendations"`
-	Metrics           map[string]float64        `json:"metrics"`
+	GeneratedAt       time.Time           `json:"generatedAt"`
+	QueueBottlenecks  []ProcessBottleneck `json:"queueBottlenecks"`
+	ApprovalDelays    []ProcessBottleneck `json:"approvalDelays"`
+	SLAHotspots       []ProcessBottleneck `json:"slaHotspots"`
+	ReassignmentLoops []ProcessBottleneck `json:"reassignmentLoops"`
+	Recommendations   []string            `json:"recommendations"`
+	Metrics           map[string]float64  `json:"metrics"`
 }
 
 type ProcessBottleneck struct {
@@ -188,9 +188,9 @@ type EvidencePackSection struct {
 
 // SLAForecastRequest predicts risk posture from workload and record age.
 type SLAForecastRequest struct {
-	Priority              string     `json:"priority"`
-	Status                string     `json:"status"`
-	CreatedAt             *time.Time `json:"createdAt,omitempty"`
+	Priority               string     `json:"priority"`
+	Status                 string     `json:"status"`
+	CreatedAt              *time.Time `json:"createdAt,omitempty"`
 	SLAResponseTarget      *time.Time `json:"slaResponseTarget,omitempty"`
 	SLAResolutionTarget    *time.Time `json:"slaResolutionTarget,omitempty"`
 	QueueOpenCount         int        `json:"queueOpenCount"`
@@ -208,16 +208,16 @@ type SLAForecastResponse struct {
 
 // PlaybookPreviewRequest dry-runs automation actions for lifecycle transitions.
 type PlaybookPreviewRequest struct {
-	EntityType   string            `json:"entityType"`
-	EntityID     string            `json:"entityId"`
-	Transition   string            `json:"transition"`
-	Priority     string            `json:"priority"`
-	Metadata     map[string]string `json:"metadata"`
+	EntityType string            `json:"entityType"`
+	EntityID   string            `json:"entityId"`
+	Transition string            `json:"transition"`
+	Priority   string            `json:"priority"`
+	Metadata   map[string]string `json:"metadata"`
 }
 
 type PlaybookPreviewResponse struct {
-	Actions []PlaybookActionPreview `json:"actions"`
-	Warnings []string               `json:"warnings"`
+	Actions  []PlaybookActionPreview `json:"actions"`
+	Warnings []string                `json:"warnings"`
 }
 
 type PlaybookActionPreview struct {
@@ -230,8 +230,8 @@ type PlaybookActionPreview struct {
 // OperationsSnapshotResponse powers mobile approvals, waiting-on-me, saved workspaces,
 // CI confidence review, and DR/NFR readiness cards.
 type OperationsSnapshotResponse struct {
-	WaitingOnMe       []OperationsTask       `json:"waitingOnMe"`
-	MobileApprovals   []OperationsTask       `json:"mobileApprovals"`
+	WaitingOnMe        []OperationsTask       `json:"waitingOnMe"`
+	MobileApprovals    []OperationsTask       `json:"mobileApprovals"`
 	SavedWorkspaces    []SavedWorkspace       `json:"savedWorkspaces"`
 	CIHealth           []CIHealthSignal       `json:"ciHealth"`
 	DRReadiness        []ReadinessSignal      `json:"drReadiness"`
@@ -239,13 +239,13 @@ type OperationsSnapshotResponse struct {
 }
 
 type OperationsTask struct {
-	ID        string    `json:"id"`
-	Label     string    `json:"label"`
-	Type      string    `json:"type"`
-	Status    string    `json:"status"`
+	ID        string     `json:"id"`
+	Label     string     `json:"label"`
+	Type      string     `json:"type"`
+	Status    string     `json:"status"`
 	DueAt     *time.Time `json:"dueAt,omitempty"`
-	ActionURL string    `json:"actionUrl"`
-	Reason    string    `json:"reason"`
+	ActionURL string     `json:"actionUrl"`
+	Reason    string     `json:"reason"`
 }
 
 type SavedWorkspace struct {
@@ -256,12 +256,12 @@ type SavedWorkspace struct {
 }
 
 type CIHealthSignal struct {
-	ID         string    `json:"id"`
-	Label      string    `json:"label"`
-	CIType     string    `json:"ciType"`
-	Confidence float64   `json:"confidence"`
+	ID         string     `json:"id"`
+	Label      string     `json:"label"`
+	CIType     string     `json:"ciType"`
+	Confidence float64    `json:"confidence"`
 	StaleSince *time.Time `json:"staleSince,omitempty"`
-	Reason     string    `json:"reason"`
+	Reason     string     `json:"reason"`
 }
 
 type ReadinessSignal struct {
@@ -278,12 +278,12 @@ type PersonalPreferenceHint struct {
 }
 
 type compactTicketRow struct {
-	ID               uuid.UUID
-	TicketNumber     string
-	Title            string
-	Status           string
-	Priority         string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                  uuid.UUID
+	TicketNumber        string
+	Title               string
+	Status              string
+	Priority            string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 	SLAResolutionTarget *time.Time
 }

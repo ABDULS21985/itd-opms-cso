@@ -25,6 +25,7 @@ type Handler struct {
 	cabMeeting    *CABMeetingHandler
 	slaMgmt       *SLAManagementHandler
 	workflow      *WorkflowHandler
+	intelligence  *IntelligenceHandler
 }
 
 // NewHandler creates a new ITSM Handler with all sub-handlers wired up.
@@ -40,6 +41,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 	requestSvc := NewRequestService(pool, auditSvc)
 	changeSvc := NewChangeService(pool, auditSvc, js)
 	slaMgmtSvc := NewSLAManagementService(pool, auditSvc)
+	intelligenceSvc := NewIntelligenceService(pool)
 
 	return &Handler{
 		catalog:       NewCatalogHandler(catalogSvc),
@@ -55,6 +57,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, js nats.JetStr
 		cabMeeting:    NewCABMeetingHandler(changeSvc),
 		slaMgmt:       NewSLAManagementHandler(slaMgmtSvc),
 		workflow:      NewWorkflowHandler(),
+		intelligence:  NewIntelligenceHandler(intelligenceSvc),
 	}
 }
 
@@ -113,6 +116,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// Workflow definitions and allowed transitions
 	r.Route("/workflows", func(r chi.Router) {
 		h.workflow.Routes(r)
+	})
+
+	// Operator intelligence, evidence packs, simulations, impact maps, and forecasting
+	r.Route("/intelligence", func(r chi.Router) {
+		h.intelligence.Routes(r)
 	})
 
 	// OLA/UC management, dependency chain, consistency check (ESM BRD)

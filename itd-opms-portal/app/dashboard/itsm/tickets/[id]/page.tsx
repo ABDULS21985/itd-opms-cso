@@ -83,6 +83,7 @@ import {
   useUnlinkSubtask,
   useITSMWorkflow,
   useITSMAllowedTransitions,
+  useAgentCopilot,
 } from "@/hooks/use-itsm";
 import type {
   ITSMWorkflowTransition,
@@ -985,6 +986,7 @@ export default function TicketDetailPage({
     workflowEntity,
     ticket?.status,
   );
+  const agentCopilot = useAgentCopilot();
 
   /* ---- KB link hooks ---- */
   const { data: kbLinks = [] } = useTicketKBLinks(id);
@@ -1407,6 +1409,38 @@ export default function TicketDetailPage({
     );
   }
 
+  function runAgentCopilot() {
+    if (!ticket) return;
+    agentCopilot.mutate({
+      ticket: {
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        title: ticket.title,
+        description: ticket.description,
+        status: ticket.status,
+        priority: ticket.priority,
+        urgency: ticket.urgency,
+        impact: ticket.impact,
+        category: ticket.category,
+        assigneeName: ticket.assigneeName,
+        teamQueueName: ticket.teamQueueName,
+        resolutionNotes: ticket.resolutionNotes,
+      },
+      comments: comments.map((comment) => ({
+        authorName: resolveUser(comment.authorId),
+        content: comment.content,
+        isInternal: comment.isInternal,
+        createdAt: comment.createdAt,
+      })),
+      history: statusHistory.map((entry) => ({
+        fromStatus: entry.fromStatus,
+        toStatus: entry.toStatus,
+        reason: entry.reason,
+        createdAt: entry.createdAt,
+      })),
+    });
+  }
+
   function handleAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!assigneeInput.trim()) return;
@@ -1778,6 +1812,52 @@ export default function TicketDetailPage({
           relatedTicketCount={ticket.relatedTicketIds.length}
         />
         <DecisionTrailPanel history={statusHistory} />
+      </div>
+
+      <div className="rounded-[1.7rem] border border-slate-200/70 bg-white/92 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <Zap size={16} className="text-[#1B7340]" />
+              Agent Copilot
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              Summarize the record, draft customer and internal updates, identify the next action, and prepare a KB draft.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={runAgentCopilot}
+            disabled={agentCopilot.isPending}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1B7340] px-4 py-3 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
+          >
+            {agentCopilot.isPending ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+            Generate guidance
+          </button>
+        </div>
+        {agentCopilot.data && (
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {[
+              ["Summary", agentCopilot.data.summary],
+              ["Next action", agentCopilot.data.nextAction],
+              ["Customer reply", agentCopilot.data.customerReply],
+              ["Internal note", agentCopilot.data.internalNote],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                  {label}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-primary)]">{value}</p>
+              </div>
+            ))}
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 lg:col-span-2">
+              <p className="text-sm font-semibold text-emerald-950">{agentCopilot.data.kbDraftTitle}</p>
+              <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-xs leading-5 text-emerald-900">
+                {agentCopilot.data.kbDraftBody}
+              </pre>
+            </div>
+          </div>
+        )}
       </div>
 
       <motion.div

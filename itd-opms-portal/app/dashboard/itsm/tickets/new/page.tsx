@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { FormField } from "@/components/shared/form-field";
 import { QueuePicker } from "@/components/shared/pickers";
-import { useCreateTicket } from "@/hooks/use-itsm";
+import { useCreateTicket, useTriageAssistant } from "@/hooks/use-itsm";
 import { useSearchKBArticles } from "@/hooks/use-knowledge";
 import { useUsers } from "@/hooks/use-system";
 import type { UserSummary } from "@/types/itsm";
@@ -206,6 +206,7 @@ const slideVariants = {
 export default function NewTicketPage() {
   const router = useRouter();
   const createTicket = useCreateTicket();
+  const triageAssistant = useTriageAssistant();
   const { data: usersData } = useUsers(1, 200);
 
   const users = Array.isArray(usersData)
@@ -339,6 +340,35 @@ export default function NewTicketPage() {
   ) => opts.find((o) => o.value === val)?.label || "—";
 
   const isLastStep = step === STEPS.length - 1;
+
+  function runTriageAssistant() {
+    triageAssistant.mutate({
+      title: title.trim(),
+      description: description.trim(),
+      type: ticketType || "incident",
+      urgency: urgency || "medium",
+      impact: impact || "medium",
+      channel: "portal",
+      tags: tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+    });
+  }
+
+  function applyTriageSuggestion() {
+    const suggestion = triageAssistant.data;
+    if (!suggestion) return;
+    setCategory(suggestion.category);
+    setSubcategory(suggestion.subcategory);
+    if (suggestion.queue?.id) {
+      setTeamQueueId(suggestion.queue.id);
+      setQueueDisplay(suggestion.queue.label);
+    }
+    if (suggestion.assignee?.id) {
+      setAssigneeId(suggestion.assignee.id);
+    }
+  }
 
   const stepComplete = [
     !!(ticketType && urgency && impact),
@@ -903,6 +933,76 @@ export default function NewTicketPage() {
                           onChange={setSubcategory}
                           placeholder="e.g. Microsoft Office, VPN"
                         />
+                      </div>
+
+                      <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/55 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                              <Sparkles size={15} />
+                              AI Triage Assistant
+                            </h3>
+                            <p className="mt-1 text-xs leading-5 text-emerald-700">
+                              Suggest category, priority, queue, assignee, CIs, known errors, and KB matches before submission.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={runTriageAssistant}
+                            disabled={!title.trim() || !description.trim() || triageAssistant.isPending}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-50"
+                          >
+                            {triageAssistant.isPending ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Sparkles size={14} />
+                            )}
+                            Run triage
+                          </button>
+                        </div>
+                        {triageAssistant.data && (
+                          <div className="mt-4 space-y-3">
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              {[
+                                ["Category", `${triageAssistant.data.category} / ${triageAssistant.data.subcategory}`],
+                                ["Priority", triageAssistant.data.priority.replace(/_/g, " ")],
+                                ["Confidence", `${Math.round(triageAssistant.data.confidence * 100)}%`],
+                              ].map(([label, value]) => (
+                                <div key={label} className="rounded-lg border border-emerald-100 bg-white/85 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                                    {label}
+                                  </p>
+                                  <p className="mt-1 text-xs font-semibold text-[var(--text-primary)]">
+                                    {value}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {triageAssistant.data.queue && (
+                                <p className="rounded-lg bg-white/85 px-3 py-2 text-xs text-emerald-800">
+                                  Queue: <strong>{triageAssistant.data.queue.label}</strong>
+                                </p>
+                              )}
+                              {triageAssistant.data.assignee && (
+                                <p className="rounded-lg bg-white/85 px-3 py-2 text-xs text-emerald-800">
+                                  Assignee: <strong>{triageAssistant.data.assignee.label}</strong>
+                                </p>
+                              )}
+                            </div>
+                            <p className="text-xs text-emerald-700">
+                              {triageAssistant.data.explanation.join(" ")}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={applyTriageSuggestion}
+                              className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-800"
+                            >
+                              <Check size={14} />
+                              Apply suggestion
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* KB Suggested Solutions */}
