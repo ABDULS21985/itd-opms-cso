@@ -12,6 +12,7 @@ import {
   UserCheck,
   Download,
   X,
+  AlertTriangle,
   Flame,
   ShieldAlert,
   Search,
@@ -203,6 +204,130 @@ function LoadingValue({ width = "w-16" }: { width?: string }) {
   );
 }
 
+function BulkWorkflowPreviewModal({
+  open,
+  target,
+  tickets,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: {
+  open: boolean;
+  target: "closed" | "assign" | null;
+  tickets: Ticket[];
+  onClose: () => void;
+  onConfirm: () => void;
+  isSubmitting?: boolean;
+}) {
+  if (!open || !target) return null;
+  const valid =
+    target === "closed"
+      ? tickets.filter((ticket) => ticket.status === "resolved")
+      : tickets.filter((ticket) => !["closed", "cancelled"].includes(ticket.status));
+  const blocked = tickets.length - valid.length;
+  const requiresNotes =
+    target === "closed"
+      ? tickets.filter((ticket) => ticket.status !== "resolved").length
+      : 0;
+  const permissionIssues = 0;
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_32px_90px_rgba(15,23,42,0.22)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Bulk workflow preview
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-950">
+              {target === "closed" ? "Close selected tickets" : "Assign selected tickets"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+            aria-label="Close preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
+          {[
+            { label: "Can update", value: valid.length, color: "text-emerald-700" },
+            { label: "Blocked", value: blocked, color: "text-rose-700" },
+            { label: "Need notes", value: requiresNotes, color: "text-amber-700" },
+            { label: "Permission", value: permissionIssues, color: "text-slate-700" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <p className={`text-2xl font-semibold ${item.color}`}>{item.value}</p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {item.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {blocked > 0 ? (
+          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="inline-flex items-center gap-2 font-semibold">
+              <AlertTriangle size={16} />
+              Some records cannot move through this workflow action.
+            </p>
+            <p className="mt-2 leading-6">
+              {target === "closed"
+                ? "Only resolved tickets can be closed in bulk."
+                : "Closed or cancelled tickets cannot be reassigned."}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-6 max-h-52 space-y-2 overflow-y-auto">
+          {tickets.map((ticket) => (
+            <div
+              key={ticket.id}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-950">{ticket.title}</p>
+                <p className="mt-1 font-mono text-xs text-slate-500">{ticket.ticketNumber}</p>
+              </div>
+              <StatusBadge status={ticket.status} />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={valid.length === 0 || isSubmitting}
+            className="rounded-xl bg-[#1B7340] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Apply to {valid.length}
+          </button>
+        </div>
+      </div>
+      <BulkWorkflowPreviewModal
+        open={!!bulkPreview}
+        target={bulkPreview?.target ?? null}
+        tickets={bulkPreviewTickets}
+        onClose={() => setBulkPreview(null)}
+        onConfirm={confirmBulkPreview}
+        isSubmitting={bulkUpdate.isPending}
+      />
+    </div>
+  );
+}
+
 function HeroActionButton({
   icon: Icon,
   label,
@@ -257,6 +382,10 @@ export default function TicketsPage() {
     "all" | "hot" | "major" | "unassigned"
   >("all");
   const [hideSubtasks, setHideSubtasks] = useState(true);
+  const [bulkPreview, setBulkPreview] = useState<{
+    target: "closed" | "assign";
+    ids: string[];
+  } | null>(null);
 
   const { data, isLoading } = useTickets(page, 20, {
     status: status || undefined,
@@ -382,23 +511,18 @@ export default function TicketsPage() {
     () => [
       {
         id: "close",
-        label: "Close",
+        label: "Preview Close",
         icon: CheckCircle,
-        onExecute: async (ids) => {
-          await bulkUpdate.mutateAsync({ ids, fields: { status: "closed" } });
-          toast.success(`${ids.length} ticket(s) closed`);
+        onExecute: (ids) => {
+          setBulkPreview({ target: "closed", ids });
         },
       },
       {
         id: "assign",
-        label: "Assign to Me",
+        label: "Preview Assign",
         icon: UserCheck,
-        onExecute: async (ids) => {
-          await bulkUpdate.mutateAsync({
-            ids,
-            fields: { assigneeId: user?.id },
-          });
-          toast.success(`${ids.length} ticket(s) assigned`);
+        onExecute: (ids) => {
+          setBulkPreview({ target: "assign", ids });
         },
       },
       {
@@ -414,8 +538,41 @@ export default function TicketsPage() {
         },
       },
     ],
-    [bulkUpdate, user?.id, visibleTickets, exportColumns],
+    [visibleTickets, exportColumns],
   );
+
+  const bulkPreviewTickets = useMemo(
+    () =>
+      bulkPreview
+        ? visibleTickets.filter((ticket) => bulkPreview.ids.includes(ticket.id))
+        : [],
+    [bulkPreview, visibleTickets],
+  );
+
+  async function confirmBulkPreview() {
+    if (!bulkPreview) return;
+    const validTickets =
+      bulkPreview.target === "closed"
+        ? bulkPreviewTickets.filter((ticket) => ticket.status === "resolved")
+        : bulkPreviewTickets.filter(
+            (ticket) => !["closed", "cancelled"].includes(ticket.status),
+          );
+    if (validTickets.length === 0) return;
+    if (bulkPreview.target === "closed") {
+      await bulkUpdate.mutateAsync({
+        ids: validTickets.map((ticket) => ticket.id),
+        fields: { status: "closed" },
+      });
+      toast.success(`${validTickets.length} ticket(s) closed`);
+    } else {
+      await bulkUpdate.mutateAsync({
+        ids: validTickets.map((ticket) => ticket.id),
+        fields: { assigneeId: user?.id },
+      });
+      toast.success(`${validTickets.length} ticket(s) assigned`);
+    }
+    setBulkPreview(null);
+  }
 
   const columns: Column<Ticket>[] = [
     {

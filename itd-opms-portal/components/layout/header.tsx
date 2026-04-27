@@ -216,10 +216,18 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const { open: activityPanelOpen, setOpen: setActivityPanelOpen, toggle: toggleActivityPanel } = useActivityPanel();
   const overrides = useBreadcrumbOverrides();
 
-  // Global Cmd+K / Ctrl+K listener
+  // Global command palette listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping =
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+      if (!isTyping && e.key === "/") {
         e.preventDefault();
         setCommandPaletteOpen(true);
       }

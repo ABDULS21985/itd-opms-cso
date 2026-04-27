@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
+  LifecycleRail,
+  SLARiskForecast,
+} from "@/components/itsm/workflow-experience";
+import {
   useServiceRequestDetail,
   useApproveRequest,
   useRejectRequest,
@@ -28,8 +32,11 @@ import {
   useStartServiceRequestFulfillment,
   useFulfillServiceRequest,
   useCloseServiceRequest,
+  useITSMWorkflow,
+  useITSMAllowedTransitions,
   type ApprovalTask,
   type RequestTimelineEntry,
+  type ServiceRequestDetail,
 } from "@/hooks/use-itsm";
 import { SLAGauge } from "@/app/dashboard/itsm/tickets/[id]/page";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -296,6 +303,65 @@ function ApprovalTaskRow({ task }: { task: ApprovalTask }) {
   );
 }
 
+function RequesterExperiencePanel({ request }: { request: ServiceRequestDetail }) {
+  const pendingApproval = request.approvalTasks?.find((task) => task.status === "pending");
+  const currentOwner = request.assignedTo
+    ? request.assignedTo.slice(0, 8) + "..."
+    : pendingApproval
+      ? `Approver ${pendingApproval.sequenceOrder}`
+      : "Service desk";
+  const waitingOn =
+    request.status === "pending_approval"
+      ? "Approval decision"
+      : request.status === "approved"
+        ? "Fulfillment start"
+        : request.status === "in_progress"
+          ? "Fulfillment completion"
+          : request.status === "fulfilled"
+            ? "Requester closure"
+            : "No active dependency";
+  const expectedBy = request.slaFulfillmentTarget || request.slaResolutionTarget;
+
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5">
+      <div className="grid gap-4 md:grid-cols-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--neutral-gray)]">
+            Current owner
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {currentOwner}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--neutral-gray)]">
+            Waiting on
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {waitingOn}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--neutral-gray)]">
+            Expected by
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {expectedBy ? formatDate(expectedBy) : "Not committed"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--neutral-gray)]">
+            Activity
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {request.timeline?.length ?? 0} timeline events
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Loading Skeleton                                                   */
 /* ------------------------------------------------------------------ */
@@ -381,6 +447,11 @@ export default function ServiceRequestDetailPage({
   const startFulfillment = useStartServiceRequestFulfillment();
   const fulfillRequest = useFulfillServiceRequest();
   const closeRequest = useCloseServiceRequest();
+  const { data: workflowDefinition } = useITSMWorkflow("service_request");
+  const { data: allowedTransitions } = useITSMAllowedTransitions(
+    "service_request",
+    request?.status,
+  );
 
   const [approveComment, setApproveComment] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -612,6 +683,21 @@ export default function ServiceRequestDetailPage({
         {/* Step progress */}
         <StepProgressDetailed status={request.status} />
       </motion.div>
+
+      <LifecycleRail
+        definition={workflowDefinition}
+        currentStatus={request.status}
+        transitionData={allowedTransitions}
+        title="Request lifecycle"
+      />
+
+      <RequesterExperiencePanel request={request} />
+
+      <SLARiskForecast
+        resolutionTarget={request.slaFulfillmentTarget || request.slaResolutionTarget}
+        resolutionMet={request.slaFulfillmentMet || request.slaResolutionMet}
+        isPaused={!!request.slaPausedAt}
+      />
 
       {/* Rejection banner */}
       {request.status === "rejected" && request.rejectionReason && (

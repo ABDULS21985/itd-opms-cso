@@ -302,6 +302,12 @@ export const navGroups: NavGroup[] = [
     label: "ITSM",
     items: [
       {
+        href: "/dashboard/itsm/command-center",
+        label: "Command Center",
+        icon: Radar,
+        permission: "itsm.view",
+      },
+      {
         href: "/dashboard/itsm/service-catalog",
         label: "Service Catalog",
         icon: BookOpen,
@@ -629,6 +635,12 @@ export const navGroups: NavGroup[] = [
         label: "Workflows",
         icon: GitBranch,
         permission: "approval.manage",
+      },
+      {
+        href: "/dashboard/system/workflows/itsm",
+        label: "ITSM Workflow Designer",
+        icon: SlidersHorizontal,
+        permission: "system.manage",
       },
       {
         href: "/dashboard/system/automation",

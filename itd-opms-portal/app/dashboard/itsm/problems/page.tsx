@@ -28,14 +28,20 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
 import { UserPicker, OrgUnitPicker } from "@/components/shared/pickers";
 import {
+  LifecycleRail,
+  WorkflowActionDrawer,
+  type WorkflowActionPayload,
+} from "@/components/itsm/workflow-experience";
+import {
   useCreateKnownError,
   useCreateProblem,
   useKnownErrors,
   useProblems,
   useTransitionProblem,
+  useITSMWorkflow,
   useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
-import type { ITSMProblem, KnownError } from "@/types";
+import type { ITSMProblem, ITSMWorkflowTransition, KnownError } from "@/types";
 
 interface ProblemStatusOption {
   value: string;
@@ -147,7 +153,7 @@ const PROBLEM_TRANSITIONS: Record<
 
 function mergeProblemTransitions(
   backend:
-    | { transitions: { value: string; label: string }[] }
+    | { transitions: ITSMWorkflowTransition[] }
     | undefined,
   local: { value: string; label: string; icon: LucideIcon; accent: string }[],
 ) {
@@ -157,6 +163,7 @@ function mergeProblemTransitions(
   return backend.transitions.map((transition) => {
     const meta = local.find((item) => item.value === transition.value);
     return {
+      ...transition,
       value: transition.value,
       label: meta?.label ?? transition.label,
       icon: meta?.icon ?? ArrowRight,
@@ -491,7 +498,11 @@ function ProblemCard({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedTransition, setSelectedTransition] =
+    useState<ITSMWorkflowTransition | null>(null);
   const transitionProblem = useTransitionProblem();
+  const { data: workflowDefinition } = useITSMWorkflow("problem");
   const { data: allowedTransitions } = useITSMAllowedTransitions(
     "problem",
     problem.status,
@@ -517,6 +528,21 @@ function ProblemCard({
       value: problem.permanentFix || "Permanent remediation is still open.",
     },
   ];
+
+  function submitWorkflowAction(payload: WorkflowActionPayload) {
+    transitionProblem.mutate(
+      {
+        id: problem.id,
+        targetStatus: payload.targetStatus,
+      },
+      {
+        onSuccess: () => {
+          setDrawerOpen(false);
+          setSelectedTransition(null);
+        },
+      },
+    );
+  }
 
   return (
     <motion.div
@@ -595,6 +621,15 @@ function ProblemCard({
         ))}
       </div>
 
+      <div className="mt-5">
+        <LifecycleRail
+          definition={workflowDefinition}
+          currentStatus={problem.status}
+          transitionData={allowedTransitions}
+          title="Problem lifecycle"
+        />
+      </div>
+
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
         {problem.ownerName ? (
           <span>Owner: {problem.ownerName}</span>
@@ -621,12 +656,10 @@ function ProblemCard({
                 key={t.value}
                 type="button"
                 disabled={transitionProblem.isPending}
-                onClick={() =>
-                  transitionProblem.mutate({
-                    id: problem.id,
-                    targetStatus: t.value,
-                  })
-                }
+                onClick={() => {
+                  setSelectedTransition(t);
+                  setDrawerOpen(true);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
                 style={{
                   borderColor: `${t.accent}40`,
@@ -713,6 +746,20 @@ function ProblemCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <WorkflowActionDrawer
+        open={drawerOpen}
+        entity="problem"
+        currentStatus={problem.status}
+        recordTitle={`${problem.problemNumber} - ${problem.title}`}
+        transition={selectedTransition}
+        isSubmitting={transitionProblem.isPending}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedTransition(null);
+        }}
+        onSubmit={submitWorkflowAction}
+      />
     </motion.div>
   );
 }

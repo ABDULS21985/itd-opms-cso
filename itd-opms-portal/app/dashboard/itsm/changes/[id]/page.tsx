@@ -18,15 +18,22 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import {
+  LifecycleRail,
+  WorkflowActionDrawer,
+  type WorkflowActionPayload,
+} from "@/components/itsm/workflow-experience";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useChange,
   useTransitionChange,
   useSubmitCABDecision,
   useCompletePIR,
+  useITSMWorkflow,
   useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 import { CAB_DECISIONS } from "@/types/itsm";
+import type { ITSMWorkflowTransition } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -89,7 +96,7 @@ const CHANGE_TRANSITIONS: Record<string, { value: string; label: string; icon: L
 
 function mergeChangeTransitions(
   backend:
-    | { transitions: { value: string; label: string }[] }
+    | { transitions: ITSMWorkflowTransition[] }
     | undefined,
   local: { value: string; label: string; icon: LucideIcon; accent: string }[],
 ) {
@@ -99,6 +106,7 @@ function mergeChangeTransitions(
   return backend.transitions.map((transition) => {
     const meta = local.find((item) => item.value === transition.value);
     return {
+      ...transition,
       value: transition.value,
       label: meta?.label ?? transition.label,
       icon: meta?.icon ?? GitBranch,
@@ -134,6 +142,7 @@ export default function ChangeDetailPage() {
   const transitionMutation = useTransitionChange(id);
   const cabDecisionMutation = useSubmitCABDecision(id);
   const pirMutation = useCompletePIR(id);
+  const { data: workflowDefinition } = useITSMWorkflow("change");
   const { data: allowedTransitions } = useITSMAllowedTransitions(
     "change",
     change?.status,
@@ -144,6 +153,9 @@ export default function ChangeDetailPage() {
   const [cabNotes, setCabNotes] = useState("");
   const [pirNotes, setPirNotes] = useState("");
   const [transitionComment, setTransitionComment] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedTransition, setSelectedTransition] =
+    useState<ITSMWorkflowTransition | null>(null);
 
   if (isLoading) {
     return (
@@ -183,6 +195,22 @@ export default function ChangeDetailPage() {
       change.reporterId === currentUser?.id ||
       change.assigneeId === currentUser?.id);
 
+  function submitWorkflowAction(payload: WorkflowActionPayload) {
+    transitionMutation.mutate(
+      {
+        targetStatus: payload.targetStatus,
+        comment: payload.reason || payload.internalNote || transitionComment || undefined,
+      },
+      {
+        onSuccess: () => {
+          setDrawerOpen(false);
+          setSelectedTransition(null);
+          setTransitionComment("");
+        },
+      },
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -221,7 +249,10 @@ export default function ChangeDetailPage() {
             return (
               <button
                 key={t.value}
-                onClick={() => transitionMutation.mutate({ targetStatus: t.value, comment: transitionComment || undefined })}
+                onClick={() => {
+                  setSelectedTransition(t);
+                  setDrawerOpen(true);
+                }}
                 disabled={transitionMutation.isPending}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white border border-white/10 hover:bg-white/5 transition-colors"
               >
@@ -239,6 +270,13 @@ export default function ChangeDetailPage() {
           />
         </div>
       )}
+
+      <LifecycleRail
+        definition={workflowDefinition}
+        currentStatus={change.status}
+        transitionData={allowedTransitions}
+        title="Change lifecycle"
+      />
 
       {/* CAB Decision Form */}
       {canManage && change.status === "cab_review" && (
@@ -381,6 +419,20 @@ export default function ChangeDetailPage() {
           </div>
         )}
       </motion.div>
+
+      <WorkflowActionDrawer
+        open={drawerOpen}
+        entity="change"
+        currentStatus={change.status}
+        recordTitle={`${change.ticketNumber} - ${change.title}`}
+        transition={selectedTransition}
+        isSubmitting={transitionMutation.isPending}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedTransition(null);
+        }}
+        onSubmit={submitWorkflowAction}
+      />
     </div>
   );
 }

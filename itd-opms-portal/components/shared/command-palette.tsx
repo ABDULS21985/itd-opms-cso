@@ -6,10 +6,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Plus,
+  Settings,
   Sun,
   Inbox,
   ListChecks,
   Clock,
+  Radar,
   ArrowRight,
   X,
 } from "lucide-react";
@@ -139,6 +141,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const quickActionDefs = useMemo(
     () => [
       {
+        id: "action-command-center",
+        label: "ITSM Command Center",
+        href: "/dashboard/itsm/command-center",
+        icon: <Radar size={16} />,
+        permission: "itsm.view",
+      },
+      {
         id: "action-new-ticket",
         label: "New Ticket",
         href: "/dashboard/itsm/tickets/new",
@@ -178,6 +187,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         href: "/dashboard/itsm/my-queue",
         icon: <Inbox size={16} />,
         permission: "itsm.view",
+      },
+      {
+        id: "action-notification-preferences",
+        label: "Notification Preferences",
+        href: "/dashboard/notifications",
+        icon: <Settings size={16} />,
+        permission: undefined,
+      },
+      {
+        id: "action-itsm-workflow-designer",
+        label: "ITSM Workflow Designer",
+        href: "/dashboard/system/workflows/itsm",
+        icon: <Settings size={16} />,
+        permission: "system.manage",
       },
       {
         id: "action-my-actions",

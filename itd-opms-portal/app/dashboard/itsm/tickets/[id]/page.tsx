@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useMemo } from "react";
+import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -52,6 +52,15 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
+import {
+  DecisionTrailPanel,
+  LifecycleRail,
+  RoutingInsightPanel,
+  SLARiskForecast,
+  SuggestedKnowledgePanel,
+  WorkflowActionDrawer,
+  type WorkflowActionPayload,
+} from "@/components/itsm/workflow-experience";
 import { useSearchUsers } from "@/hooks/use-system";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -72,9 +81,11 @@ import {
   useSubtasks,
   useCreateSubtask,
   useUnlinkSubtask,
+  useITSMWorkflow,
   useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
 import type {
+  ITSMWorkflowTransition,
   TicketComment,
   TicketStatusHistory,
   SLABreachEntry,
@@ -162,7 +173,7 @@ const STATUS_TRANSITIONS: Record<
 
 function mergeTicketTransitions(
   backend:
-    | { transitions: { value: string; label: string }[] }
+    | { transitions: ITSMWorkflowTransition[] }
     | undefined,
   local: { value: string; label: string; icon?: React.ElementType; variant?: string }[],
 ) {
@@ -172,6 +183,7 @@ function mergeTicketTransitions(
   return backend.transitions.map((transition) => {
     const meta = local.find((item) => item.value === transition.value);
     return {
+      ...transition,
       value: transition.value,
       label: meta?.label ?? transition.label,
       icon: meta?.icon,
@@ -968,6 +980,7 @@ export default function TicketDetailPage({
   const resolveTicket = useResolveTicket();
   const closeTicket = useCloseTicket();
   const workflowEntity = ticket?.type === "change" ? "change" : "ticket";
+  const { data: workflowDefinition } = useITSMWorkflow(workflowEntity);
   const { data: allowedTransitions } = useITSMAllowedTransitions(
     workflowEntity,
     ticket?.status,
@@ -1025,8 +1038,10 @@ export default function TicketDetailPage({
   const [assigneeInput, setAssigneeInput] = useState("");
   const [assigneeDisplay, setAssigneeDisplay] = useState("");
   const [showResolveForm, setShowResolveForm] = useState(false);
+  const [workflowDrawerOpen, setWorkflowDrawerOpen] = useState(false);
+  const [selectedTransition, setSelectedTransition] =
+    useState<ITSMWorkflowTransition | null>(null);
   const [resolutionNotes, setResolutionNotes] = useState("");
-  const [transitionReason, setTransitionReason] = useState("");
   const [copiedId, setCopiedId] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     info: true,
@@ -1319,22 +1334,76 @@ export default function TicketDetailPage({
     STATUS_TRANSITIONS[ticket.status] ?? [],
   );
 
-  function handleTransition(newStatus: string) {
-    if (newStatus === "resolved") {
-      setShowResolveForm(true);
-      return;
-    }
-    if (newStatus === "closed") {
-      closeTicket.mutate(id);
-      return;
-    }
-    transitionTicket.mutate({
-      id,
-      status: newStatus,
-      reason: transitionReason || undefined,
-    });
-    setTransitionReason("");
+  function openWorkflowDrawer(transition: ITSMWorkflowTransition) {
+    setSelectedTransition(transition);
+    setWorkflowDrawerOpen(true);
   }
+
+  function submitWorkflowAction(payload: WorkflowActionPayload) {
+    const closeDrawer = () => {
+      setWorkflowDrawerOpen(false);
+      setSelectedTransition(null);
+    };
+    if (payload.targetStatus === "resolved") {
+      const notes = [
+        payload.resolutionNotes,
+        payload.rootCause ? `Root cause: ${payload.rootCause}` : "",
+        payload.customerNote ? `Customer note: ${payload.customerNote}` : "",
+        payload.internalNote ? `Internal note: ${payload.internalNote}` : "",
+        payload.kbDisposition ? `KB disposition: ${payload.kbDisposition}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      resolveTicket.mutate(
+        {
+          id,
+          resolutionNotes:
+            notes || payload.reason || "Resolved through workflow action.",
+        },
+        { onSuccess: closeDrawer },
+      );
+      return;
+    }
+    if (payload.targetStatus === "closed") {
+      closeTicket.mutate(id, { onSuccess: closeDrawer });
+      return;
+    }
+    transitionTicket.mutate(
+      {
+        id,
+        status: payload.targetStatus,
+        reason: payload.reason || payload.customerNote || payload.internalNote || undefined,
+      },
+      { onSuccess: closeDrawer },
+    );
+  }
+
+  useEffect(() => {
+    function handleTicketKeys(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable ||
+        !canManage ||
+        isActing
+      ) {
+        return;
+      }
+      if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setShowAssignForm(true);
+      }
+      if (event.key.toLowerCase() === "r") {
+        const resolveTransition = transitions.find((item) => item.value === "resolved");
+        if (resolveTransition) {
+          event.preventDefault();
+          openWorkflowDrawer(resolveTransition);
+        }
+      }
+    }
+    document.addEventListener("keydown", handleTicketKeys);
+    return () => document.removeEventListener("keydown", handleTicketKeys);
+  }, [canManage, isActing, transitions]);
 
   function handleAssign(e: React.FormEvent) {
     e.preventDefault();
@@ -1593,7 +1662,7 @@ export default function TicketDetailPage({
                       key={t.value}
                       type="button"
                       disabled={isActing}
-                      onClick={() => handleTransition(t.value)}
+                      onClick={() => openWorkflowDrawer(t)}
                       className={btnClass}
                     >
                       {TIcon && <TIcon size={16} />}
@@ -1681,6 +1750,33 @@ export default function TicketDetailPage({
           </div>
         </div>
       </motion.div>
+
+      <LifecycleRail
+        definition={workflowDefinition}
+        currentStatus={ticket.status}
+        transitionData={allowedTransitions}
+        title="Ticket lifecycle"
+      />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+        <SLARiskForecast
+          responseTarget={ticket.slaResponseTarget}
+          resolutionTarget={ticket.slaResolutionTarget}
+          responseMet={ticket.slaResponseMet}
+          resolutionMet={ticket.slaResolutionMet}
+          isPaused={!!ticket.slaPausedAt}
+        />
+        <RoutingInsightPanel ticket={ticket} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+        <SuggestedKnowledgePanel
+          suggestions={kbSuggestions}
+          linkedProblemId={ticket.linkedProblemId}
+          relatedTicketCount={ticket.relatedTicketIds.length}
+        />
+        <DecisionTrailPanel history={statusHistory} />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -3126,6 +3222,20 @@ export default function TicketDetailPage({
           )}
         </motion.div>
       </div>
+
+      <WorkflowActionDrawer
+        open={workflowDrawerOpen}
+        entity={workflowEntity}
+        currentStatus={ticket.status}
+        recordTitle={`${ticket.ticketNumber} - ${ticket.title}`}
+        transition={selectedTransition}
+        isSubmitting={isActing}
+        onClose={() => {
+          setWorkflowDrawerOpen(false);
+          setSelectedTransition(null);
+        }}
+        onSubmit={submitWorkflowAction}
+      />
     </div>
   );
 }

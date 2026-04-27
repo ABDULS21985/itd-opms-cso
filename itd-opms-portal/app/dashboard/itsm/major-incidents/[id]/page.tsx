@@ -18,6 +18,12 @@ import {
   Users,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
+import {
+  LifecycleRail,
+  MajorIncidentLiveRoom,
+  WorkflowActionDrawer,
+  type WorkflowActionPayload,
+} from "@/components/itsm/workflow-experience";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useMajorIncident,
@@ -25,8 +31,10 @@ import {
   useResolveMajorIncident,
   useSubmitMajorIncidentPIR,
   useTransitionMajorIncident,
+  useITSMWorkflow,
   useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
+import type { ITSMWorkflowTransition } from "@/types";
 
 type UpdateType = "status_update" | "comms" | "technical";
 
@@ -245,6 +253,9 @@ export default function MajorIncidentDetailPage() {
   const [updateType, setUpdateType] = useState<UpdateType>("status_update");
   const [updateMessage, setUpdateMessage] = useState("");
   const [showResolveForm, setShowResolveForm] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedTransition, setSelectedTransition] =
+    useState<ITSMWorkflowTransition | null>(null);
   const [resolutionSummary, setResolutionSummary] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [pirForm, setPirForm] = useState<PirFormState>({
@@ -262,6 +273,7 @@ export default function MajorIncidentDetailPage() {
   const updateMutation = usePostMajorIncidentUpdate();
   const resolveMutation = useResolveMajorIncident();
   const pirMutation = useSubmitMajorIncidentPIR();
+  const { data: workflowDefinition } = useITSMWorkflow("major_incident");
   const { data: allowedTransitionData } = useITSMAllowedTransitions(
     "major_incident",
     incident?.status,
@@ -428,6 +440,23 @@ export default function MajorIncidentDetailPage() {
     });
   }
 
+  function openTransitionDrawer(targetStatus: string, label: string) {
+    const transition =
+      allowedTransitionData?.transitions.find((item) => item.value === targetStatus) ??
+      ({ value: targetStatus, label } satisfies ITSMWorkflowTransition);
+    setSelectedTransition(transition);
+    setDrawerOpen(true);
+  }
+
+  async function submitWorkflowAction(payload: WorkflowActionPayload) {
+    await transitionMutation.mutateAsync({
+      id: incidentID,
+      targetStatus: payload.targetStatus,
+    });
+    setDrawerOpen(false);
+    setSelectedTransition(null);
+  }
+
   return (
     <div className="space-y-6 pb-10">
       <section
@@ -511,6 +540,15 @@ export default function MajorIncidentDetailPage() {
           </div>
         </div>
       </section>
+
+      <MajorIncidentLiveRoom incident={incident} />
+
+      <LifecycleRail
+        definition={workflowDefinition}
+        currentStatus={incident.status}
+        transitionData={allowedTransitionData}
+        title="Major incident lifecycle"
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(320px,1fr)]">
         <div className="space-y-6">
@@ -1031,12 +1069,7 @@ export default function MajorIncidentDetailPage() {
                 {incident.status === "investigating" && canTransitionTo("mitigating") ? (
                   <ActionButton
                     label="Begin Mitigation"
-                    onClick={() =>
-                      transitionMutation.mutateAsync({
-                        id: incident.id,
-                        targetStatus: "mitigating",
-                      })
-                    }
+                    onClick={() => openTransitionDrawer("mitigating", "Begin Mitigation")}
                     disabled={busy}
                   />
                 ) : null}
@@ -1044,12 +1077,7 @@ export default function MajorIncidentDetailPage() {
                 {incident.status === "mitigating" && canTransitionTo("mitigated") ? (
                   <ActionButton
                     label="Confirm Mitigated"
-                    onClick={() =>
-                      transitionMutation.mutateAsync({
-                        id: incident.id,
-                        targetStatus: "mitigated",
-                      })
-                    }
+                    onClick={() => openTransitionDrawer("mitigated", "Confirm Mitigated")}
                     disabled={busy}
                   />
                 ) : null}
@@ -1060,12 +1088,7 @@ export default function MajorIncidentDetailPage() {
                       <ActionButton
                         label="Continue Monitoring"
                         tone="secondary"
-                        onClick={() =>
-                          transitionMutation.mutateAsync({
-                            id: incident.id,
-                            targetStatus: "monitoring",
-                          })
-                        }
+                        onClick={() => openTransitionDrawer("monitoring", "Continue Monitoring")}
                         disabled={busy}
                       />
                     ) : null}
@@ -1137,6 +1160,20 @@ export default function MajorIncidentDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <WorkflowActionDrawer
+        open={drawerOpen}
+        entity="major_incident"
+        currentStatus={incident.status}
+        recordTitle={incident.ticket?.title ?? incident.id}
+        transition={selectedTransition}
+        isSubmitting={transitionMutation.isPending}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedTransition(null);
+        }}
+        onSubmit={submitWorkflowAction}
+      />
     </div>
   );
 }
