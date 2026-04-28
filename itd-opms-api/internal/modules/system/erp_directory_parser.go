@@ -292,6 +292,9 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	roleEligible := map[string]struct{}{}
 	serviceDeskAnalysts := map[string]struct{}{}
 	seniorServiceDeskAnalysts := map[string]struct{}{}
+	itServiceCenterSpecialists := map[string]struct{}{}
+	seniorITServiceCenterSpecialists := map[string]struct{}{}
+	itServiceSupportSpecialists := map[string]struct{}{}
 
 	for _, rec := range records {
 		employeeIDs[rec.EmployeeNumber] = deterministicERPUUID("user", rec.EmployeeNumber)
@@ -317,6 +320,14 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 				seniorServiceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
 			case "service_desk_analyst":
 				serviceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
+			}
+			switch problemManagementRoleForERPAssignment(rec) {
+			case "senior_it_service_center_specialist":
+				seniorITServiceCenterSpecialists[rec.EmployeeNumber] = struct{}{}
+			case "it_service_center_specialist":
+				itServiceCenterSpecialists[rec.EmployeeNumber] = struct{}{}
+			case "it_service_support_specialist":
+				itServiceSupportSpecialists[rec.EmployeeNumber] = struct{}{}
 			}
 		}
 	}
@@ -439,6 +450,9 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.ElevatedAdmins = countKnownEmployees(elevated, employeeIDs)
 	stats.ServiceDeskAnalysts = countKnownEmployees(serviceDeskAnalysts, employeeIDs)
 	stats.SeniorServiceDeskAnalysts = countKnownEmployees(seniorServiceDeskAnalysts, employeeIDs)
+	stats.ITServiceCenterSpecialists = countKnownEmployees(itServiceCenterSpecialists, employeeIDs)
+	stats.SeniorITServiceCenterSpecialists = countKnownEmployees(seniorITServiceCenterSpecialists, employeeIDs)
+	stats.ITServiceSupportSpecialists = countKnownEmployees(itServiceSupportSpecialists, employeeIDs)
 	stats.Samples = buildERPPreviewSamples(preparedRecords, elevated)
 
 	if stats.MissingEmails > 0 || stats.InvalidEmails > 0 || stats.DuplicateEmails > 0 {
@@ -449,17 +463,20 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	}
 
 	return preparedERPDirectory{
-		Preview:                   stats,
-		Employees:                 preparedRecords,
-		OrgUnits:                  orgUnits,
-		EmployeeIDs:               employeeIDs,
-		Supervisors:               supervisors,
-		DivHeads:                  divHeads,
-		OfficeHeads:               officeHeads,
-		Elevated:                  elevated,
-		RoleEligible:              roleEligible,
-		ServiceDeskAnalysts:       serviceDeskAnalysts,
-		SeniorServiceDeskAnalysts: seniorServiceDeskAnalysts,
+		Preview:                          stats,
+		Employees:                        preparedRecords,
+		OrgUnits:                         orgUnits,
+		EmployeeIDs:                      employeeIDs,
+		Supervisors:                      supervisors,
+		DivHeads:                         divHeads,
+		OfficeHeads:                      officeHeads,
+		Elevated:                         elevated,
+		RoleEligible:                     roleEligible,
+		ServiceDeskAnalysts:              serviceDeskAnalysts,
+		SeniorServiceDeskAnalysts:        seniorServiceDeskAnalysts,
+		ITServiceCenterSpecialists:       itServiceCenterSpecialists,
+		SeniorITServiceCenterSpecialists: seniorITServiceCenterSpecialists,
+		ITServiceSupportSpecialists:      itServiceSupportSpecialists,
 	}
 }
 
@@ -656,6 +673,45 @@ func serviceDeskRoleForERPAssignment(rec erpEmployeeRecord) string {
 		return "senior_service_desk_analyst"
 	}
 	return "service_desk_analyst"
+}
+
+func problemManagementRoleForERPAssignment(rec erpEmployeeRecord) string {
+	job := normalizeERPMatchText(rec.JobName)
+	org := normalizeERPMatchText(strings.Join([]string{rec.DepartmentName, rec.DivisionName, rec.OfficeName}, " "))
+
+	if job == "" && org == "" {
+		return ""
+	}
+	if isSeniorServiceDeskERPJob(rec.JobName) && isProblemManagementERPOrg(org) {
+		return "senior_it_service_center_specialist"
+	}
+	if strings.Contains(job, "SENIOR IT SERVICE CENTER SPECIALIST") ||
+		strings.Contains(job, "SENIOR IT SERVICE CENTRE SPECIALIST") {
+		return "senior_it_service_center_specialist"
+	}
+	if strings.Contains(job, "IT SERVICE CENTER SPECIALIST") ||
+		strings.Contains(job, "IT SERVICE CENTRE SPECIALIST") ||
+		strings.Contains(org, "IT SERVICE CENTRE") ||
+		strings.Contains(org, "IT SERVICE CENTER") ||
+		strings.Contains(org, "IT - SERVICE CENTRE") {
+		return "it_service_center_specialist"
+	}
+	if strings.Contains(job, "IT SERVICE SUPPORT SPECIALIST") ||
+		strings.Contains(org, "IT SERVICE SUPPORT") ||
+		strings.Contains(org, "USER SUPPORT HELP DESK") ||
+		strings.Contains(org, "BRANCH IT SUPPORT") {
+		return "it_service_support_specialist"
+	}
+	return ""
+}
+
+func isProblemManagementERPOrg(org string) bool {
+	return strings.Contains(org, "IT SERVICE SUPPORT") ||
+		strings.Contains(org, "IT SERVICE CENTRE") ||
+		strings.Contains(org, "IT SERVICE CENTER") ||
+		strings.Contains(org, "IT - SERVICE CENTRE") ||
+		strings.Contains(org, "USER SUPPORT HELP DESK") ||
+		strings.Contains(org, "BRANCH IT SUPPORT")
 }
 
 func isServiceDeskERPOrg(names ...string) bool {

@@ -27,6 +27,7 @@ import {
   useProblemRCATemplates,
   useUpdateProblem,
   useTransitionProblem,
+  useITSMAllowedTransitions,
   useDeleteProblem,
   useKnownErrors,
   useCreateKnownError,
@@ -47,7 +48,9 @@ const STATUS_OPTIONS = [
   { value: "investigating", label: "Investigating" },
   { value: "root_cause_identified", label: "Root Cause Identified" },
   { value: "known_error", label: "Known Error" },
+  { value: "third_party_escalated", label: "3rd Party Escalated" },
   { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
 ];
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -55,7 +58,9 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   investigating: { bg: "rgba(59, 130, 246, 0.1)", text: "#3B82F6" },
   root_cause_identified: { bg: "rgba(245, 158, 11, 0.1)", text: "#F59E0B" },
   known_error: { bg: "rgba(249, 115, 22, 0.1)", text: "#F97316" },
+  third_party_escalated: { bg: "rgba(124, 58, 237, 0.1)", text: "#7C3AED" },
   resolved: { bg: "rgba(16, 185, 129, 0.1)", text: "#10B981" },
+  closed: { bg: "rgba(15, 118, 110, 0.1)", text: "#0F766E" },
 };
 
 function formatDate(dateStr?: string): string {
@@ -67,6 +72,23 @@ function formatDate(dateStr?: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function statusLabel(value: string): string {
+  return STATUS_OPTIONS.find((status) => status.value === value)?.label ?? value.replace(/_/g, " ");
+}
+
+function roleLabel(value?: string): string {
+  if (!value) return "";
+  return value
+    .split("_")
+    .map((part) => {
+      const upper = part.toUpperCase();
+      return ["IT", "CI", "RCA", "KB", "SLA"].includes(upper)
+        ? upper
+        : part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,6 +331,7 @@ function EditProblemForm({
 }) {
   const updateMutation = useUpdateProblem(problem.id);
   const transitionMutation = useTransitionProblem();
+  const { data: allowedTransitionData } = useITSMAllowedTransitions("problem", problem.status);
   const { data: rcaTemplates } = useProblemRCATemplates();
   const [title, setTitle] = useState(problem.title);
   const [description, setDescription] = useState(problem.description ?? "");
@@ -322,6 +345,13 @@ function EditProblemForm({
   );
   const [ownerId, setOwnerId] = useState(problem.ownerId ?? "");
   const [ownerDisplay, setOwnerDisplay] = useState("");
+  const statusOptions = [
+    { value: problem.status, label: statusLabel(problem.status) },
+    ...(allowedTransitionData?.transitions ?? []).map((transition) => ({
+      value: transition.value,
+      label: transition.label,
+    })),
+  ];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -387,7 +417,7 @@ function EditProblemForm({
             onChange={(e) => setStatus(e.target.value)}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none"
           >
-            {STATUS_OPTIONS.map((s) => (
+            {statusOptions.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
@@ -507,6 +537,8 @@ export default function ProblemDetailPage({
 
   const { data: problem, isLoading } = useProblem(id);
   const { data: knownErrorsData, isLoading: keLoading } = useKnownErrors(id);
+  const { data: allowedTransitionData } = useITSMAllowedTransitions("problem", problem?.status);
+  const transitionProblem = useTransitionProblem();
   const deleteProblem = useDeleteProblem();
   const deleteKnownError = useDeleteKnownError();
 
@@ -555,6 +587,7 @@ export default function ProblemDetailPage({
   }
 
   const statusColor = STATUS_COLORS[problem.status] ?? { bg: "rgba(107,114,128,0.1)", text: "#6B7280" };
+  const allowedTransitions = allowedTransitionData?.transitions ?? [];
 
   return (
     <PermissionGate permission="itsm.view">
@@ -877,23 +910,42 @@ export default function ProblemDetailPage({
                 className="rounded-xl border p-5 space-y-3"
                 style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-0)" }}
               >
-                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Quick Status Update</h2>
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Allowed Workflow Actions</h2>
                 <div className="space-y-1.5">
-                  {STATUS_OPTIONS.filter((s) => s.value !== problem.status).map((s) => {
-                    const color = STATUS_COLORS[s.value] ?? { bg: "rgba(107,114,128,0.1)", text: "#6B7280" };
+                  {allowedTransitions.length === 0 && (
+                    <p className="rounded-lg bg-[var(--surface-1)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                      No further workflow actions are available from {statusLabel(problem.status)}.
+                    </p>
+                  )}
+                  {allowedTransitions.map((transition) => {
+                    const color = STATUS_COLORS[transition.value] ?? { bg: "rgba(107,114,128,0.1)", text: "#6B7280" };
                     return (
                       <button
-                        key={s.value}
-                        onClick={() => {
-                          /* useUpdateProblem directly */
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-1)]"
+                        key={transition.value}
+                        onClick={() =>
+                          transitionProblem.mutate({
+                            id: problem.id,
+                            targetStatus: transition.value,
+                            comment: transition.label,
+                          })
+                        }
+                        disabled={transitionProblem.isPending}
+                        className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-[var(--surface-1)] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <span
-                          className="h-2 w-2 rounded-full shrink-0"
+                          className="mt-1.5 h-2 w-2 rounded-full shrink-0"
                           style={{ backgroundColor: color.text }}
                         />
-                        <span className="capitalize">{s.label}</span>
+                        <span className="min-w-0">
+                          <span className="block">{transition.label}</span>
+                          {(transition.responsibleRole || transition.accountableRole) && (
+                            <span className="mt-0.5 block text-xs font-normal text-[var(--text-tertiary)]">
+                              {transition.responsibleRole && `R: ${roleLabel(transition.responsibleRole)}`}
+                              {transition.responsibleRole && transition.accountableRole && " · "}
+                              {transition.accountableRole && `A: ${roleLabel(transition.accountableRole)}`}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     );
                   })}

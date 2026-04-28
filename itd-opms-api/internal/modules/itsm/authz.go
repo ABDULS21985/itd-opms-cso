@@ -8,8 +8,11 @@ import (
 )
 
 const (
-	ServiceDeskAnalystRole       = "service_desk_analyst"
-	SeniorServiceDeskAnalystRole = "senior_service_desk_analyst"
+	ServiceDeskAnalystRole              = "service_desk_analyst"
+	SeniorServiceDeskAnalystRole        = "senior_service_desk_analyst"
+	ITServiceCenterSpecialistRole       = "it_service_center_specialist"
+	SeniorITServiceCenterSpecialistRole = "senior_it_service_center_specialist"
+	ITServiceSupportSpecialistRole      = "it_service_support_specialist"
 )
 
 func isITSMPrivileged(auth *types.AuthContext) bool {
@@ -40,6 +43,24 @@ func hasSeniorServiceDeskAccountability(auth *types.AuthContext) bool {
 	return auth.HasRole(SeniorServiceDeskAnalystRole)
 }
 
+func hasProblemManagementResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(ITServiceCenterSpecialistRole) ||
+		auth.HasRole(SeniorITServiceCenterSpecialistRole) ||
+		auth.HasRole(ITServiceSupportSpecialistRole)
+}
+
+func hasProblemDetectionResponsibility(auth *types.AuthContext) bool {
+	return hasProblemManagementResponsibility(auth) ||
+		hasServiceDeskResponsibility(auth) ||
+		hasSeniorServiceDeskAccountability(auth)
+}
+
 func ensureServiceDeskResponsibility(auth *types.AuthContext, action string) error {
 	if hasServiceDeskResponsibility(auth) {
 		return nil
@@ -52,6 +73,20 @@ func ensureSeniorServiceDeskAccountability(auth *types.AuthContext, action strin
 		return nil
 	}
 	return apperrors.Forbidden(fmt.Sprintf("%s requires %s role", action, SeniorServiceDeskAnalystRole))
+}
+
+func ensureProblemManagementResponsibility(auth *types.AuthContext, action string) error {
+	if hasProblemManagementResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, or %s role", action, ITServiceCenterSpecialistRole, ITServiceSupportSpecialistRole, SeniorITServiceCenterSpecialistRole))
+}
+
+func ensureProblemDetectionResponsibility(auth *types.AuthContext, action string) error {
+	if hasProblemDetectionResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires a problem management or service desk responsibility role", action))
 }
 
 func canMutateTicket(auth *types.AuthContext, ticket Ticket) bool {
@@ -82,6 +117,9 @@ func canMutateProblem(auth *types.AuthContext, problem Problem) bool {
 		return false
 	}
 	if problem.OwnerID == nil {
+		return true
+	}
+	if problem.AssignedGroupID != nil && auth.HasOrgAccess(*problem.AssignedGroupID) {
 		return true
 	}
 	return *problem.OwnerID == auth.UserID
@@ -137,6 +175,9 @@ func ensureTicketAssignmentAllowed(auth *types.AuthContext, ticket Ticket) error
 }
 
 func ensureProblemMutationAllowed(auth *types.AuthContext, problem Problem) error {
+	if err := ensureProblemManagementResponsibility(auth, "problem mutation"); err != nil {
+		return err
+	}
 	if canMutateProblem(auth, problem) {
 		return nil
 	}

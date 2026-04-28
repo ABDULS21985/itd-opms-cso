@@ -90,10 +90,22 @@ const PROBLEM_STATUSES: ProblemStatusOption[] = [
     description: "Workaround published while the permanent fix is tracked",
   },
   {
+    value: "third_party_escalated",
+    label: "3rd party escalated",
+    accent: "#7C3AED",
+    description: "Awaiting external resolver input or vendor evidence",
+  },
+  {
     value: "resolved",
     label: "Resolved",
     accent: "#1B7340",
-    description: "Problem has been driven to closure",
+    description: "Solution has been applied and is awaiting closure checks",
+  },
+  {
+    value: "closed",
+    label: "Closed",
+    accent: "#0F766E",
+    description: "RCA, KEDB, incident handoff, and closure evidence complete",
   },
 ];
 
@@ -121,10 +133,20 @@ const STATUS_SUMMARY: Record<
     bgColor: "rgba(234, 88, 12, 0.12)",
     description: "Workaround is available while the long fix lands.",
   },
+  third_party_escalated: {
+    accent: "#7C3AED",
+    bgColor: "rgba(124, 58, 237, 0.12)",
+    description: "External resolver escalation is active.",
+  },
   resolved: {
     accent: "#1B7340",
     bgColor: "rgba(27, 115, 64, 0.12)",
-    description: "Problem record has reached closure.",
+    description: "Solution has been validated and can be closed.",
+  },
+  closed: {
+    accent: "#0F766E",
+    bgColor: "rgba(15, 118, 110, 0.12)",
+    description: "Problem record has reached formal closure.",
   },
 };
 
@@ -138,6 +160,12 @@ const PROBLEM_TRANSITIONS: Record<
   investigating: [
     { value: "root_cause_identified", label: "Root Cause Found", icon: Eye, accent: "#D97706" },
     { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
+    { value: "third_party_escalated", label: "Escalate to 3rd Party", icon: AlertTriangle, accent: "#7C3AED" },
+  ],
+  third_party_escalated: [
+    { value: "investigating", label: "Continue Investigation", icon: Search, accent: "#2563EB" },
+    { value: "root_cause_identified", label: "Root Cause Found", icon: Eye, accent: "#D97706" },
+    { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
   ],
   root_cause_identified: [
     { value: "known_error", label: "Known Error", icon: AlertTriangle, accent: "#EA580C" },
@@ -147,6 +175,7 @@ const PROBLEM_TRANSITIONS: Record<
     { value: "resolved", label: "Resolve", icon: CheckCircle2, accent: "#1B7340" },
   ],
   resolved: [
+    { value: "closed", label: "Close", icon: CheckCircle2, accent: "#0F766E" },
     { value: "investigating", label: "Reopen", icon: RotateCcw, accent: "#2563EB" },
   ],
 };

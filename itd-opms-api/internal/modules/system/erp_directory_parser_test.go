@@ -107,6 +107,47 @@ func TestServiceDeskRoleForERPAssignmentUsesOrgUnit(t *testing.T) {
 	}
 }
 
+func TestProblemManagementRoleForERPAssignment(t *testing.T) {
+	cases := []struct {
+		name string
+		rec  erpEmployeeRecord
+		want string
+	}{
+		{
+			name: "explicit senior service center specialist",
+			rec:  erpEmployeeRecord{JobName: "Senior IT Service Centre Specialist"},
+			want: "senior_it_service_center_specialist",
+		},
+		{
+			name: "service centre org",
+			rec:  erpEmployeeRecord{JobName: "Officer", OfficeName: "IT - Service Centre Office"},
+			want: "it_service_center_specialist",
+		},
+		{
+			name: "service support org",
+			rec:  erpEmployeeRecord{JobName: "Officer", DivisionName: "IT Service Support Management Division"},
+			want: "it_service_support_specialist",
+		},
+		{
+			name: "senior support org accountable",
+			rec:  erpEmployeeRecord{JobName: "Senior Supervisor", OfficeName: "User Support Help Desk"},
+			want: "senior_it_service_center_specialist",
+		},
+		{
+			name: "non IT help desk ignored",
+			rec:  erpEmployeeRecord{JobName: "Manager", OfficeName: "HR Help Desk"},
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := problemManagementRoleForERPAssignment(tc.rec); got != tc.want {
+				t.Fatalf("problemManagementRoleForERPAssignment() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseERPDirectoryDump_FromEnv(t *testing.T) {
 	path := os.Getenv("ERP_DIRECTORY_DUMP_PATH")
 	if path == "" {

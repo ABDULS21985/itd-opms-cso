@@ -534,7 +534,6 @@ export const navGroups: NavGroup[] = [
       {
         href: "/dashboard/vault",
         label: "Document Vault",
-    color: "#F43F5E",
         icon: FolderOpen,
         permission: "documents.view",
       },
@@ -589,7 +588,6 @@ export const navGroups: NavGroup[] = [
       {
         href: "/dashboard/system",
         label: "Overview",
-    color: "#3B82F6",
         icon: LayoutDashboard,
         permission: "system.view",
       },

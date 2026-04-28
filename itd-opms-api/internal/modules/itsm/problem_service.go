@@ -96,6 +96,9 @@ func (s *ProblemService) CreateProblem(ctx context.Context, req CreateProblemReq
 	if auth == nil {
 		return Problem{}, apperrors.Unauthorized("authentication required")
 	}
+	if err := ensureProblemDetectionResponsibility(auth, "problem detection and logging"); err != nil {
+		return Problem{}, err
+	}
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -658,6 +661,13 @@ func (s *ProblemService) CreateKnownError(ctx context.Context, req CreateKnownEr
 	if auth == nil {
 		return KnownError{}, apperrors.Unauthorized("authentication required")
 	}
+	problem, err := s.GetProblem(ctx, req.ProblemID)
+	if err != nil {
+		return KnownError{}, err
+	}
+	if err := ensureProblemMutationAllowed(auth, problem); err != nil {
+		return KnownError{}, err
+	}
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -677,7 +687,7 @@ func (s *ProblemService) CreateKnownError(ctx context.Context, req CreateKnownEr
 			created_at, updated_at`
 
 	var ke KnownError
-	err := s.pool.QueryRow(ctx, query,
+	err = s.pool.QueryRow(ctx, query,
 		id, req.ProblemID, req.Title, req.Description,
 		req.Workaround, req.KBArticleID,
 		now, now,
@@ -794,8 +804,15 @@ func (s *ProblemService) UpdateKnownError(ctx context.Context, id uuid.UUID, req
 	}
 
 	// Verify the known error exists and belongs to the tenant.
-	_, err := s.GetKnownError(ctx, id)
+	existingKnownError, err := s.GetKnownError(ctx, id)
 	if err != nil {
+		return KnownError{}, err
+	}
+	problem, err := s.GetProblem(ctx, existingKnownError.ProblemID)
+	if err != nil {
+		return KnownError{}, err
+	}
+	if err := ensureProblemMutationAllowed(auth, problem); err != nil {
 		return KnownError{}, err
 	}
 
@@ -854,6 +871,13 @@ func (s *ProblemService) DeleteKnownError(ctx context.Context, id uuid.UUID) err
 	// Verify the known error belongs to the tenant before deleting.
 	ke, err := s.GetKnownError(ctx, id)
 	if err != nil {
+		return err
+	}
+	problem, err := s.GetProblem(ctx, ke.ProblemID)
+	if err != nil {
+		return err
+	}
+	if err := ensureProblemMutationAllowed(auth, problem); err != nil {
 		return err
 	}
 

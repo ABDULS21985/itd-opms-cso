@@ -107,3 +107,39 @@ func TestWorkflowTransitions_ServiceRequestExposeResponsibilityRoles(t *testing.
 	}
 	t.Fatal("start fulfillment transition missing")
 }
+
+func TestWorkflowTransitions_ProblemExposeBRDRolesAndClosure(t *testing.T) {
+	resp, ok := workflowTransitionsForEntity("problem", ProblemStatusInvestigating)
+	if !ok {
+		t.Fatal("problem workflow not found")
+	}
+	gotThirdParty := false
+	for _, tr := range resp.Transitions {
+		if tr.Value == ProblemStatusThirdPartyEscalated {
+			gotThirdParty = true
+			if tr.ResponsibleRole != ITServiceCenterSpecialistRole {
+				t.Fatalf("responsible role = %q, want %q", tr.ResponsibleRole, ITServiceCenterSpecialistRole)
+			}
+			if tr.AccountableRole != SeniorITServiceCenterSpecialistRole {
+				t.Fatalf("accountable role = %q, want %q", tr.AccountableRole, SeniorITServiceCenterSpecialistRole)
+			}
+		}
+	}
+	if !gotThirdParty {
+		t.Fatal("third-party escalation transition missing")
+	}
+
+	resolved, ok := workflowTransitionsForEntity("problem", ProblemStatusResolved)
+	if !ok {
+		t.Fatal("problem workflow not found")
+	}
+	for _, tr := range resolved.Transitions {
+		if tr.Value == ProblemStatusClosed {
+			if tr.AccountableRole != SeniorITServiceCenterSpecialistRole {
+				t.Fatalf("closure accountable role = %q, want %q", tr.AccountableRole, SeniorITServiceCenterSpecialistRole)
+			}
+			return
+		}
+	}
+	t.Fatal("closure transition missing")
+}

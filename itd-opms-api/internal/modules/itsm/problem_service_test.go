@@ -148,10 +148,11 @@ func TestProblemTransition_AllValidPaths(t *testing.T) {
 	// Every valid transition defined in the ProblemStateMachine.
 	validTransitions := map[string][]string{
 		"logged":                {"investigating"},
-		"investigating":         {"root_cause_identified", "known_error"},
+		"investigating":         {"root_cause_identified", "known_error", "third_party_escalated"},
+		"third_party_escalated": {"investigating", "root_cause_identified", "known_error"},
 		"root_cause_identified": {"known_error", "resolved"},
 		"known_error":           {"resolved"},
-		"resolved":              {"investigating"}, // reopen
+		"resolved":              {"closed", "investigating"}, // close or reopen
 	}
 
 	for from, toStatuses := range validTransitions {
@@ -169,7 +170,7 @@ func TestProblemTransition_TerminalStates(t *testing.T) {
 	// but verify no unexpected outbound edges exist).
 	allStatuses := []string{
 		"logged", "investigating", "root_cause_identified",
-		"known_error", "resolved",
+		"known_error", "third_party_escalated", "resolved", "closed",
 	}
 
 	// known_error can only go to resolved.
@@ -196,7 +197,7 @@ func TestProblemTransition_TerminalStates(t *testing.T) {
 func TestProblemTransition_SelfTransition(t *testing.T) {
 	statuses := []string{
 		"logged", "investigating", "root_cause_identified",
-		"known_error", "resolved",
+		"known_error", "third_party_escalated", "resolved", "closed",
 	}
 
 	for _, s := range statuses {
@@ -230,9 +231,11 @@ func TestProblemTransition_SkipSteps(t *testing.T) {
 		from, to string
 	}{
 		{"logged", "resolved"},                     // must go through investigating first
+		{"logged", "closed"},                       // must go through investigation and resolution first
 		{"logged", "root_cause_identified"},        // must go through investigating
 		{"logged", "known_error"},                  // must go through investigating
 		{"investigating", "resolved"},              // must go through RCI or known_error first
+		{"investigating", "closed"},                // must resolve before close
 		{"root_cause_identified", "investigating"}, // can't go back to investigating from RCI
 	}
 
@@ -243,18 +246,21 @@ func TestProblemTransition_SkipSteps(t *testing.T) {
 	}
 }
 
-// TestProblemTransition_ReopenFromResolved verifies that resolved problems
-// can be reopened back to "investigating" (the only valid reopen path).
-func TestProblemTransition_ReopenFromResolved(t *testing.T) {
+// TestProblemTransition_ResolvedCanCloseOrReopen verifies that resolved problems
+// can be formally closed or reopened back to investigation.
+func TestProblemTransition_ResolvedCanCloseOrReopen(t *testing.T) {
 	if !workflow.ProblemStateMachine.IsValid("resolved", "investigating") {
 		t.Error("expected valid reopen transition from 'resolved' to 'investigating'")
 	}
+	if !workflow.ProblemStateMachine.IsValid("resolved", "closed") {
+		t.Error("expected valid close transition from 'resolved' to 'closed'")
+	}
 
-	// Resolved should NOT transition to anything other than investigating.
-	invalidFromResolved := []string{"logged", "root_cause_identified", "known_error", "resolved"}
+	// Resolved should NOT transition to anything other than closed/investigating.
+	invalidFromResolved := []string{"logged", "root_cause_identified", "known_error", "third_party_escalated", "resolved"}
 	for _, to := range invalidFromResolved {
 		if workflow.ProblemStateMachine.IsValid("resolved", to) {
-			t.Errorf("resolved should only reopen to 'investigating', not %q", to)
+			t.Errorf("resolved should only close or reopen to 'investigating', not %q", to)
 		}
 	}
 }

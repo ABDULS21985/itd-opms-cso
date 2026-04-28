@@ -93,13 +93,17 @@ var itsmWorkflowDefinitions = map[string]workflowMetadata{
 			workflow.ProblemInvestigating,
 			workflow.ProblemRootCauseIdentified,
 			workflow.ProblemKnownError,
+			workflow.ProblemThirdPartyEscalated,
 			workflow.ProblemResolved,
+			workflow.ProblemClosed,
 		},
 		labels: map[string]string{
 			workflow.ProblemInvestigating:       "Investigate",
 			workflow.ProblemRootCauseIdentified: "Root Cause Found",
 			workflow.ProblemKnownError:          "Known Error",
+			workflow.ProblemThirdPartyEscalated: "Escalate to 3rd Party",
 			workflow.ProblemResolved:            "Resolve",
+			workflow.ProblemClosed:              "Close",
 		},
 	},
 	"service_request": {
@@ -435,30 +439,71 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 		return transitionUXMetadata{SLAImpact: "SLA clock pauses while waiting for customer response."}
 	case "ticket:" + workflow.TicketPendingVendor:
 		return transitionUXMetadata{SLAImpact: "SLA clock pauses while waiting for vendor action."}
+	case "problem:" + workflow.ProblemInvestigating:
+		return transitionUXMetadata{
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "problem_record_complete", Label: "Problem record contains nature, symptoms, and linked incident evidence", Required: true},
+				{Key: "category_priority_set", Label: "Category and priority reviewed using incident priority matrix", Required: true},
+			},
+			DecisionTrail: []string{"service_desk", "it_service_center_specialist", "linked_incidents", "priority"},
+		}
 	case "problem:" + workflow.ProblemRootCauseIdentified:
 		return transitionUXMetadata{
-			RequiredFields: []string{"root_cause"},
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			RequiredFields:  []string{"root_cause"},
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "rca_template", Label: "Structured RCA evidence captured", Required: true},
 				{Key: "linked_incidents_reviewed", Label: "Linked incidents reviewed", Required: true},
+				{Key: "configuration_items_reviewed", Label: "Associated CIs reviewed", Required: true},
 			},
-			DecisionTrail: []string{"owner", "root_cause", "evidence"},
+			DecisionTrail: []string{"it_service_center_specialist", "root_cause", "evidence", "linked_cis"},
 		}
 	case "problem:" + workflow.ProblemKnownError:
 		return transitionUXMetadata{
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "workaround_documented", Label: "Workaround documented", Required: true},
-				{Key: "kb_candidate", Label: "KB candidate prepared", Required: false},
+				{Key: "kedb_updated", Label: "Known Error Database updated", Required: true},
+				{Key: "incident_process_ready", Label: "Incident Management handoff guidance prepared", Required: false},
 			},
-			DecisionTrail: []string{"owner", "workaround", "known_error_record"},
+			DecisionTrail: []string{"it_service_center_specialist", "it_service_support_specialist", "workaround", "known_error_record"},
+		}
+	case "problem:" + workflow.ProblemThirdPartyEscalated:
+		return transitionUXMetadata{
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "no_workaround_confirmed", Label: "No viable workaround has been confirmed", Required: true},
+				{Key: "third_party_owner_identified", Label: "3rd party owner and escalation path identified", Required: true},
+				{Key: "impact_summary_shared", Label: "Impact and diagnostic evidence shared", Required: true},
+			},
+			DecisionTrail: []string{"senior_it_service_center_specialist", "third_party", "escalation_reason", "evidence"},
 		}
 	case "problem:" + workflow.ProblemResolved:
 		return transitionUXMetadata{
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "permanent_fix", Label: "Permanent fix validated", Required: true},
 				{Key: "change_linked", Label: "Remediation change linked where required", Required: false},
+				{Key: "problem_solved_confirmed", Label: "Problem solved confirmation captured", Required: true},
 			},
-			DecisionTrail: []string{"owner", "permanent_fix", "resolved_at"},
+			DecisionTrail: []string{"it_service_center_specialist", "permanent_fix", "linked_change", "validation"},
+		}
+	case "problem:" + workflow.ProblemClosed:
+		return transitionUXMetadata{
+			ResponsibleRole: ITServiceCenterSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "rca_report_produced", Label: "Root cause analysis report produced", Required: true},
+				{Key: "related_incidents_closed", Label: "Related incidents closed or handed back to Incident Management", Required: true},
+				{Key: "knowledge_base_updated", Label: "Knowledge base or KEDB updated", Required: true},
+			},
+			DecisionTrail: []string{"senior_it_service_center_specialist", "closure_summary", "rca_report", "knowledge_update"},
 		}
 	case "change:" + workflow.ChangeApproved:
 		return transitionUXMetadata{

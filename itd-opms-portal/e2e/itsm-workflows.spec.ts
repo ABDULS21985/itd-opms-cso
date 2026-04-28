@@ -193,8 +193,23 @@ async function fulfill(route: Route, data: unknown, status = 200) {
   });
 }
 
+type MutableServiceRequestDetail = Omit<
+  typeof serviceRequestDetail,
+  "assignedTo" | "closedAt" | "fulfilledAt" | "fulfillmentNotes" | "status" | "timeline"
+> & {
+  assignedTo?: string;
+  closedAt?: string;
+  fulfilledAt?: string;
+  fulfillmentNotes?: string;
+  status: string;
+  timeline: Array<Record<string, unknown>>;
+};
+
 async function mockApi(page: Page, onTransition?: (path: string, body: unknown) => void) {
-  let currentServiceRequest = { ...serviceRequestDetail };
+  let currentServiceRequest: MutableServiceRequestDetail = {
+    ...serviceRequestDetail,
+    timeline: [...serviceRequestDetail.timeline],
+  };
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -241,7 +256,7 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
       });
     }
     if (path === "/itsm/tickets/ticket-1/transition" && method === "POST") {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as { status: string };
       onTransition?.(path, body);
       return fulfill(route, { ...ticket, status: body.status });
     }
@@ -257,18 +272,43 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
         }),
       });
     }
+    if (path === "/itsm/problems/problem-1" && method === "GET") {
+      return fulfill(route, problem);
+    }
     if (path === "/itsm/problems/known-errors") {
       return fulfill(route, []);
+    }
+    if (path === "/itsm/workflows/problem" && method === "GET") {
+      return fulfill(route, {
+        entity: "problem",
+        statuses: [
+          { value: "logged", label: "Logged", terminal: false, transitions: [{ value: "investigating", label: "Investigate", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" }] },
+          { value: "investigating", label: "Investigating", terminal: false, transitions: [
+            { value: "root_cause_identified", label: "Root Cause Found", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+            { value: "known_error", label: "Known Error", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+            { value: "third_party_escalated", label: "Escalate to 3rd Party", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+          ] },
+          { value: "third_party_escalated", label: "3rd Party Escalated", terminal: false, transitions: [{ value: "investigating", label: "Continue Investigation", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" }] },
+          { value: "root_cause_identified", label: "Root Cause Found", terminal: false, transitions: [{ value: "resolved", label: "Resolve", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" }] },
+          { value: "known_error", label: "Known Error", terminal: false, transitions: [{ value: "resolved", label: "Resolve", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" }] },
+          { value: "resolved", label: "Resolved", terminal: false, transitions: [{ value: "closed", label: "Close", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" }] },
+          { value: "closed", label: "Closed", terminal: true, transitions: [] },
+        ],
+      });
     }
     if (path === "/itsm/workflows/problem/transitions") {
       return fulfill(route, {
         entity: "problem",
         status: url.searchParams.get("status"),
-        transitions: [{ value: "root_cause_identified", label: "Root Cause Found" }],
+        transitions: [
+          { value: "root_cause_identified", label: "Root Cause Found", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+          { value: "known_error", label: "Known Error", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+          { value: "third_party_escalated", label: "Escalate to 3rd Party", responsibleRole: "it_service_center_specialist", accountableRole: "senior_it_service_center_specialist" },
+        ],
       });
     }
     if (path === "/itsm/problems/problem-1/transition" && method === "POST") {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as { targetStatus: string };
       onTransition?.(path, body);
       return fulfill(route, { ...problem, status: body.targetStatus });
     }
@@ -417,14 +457,34 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
 
     await expect(page.getByRole("heading", { name: problem.title })).toBeVisible();
     await expect(page.getByRole("button", { name: "Root Cause Found", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Known Error", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Escalate to 3rd Party", exact: true })).toBeVisible();
+    await expect(page.getByText(/R: IT Service Center Specialist/).first()).toBeVisible();
+    await expect(page.getByText(/A: Senior IT Service Center Specialist/).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Root Cause Found", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Root Cause Found" })).toBeVisible();
-    await page.getByRole("button", { name: "Confirm Root Cause Found" }).click();
+    await page.getByRole("button", { name: "Escalate to 3rd Party", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Escalate to 3rd Party" })).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Escalate to 3rd Party" }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/problems/problem-1/transition",
-      body: { targetStatus: "root_cause_identified" },
+      body: { targetStatus: "third_party_escalated" },
+    });
+  });
+
+  test("problem detail renders only allowed workflow actions", async ({ page }) => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    await mockApi(page, (path, body) => calls.push({ path, body }));
+
+    await page.goto("/dashboard/itsm/problems/problem-1");
+
+    await expect(page.getByText("Allowed Workflow Actions")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Escalate to 3rd Party/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Close/ })).toHaveCount(0);
+    await expect(page.getByText(/R: IT Service Center Specialist/).first()).toBeVisible();
+
+    await page.getByRole("button", { name: /Escalate to 3rd Party/ }).click();
+    await expect.poll(() => calls).toContainEqual({
+      path: "/itsm/problems/problem-1/transition",
+      body: { targetStatus: "third_party_escalated", comment: "Escalate to 3rd Party" },
     });
   });
 

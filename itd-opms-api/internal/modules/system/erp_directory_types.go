@@ -17,28 +17,31 @@ type ERPDirectoryImportRequest struct {
 
 // ERPDirectoryImportPreview is returned before applying a reset.
 type ERPDirectoryImportPreview struct {
-	SourcePath                string                    `json:"sourcePath"`
-	SourceChecksum            string                    `json:"sourceChecksum"`
-	TotalRows                 int                       `json:"totalRows"`
-	ParseErrors               int                       `json:"parseErrors"`
-	EmployeesTotal            int                       `json:"employeesTotal"`
-	ActiveEmployees           int                       `json:"activeEmployees"`
-	InactiveEmployees         int                       `json:"inactiveEmployees"`
-	MissingEmails             int                       `json:"missingEmails"`
-	InvalidEmails             int                       `json:"invalidEmails"`
-	DuplicateEmails           int                       `json:"duplicateEmails"`
-	PlaceholderEmails         int                       `json:"placeholderEmails"`
-	LoginEligibleEmployees    int                       `json:"loginEligibleEmployees"`
-	Departments               int                       `json:"departments"`
-	Divisions                 int                       `json:"divisions"`
-	Offices                   int                       `json:"offices"`
-	Supervisors               int                       `json:"supervisors"`
-	HeadsOfDivision           int                       `json:"headsOfDivision"`
-	ElevatedAdmins            int                       `json:"elevatedAdmins"`
-	ServiceDeskAnalysts       int                       `json:"serviceDeskAnalysts"`
-	SeniorServiceDeskAnalysts int                       `json:"seniorServiceDeskAnalysts"`
-	Warnings                  []string                  `json:"warnings"`
-	Samples                   []ERPDirectoryPreviewUser `json:"samples"`
+	SourcePath                       string                    `json:"sourcePath"`
+	SourceChecksum                   string                    `json:"sourceChecksum"`
+	TotalRows                        int                       `json:"totalRows"`
+	ParseErrors                      int                       `json:"parseErrors"`
+	EmployeesTotal                   int                       `json:"employeesTotal"`
+	ActiveEmployees                  int                       `json:"activeEmployees"`
+	InactiveEmployees                int                       `json:"inactiveEmployees"`
+	MissingEmails                    int                       `json:"missingEmails"`
+	InvalidEmails                    int                       `json:"invalidEmails"`
+	DuplicateEmails                  int                       `json:"duplicateEmails"`
+	PlaceholderEmails                int                       `json:"placeholderEmails"`
+	LoginEligibleEmployees           int                       `json:"loginEligibleEmployees"`
+	Departments                      int                       `json:"departments"`
+	Divisions                        int                       `json:"divisions"`
+	Offices                          int                       `json:"offices"`
+	Supervisors                      int                       `json:"supervisors"`
+	HeadsOfDivision                  int                       `json:"headsOfDivision"`
+	ElevatedAdmins                   int                       `json:"elevatedAdmins"`
+	ServiceDeskAnalysts              int                       `json:"serviceDeskAnalysts"`
+	SeniorServiceDeskAnalysts        int                       `json:"seniorServiceDeskAnalysts"`
+	ITServiceCenterSpecialists       int                       `json:"itServiceCenterSpecialists"`
+	SeniorITServiceCenterSpecialists int                       `json:"seniorItServiceCenterSpecialists"`
+	ITServiceSupportSpecialists      int                       `json:"itServiceSupportSpecialists"`
+	Warnings                         []string                  `json:"warnings"`
+	Samples                          []ERPDirectoryPreviewUser `json:"samples"`
 }
 
 type ERPDirectoryPreviewUser struct {
@@ -141,17 +144,20 @@ func (r erpEmployeeRecord) displayName() string {
 }
 
 type preparedERPDirectory struct {
-	Preview                   ERPDirectoryImportPreview
-	Employees                 []erpEmployeeRecord
-	OrgUnits                  []preparedERPOrgUnit
-	EmployeeIDs               map[string]uuid.UUID
-	Supervisors               map[string]struct{}
-	DivHeads                  map[string]struct{}
-	OfficeHeads               map[string]struct{}
-	Elevated                  map[string]struct{}
-	RoleEligible              map[string]struct{}
-	ServiceDeskAnalysts       map[string]struct{}
-	SeniorServiceDeskAnalysts map[string]struct{}
+	Preview                          ERPDirectoryImportPreview
+	Employees                        []erpEmployeeRecord
+	OrgUnits                         []preparedERPOrgUnit
+	EmployeeIDs                      map[string]uuid.UUID
+	Supervisors                      map[string]struct{}
+	DivHeads                         map[string]struct{}
+	OfficeHeads                      map[string]struct{}
+	Elevated                         map[string]struct{}
+	RoleEligible                     map[string]struct{}
+	ServiceDeskAnalysts              map[string]struct{}
+	SeniorServiceDeskAnalysts        map[string]struct{}
+	ITServiceCenterSpecialists       map[string]struct{}
+	SeniorITServiceCenterSpecialists map[string]struct{}
+	ITServiceSupportSpecialists      map[string]struct{}
 }
 
 type preparedERPOrgUnit struct {

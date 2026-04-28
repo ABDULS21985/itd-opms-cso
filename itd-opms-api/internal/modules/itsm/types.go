@@ -99,7 +99,9 @@ const (
 	ProblemStatusInvestigating       = "investigating"
 	ProblemStatusRootCauseIdentified = "root_cause_identified"
 	ProblemStatusKnownError          = "known_error"
+	ProblemStatusThirdPartyEscalated = "third_party_escalated"
 	ProblemStatusResolved            = "resolved"
+	ProblemStatusClosed              = "closed"
 )
 
 // ──────────────────────────────────────────────

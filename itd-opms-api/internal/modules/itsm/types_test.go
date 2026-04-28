@@ -353,8 +353,14 @@ func TestProblemStatusConstants(t *testing.T) {
 	if ProblemStatusKnownError != "known_error" {
 		t.Errorf("ProblemStatusKnownError = %q, want %q", ProblemStatusKnownError, "known_error")
 	}
+	if ProblemStatusThirdPartyEscalated != "third_party_escalated" {
+		t.Errorf("ProblemStatusThirdPartyEscalated = %q, want %q", ProblemStatusThirdPartyEscalated, "third_party_escalated")
+	}
 	if ProblemStatusResolved != "resolved" {
 		t.Errorf("ProblemStatusResolved = %q, want %q", ProblemStatusResolved, "resolved")
+	}
+	if ProblemStatusClosed != "closed" {
+		t.Errorf("ProblemStatusClosed = %q, want %q", ProblemStatusClosed, "closed")
 	}
 }
 

@@ -60,10 +60,17 @@ function humanize(value?: string) {
 
 function roleLabel(value?: string) {
   if (!value) return "";
+  const acronyms: Record<string, string> = {
+    it: "IT",
+    ci: "CI",
+    rca: "RCA",
+    kb: "KB",
+    sla: "SLA",
+  };
   return value
     .split("_")
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part) => acronyms[part] ?? part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
 

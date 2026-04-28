@@ -101,16 +101,20 @@ const (
 	ProblemInvestigating       = "investigating"
 	ProblemRootCauseIdentified = "root_cause_identified"
 	ProblemKnownError          = "known_error"
+	ProblemThirdPartyEscalated = "third_party_escalated"
 	ProblemResolved            = "resolved"
+	ProblemClosed              = "closed"
 )
 
 // ProblemStateMachine enforces the ITIL problem management lifecycle.
 var ProblemStateMachine = NewStateMachine("problem", map[string][]string{
 	ProblemLogged:              {ProblemInvestigating},
-	ProblemInvestigating:       {ProblemRootCauseIdentified, ProblemKnownError},
+	ProblemInvestigating:       {ProblemRootCauseIdentified, ProblemKnownError, ProblemThirdPartyEscalated},
+	ProblemThirdPartyEscalated: {ProblemInvestigating, ProblemRootCauseIdentified, ProblemKnownError},
 	ProblemRootCauseIdentified: {ProblemKnownError, ProblemResolved},
 	ProblemKnownError:          {ProblemResolved},
-	ProblemResolved:            {ProblemInvestigating}, // reopen
+	ProblemResolved:            {ProblemClosed, ProblemInvestigating}, // close or reopen
+	ProblemClosed:              {},
 })
 
 // Ticket statuses.

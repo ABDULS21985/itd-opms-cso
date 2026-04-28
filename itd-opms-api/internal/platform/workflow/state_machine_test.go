@@ -157,9 +157,14 @@ func TestProblemStateMachine_ValidTransitions(t *testing.T) {
 		{ProblemLogged, ProblemInvestigating},
 		{ProblemInvestigating, ProblemRootCauseIdentified},
 		{ProblemInvestigating, ProblemKnownError},
+		{ProblemInvestigating, ProblemThirdPartyEscalated},
+		{ProblemThirdPartyEscalated, ProblemInvestigating},
+		{ProblemThirdPartyEscalated, ProblemRootCauseIdentified},
+		{ProblemThirdPartyEscalated, ProblemKnownError},
 		{ProblemRootCauseIdentified, ProblemKnownError},
 		{ProblemRootCauseIdentified, ProblemResolved},
 		{ProblemKnownError, ProblemResolved},
+		{ProblemResolved, ProblemClosed},
 		{ProblemResolved, ProblemInvestigating}, // reopen
 	}
 
@@ -186,6 +191,7 @@ func TestProblemStateMachine_InvalidTransitions(t *testing.T) {
 		{ProblemLogged, ProblemRootCauseIdentified},
 		{ProblemLogged, ProblemKnownError},
 		{ProblemLogged, ProblemResolved},
+		{ProblemLogged, ProblemClosed},
 		// Cannot go backward.
 		{ProblemInvestigating, ProblemLogged},
 		{ProblemRootCauseIdentified, ProblemInvestigating},
@@ -196,6 +202,7 @@ func TestProblemStateMachine_InvalidTransitions(t *testing.T) {
 		{ProblemLogged, ProblemLogged},
 		{ProblemInvestigating, ProblemInvestigating},
 		{ProblemResolved, ProblemResolved},
+		{ProblemClosed, ProblemClosed},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +221,9 @@ func TestProblemStateMachine_AllStatusesCovered(t *testing.T) {
 		ProblemInvestigating,
 		ProblemRootCauseIdentified,
 		ProblemKnownError,
+		ProblemThirdPartyEscalated,
 		ProblemResolved,
+		ProblemClosed,
 	}
 	for _, s := range allStatuses {
 		if ProblemStateMachine.AllowedFrom(s) == nil {
@@ -223,13 +232,16 @@ func TestProblemStateMachine_AllStatusesCovered(t *testing.T) {
 	}
 }
 
-func TestProblemStateMachine_ResolvedOnlyReopensToInvestigating(t *testing.T) {
+func TestProblemStateMachine_ResolvedCanCloseOrReopen(t *testing.T) {
 	allowed := ProblemStateMachine.AllowedFrom(ProblemResolved)
-	if len(allowed) != 1 {
-		t.Fatalf("expected 1 transition from resolved, got %d", len(allowed))
+	if len(allowed) != 2 {
+		t.Fatalf("expected 2 transitions from resolved, got %d", len(allowed))
 	}
-	if allowed[0] != ProblemInvestigating {
-		t.Errorf("expected reopen to %q, got %q", ProblemInvestigating, allowed[0])
+	if !ProblemStateMachine.IsValid(ProblemResolved, ProblemClosed) {
+		t.Errorf("expected resolved to close")
+	}
+	if !ProblemStateMachine.IsValid(ProblemResolved, ProblemInvestigating) {
+		t.Errorf("expected resolved to reopen to investigating")
 	}
 }
 

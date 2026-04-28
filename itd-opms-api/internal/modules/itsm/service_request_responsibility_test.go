@@ -39,3 +39,50 @@ func TestEnsureServiceDeskResponsibility(t *testing.T) {
 		t.Fatalf("expected global privileged user to be allowed: %v", err)
 	}
 }
+
+func TestEnsureProblemManagementResponsibility(t *testing.T) {
+	base := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Permissions: []string{"itsm.manage"},
+		IssuedAt:    time.Now(),
+	}
+
+	if err := ensureProblemManagementResponsibility(base, "transition problem"); err == nil {
+		t.Fatal("expected generic itsm.manage user without problem role to be denied")
+	}
+
+	center := *base
+	center.Roles = []string{ITServiceCenterSpecialistRole}
+	if err := ensureProblemManagementResponsibility(&center, "transition problem"); err != nil {
+		t.Fatalf("expected IT service center specialist to be allowed: %v", err)
+	}
+
+	support := *base
+	support.Roles = []string{ITServiceSupportSpecialistRole}
+	if err := ensureProblemManagementResponsibility(&support, "update workaround"); err != nil {
+		t.Fatalf("expected IT service support specialist to be allowed: %v", err)
+	}
+
+	senior := *base
+	senior.Roles = []string{SeniorITServiceCenterSpecialistRole}
+	if err := ensureProblemManagementResponsibility(&senior, "close problem"); err != nil {
+		t.Fatalf("expected senior IT service center specialist to be allowed: %v", err)
+	}
+}
+
+func TestEnsureProblemDetectionResponsibilityAllowsServiceDesk(t *testing.T) {
+	auth := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Roles:       []string{ServiceDeskAnalystRole},
+		Permissions: []string{"itsm.manage"},
+		IssuedAt:    time.Now(),
+	}
+	if err := ensureProblemDetectionResponsibility(auth, "create problem"); err != nil {
+		t.Fatalf("expected service desk analyst to log problems: %v", err)
+	}
+	if err := ensureProblemManagementResponsibility(auth, "close problem"); err == nil {
+		t.Fatal("expected service desk analyst without problem role to be denied for lifecycle ownership")
+	}
+}

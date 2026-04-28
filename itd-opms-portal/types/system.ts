@@ -203,6 +203,11 @@ export interface ERPDirectoryImportPreview {
   supervisors: number;
   headsOfDivision: number;
   elevatedAdmins: number;
+  serviceDeskAnalysts?: number;
+  seniorServiceDeskAnalysts?: number;
+  itServiceCenterSpecialists?: number;
+  seniorItServiceCenterSpecialists?: number;
+  itServiceSupportSpecialists?: number;
   warnings: string[];
   samples: ERPDirectoryPreviewUser[];
 }
