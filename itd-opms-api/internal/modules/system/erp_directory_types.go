@@ -37,6 +37,9 @@ type ERPDirectoryImportPreview struct {
 	ElevatedAdmins                   int                       `json:"elevatedAdmins"`
 	ServiceDeskAnalysts              int                       `json:"serviceDeskAnalysts"`
 	SeniorServiceDeskAnalysts        int                       `json:"seniorServiceDeskAnalysts"`
+	ServiceDeskSpecialists           int                       `json:"serviceDeskSpecialists"`
+	EndUserSupportSpecialists        int                       `json:"endUserSupportSpecialists"`
+	SecondLevelSupportSpecialists    int                       `json:"secondLevelSupportSpecialists"`
 	ITServiceCenterSpecialists       int                       `json:"itServiceCenterSpecialists"`
 	SeniorITServiceCenterSpecialists int                       `json:"seniorItServiceCenterSpecialists"`
 	ITServiceSupportSpecialists      int                       `json:"itServiceSupportSpecialists"`
@@ -155,6 +158,9 @@ type preparedERPDirectory struct {
 	RoleEligible                     map[string]struct{}
 	ServiceDeskAnalysts              map[string]struct{}
 	SeniorServiceDeskAnalysts        map[string]struct{}
+	ServiceDeskSpecialists           map[string]struct{}
+	EndUserSupportSpecialists        map[string]struct{}
+	SecondLevelSupportSpecialists    map[string]struct{}
 	ITServiceCenterSpecialists       map[string]struct{}
 	SeniorITServiceCenterSpecialists map[string]struct{}
 	ITServiceSupportSpecialists      map[string]struct{}

@@ -259,6 +259,9 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 	if req.Type == TicketTypeChange {
 		return Ticket{}, apperrors.BadRequest("change tickets must be created through the change management workflow")
 	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident identification and recording"); err != nil {
+		return Ticket{}, err
+	}
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -686,6 +689,9 @@ func (s *TicketService) UpdateTicket(ctx context.Context, id uuid.UUID, req Upda
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident record update"); err != nil {
+		return Ticket{}, err
+	}
 
 	now := time.Now().UTC()
 
@@ -848,6 +854,9 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident lifecycle transition"); err != nil {
+		return Ticket{}, err
+	}
 
 	return s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
 		targetStatus: req.Status,
@@ -871,6 +880,9 @@ func (s *TicketService) AssignTicket(ctx context.Context, id uuid.UUID, req Assi
 		return Ticket{}, err
 	}
 	if err := ensureTicketAssignmentAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident routing and assignment"); err != nil {
 		return Ticket{}, err
 	}
 
@@ -950,6 +962,9 @@ func (s *TicketService) EscalateTicket(ctx context.Context, id uuid.UUID, reason
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
 		return err
 	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident escalation"); err != nil {
+		return err
+	}
 
 	// Log audit event for escalation.
 	changes, _ := json.Marshal(map[string]any{
@@ -988,6 +1003,9 @@ func (s *TicketService) DeclareMajorIncident(ctx context.Context, id uuid.UUID) 
 		return err
 	}
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "major incident identification"); err != nil {
 		return err
 	}
 
@@ -1107,6 +1125,9 @@ func (s *TicketService) LinkConfigurationItems(ctx context.Context, id uuid.UUID
 		return Ticket{}, err
 	}
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident resolution"); err != nil {
 		return Ticket{}, err
 	}
 
@@ -1245,6 +1266,9 @@ func (s *TicketService) CloseTicket(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident closure"); err != nil {
 		return err
 	}
 
@@ -1756,6 +1780,10 @@ func (s *TicketService) BulkUpdateTickets(ctx context.Context, ids []uuid.UUID, 
 
 	if len(fields) == 0 {
 		return 0, 0, apperrors.BadRequest("fields must not be empty")
+	}
+
+	if err := ensureIncidentManagementResponsibility(auth, "bulk incident workflow operation"); err != nil {
+		return 0, 0, err
 	}
 
 	// Validate all field names upfront before touching the database.

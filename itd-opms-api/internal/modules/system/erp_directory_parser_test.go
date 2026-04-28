@@ -148,6 +148,43 @@ func TestProblemManagementRoleForERPAssignment(t *testing.T) {
 	}
 }
 
+func TestIncidentManagementRolesForERPAssignment(t *testing.T) {
+	cases := []struct {
+		name string
+		rec  erpEmployeeRecord
+		want []string
+	}{
+		{
+			name: "service desk specialist job",
+			rec:  erpEmployeeRecord{JobName: "Service Desk Specialist"},
+			want: []string{"service_desk_specialist"},
+		},
+		{
+			name: "user support help desk maps service desk and first line",
+			rec:  erpEmployeeRecord{JobName: "Officer", OfficeName: "User Support Help Desk"},
+			want: []string{"service_desk_specialist", "end_user_support_specialist"},
+		},
+		{
+			name: "application management maps second level",
+			rec:  erpEmployeeRecord{JobName: "Technical Officer", DivisionName: "Application Management Division"},
+			want: []string{"second_level_support_specialist"},
+		},
+		{
+			name: "procurement ignored",
+			rec:  erpEmployeeRecord{JobName: "Procurement Officer", DivisionName: "Procurement Support Services"},
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := incidentManagementRolesForERPAssignment(tc.rec)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("incidentManagementRolesForERPAssignment() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseERPDirectoryDump_FromEnv(t *testing.T) {
 	path := os.Getenv("ERP_DIRECTORY_DUMP_PATH")
 	if path == "" {

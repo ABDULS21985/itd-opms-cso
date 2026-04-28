@@ -292,6 +292,9 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	roleEligible := map[string]struct{}{}
 	serviceDeskAnalysts := map[string]struct{}{}
 	seniorServiceDeskAnalysts := map[string]struct{}{}
+	serviceDeskSpecialists := map[string]struct{}{}
+	endUserSupportSpecialists := map[string]struct{}{}
+	secondLevelSupportSpecialists := map[string]struct{}{}
 	itServiceCenterSpecialists := map[string]struct{}{}
 	seniorITServiceCenterSpecialists := map[string]struct{}{}
 	itServiceSupportSpecialists := map[string]struct{}{}
@@ -320,6 +323,16 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 				seniorServiceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
 			case "service_desk_analyst":
 				serviceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
+			}
+			for _, role := range incidentManagementRolesForERPAssignment(rec) {
+				switch role {
+				case "service_desk_specialist":
+					serviceDeskSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "end_user_support_specialist":
+					endUserSupportSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "second_level_support_specialist":
+					secondLevelSupportSpecialists[rec.EmployeeNumber] = struct{}{}
+				}
 			}
 			switch problemManagementRoleForERPAssignment(rec) {
 			case "senior_it_service_center_specialist":
@@ -450,6 +463,9 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.ElevatedAdmins = countKnownEmployees(elevated, employeeIDs)
 	stats.ServiceDeskAnalysts = countKnownEmployees(serviceDeskAnalysts, employeeIDs)
 	stats.SeniorServiceDeskAnalysts = countKnownEmployees(seniorServiceDeskAnalysts, employeeIDs)
+	stats.ServiceDeskSpecialists = countKnownEmployees(serviceDeskSpecialists, employeeIDs)
+	stats.EndUserSupportSpecialists = countKnownEmployees(endUserSupportSpecialists, employeeIDs)
+	stats.SecondLevelSupportSpecialists = countKnownEmployees(secondLevelSupportSpecialists, employeeIDs)
 	stats.ITServiceCenterSpecialists = countKnownEmployees(itServiceCenterSpecialists, employeeIDs)
 	stats.SeniorITServiceCenterSpecialists = countKnownEmployees(seniorITServiceCenterSpecialists, employeeIDs)
 	stats.ITServiceSupportSpecialists = countKnownEmployees(itServiceSupportSpecialists, employeeIDs)
@@ -474,6 +490,9 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 		RoleEligible:                     roleEligible,
 		ServiceDeskAnalysts:              serviceDeskAnalysts,
 		SeniorServiceDeskAnalysts:        seniorServiceDeskAnalysts,
+		ServiceDeskSpecialists:           serviceDeskSpecialists,
+		EndUserSupportSpecialists:        endUserSupportSpecialists,
+		SecondLevelSupportSpecialists:    secondLevelSupportSpecialists,
 		ITServiceCenterSpecialists:       itServiceCenterSpecialists,
 		SeniorITServiceCenterSpecialists: seniorITServiceCenterSpecialists,
 		ITServiceSupportSpecialists:      itServiceSupportSpecialists,
@@ -673,6 +692,49 @@ func serviceDeskRoleForERPAssignment(rec erpEmployeeRecord) string {
 		return "senior_service_desk_analyst"
 	}
 	return "service_desk_analyst"
+}
+
+func incidentManagementRolesForERPAssignment(rec erpEmployeeRecord) []string {
+	job := normalizeERPMatchText(rec.JobName)
+	org := normalizeERPMatchText(strings.Join([]string{rec.DepartmentName, rec.DivisionName, rec.OfficeName}, " "))
+	if job == "" && org == "" {
+		return nil
+	}
+
+	roles := make([]string, 0, 3)
+	if strings.Contains(job, "SERVICE DESK SPECIALIST") ||
+		strings.Contains(job, "SERVICE DESK") ||
+		strings.Contains(job, "HELP DESK") ||
+		strings.Contains(org, "SERVICE DESK") ||
+		strings.Contains(org, "USER SUPPORT HELP DESK") ||
+		(strings.Contains(org, "HELP DESK") && (strings.Contains(org, "IT") || strings.Contains(org, "USER SUPPORT"))) {
+		roles = append(roles, "service_desk_specialist")
+	}
+	if strings.Contains(job, "END USER SUPPORT") ||
+		strings.Contains(job, "USER SUPPORT") ||
+		strings.Contains(job, "DESKTOP SUPPORT") ||
+		strings.Contains(org, "END USER SUPPORT") ||
+		strings.Contains(org, "USER SUPPORT HELP DESK") ||
+		strings.Contains(org, "BRANCH IT SUPPORT") ||
+		strings.Contains(org, "IT SERVICE SUPPORT") {
+		roles = append(roles, "end_user_support_specialist")
+	}
+	if strings.Contains(job, "SECOND LEVEL") ||
+		strings.Contains(job, "SPECIALIST SUPPORT") ||
+		strings.Contains(org, "APPLICATION MANAGEMENT") ||
+		strings.Contains(org, "INFRASTRUCTURE OPERATIONS") ||
+		strings.Contains(org, "INFORMATION SECURITY") ||
+		strings.Contains(org, "NETWORK") ||
+		strings.Contains(org, "DATABASE") ||
+		strings.Contains(org, "SYSTEM") ||
+		strings.Contains(org, "IT SERVICE CENTRE") ||
+		strings.Contains(org, "IT SERVICE CENTER") ||
+		strings.Contains(org, "IOMD") ||
+		strings.Contains(org, "ISMD") ||
+		strings.Contains(org, "AMD") {
+		roles = append(roles, "second_level_support_specialist")
+	}
+	return roles
 }
 
 func problemManagementRoleForERPAssignment(rec erpEmployeeRecord) string {

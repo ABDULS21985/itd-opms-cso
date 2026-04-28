@@ -86,3 +86,34 @@ func TestEnsureProblemDetectionResponsibilityAllowsServiceDesk(t *testing.T) {
 		t.Fatal("expected service desk analyst without problem role to be denied for lifecycle ownership")
 	}
 }
+
+func TestEnsureIncidentManagementResponsibility(t *testing.T) {
+	base := &types.AuthContext{
+		UserID:      uuid.New(),
+		TenantID:    uuid.New(),
+		Permissions: []string{"itsm.manage"},
+		IssuedAt:    time.Now(),
+	}
+
+	if err := ensureIncidentManagementResponsibility(base, "transition incident"); err == nil {
+		t.Fatal("expected generic itsm.manage user without incident role to be denied")
+	}
+
+	allowedRoles := []string{
+		ServiceDeskSpecialistRole,
+		ServiceDeskAnalystRole,
+		LegacyServiceDeskAgentRole,
+		ITServiceCenterSpecialistRole,
+		SeniorITServiceCenterSpecialistRole,
+		ITServiceSupportSpecialistRole,
+		EndUserSupportSpecialistRole,
+		SecondLevelSupportSpecialistRole,
+	}
+	for _, role := range allowedRoles {
+		auth := *base
+		auth.Roles = []string{role}
+		if err := ensureIncidentManagementResponsibility(&auth, "transition incident"); err != nil {
+			t.Fatalf("expected %s to be allowed for incident workflow: %v", role, err)
+		}
+	}
+}

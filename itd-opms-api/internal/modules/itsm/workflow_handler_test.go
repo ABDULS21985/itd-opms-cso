@@ -64,6 +64,51 @@ func TestWorkflowTransitions_Ticket(t *testing.T) {
 	}
 }
 
+func TestWorkflowTransitions_TicketExposeIncidentBRDRoles(t *testing.T) {
+	classify, ok := workflowTransitionsForEntity("ticket", TicketStatusLogged)
+	if !ok {
+		t.Fatal("ticket workflow not found")
+	}
+	for _, tr := range classify.Transitions {
+		if tr.Value == TicketStatusClassified {
+			if tr.ResponsibleRole != ServiceDeskSpecialistRole {
+				t.Fatalf("classified responsible role = %q, want %q", tr.ResponsibleRole, ServiceDeskSpecialistRole)
+			}
+			if tr.AccountableRole != SeniorITServiceCenterSpecialistRole {
+				t.Fatalf("classified accountable role = %q, want %q", tr.AccountableRole, SeniorITServiceCenterSpecialistRole)
+			}
+			if len(tr.Checklist) == 0 {
+				t.Fatal("classified transition should expose BRD checklist")
+			}
+			break
+		}
+	}
+
+	inProgress, ok := workflowTransitionsForEntity("ticket", TicketStatusInProgress)
+	if !ok {
+		t.Fatal("ticket workflow not found")
+	}
+	gotVendor := false
+	gotResolved := false
+	for _, tr := range inProgress.Transitions {
+		switch tr.Value {
+		case TicketStatusPendingVendor:
+			gotVendor = true
+			if tr.ResponsibleRole != SecondLevelSupportSpecialistRole {
+				t.Fatalf("pending vendor responsible role = %q, want %q", tr.ResponsibleRole, SecondLevelSupportSpecialistRole)
+			}
+		case TicketStatusResolved:
+			gotResolved = true
+			if tr.ResponsibleRole != ServiceDeskSpecialistRole {
+				t.Fatalf("resolved responsible role = %q, want %q", tr.ResponsibleRole, ServiceDeskSpecialistRole)
+			}
+		}
+	}
+	if !gotVendor || !gotResolved {
+		t.Fatalf("missing incident transitions from in_progress: pendingVendor=%v resolved=%v", gotVendor, gotResolved)
+	}
+}
+
 func TestWorkflowTransitions_RejectsUnknownEntity(t *testing.T) {
 	w, req := workflowTestRequest("unknown", "open")
 	NewWorkflowHandler().GetAllowedTransitions(w, req)

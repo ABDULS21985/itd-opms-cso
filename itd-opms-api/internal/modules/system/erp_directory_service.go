@@ -550,6 +550,27 @@ func (s *ERPDirectoryService) applyRoleBindings(ctx context.Context, tx pgx.Tx, 
 			}
 			added += n
 		}
+		if _, ok := prepared.ServiceDeskSpecialists[rec.EmployeeNumber]; ok {
+			n, err = insertRoleBindingByName(ctx, tx, tenantID, userID, "service_desk_specialist", "unit", &scopeID, grantedBy)
+			if err != nil {
+				return added, err
+			}
+			added += n
+		}
+		if _, ok := prepared.EndUserSupportSpecialists[rec.EmployeeNumber]; ok {
+			n, err = insertRoleBindingByName(ctx, tx, tenantID, userID, "end_user_support_specialist", "unit", &scopeID, grantedBy)
+			if err != nil {
+				return added, err
+			}
+			added += n
+		}
+		if _, ok := prepared.SecondLevelSupportSpecialists[rec.EmployeeNumber]; ok {
+			n, err = insertRoleBindingByName(ctx, tx, tenantID, userID, "second_level_support_specialist", "unit", &scopeID, grantedBy)
+			if err != nil {
+				return added, err
+			}
+			added += n
+		}
 		if _, ok := prepared.SeniorITServiceCenterSpecialists[rec.EmployeeNumber]; ok {
 			n, err = insertRoleBindingByName(ctx, tx, tenantID, userID, "senior_it_service_center_specialist", "unit", &scopeID, grantedBy)
 			if err != nil {

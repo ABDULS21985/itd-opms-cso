@@ -205,6 +205,9 @@ export interface ERPDirectoryImportPreview {
   elevatedAdmins: number;
   serviceDeskAnalysts?: number;
   seniorServiceDeskAnalysts?: number;
+  serviceDeskSpecialists?: number;
+  endUserSupportSpecialists?: number;
+  secondLevelSupportSpecialists?: number;
   itServiceCenterSpecialists?: number;
   seniorItServiceCenterSpecialists?: number;
   itServiceSupportSpecialists?: number;

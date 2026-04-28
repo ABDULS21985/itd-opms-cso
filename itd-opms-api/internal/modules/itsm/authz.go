@@ -10,9 +10,13 @@ import (
 const (
 	ServiceDeskAnalystRole              = "service_desk_analyst"
 	SeniorServiceDeskAnalystRole        = "senior_service_desk_analyst"
+	ServiceDeskSpecialistRole           = "service_desk_specialist"
 	ITServiceCenterSpecialistRole       = "it_service_center_specialist"
 	SeniorITServiceCenterSpecialistRole = "senior_it_service_center_specialist"
 	ITServiceSupportSpecialistRole      = "it_service_support_specialist"
+	EndUserSupportSpecialistRole        = "end_user_support_specialist"
+	SecondLevelSupportSpecialistRole    = "second_level_support_specialist"
+	LegacyServiceDeskAgentRole          = "service_desk_agent"
 )
 
 func isITSMPrivileged(auth *types.AuthContext) bool {
@@ -30,7 +34,10 @@ func hasServiceDeskResponsibility(auth *types.AuthContext) bool {
 	if auth == nil {
 		return false
 	}
-	return auth.HasRole(ServiceDeskAnalystRole) || auth.HasRole(SeniorServiceDeskAnalystRole)
+	return auth.HasRole(ServiceDeskAnalystRole) ||
+		auth.HasRole(SeniorServiceDeskAnalystRole) ||
+		auth.HasRole(ServiceDeskSpecialistRole) ||
+		auth.HasRole(LegacyServiceDeskAgentRole)
 }
 
 func hasSeniorServiceDeskAccountability(auth *types.AuthContext) bool {
@@ -53,6 +60,21 @@ func hasProblemManagementResponsibility(auth *types.AuthContext) bool {
 	return auth.HasRole(ITServiceCenterSpecialistRole) ||
 		auth.HasRole(SeniorITServiceCenterSpecialistRole) ||
 		auth.HasRole(ITServiceSupportSpecialistRole)
+}
+
+func hasIncidentManagementResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return hasServiceDeskResponsibility(auth) ||
+		auth.HasRole(ITServiceCenterSpecialistRole) ||
+		auth.HasRole(SeniorITServiceCenterSpecialistRole) ||
+		auth.HasRole(ITServiceSupportSpecialistRole) ||
+		auth.HasRole(EndUserSupportSpecialistRole) ||
+		auth.HasRole(SecondLevelSupportSpecialistRole)
 }
 
 func hasProblemDetectionResponsibility(auth *types.AuthContext) bool {
@@ -80,6 +102,13 @@ func ensureProblemManagementResponsibility(auth *types.AuthContext, action strin
 		return nil
 	}
 	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, or %s role", action, ITServiceCenterSpecialistRole, ITServiceSupportSpecialistRole, SeniorITServiceCenterSpecialistRole))
+}
+
+func ensureIncidentManagementResponsibility(auth *types.AuthContext, action string) error {
+	if hasIncidentManagementResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires an Incident Management responsibility role", action))
 }
 
 func ensureProblemDetectionResponsibility(auth *types.AuthContext, action string) error {

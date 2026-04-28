@@ -252,7 +252,14 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
       return fulfill(route, {
         entity: "ticket",
         status: url.searchParams.get("status"),
-        transitions: [{ value: "pending_customer", label: "Waiting on customer" }],
+        transitions: [
+          {
+            value: "pending_customer",
+            label: "Pending Customer",
+            responsibleRole: "service_desk_specialist",
+            accountableRole: "senior_it_service_center_specialist",
+          },
+        ],
       });
     }
     if (path === "/itsm/tickets/ticket-1/transition" && method === "POST") {
@@ -439,6 +446,8 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
     await expect(page.getByRole("button", { name: "Pending Customer", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Resolve", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/R: Service Desk Specialist/).first()).toBeVisible();
+    await expect(page.getByText(/A: Senior IT Service Center Specialist/).first()).toBeVisible();
 
     await page.getByRole("button", { name: "Pending Customer", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Pending Customer" })).toBeVisible();

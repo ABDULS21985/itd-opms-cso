@@ -414,31 +414,100 @@ type transitionUXMetadata struct {
 
 func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 	switch entity + ":" + target {
+	case "ticket:" + workflow.TicketClassified:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			RequiredFields:  []string{"category", "impact", "urgency", "priority", "description"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "request_checked", Label: "Issue checked against Request Fulfillment criteria", Required: true},
+				{Key: "incident_record_complete", Label: "Unique reference, requester, description, and activity notes recorded", Required: true},
+				{Key: "priority_matrix_applied", Label: "Impact and urgency assessed to derive priority", Required: true},
+				{Key: "known_errors_checked", Label: "Known errors, related problems, and validated workarounds reviewed", Required: false},
+			},
+			SLAImpact:     "Response SLA continues while the incident is categorized and prioritized.",
+			DecisionTrail: []string{"service_desk_specialist", "request_check", "category", "impact", "urgency", "priority"},
+		}
+	case "ticket:" + workflow.TicketAssigned:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "support_group_selected", Label: "Appropriate technical support group or resolver queue selected", Required: true},
+				{Key: "critical_priority_checked", Label: "Critical priority checked for Major Incident Handling Procedure", Required: true},
+				{Key: "management_escalation_noted", Label: "Management escalation noted when resolution needs authorization or is taking too long", Required: false},
+			},
+			SLAImpact:     "First response is recorded on first assignment.",
+			DecisionTrail: []string{"service_desk_specialist", "team_queue", "assignee", "first_response_at"},
+		}
+	case "ticket:" + workflow.TicketInProgress:
+		return transitionUXMetadata{
+			ResponsibleRole: EndUserSupportSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "initial_diagnosis", Label: "Initial diagnosis and troubleshooting started", Required: true},
+				{Key: "change_need_checked", Label: "Change Management need assessed", Required: true},
+				{Key: "problem_need_checked", Label: "Problem Management need assessed for recurring or unknown root cause", Required: false},
+				{Key: "actions_recorded", Label: "Investigation actions and results are recorded", Required: true},
+			},
+			SLAImpact:     "Resolution SLA remains active while diagnosis and recovery work are in progress.",
+			DecisionTrail: []string{"service_desk_specialist", "end_user_support_specialist", "diagnosis", "actions_taken"},
+		}
+	case "ticket:" + workflow.TicketPendingCustomer:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "customer_information_requested", Label: "Customer information, confirmation, or satisfaction response requested", Required: true},
+				{Key: "next_contact_due", Label: "Next customer follow-up point recorded", Required: false},
+			},
+			SLAImpact:     "SLA clock pauses while waiting for customer response.",
+			DecisionTrail: []string{"service_desk_specialist", "customer_request", "follow_up_due"},
+		}
+	case "ticket:" + workflow.TicketPendingVendor:
+		return transitionUXMetadata{
+			ResponsibleRole: SecondLevelSupportSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "third_party_identified", Label: "3rd party or vendor escalation owner identified", Required: true},
+				{Key: "diagnostics_shared", Label: "Diagnostic evidence and impact summary shared", Required: true},
+				{Key: "monitoring_plan", Label: "Monitoring plan until resolution recorded", Required: true},
+			},
+			SLAImpact:     "SLA clock pauses while waiting for vendor or 3rd party action.",
+			DecisionTrail: []string{"second_level_support_specialist", "third_party", "diagnostic_evidence", "monitoring_plan"},
+		}
 	case "ticket:" + workflow.TicketResolved:
 		return transitionUXMetadata{
-			RequiredFields: []string{"resolution_notes"},
+			ResponsibleRole: ServiceDeskSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			RequiredFields:  []string{"resolution_notes"},
 			Checklist: []ITSMWorkflowChecklistItem{
-				{Key: "customer_impact_confirmed", Label: "Customer impact has been confirmed", Required: true},
-				{Key: "resolution_notes", Label: "Resolution notes are complete", Required: true},
-				{Key: "knowledge_reviewed", Label: "KB article linked or not applicable reason captured", Required: true},
-				{Key: "ci_reviewed", Label: "Related CI/asset reviewed for infrastructure incidents", Required: false},
+				{Key: "service_recovery_done", Label: "Resolution or workaround executed within agreed service level", Required: true},
+				{Key: "resolution_activity_documented", Label: "Resolution and recovery activity documented in the incident record", Required: true},
+				{Key: "customer_notified", Label: "Customer informed of incident resolution", Required: true},
+				{Key: "knowledge_reviewed", Label: "Knowledge base updated with correct resolution where applicable", Required: false},
 			},
 			SLAImpact:     "Resolution SLA stops when the ticket is resolved.",
-			DecisionTrail: []string{"resolver", "resolution_notes", "resolved_at"},
+			DecisionTrail: []string{"service_desk_specialist", "resolver", "resolution_notes", "resolved_at"},
 		}
 	case "ticket:" + workflow.TicketClosed:
 		return transitionUXMetadata{
+			ResponsibleRole: "affected_staff",
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
 			Checklist: []ITSMWorkflowChecklistItem{
-				{Key: "customer_notified", Label: "Customer has been notified", Required: true},
-				{Key: "closure_quality", Label: "Closure details reviewed", Required: true},
+				{Key: "customer_satisfaction_confirmed", Label: "Customer satisfaction with resolution confirmed", Required: true},
+				{Key: "closure_time_recorded", Label: "Date, time, resolver, and time spent recorded", Required: true},
+				{Key: "classification_quality", Label: "Classification complete and accurate according to root cause", Required: true},
 			},
 			SLAImpact:     "Closure locks the ticket lifecycle and finalizes reporting metrics.",
-			DecisionTrail: []string{"closer", "closed_at"},
+			DecisionTrail: []string{"affected_staff", "service_desk_specialist", "closed_at", "satisfaction"},
 		}
-	case "ticket:" + workflow.TicketPendingCustomer:
-		return transitionUXMetadata{SLAImpact: "SLA clock pauses while waiting for customer response."}
-	case "ticket:" + workflow.TicketPendingVendor:
-		return transitionUXMetadata{SLAImpact: "SLA clock pauses while waiting for vendor action."}
+	case "ticket:" + workflow.TicketCancelled:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskSpecialistRole,
+			AccountableRole: SeniorITServiceCenterSpecialistRole,
+			DecisionTrail:   []string{"service_desk_specialist", "cancel_reason", "cancelled_at"},
+		}
 	case "problem:" + workflow.ProblemInvestigating:
 		return transitionUXMetadata{
 			ResponsibleRole: ITServiceCenterSpecialistRole,
