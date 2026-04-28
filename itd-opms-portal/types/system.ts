@@ -179,6 +179,80 @@ export interface OrgGrowthPoint {
   cumulative: number;
 }
 
+export interface ERPDirectoryImportRequest {
+  sourcePath: string;
+  deactivateUnmatched?: boolean;
+}
+
+export interface ERPDirectoryImportPreview {
+  sourcePath: string;
+  sourceChecksum: string;
+  totalRows: number;
+  parseErrors: number;
+  employeesTotal: number;
+  activeEmployees: number;
+  inactiveEmployees: number;
+  missingEmails: number;
+  invalidEmails: number;
+  duplicateEmails: number;
+  placeholderEmails: number;
+  loginEligibleEmployees: number;
+  departments: number;
+  divisions: number;
+  offices: number;
+  supervisors: number;
+  headsOfDivision: number;
+  elevatedAdmins: number;
+  warnings: string[];
+  samples: ERPDirectoryPreviewUser[];
+}
+
+export interface ERPDirectoryPreviewUser {
+  employeeNumber: string;
+  displayName: string;
+  email: string;
+  emailQuality: string;
+  jobTitle: string;
+  status: string;
+  department: string;
+  division: string;
+  office: string;
+  isActive: boolean;
+  isElevated: boolean;
+}
+
+export interface ERPDirectoryImportResult {
+  runId: string;
+  preview: ERPDirectoryImportPreview;
+  usersCreated: number;
+  usersUpdated: number;
+  usersDeactivated: number;
+  orgUnitsUpserted: number;
+  roleBindingsAdded: number;
+  completedAt: string;
+}
+
+export interface ERPDirectoryImportRun {
+  id: string;
+  tenantId: string;
+  sourcePath: string;
+  sourceChecksum: string;
+  status: string;
+  mode: string;
+  startedAt: string;
+  completedAt?: string;
+  triggeredBy?: string;
+  totalRows: number;
+  usersCreated: number;
+  usersUpdated: number;
+  usersDeactivated: number;
+  usersInactive: number;
+  orgUnitsUpserted: number;
+  roleBindingsAdded: number;
+  warningsCount: number;
+  errorsCount: number;
+}
+
 export interface SystemSetting {
   id: string;
   tenantId?: string;

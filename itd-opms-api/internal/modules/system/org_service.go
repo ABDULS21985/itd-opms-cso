@@ -88,7 +88,7 @@ func (s *OrgService) ListOrgUnits(ctx context.Context, tenantID uuid.UUID, page,
 		       o.manager_user_id, COALESCE(m.display_name, '') AS manager_name,
 		       o.is_active, o.metadata, o.created_at, o.updated_at,
 		       (SELECT COUNT(*) FROM org_units c WHERE c.parent_id = o.id) AS child_count,
-		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.org_unit_id = o.id AND u.is_active = true) AS user_count
 		FROM org_units o
 		LEFT JOIN org_units p ON p.id = o.parent_id
 		LEFT JOIN users m ON m.id = o.manager_user_id
@@ -124,7 +124,7 @@ func (s *OrgService) GetOrgUnit(ctx context.Context, tenantID, orgUnitID uuid.UU
 		       o.manager_user_id, COALESCE(m.display_name, '') AS manager_name,
 		       o.is_active, o.metadata, o.created_at, o.updated_at,
 		       (SELECT COUNT(*) FROM org_units c WHERE c.parent_id = o.id) AS child_count,
-		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.org_unit_id = o.id AND u.is_active = true) AS user_count
 		FROM org_units o
 		LEFT JOIN org_units p ON p.id = o.parent_id
 		LEFT JOIN users m ON m.id = o.manager_user_id
@@ -146,7 +146,7 @@ func (s *OrgService) GetOrgTree(ctx context.Context, tenantID uuid.UUID) ([]OrgT
 	rows, err := s.pool.Query(ctx, `
 		SELECT o.id, o.name, o.code, o.level::text, o.parent_id,
 		       COALESCE(m.display_name, '') AS manager_name,
-		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.department = o.name AND u.is_active = true) AS user_count
+		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = o.tenant_id AND u.org_unit_id = o.id AND u.is_active = true) AS user_count
 		FROM org_units o
 		LEFT JOIN users m ON m.id = o.manager_user_id
 		WHERE o.tenant_id = $1 AND o.is_active = true
@@ -481,26 +481,25 @@ func (s *OrgService) DeleteOrgUnit(ctx context.Context, tenantID, orgUnitID uuid
 	return nil
 }
 
-// GetOrgUnitUsers returns active users assigned to a specific org unit (matched by department name).
+// GetOrgUnitUsers returns active users directly assigned to a specific org unit.
 func (s *OrgService) GetOrgUnitUsers(ctx context.Context, tenantID, orgUnitID uuid.UUID) ([]UserSearchResult, error) {
-	// Get org unit name for matching.
-	var orgUnitName string
-	err := s.pool.QueryRow(ctx, "SELECT name FROM org_units WHERE id = $1 AND tenant_id = $2", orgUnitID, tenantID).Scan(&orgUnitName)
+	var exists bool
+	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM org_units WHERE id = $1 AND tenant_id = $2)", orgUnitID, tenantID).Scan(&exists)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, apperrors.NotFound("org_unit", orgUnitID.String())
-		}
-		return nil, fmt.Errorf("get org unit name: %w", err)
+		return nil, fmt.Errorf("check org unit: %w", err)
+	}
+	if !exists {
+		return nil, apperrors.NotFound("org_unit", orgUnitID.String())
 	}
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT u.id, u.display_name, u.email, u.photo_url, u.department, u.is_active
 		FROM users u
 		WHERE u.tenant_id = $1
-		  AND u.department = $2
+		  AND u.org_unit_id = $2
 		  AND u.is_active = true
 		ORDER BY u.display_name ASC`,
-		tenantID, orgUnitName)
+		tenantID, orgUnitID)
 	if err != nil {
 		return nil, fmt.Errorf("get org unit users: %w", err)
 	}
@@ -537,7 +536,7 @@ func (s *OrgService) GetOrgAnalytics(ctx context.Context, tenantID uuid.UUID) (*
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE is_active = true) AS active,
 			COUNT(*) FILTER (WHERE is_active = false) AS inactive,
-			COALESCE(SUM(CASE WHEN is_active THEN (SELECT COUNT(*) FROM users u WHERE u.department = o.name AND u.tenant_id = o.tenant_id AND u.is_active = true) ELSE 0 END), 0) AS headcount
+			COALESCE(SUM(CASE WHEN is_active THEN (SELECT COUNT(*) FROM users u WHERE u.org_unit_id = o.id AND u.tenant_id = o.tenant_id AND u.is_active = true) ELSE 0 END), 0) AS headcount
 		FROM org_units o
 		WHERE o.tenant_id = $1
 	`, tenantID).Scan(&resp.TotalUnits, &resp.ActiveUnits, &resp.InactiveUnits, &resp.TotalHeadcount)
@@ -587,7 +586,7 @@ func (s *OrgService) GetOrgAnalytics(ctx context.Context, tenantID uuid.UUID) (*
 	// 5. Headcount by level
 	rows, err := s.pool.Query(ctx, `
 		SELECT o.level::text,
-			COALESCE(SUM((SELECT COUNT(*) FROM users u WHERE u.department = o.name AND u.tenant_id = o.tenant_id AND u.is_active = true)), 0) AS headcount,
+			COALESCE(SUM((SELECT COUNT(*) FROM users u WHERE u.org_unit_id = o.id AND u.tenant_id = o.tenant_id AND u.is_active = true)), 0) AS headcount,
 			COUNT(*) AS unit_count
 		FROM org_units o
 		WHERE o.tenant_id = $1 AND o.is_active = true

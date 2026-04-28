@@ -32,6 +32,7 @@ type Handler struct {
 	webhook   *WebhookHandler
 	receiver  *WebhookReceiverHandler
 	reference *ReferenceHandler
+	erpDir    *ERPDirectoryHandler
 
 	// Maintenance exposes the background worker for lifecycle management.
 	Maintenance *MaintenanceWorker
@@ -65,6 +66,7 @@ func NewHandler(
 	webhookSvc := NewWebhookService(pool, auditSvc)
 	webhookReceiver := NewWebhookReceiverHandler(pool, auditSvc, webhookSvc, js)
 	referenceSvc := NewReferenceService(pool, auditSvc)
+	erpDirSvc := NewERPDirectoryService(pool, auditSvc)
 
 	return &Handler{
 		user:            NewUserHandler(userSvc),
@@ -79,6 +81,7 @@ func NewHandler(
 		webhook:         NewWebhookHandler(webhookSvc, webhookReceiver),
 		receiver:        webhookReceiver,
 		reference:       NewReferenceHandler(referenceSvc),
+		erpDir:          NewERPDirectoryHandler(erpDirSvc),
 		Maintenance:     NewMaintenanceWorker(pool),
 		licenseEnforcer: licenseEnforcer,
 		siemExporter:    siemExporter,
@@ -128,6 +131,9 @@ func (h *Handler) Routes(r chi.Router) {
 
 		// Org unit management (FR-A020)
 		r.Route("/org-units", func(r chi.Router) { h.org.Routes(r) })
+
+		// ERP directory reset/import for CBN-wide organigram and users
+		r.Route("/erp-directory", func(r chi.Router) { h.erpDir.Routes(r) })
 
 		// Session management (SR-002, SR-003)
 		r.Route("/sessions", func(r chi.Router) { h.session.Routes(r) })
