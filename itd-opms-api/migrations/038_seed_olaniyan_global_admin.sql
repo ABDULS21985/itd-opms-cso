@@ -17,7 +17,7 @@ VALUES (
   '+2348129021084',
   '00000000-0000-0000-0000-000000000001',
   true,
-  '$2a$10$QzDvHdpCvQOZf.ML5TRoteyA5rZpTw4XwxfIqOIkQSd0KGGHx48r2',
+  '$2a$10$4SmiZO2ffsRaDefbLF5nkOX6dJtbGjF9tBvHSJrEL/m4299ztEWzS',
   '{"work_phone": "15173", "business_address": "Abuja"}'::jsonb
 );
 

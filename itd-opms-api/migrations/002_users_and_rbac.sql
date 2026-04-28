@@ -165,7 +165,7 @@ INSERT INTO roles (id, name, description, permissions, is_system) VALUES
 
 -- ──────────────────────────────────────────────
 -- Seed: Dev admin user (dev-mode only)
--- Password: "admin123" bcrypt hash
+-- Password: "Secured$3211" bcrypt hash
 -- ──────────────────────────────────────────────
 INSERT INTO users (id, email, display_name, job_title, department, tenant_id, is_active, password_hash) VALUES
 (
@@ -176,7 +176,7 @@ INSERT INTO users (id, email, display_name, job_title, department, tenant_id, is
     'Information Technology',
     '00000000-0000-0000-0000-000000000001',
     true,
-    '$2a$10$25lLTNSLitmXoxckd4dfNOp39C8lnGOK3FkU/C9sMjJBtOOmXvrpS'
+    '$2a$10$4SmiZO2ffsRaDefbLF5nkOX6dJtbGjF9tBvHSJrEL/m4299ztEWzS'
 );
 
 -- Bind admin to global_admin role

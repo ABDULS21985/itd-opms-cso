@@ -14,6 +14,7 @@ import {
   UserPlus,
   Users,
   XCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -79,7 +80,7 @@ function MetricCard({
 }: {
   label: string;
   value: number | string;
-  icon: typeof Users;
+  icon: LucideIcon;
   tone: string;
 }) {
   return (

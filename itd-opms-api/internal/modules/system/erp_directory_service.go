@@ -112,7 +112,7 @@ func (s *ERPDirectoryService) Apply(ctx context.Context, tenantID uuid.UUID, req
 		deactivateUnmatched = *req.DeactivateUnmatched
 	}
 	if deactivateUnmatched {
-		deactivated, err := s.deactivateUnmatchedUsers(ctx, tx, tenantID, actualEmployeeIDs)
+		deactivated, err := s.deactivateUnmatchedUsers(ctx, tx, tenantID, actualEmployeeIDs, auth.UserID)
 		if err != nil {
 			s.failRun(ctx, runID, err)
 			return nil, err
@@ -427,20 +427,34 @@ func (s *ERPDirectoryService) applyOrgManagers(ctx context.Context, tx pgx.Tx, t
 	return nil
 }
 
-func (s *ERPDirectoryService) deactivateUnmatchedUsers(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, employeeIDs map[string]uuid.UUID) (int, error) {
+func (s *ERPDirectoryService) deactivateUnmatchedUsers(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, employeeIDs map[string]uuid.UUID, actorID uuid.UUID) (int, error) {
 	ids := make([]uuid.UUID, 0, len(employeeIDs))
 	for _, id := range employeeIDs {
 		ids = append(ids, id)
 	}
+	protectedEmails := []string{"admin@itd.cbn.gov.ng"}
 	tag, err := tx.Exec(ctx, `
-		UPDATE users SET
+		UPDATE users u SET
 			is_active = false,
 			updated_at = NOW(),
 			metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('expunged_by_erp_import_at', NOW())
-		WHERE tenant_id = $1
-		  AND id <> ALL($2::uuid[])
-		  AND is_active = true`,
-		tenantID, ids,
+		WHERE u.tenant_id = $1
+		  AND u.id <> ALL($2::uuid[])
+		  AND u.is_active = true
+		  AND NOT (
+		    u.id = $3
+		    OR lower(u.email) = ANY($4::text[])
+		    OR EXISTS (
+		      SELECT 1
+		      FROM role_bindings rb
+		      JOIN roles r ON r.id = rb.role_id
+		      WHERE rb.user_id = u.id
+		        AND rb.tenant_id = $1
+		        AND rb.is_active = true
+		        AND r.name = 'global_admin'
+		    )
+		  )`,
+		tenantID, ids, actorID, protectedEmails,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("deactivate unmatched users: %w", err)
@@ -450,9 +464,25 @@ func (s *ERPDirectoryService) deactivateUnmatchedUsers(ctx context.Context, tx p
 		WHERE tenant_id = $1
 		  AND is_active = true
 		  AND user_id IN (
-		    SELECT id FROM users WHERE tenant_id = $1 AND id <> ALL($2::uuid[])
+		    SELECT u.id
+		    FROM users u
+		    WHERE u.tenant_id = $1
+		      AND u.id <> ALL($2::uuid[])
+		      AND NOT (
+		        u.id = $3
+		        OR lower(u.email) = ANY($4::text[])
+		        OR EXISTS (
+		          SELECT 1
+		          FROM role_bindings rb
+		          JOIN roles r ON r.id = rb.role_id
+		          WHERE rb.user_id = u.id
+		            AND rb.tenant_id = $1
+		            AND rb.is_active = true
+		            AND r.name = 'global_admin'
+		        )
+		      )
 		  )`,
-		tenantID, ids,
+		tenantID, ids, actorID, protectedEmails,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("revoke roles for unmatched users: %w", err)
