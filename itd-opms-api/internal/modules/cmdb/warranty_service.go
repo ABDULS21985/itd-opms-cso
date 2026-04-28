@@ -299,7 +299,7 @@ func (s *WarrantyService) GetExpiringWarranties(ctx context.Context, days int) (
 		FROM warranties
 		WHERE tenant_id = $1
 			AND end_date > NOW()
-			AND end_date <= NOW() + ($2 || ' days')::interval
+			AND end_date <= NOW() + ($2::int * INTERVAL '1 day')
 		ORDER BY end_date ASC`
 
 	rows, err := s.pool.Query(ctx, query, auth.TenantID, days)

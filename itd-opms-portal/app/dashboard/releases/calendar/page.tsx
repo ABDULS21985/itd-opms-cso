@@ -38,10 +38,10 @@ function isSameDay(a: Date, b: Date) {
 }
 
 const TYPE_COLORS: Record<string, { bg: string; text: string; icon: typeof Package }> = {
-  major: { bg: "rgba(124, 58, 237, 0.15)", text: "#A78BFA", icon: Rocket },
-  minor: { bg: "rgba(37, 99, 235, 0.15)", text: "#60A5FA", icon: Package },
-  patch: { bg: "rgba(22, 163, 74, 0.15)", text: "#4ADE80", icon: CheckCircle2 },
-  emergency: { bg: "rgba(220, 38, 38, 0.15)", text: "#F87171", icon: Zap },
+  major:     { bg: "rgba(168, 137, 61, 0.15)", text: "#A8893D", icon: Rocket },
+  minor:     { bg: "rgba(38, 168, 217, 0.15)", text: "#1E88BC", icon: Package },
+  patch:     { bg: "rgba(22, 163, 74, 0.15)",  text: "#16A34A", icon: CheckCircle2 },
+  emergency: { bg: "rgba(220, 38, 38, 0.15)",  text: "#DC2626", icon: Zap },
 };
 
 /* ------------------------------------------------------------------ */
@@ -113,13 +113,13 @@ export default function ReleaseCalendarPage() {
         <div>
           <button
             onClick={() => router.push("/dashboard/releases")}
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors mb-2"
+            className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-2"
           >
             <ArrowLeft size={16} />
             Back to Releases
           </button>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Calendar size={24} className="text-indigo-400" />
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-3">
+            <Calendar size={24} className="text-[var(--primary)]" />
             Release Calendar
           </h1>
         </div>
@@ -128,23 +128,32 @@ export default function ReleaseCalendarPage() {
       {/* Month Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={prevMonth} className="p-2 rounded-lg border border-white/10 hover:bg-white/5 text-white/60">
+          <button
+            onClick={prevMonth}
+            className="p-2 rounded-lg border border-[var(--border)] bg-[var(--surface-0)] hover:bg-[var(--surface-1)] text-[var(--text-secondary)] transition-colors"
+          >
             <ChevronLeft size={16} />
           </button>
-          <h2 className="text-lg font-semibold text-white min-w-[200px] text-center">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] min-w-[200px] text-center">
             {formatMonthYear(currentMonth)}
           </h2>
-          <button onClick={nextMonth} className="p-2 rounded-lg border border-white/10 hover:bg-white/5 text-white/60">
+          <button
+            onClick={nextMonth}
+            className="p-2 rounded-lg border border-[var(--border)] bg-[var(--surface-0)] hover:bg-[var(--surface-1)] text-[var(--text-secondary)] transition-colors"
+          >
             <ChevronRight size={16} />
           </button>
         </div>
-        <button onClick={today} className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-white/60 hover:bg-white/5">
+        <button
+          onClick={today}
+          className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-0)] text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-1)] transition-colors"
+        >
           Today
         </button>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-5 text-xs text-white/50">
+      <div className="flex flex-wrap items-center gap-5 text-xs text-[var(--text-muted)]">
         {Object.entries(TYPE_COLORS).map(([type, meta]) => {
           const Icon = meta.icon;
           return (
@@ -158,16 +167,17 @@ export default function ReleaseCalendarPage() {
 
       {/* Calendar Grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-white/50">
+        <div className="flex items-center justify-center py-20 text-[var(--text-muted)]">
           <Loader2 className="animate-spin mr-2" size={20} />
           Loading calendar...
         </div>
       ) : (
-        <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-x-auto">
+          <div className="min-w-[700px]">
           {/* Day headers */}
-          <div className="grid grid-cols-7 text-xs text-white/40 uppercase tracking-wider">
+          <div className="grid grid-cols-7 text-xs text-[var(--text-muted)] uppercase tracking-wider">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="p-3 text-center border-b border-white/[0.06]">{d}</div>
+              <div key={d} className="p-3 text-center border-b border-[var(--border)]">{d}</div>
             ))}
           </div>
 
@@ -182,11 +192,17 @@ export default function ReleaseCalendarPage() {
               return (
                 <div
                   key={i}
-                  className={`min-h-[100px] p-2 border-b border-r border-white/[0.04] ${
-                    isCurrentMonth ? "" : "opacity-30"
+                  className={`min-h-[100px] p-2 border-b border-r border-[var(--border)] ${
+                    isCurrentMonth ? "" : "opacity-40 bg-[var(--surface-1)]"
                   }`}
                 >
-                  <div className={`text-xs mb-1 ${isToday ? "text-indigo-400 font-bold" : "text-white/40"}`}>
+                  <div
+                    className={`text-xs mb-1 ${
+                      isToday
+                        ? "text-[var(--primary)] font-bold"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                  >
                     {day.getDate()}
                   </div>
                   <div className="space-y-1">
@@ -208,12 +224,13 @@ export default function ReleaseCalendarPage() {
                       );
                     })}
                     {dayEvents.length > 3 && (
-                      <div className="text-[10px] text-white/30 pl-1">+{dayEvents.length - 3} more</div>
+                      <div className="text-[10px] text-[var(--text-muted)] pl-1">+{dayEvents.length - 3} more</div>
                     )}
                   </div>
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       )}

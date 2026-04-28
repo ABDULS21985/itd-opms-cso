@@ -93,7 +93,7 @@ func (s *CMDBService) GetQualityReport(ctx context.Context) (CMDBQualityReport, 
 	_ = s.pool.QueryRow(ctx, `
 		SELECT source, completed_at, discrepancies
 		FROM reconciliation_runs
-		WHERE tenant_id = $1 AND status = 'completed'
+		WHERE tenant_id = $1 AND completed_at IS NOT NULL
 		ORDER BY completed_at DESC NULLS LAST, started_at DESC
 		LIMIT 1`,
 		auth.TenantID,

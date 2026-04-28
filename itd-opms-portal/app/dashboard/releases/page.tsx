@@ -34,8 +34,8 @@ function formatDate(value?: string) {
 }
 
 const TYPE_ACCENT: Record<string, { color: string; bg: string }> = {
-  major:     { color: "#7C3AED", bg: "rgba(124, 58, 237, 0.10)" },
-  minor:     { color: "#2563EB", bg: "rgba(37, 99, 235, 0.10)" },
+  major:     { color: "#A8893D", bg: "rgba(168, 137, 61, 0.12)" },
+  minor:     { color: "#26A8D9", bg: "rgba(38, 168, 217, 0.12)" },
   patch:     { color: "#16A34A", bg: "rgba(22, 163, 74, 0.10)" },
   emergency: { color: "#DC2626", bg: "rgba(220, 38, 38, 0.10)" },
 };
@@ -67,7 +67,7 @@ function QuickLink({
     >
       <Link
         href={href}
-        className="block rounded-xl border border-white/[0.06] p-5 hover:bg-white/[0.02] transition-colors group"
+        className="block rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5 hover:bg-[var(--surface-1)] transition-colors group"
       >
         <div className="flex items-center justify-between mb-3">
           <div
@@ -76,10 +76,10 @@ function QuickLink({
           >
             <Icon size={20} style={{ color: accent }} />
           </div>
-          <ArrowRight size={16} className="text-white/20 group-hover:text-white/50 transition-colors" />
+          <ArrowRight size={16} className="text-[var(--neutral-gray)] group-hover:text-[var(--text-secondary)] transition-colors" />
         </div>
-        <div className="font-semibold text-white text-sm">{label}</div>
-        <p className="text-xs text-white/40 mt-1">{description}</p>
+        <div className="font-semibold text-[var(--text-primary)] text-sm">{label}</div>
+        <p className="text-xs text-[var(--text-muted)] mt-1">{description}</p>
       </Link>
     </motion.div>
   );
@@ -100,11 +100,11 @@ export default function ReleasesHubPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Package size={24} className="text-indigo-400" />
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-3">
+            <Package size={24} className="text-[var(--primary)]" />
             Release Management
           </h1>
-          <p className="text-sm text-white/50 mt-1">
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
             Plan, build, test, and deploy releases across environments
           </p>
         </div>
@@ -124,8 +124,8 @@ export default function ReleasesHubPage() {
           label="Total Releases"
           value={stats?.total}
           icon={Package}
-          color="#6366F1"
-          bgColor="rgba(99, 102, 241, 0.12)"
+          color="#1B7340"
+          bgColor="rgba(27, 115, 64, 0.12)"
           isLoading={statsLoading}
           index={0}
         />
@@ -197,30 +197,30 @@ export default function ReleasesHubPage() {
       {/* Recent Releases */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider">Recent Releases</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Recent Releases</h2>
           <Link
             href="/dashboard/releases/list"
-            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+            className="text-xs text-[var(--primary)] hover:text-[var(--color-brand-dark)] transition-colors"
           >
             View all &rarr;
           </Link>
         </div>
 
         {releasesLoading ? (
-          <div className="flex items-center justify-center py-12 text-white/50">
+          <div className="flex items-center justify-center py-12 text-[var(--text-muted)]">
             <Loader2 className="animate-spin mr-2" size={20} />
             Loading releases...
           </div>
         ) : releases.length === 0 ? (
-          <div className="text-center py-12 text-white/40">
+          <div className="text-center py-12 text-[var(--text-muted)]">
             <Package size={36} className="mx-auto mb-3 opacity-30" />
             <p>No releases yet</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-white/[0.06] overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] overflow-x-auto">
+            <table className="w-full text-sm min-w-[720px]">
               <thead>
-                <tr className="border-b border-white/[0.06] text-white/40 text-xs uppercase tracking-wider">
+                <tr className="border-b border-[var(--border)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                   <th className="text-left p-4">Release</th>
                   <th className="text-left p-4">Type</th>
                   <th className="text-left p-4">Status</th>
@@ -235,11 +235,11 @@ export default function ReleasesHubPage() {
                   return (
                     <tr
                       key={release.id}
-                      className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+                      className="border-b border-[var(--border)] hover:bg-[var(--surface-1)] transition-colors"
                     >
                       <td className="p-4">
-                        <div className="font-mono text-xs text-white/50">{release.releaseNumber}</div>
-                        <div className="text-white font-medium">{release.title}</div>
+                        <div className="font-mono text-xs text-[var(--text-muted)]">{release.releaseNumber}</div>
+                        <div className="text-[var(--text-primary)] font-medium">{release.title}</div>
                       </td>
                       <td className="p-4">
                         <span
@@ -252,12 +252,12 @@ export default function ReleasesHubPage() {
                       <td className="p-4">
                         <StatusBadge status={release.status} />
                       </td>
-                      <td className="p-4 text-white/50 capitalize">{release.environment}</td>
-                      <td className="p-4 text-white/50">{formatDate(release.plannedStartDate)}</td>
+                      <td className="p-4 text-[var(--text-secondary)] capitalize">{release.environment}</td>
+                      <td className="p-4 text-[var(--text-secondary)]">{formatDate(release.plannedStartDate)}</td>
                       <td className="p-4 text-right">
                         <Link
                           href={`/dashboard/releases/${release.id}`}
-                          className="text-white/40 hover:text-white transition-colors"
+                          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                         >
                           <ArrowRight size={16} />
                         </Link>

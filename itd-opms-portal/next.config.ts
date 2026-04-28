@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    const isDev = process.env.NODE_ENV !== "production";
+    const csp = isDev
+      ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:9000 https:; font-src 'self' data:; connect-src 'self' http://localhost:8089 http://localhost:9000 https://*.amsop.org ws://localhost:* http://localhost:*; frame-ancestors 'none'"
+      : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:9000 https:; font-src 'self' data:; connect-src 'self' http://localhost:8089 http://localhost:9000 https://*.amsop.org; frame-ancestors 'none'";
     return [
       {
         source: "/(.*)",
@@ -42,8 +46,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:9000 https:; font-src 'self' data:; connect-src 'self' http://localhost:8089 http://localhost:9000 https://*.amsop.org; frame-ancestors 'none'",
+            value: csp,
           },
         ],
       },
