@@ -1,8 +1,15 @@
 package itsm
 
 import (
+	"fmt"
+
 	apperrors "github.com/itd-cbn/itd-opms-api/internal/shared/errors"
 	"github.com/itd-cbn/itd-opms-api/internal/shared/types"
+)
+
+const (
+	ServiceDeskAnalystRole       = "service_desk_analyst"
+	SeniorServiceDeskAnalystRole = "senior_service_desk_analyst"
 )
 
 func isITSMPrivileged(auth *types.AuthContext) bool {
@@ -11,6 +18,40 @@ func isITSMPrivileged(auth *types.AuthContext) bool {
 	}
 
 	return auth.HasPermission("*") || auth.HasRole("admin") || auth.HasRole("tenant_admin")
+}
+
+func hasServiceDeskResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(ServiceDeskAnalystRole) || auth.HasRole(SeniorServiceDeskAnalystRole)
+}
+
+func hasSeniorServiceDeskAccountability(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(SeniorServiceDeskAnalystRole)
+}
+
+func ensureServiceDeskResponsibility(auth *types.AuthContext, action string) error {
+	if hasServiceDeskResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s or %s role", action, ServiceDeskAnalystRole, SeniorServiceDeskAnalystRole))
+}
+
+func ensureSeniorServiceDeskAccountability(auth *types.AuthContext, action string) error {
+	if hasSeniorServiceDeskAccountability(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s role", action, SeniorServiceDeskAnalystRole))
 }
 
 func canMutateTicket(auth *types.AuthContext, ticket Ticket) bool {

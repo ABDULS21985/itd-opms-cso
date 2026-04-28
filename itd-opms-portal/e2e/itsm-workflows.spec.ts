@@ -137,6 +137,39 @@ const majorIncident = {
   timeline: [],
 };
 
+const serviceRequestDetail = {
+  id: "request-1",
+  tenantId: "tenant-1",
+  requestNumber: "REQ-001001",
+  catalogItemId: "catalog-1",
+  requesterId: user.id,
+  status: "approved",
+  formData: { requestedFor: "Workflow smoke test" },
+  assignedTo: undefined,
+  priority: "P3_medium",
+  ticketId: undefined,
+  rejectionReason: undefined,
+  fulfillmentNotes: undefined,
+  fulfilledAt: undefined,
+  closedAt: undefined,
+  cancelledAt: undefined,
+  createdAt: now,
+  updatedAt: now,
+  catalogItemName: "Monitor Request",
+  approvalTasks: [],
+  timeline: [
+    {
+      id: "timeline-1",
+      requestId: "request-1",
+      eventType: "submitted",
+      actorId: user.id,
+      description: "Service request submitted for Monitor Request",
+      metadata: {},
+      createdAt: now,
+    },
+  ],
+};
+
 function jwtWithFutureExpiry() {
   const payload = Buffer.from(
     JSON.stringify({ sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 }),
@@ -161,6 +194,8 @@ async function fulfill(route: Route, data: unknown, status = 200) {
 }
 
 async function mockApi(page: Page, onTransition?: (path: string, body: unknown) => void) {
+  let currentServiceRequest = { ...serviceRequestDetail };
+
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -270,6 +305,79 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
       return fulfill(route, { ...majorIncident, status: body.targetStatus });
     }
 
+    if (path === "/itsm/catalog/requests/request-1" && method === "GET") {
+      return fulfill(route, currentServiceRequest);
+    }
+    if (path === "/itsm/workflows/service_request" && method === "GET") {
+      return fulfill(route, {
+        entity: "service_request",
+        statuses: [
+          { value: "pending_approval", label: "Pending Approval", terminal: false, transitions: [] },
+          { value: "approved", label: "Approved", terminal: false, transitions: [{ value: "in_progress", label: "Start Fulfillment", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }] },
+          { value: "in_progress", label: "In Progress", terminal: false, transitions: [{ value: "fulfilled", label: "Fulfill", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }] },
+          { value: "fulfilled", label: "Fulfilled", terminal: false, transitions: [{ value: "closed", label: "Close", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }] },
+          { value: "closed", label: "Closed", terminal: true, transitions: [] },
+        ],
+      });
+    }
+    if (path === "/itsm/workflows/service_request/transitions" && method === "GET") {
+      const status = url.searchParams.get("status");
+      const transitions =
+        status === "approved"
+          ? [{ value: "in_progress", label: "Start Fulfillment", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }]
+          : status === "in_progress"
+            ? [{ value: "fulfilled", label: "Fulfill", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }]
+            : status === "fulfilled"
+              ? [{ value: "closed", label: "Close", responsibleRole: "service_desk_analyst", accountableRole: "senior_service_desk_analyst" }]
+              : [];
+      return fulfill(route, {
+        entity: "service_request",
+        status,
+        transitions,
+        blockedTransitions: [],
+        nextAction: transitions[0]?.label,
+      });
+    }
+    if (path === "/itsm/catalog/requests/request-1/start-fulfillment" && method === "POST") {
+      const body = request.postDataJSON();
+      onTransition?.(path, body);
+      currentServiceRequest = {
+        ...currentServiceRequest,
+        status: "in_progress",
+        assignedTo: user.id,
+        timeline: [
+          ...currentServiceRequest.timeline,
+          {
+            id: "timeline-2",
+            requestId: "request-1",
+            eventType: "in_progress",
+            actorId: user.id,
+            description: "Fulfillment started",
+            metadata: {},
+            createdAt: now,
+          },
+        ],
+      };
+      return fulfill(route, currentServiceRequest);
+    }
+    if (path === "/itsm/catalog/requests/request-1/fulfill" && method === "POST") {
+      const body = request.postDataJSON();
+      onTransition?.(path, body);
+      currentServiceRequest = {
+        ...currentServiceRequest,
+        status: "fulfilled",
+        fulfillmentNotes: body.fulfillmentNotes,
+        fulfilledAt: now,
+      };
+      return fulfill(route, currentServiceRequest);
+    }
+    if (path === "/itsm/catalog/requests/request-1/close" && method === "POST") {
+      const body = request.postDataJSON();
+      onTransition?.(path, body);
+      currentServiceRequest = { ...currentServiceRequest, status: "closed", closedAt: now };
+      return fulfill(route, currentServiceRequest);
+    }
+
     return fulfill(route, method === "GET" ? [] : {});
   });
 }
@@ -357,5 +465,44 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
       path: "/itsm/major-incidents/major-1/transition",
       body: { targetStatus: "mitigating" },
     });
+  });
+
+  test("service request detail supports fulfillment, confirmation, and closure path", async ({ page }) => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    await mockApi(page, (path, body) => calls.push({ path, body }));
+
+    await page.goto("/dashboard/itsm/service-catalog/my-requests/request-1");
+
+    await expect(page.getByRole("heading", { name: "Monitor Request" })).toBeVisible();
+    await expect(page.getByText("Request lifecycle")).toBeVisible();
+    await expect(page.getByText(/R: Service Desk Analyst/)).toBeVisible();
+    await expect(page.getByText(/A: Senior Service Desk Analyst/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start Fulfillment" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Start Fulfillment" }).click();
+    await expect.poll(() => calls).toContainEqual({
+      path: "/itsm/catalog/requests/request-1/start-fulfillment",
+      body: {},
+    });
+
+    await page.getByRole("button", { name: "Mark Fulfilled" }).click();
+    await page.getByPlaceholder(/Record what was fulfilled/i).fill(
+      "Executed request and confirmed completeness.",
+    );
+    await page.getByRole("button", { name: "Confirm Fulfillment" }).click();
+    await expect.poll(() => calls).toContainEqual({
+      path: "/itsm/catalog/requests/request-1/fulfill",
+      body: { fulfillmentNotes: "Executed request and confirmed completeness." },
+    });
+
+    await page.getByPlaceholder("Closure comment (optional)").fill(
+      "Requester notified and request closed.",
+    );
+    await page.getByRole("button", { name: "Close Request" }).click();
+    await expect.poll(() => calls).toContainEqual({
+      path: "/itsm/catalog/requests/request-1/close",
+      body: { comment: "Requester notified and request closed." },
+    });
+    await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
   });
 });

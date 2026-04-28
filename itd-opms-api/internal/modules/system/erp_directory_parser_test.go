@@ -64,6 +64,49 @@ func TestEffectiveERPEmailQuality(t *testing.T) {
 	}
 }
 
+func TestServiceDeskRoleForERPJob(t *testing.T) {
+	cases := []struct {
+		job  string
+		want string
+	}{
+		{job: "Service Desk Analyst", want: "service_desk_analyst"},
+		{job: "Senior Service Desk Analyst", want: "senior_service_desk_analyst"},
+		{job: "Help Desk Officer", want: "service_desk_analyst"},
+		{job: "Senior System Analyst", want: ""},
+	}
+	for _, tc := range cases {
+		if got := serviceDeskRoleForERPJob(tc.job); got != tc.want {
+			t.Fatalf("serviceDeskRoleForERPJob(%q) = %q, want %q", tc.job, got, tc.want)
+		}
+	}
+}
+
+func TestServiceDeskRoleForERPAssignmentUsesOrgUnit(t *testing.T) {
+	junior := erpEmployeeRecord{
+		JobName:      "Officer",
+		DivisionName: "IT Service Support Management Division",
+	}
+	if got := serviceDeskRoleForERPAssignment(junior); got != "service_desk_analyst" {
+		t.Fatalf("expected IT service support officer to map to service_desk_analyst, got %q", got)
+	}
+
+	senior := erpEmployeeRecord{
+		JobName:    "Senior Supervisor",
+		OfficeName: "User Support Help Desk",
+	}
+	if got := serviceDeskRoleForERPAssignment(senior); got != "senior_service_desk_analyst" {
+		t.Fatalf("expected senior help desk supervisor to map to senior_service_desk_analyst, got %q", got)
+	}
+
+	unrelated := erpEmployeeRecord{
+		JobName:      "Officer",
+		DivisionName: "Procurement Support Services",
+	}
+	if got := serviceDeskRoleForERPAssignment(unrelated); got != "" {
+		t.Fatalf("expected unrelated support services role to be ignored, got %q", got)
+	}
+}
+
 func TestParseERPDirectoryDump_FromEnv(t *testing.T) {
 	path := os.Getenv("ERP_DIRECTORY_DUMP_PATH")
 	if path == "" {

@@ -58,6 +58,15 @@ function humanize(value?: string) {
   return value ? value.replace(/_/g, " ") : "not set";
 }
 
+function roleLabel(value?: string) {
+  if (!value) return "";
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function minutesUntil(value?: string) {
   if (!value) return null;
   const delta = new Date(value).getTime() - Date.now();
@@ -376,9 +385,11 @@ export function LifecycleRail({
 }: LifecycleRailProps) {
   const statuses = definition?.statuses ?? [];
   const currentIndex = statuses.findIndex((status) => status.value === currentStatus);
-  const nextActions = transitionData?.transitions ?? [];
+  const currentWorkflowState = statuses.find((status) => status.value === currentStatus);
+  const nextActions = transitionData?.transitions ?? currentWorkflowState?.transitions ?? [];
   const blocked = transitionData?.blockedTransitions ?? [];
   const impact = nextActions.find((item) => item.slaImpact)?.slaImpact;
+  const nextActionLabel = transitionData?.nextAction ?? nextActions[0]?.label;
 
   if (!definition || !currentStatus || statuses.length === 0) {
     return null;
@@ -395,10 +406,10 @@ export function LifecycleRail({
             {humanize(currentStatus)}
           </h3>
         </div>
-        {transitionData?.nextAction ? (
+        {nextActionLabel ? (
           <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
             <ArrowRight size={14} />
-            {transitionData.nextAction}
+            {nextActionLabel}
           </span>
         ) : (
           <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
@@ -467,9 +478,16 @@ export function LifecycleRail({
               nextActions.map((item) => (
                 <span
                   key={item.value}
-                  className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm"
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm"
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.responsibleRole || item.accountableRole ? (
+                    <span className="mt-1 block font-medium text-slate-500">
+                      {item.responsibleRole ? `R: ${roleLabel(item.responsibleRole)}` : ""}
+                      {item.responsibleRole && item.accountableRole ? " · " : ""}
+                      {item.accountableRole ? `A: ${roleLabel(item.accountableRole)}` : ""}
+                    </span>
+                  ) : null}
                 </span>
               ))
             ) : (

@@ -88,28 +88,31 @@ type escalationRule struct {
 }
 
 type openTicket struct {
-	ID                     uuid.UUID
-	TenantID               uuid.UUID
-	Priority               string
-	Status                 string
-	AssigneeID             *uuid.UUID
-	CreatedAt              time.Time
-	SLAResponseTarget      *time.Time
-	SLAResolutionTarget    *time.Time
-	SLAPausedAt            *time.Time
-	SLAPausedDurationMins  int
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	Priority              string
+	Status                string
+	ReporterID            uuid.UUID
+	AssigneeID            *uuid.UUID
+	CreatedAt             time.Time
+	SLAResponseTarget     *time.Time
+	SLAResolutionTarget   *time.Time
+	SLAPausedAt           *time.Time
+	SLAPausedDurationMins int
 }
 
 type openServiceRequest struct {
-	ID                       uuid.UUID
-	TenantID                 uuid.UUID
-	Priority                 string
-	Status                   string
-	CreatedAt                time.Time
-	SLAResolutionTarget      *time.Time
-	SLAFulfillmentTarget     *time.Time
-	SLAPausedAt              *time.Time
-	SLAPausedDurationMins    int
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	Priority              string
+	Status                string
+	RequesterID           uuid.UUID
+	AssignedTo            *uuid.UUID
+	CreatedAt             time.Time
+	SLAResolutionTarget   *time.Time
+	SLAFulfillmentTarget  *time.Time
+	SLAPausedAt           *time.Time
+	SLAPausedDurationMins int
 }
 
 // ---------- evaluation loop ----------
@@ -182,7 +185,7 @@ func (w *EscalationWorker) loadActiveRules(ctx context.Context) ([]escalationRul
 
 func (w *EscalationWorker) loadOpenTickets(ctx context.Context, tenantID uuid.UUID) ([]openTicket, error) {
 	rows, err := w.pool.Query(ctx, `
-		SELECT id, tenant_id, priority, status, assignee_id, created_at,
+		SELECT id, tenant_id, priority, status, reporter_id, assignee_id, created_at,
 		       sla_response_target, sla_resolution_target,
 		       sla_paused_at, sla_paused_duration_minutes
 		FROM tickets
@@ -197,7 +200,7 @@ func (w *EscalationWorker) loadOpenTickets(ctx context.Context, tenantID uuid.UU
 	for rows.Next() {
 		var t openTicket
 		if err := rows.Scan(
-			&t.ID, &t.TenantID, &t.Priority, &t.Status, &t.AssigneeID, &t.CreatedAt,
+			&t.ID, &t.TenantID, &t.Priority, &t.Status, &t.ReporterID, &t.AssigneeID, &t.CreatedAt,
 			&t.SLAResponseTarget, &t.SLAResolutionTarget,
 			&t.SLAPausedAt, &t.SLAPausedDurationMins,
 		); err != nil {
@@ -210,12 +213,12 @@ func (w *EscalationWorker) loadOpenTickets(ctx context.Context, tenantID uuid.UU
 
 func (w *EscalationWorker) loadOpenServiceRequests(ctx context.Context, tenantID uuid.UUID) ([]openServiceRequest, error) {
 	rows, err := w.pool.Query(ctx, `
-		SELECT id, tenant_id, priority, status, created_at,
+		SELECT id, tenant_id, priority, status, requester_id, assigned_to, created_at,
 		       sla_resolution_target, sla_fulfillment_target,
 		       sla_paused_at, sla_paused_duration_minutes
 		FROM service_requests
 		WHERE tenant_id = $1
-		  AND status NOT IN ('fulfilled', 'cancelled', 'rejected')
+		  AND status NOT IN ('fulfilled', 'closed', 'cancelled', 'rejected')
 		  AND (sla_resolution_target IS NOT NULL OR sla_fulfillment_target IS NOT NULL)`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("query open service requests: %w", err)
@@ -226,7 +229,7 @@ func (w *EscalationWorker) loadOpenServiceRequests(ctx context.Context, tenantID
 	for rows.Next() {
 		var r openServiceRequest
 		if err := rows.Scan(
-			&r.ID, &r.TenantID, &r.Priority, &r.Status, &r.CreatedAt,
+			&r.ID, &r.TenantID, &r.Priority, &r.Status, &r.RequesterID, &r.AssignedTo, &r.CreatedAt,
 			&r.SLAResolutionTarget, &r.SLAFulfillmentTarget,
 			&r.SLAPausedAt, &r.SLAPausedDurationMins,
 		); err != nil {
@@ -305,13 +308,16 @@ func (w *EscalationWorker) evaluateRule(ctx context.Context, rule escalationRule
 
 	// Record escalation event (dedup index prevents duplicates within the same hour).
 	detailsJSON, _ := json.Marshal(details)
-	_, err := w.pool.Exec(ctx, `
-		INSERT INTO escalation_events (tenant_id, ticket_id, rule_id, trigger_type, action_taken, details)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (ticket_id, rule_id, DATE_TRUNC('hour', created_at)) DO NOTHING`,
+	tag, err := w.pool.Exec(ctx, `
+		INSERT INTO escalation_events (tenant_id, ticket_id, entity_type, entity_id, rule_id, trigger_type, action_taken, details)
+		VALUES ($1, $2, 'ticket', $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING`,
 		ticket.TenantID, ticket.ID, rule.ID, rule.TriggerType, "escalation_triggered", detailsJSON)
 	if err != nil {
 		slog.Error("escalation: insert event failed", "ticket", ticket.ID, "rule", rule.ID, "error", err)
+		return
+	}
+	if tag.RowsAffected() == 0 {
 		return
 	}
 
@@ -319,16 +325,7 @@ func (w *EscalationWorker) evaluateRule(ctx context.Context, rule escalationRule
 	w.executeChain(ctx, rule, ticket)
 
 	// Publish NATS event.
-	if w.js != nil {
-		payload, _ := json.Marshal(map[string]any{
-			"ticketId":    ticket.ID,
-			"ruleId":      rule.ID,
-			"ruleName":    rule.Name,
-			"triggerType": rule.TriggerType,
-			"details":     details,
-		})
-		_, _ = w.js.Publish("notify.itsm.escalation", payload)
-	}
+	w.publishEscalationNotification(ctx, rule, "ticket", ticket.ID, ticket.TenantID, details, uuidRecipients(&ticket.ReporterID, ticket.AssigneeID), "/dashboard/itsm/tickets/"+ticket.ID.String())
 
 	metrics.SLABreachesTotal.Inc()
 	slog.Info("escalation fired", "ticket", ticket.ID, "rule", rule.Name, "trigger", rule.TriggerType)
@@ -386,27 +383,21 @@ func (w *EscalationWorker) evaluateServiceRequestRule(ctx context.Context, rule 
 	}
 
 	detailsJSON, _ := json.Marshal(details)
-	_, err := w.pool.Exec(ctx, `
-		INSERT INTO escalation_events (tenant_id, ticket_id, rule_id, trigger_type, action_taken, details)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (ticket_id, rule_id, DATE_TRUNC('hour', created_at)) DO NOTHING`,
+	tag, err := w.pool.Exec(ctx, `
+		INSERT INTO escalation_events (tenant_id, ticket_id, entity_type, entity_id, rule_id, trigger_type, action_taken, details)
+		VALUES ($1, NULL, 'service_request', $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING`,
 		req.TenantID, req.ID, rule.ID, rule.TriggerType, "escalation_triggered", detailsJSON)
 	if err != nil {
 		slog.Error("escalation: insert service request event failed", "request", req.ID, "rule", rule.ID, "error", err)
 		return
 	}
+	if tag.RowsAffected() == 0 {
+		return
+	}
 
 	// Publish NATS event.
-	if w.js != nil {
-		payload, _ := json.Marshal(map[string]any{
-			"serviceRequestId": req.ID,
-			"ruleId":           rule.ID,
-			"ruleName":         rule.Name,
-			"triggerType":      rule.TriggerType,
-			"details":          details,
-		})
-		_, _ = w.js.Publish("notify.itsm.escalation", payload)
-	}
+	w.publishEscalationNotification(ctx, rule, "service_request", req.ID, req.TenantID, details, uuidRecipients(&req.RequesterID, req.AssignedTo), "/dashboard/itsm/service-catalog/my-requests/"+req.ID.String())
 
 	metrics.SLABreachesTotal.Inc()
 	slog.Info("escalation fired (service request)", "request", req.ID, "rule", rule.Name, "trigger", rule.TriggerType)
@@ -428,6 +419,76 @@ func (w *EscalationWorker) serviceRequestSLAPct(r openServiceRequest, now time.T
 	return (float64(elapsed) / float64(total)) * 100
 }
 
+func (w *EscalationWorker) publishEscalationNotification(
+	ctx context.Context,
+	rule escalationRule,
+	entityType string,
+	entityID uuid.UUID,
+	tenantID uuid.UUID,
+	details map[string]any,
+	recipientIDs []string,
+	actionURL string,
+) {
+	if w.js == nil {
+		return
+	}
+
+	eventType := "itsm.ticket.escalated"
+	subject := "notify.itsm.ticket.escalated"
+	switch rule.TriggerType {
+	case "sla_warning":
+		eventType = "itsm.sla.warning"
+		subject = "notify.itsm.sla.warning"
+	case "sla_breach":
+		eventType = "itsm.sla.breached"
+		subject = "notify.itsm.sla.breached"
+	}
+
+	data := map[string]any{
+		"entityType":   entityType,
+		"entityId":     entityID.String(),
+		"ruleId":       rule.ID.String(),
+		"ruleName":     rule.Name,
+		"triggerType":  rule.TriggerType,
+		"details":      details,
+		"recipientIds": recipientIDs,
+		"actionUrl":    actionURL,
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"type":       eventType,
+		"tenantId":   tenantID,
+		"actorId":    uuid.Nil,
+		"entityType": entityType,
+		"entityId":   entityID,
+		"data":       data,
+		"timestamp":  time.Now().UTC(),
+	})
+	if err != nil {
+		slog.Error("escalation: serialize notification failed", "entity_type", entityType, "entity_id", entityID, "error", err)
+		return
+	}
+	if _, err := w.js.Publish(subject, payload); err != nil {
+		slog.Error("escalation: publish notification failed", "entity_type", entityType, "entity_id", entityID, "subject", subject, "error", err)
+	}
+}
+
+func uuidRecipients(ids ...*uuid.UUID) []string {
+	seen := map[uuid.UUID]struct{}{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == nil || *id == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[*id]; ok {
+			continue
+		}
+		seen[*id] = struct{}{}
+		out = append(out, id.String())
+	}
+	return out
+}
+
 // executeChain parses the escalation_chain JSON and applies actions.
 // Chain format: [{"action": "notify", "target_user_ids": [...]},
 //
@@ -435,10 +496,10 @@ func (w *EscalationWorker) serviceRequestSLAPct(r openServiceRequest, now time.T
 //	{"action": "change_priority", "new_priority": "P1"}]
 func (w *EscalationWorker) executeChain(ctx context.Context, rule escalationRule, ticket openTicket) {
 	var chain []struct {
-		Action       string    `json:"action"`
-		TargetUserID *string   `json:"target_user_id"`
-		TargetUsers  []string  `json:"target_user_ids"`
-		NewPriority  string    `json:"new_priority"`
+		Action       string   `json:"action"`
+		TargetUserID *string  `json:"target_user_id"`
+		TargetUsers  []string `json:"target_user_ids"`
+		NewPriority  string   `json:"new_priority"`
 	}
 	if err := json.Unmarshal(rule.EscalationChain, &chain); err != nil {
 		slog.Error("escalation: parse chain failed", "rule", rule.ID, "error", err)

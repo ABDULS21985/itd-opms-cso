@@ -88,3 +88,22 @@ func TestWorkflowSnapshot_ServiceRequestRejectedTerminal(t *testing.T) {
 	}
 	t.Fatal("rejected service request status missing")
 }
+
+func TestWorkflowTransitions_ServiceRequestExposeResponsibilityRoles(t *testing.T) {
+	resp, ok := workflowTransitionsForEntity("service_request", RequestStatusApproved)
+	if !ok {
+		t.Fatal("service request workflow not found")
+	}
+	for _, tr := range resp.Transitions {
+		if tr.Value == RequestStatusInProgress {
+			if tr.ResponsibleRole != ServiceDeskAnalystRole {
+				t.Fatalf("responsible role = %q, want %q", tr.ResponsibleRole, ServiceDeskAnalystRole)
+			}
+			if tr.AccountableRole != SeniorServiceDeskAnalystRole {
+				t.Fatalf("accountable role = %q, want %q", tr.AccountableRole, SeniorServiceDeskAnalystRole)
+			}
+			return
+		}
+	}
+	t.Fatal("start fulfillment transition missing")
+}

@@ -14,13 +14,15 @@ import (
 
 // ITSMWorkflowTransition is the backend source of truth for a permitted status move.
 type ITSMWorkflowTransition struct {
-	Value          string                      `json:"value"`
-	Label          string                      `json:"label"`
-	Reason         string                      `json:"reason,omitempty"`
-	RequiredFields []string                    `json:"requiredFields,omitempty"`
-	Checklist      []ITSMWorkflowChecklistItem `json:"checklist,omitempty"`
-	SLAImpact      string                      `json:"slaImpact,omitempty"`
-	DecisionTrail  []string                    `json:"decisionTrail,omitempty"`
+	Value           string                      `json:"value"`
+	Label           string                      `json:"label"`
+	Reason          string                      `json:"reason,omitempty"`
+	ResponsibleRole string                      `json:"responsibleRole,omitempty"`
+	AccountableRole string                      `json:"accountableRole,omitempty"`
+	RequiredFields  []string                    `json:"requiredFields,omitempty"`
+	Checklist       []ITSMWorkflowChecklistItem `json:"checklist,omitempty"`
+	SLAImpact       string                      `json:"slaImpact,omitempty"`
+	DecisionTrail   []string                    `json:"decisionTrail,omitempty"`
 }
 
 // ITSMWorkflowChecklistItem describes a transition prerequisite the UI can render.
@@ -311,12 +313,14 @@ func decorateTransitions(entity string, def workflowMetadata, statuses []string)
 	for _, status := range statuses {
 		metadata := workflowTransitionMetadata(entity, status)
 		transitions = append(transitions, ITSMWorkflowTransition{
-			Value:          status,
-			Label:          workflowLabel(def, status),
-			RequiredFields: metadata.RequiredFields,
-			Checklist:      metadata.Checklist,
-			SLAImpact:      metadata.SLAImpact,
-			DecisionTrail:  metadata.DecisionTrail,
+			Value:           status,
+			Label:           workflowLabel(def, status),
+			ResponsibleRole: metadata.ResponsibleRole,
+			AccountableRole: metadata.AccountableRole,
+			RequiredFields:  metadata.RequiredFields,
+			Checklist:       metadata.Checklist,
+			SLAImpact:       metadata.SLAImpact,
+			DecisionTrail:   metadata.DecisionTrail,
 		})
 	}
 	return transitions
@@ -339,13 +343,15 @@ func blockedTransitions(entity string, def workflowMetadata, current string, all
 		}
 		metadata := workflowTransitionMetadata(entity, state)
 		blocked = append(blocked, ITSMWorkflowTransition{
-			Value:          state,
-			Label:          workflowLabel(def, state),
-			Reason:         blockedTransitionReason(def, current, state),
-			RequiredFields: metadata.RequiredFields,
-			Checklist:      metadata.Checklist,
-			SLAImpact:      metadata.SLAImpact,
-			DecisionTrail:  metadata.DecisionTrail,
+			Value:           state,
+			Label:           workflowLabel(def, state),
+			Reason:          blockedTransitionReason(def, current, state),
+			ResponsibleRole: metadata.ResponsibleRole,
+			AccountableRole: metadata.AccountableRole,
+			RequiredFields:  metadata.RequiredFields,
+			Checklist:       metadata.Checklist,
+			SLAImpact:       metadata.SLAImpact,
+			DecisionTrail:   metadata.DecisionTrail,
 		})
 	}
 	return blocked
@@ -394,10 +400,12 @@ func blockedTransitionReason(def workflowMetadata, current, target string) strin
 }
 
 type transitionUXMetadata struct {
-	RequiredFields []string
-	Checklist      []ITSMWorkflowChecklistItem
-	SLAImpact      string
-	DecisionTrail  []string
+	ResponsibleRole string
+	AccountableRole string
+	RequiredFields  []string
+	Checklist       []ITSMWorkflowChecklistItem
+	SLAImpact       string
+	DecisionTrail   []string
 }
 
 func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
@@ -491,6 +499,8 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 		}
 	case "service_request:" + workflow.ServiceRequestFulfilled:
 		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "fulfillment_confirmed", Label: "Fulfillment output confirmed", Required: true},
 				{Key: "requester_notified", Label: "Requester notified", Required: true},
@@ -499,9 +509,40 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 		}
 	case "service_request:" + workflow.ServiceRequestClosed:
 		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "requester_acceptance", Label: "Requester acceptance captured or timeout elapsed", Required: true},
 			},
+		}
+	case "service_request:" + workflow.ServiceRequestApproved:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
+			DecisionTrail:   []string{"approver", "approval_comment", "approved_at"},
+		}
+	case "service_request:" + workflow.ServiceRequestRejected:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
+			DecisionTrail:   []string{"approver", "rejection_reason", "rejected_at"},
+		}
+	case "service_request:" + workflow.ServiceRequestInProgress:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "request_packaged", Label: "Request package reviewed and ready for provisioning", Required: true},
+				{Key: "fulfillment_owner_confirmed", Label: "Service Desk or relevant IT division owner confirmed", Required: true},
+			},
+			SLAImpact:     "Fulfillment SLA ownership starts when provisioning begins.",
+			DecisionTrail: []string{"service_desk_analyst", "assigned_to", "routing_note"},
+		}
+	case "service_request:" + workflow.ServiceRequestCancelled:
+		return transitionUXMetadata{
+			ResponsibleRole: ServiceDeskAnalystRole,
+			AccountableRole: SeniorServiceDeskAnalystRole,
+			DecisionTrail:   []string{"requester", "cancelled_at"},
 		}
 	}
 	return transitionUXMetadata{}

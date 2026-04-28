@@ -134,6 +134,8 @@ export interface ITSMWorkflowTransition {
   value: string;
   label: string;
   reason?: string;
+  responsibleRole?: string;
+  accountableRole?: string;
   requiredFields?: string[];
   checklist?: ITSMWorkflowChecklistItem[];
   slaImpact?: string;

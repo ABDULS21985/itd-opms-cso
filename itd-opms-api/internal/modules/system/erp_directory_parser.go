@@ -290,6 +290,8 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	officeHeads := map[string]struct{}{}
 	elevated := map[string]struct{}{}
 	roleEligible := map[string]struct{}{}
+	serviceDeskAnalysts := map[string]struct{}{}
+	seniorServiceDeskAnalysts := map[string]struct{}{}
 
 	for _, rec := range records {
 		employeeIDs[rec.EmployeeNumber] = deterministicERPUUID("user", rec.EmployeeNumber)
@@ -309,6 +311,12 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 			roleEligible[rec.EmployeeNumber] = struct{}{}
 			if isElevatedERPAdmin(rec.JobName) {
 				elevated[rec.EmployeeNumber] = struct{}{}
+			}
+			switch serviceDeskRoleForERPAssignment(rec) {
+			case "senior_service_desk_analyst":
+				seniorServiceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
+			case "service_desk_analyst":
+				serviceDeskAnalysts[rec.EmployeeNumber] = struct{}{}
 			}
 		}
 	}
@@ -429,6 +437,8 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.Supervisors = countKnownEmployees(supervisors, employeeIDs)
 	stats.HeadsOfDivision = countKnownEmployees(divHeads, employeeIDs)
 	stats.ElevatedAdmins = countKnownEmployees(elevated, employeeIDs)
+	stats.ServiceDeskAnalysts = countKnownEmployees(serviceDeskAnalysts, employeeIDs)
+	stats.SeniorServiceDeskAnalysts = countKnownEmployees(seniorServiceDeskAnalysts, employeeIDs)
 	stats.Samples = buildERPPreviewSamples(preparedRecords, elevated)
 
 	if stats.MissingEmails > 0 || stats.InvalidEmails > 0 || stats.DuplicateEmails > 0 {
@@ -439,15 +449,17 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	}
 
 	return preparedERPDirectory{
-		Preview:      stats,
-		Employees:    preparedRecords,
-		OrgUnits:     orgUnits,
-		EmployeeIDs:  employeeIDs,
-		Supervisors:  supervisors,
-		DivHeads:     divHeads,
-		OfficeHeads:  officeHeads,
-		Elevated:     elevated,
-		RoleEligible: roleEligible,
+		Preview:                   stats,
+		Employees:                 preparedRecords,
+		OrgUnits:                  orgUnits,
+		EmployeeIDs:               employeeIDs,
+		Supervisors:               supervisors,
+		DivHeads:                  divHeads,
+		OfficeHeads:               officeHeads,
+		Elevated:                  elevated,
+		RoleEligible:              roleEligible,
+		ServiceDeskAnalysts:       serviceDeskAnalysts,
+		SeniorServiceDeskAnalysts: seniorServiceDeskAnalysts,
 	}
 }
 
@@ -614,6 +626,65 @@ func normalizeSpaces(value string) string {
 func isElevatedERPAdmin(jobName string) bool {
 	job := strings.ToUpper(strings.Join(strings.Fields(jobName), " "))
 	return strings.Contains(job, "DEPUTY GOVERNOR") || strings.Contains(job, "DIRECTOR")
+}
+
+func serviceDeskRoleForERPJob(jobName string) string {
+	job := normalizeERPMatchText(jobName)
+	if job == "" {
+		return ""
+	}
+	if !(strings.Contains(job, "SERVICE DESK") || strings.Contains(job, "HELP DESK")) {
+		return ""
+	}
+	if !(strings.Contains(job, "ANALYST") || strings.Contains(job, "AGENT") || strings.Contains(job, "OFFICER")) {
+		return ""
+	}
+	if strings.Contains(job, "SENIOR") || strings.Contains(job, "LEAD") || strings.Contains(job, "SUPERVISOR") {
+		return "senior_service_desk_analyst"
+	}
+	return "service_desk_analyst"
+}
+
+func serviceDeskRoleForERPAssignment(rec erpEmployeeRecord) string {
+	if role := serviceDeskRoleForERPJob(rec.JobName); role != "" {
+		return role
+	}
+	if !isServiceDeskERPOrg(rec.DepartmentName, rec.DivisionName, rec.OfficeName) {
+		return ""
+	}
+	if isSeniorServiceDeskERPJob(rec.JobName) {
+		return "senior_service_desk_analyst"
+	}
+	return "service_desk_analyst"
+}
+
+func isServiceDeskERPOrg(names ...string) bool {
+	org := normalizeERPMatchText(strings.Join(names, " "))
+	if org == "" {
+		return false
+	}
+	return strings.Contains(org, "USER SUPPORT HELP DESK") ||
+		strings.Contains(org, "IT SERVICE SUPPORT") ||
+		strings.Contains(org, "SERVICE DESK") ||
+		(strings.Contains(org, "HELP DESK") &&
+			(strings.Contains(org, "IT") || strings.Contains(org, "USER SUPPORT")))
+}
+
+func isSeniorServiceDeskERPJob(jobName string) bool {
+	job := normalizeERPMatchText(jobName)
+	if job == "" {
+		return false
+	}
+	return strings.Contains(job, "SENIOR") ||
+		strings.Contains(job, "LEAD") ||
+		strings.Contains(job, "SUPERVISOR") ||
+		strings.Contains(job, "MANAGER") ||
+		strings.Contains(job, "HEAD") ||
+		strings.Contains(job, "DIRECTOR")
+}
+
+func normalizeERPMatchText(value string) string {
+	return strings.ToUpper(strings.Join(strings.Fields(value), " "))
 }
 
 func deterministicERPUUID(kind, key string) uuid.UUID {

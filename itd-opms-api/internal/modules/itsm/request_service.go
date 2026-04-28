@@ -904,6 +904,9 @@ func (s *RequestService) StartFulfillment(ctx context.Context, requestID uuid.UU
 	if auth == nil {
 		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
 	}
+	if err := ensureServiceDeskResponsibility(auth, "start fulfillment"); err != nil {
+		return ServiceRequest{}, err
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -987,6 +990,9 @@ func (s *RequestService) FulfillRequest(ctx context.Context, requestID uuid.UUID
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
+	}
+	if err := ensureServiceDeskResponsibility(auth, "fulfill service request"); err != nil {
+		return ServiceRequest{}, err
 	}
 	if strings.TrimSpace(req.FulfillmentNotes) == "" {
 		return ServiceRequest{}, apperrors.Validation("fulfillmentNotes", "fulfillment notes are required")
@@ -1072,6 +1078,9 @@ func (s *RequestService) CloseRequest(ctx context.Context, requestID uuid.UUID, 
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return ServiceRequest{}, apperrors.Unauthorized("authentication required")
+	}
+	if err := ensureServiceDeskResponsibility(auth, "close service request"); err != nil {
+		return ServiceRequest{}, err
 	}
 
 	tx, err := s.pool.Begin(ctx)
