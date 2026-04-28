@@ -195,6 +195,73 @@ const releaseRecord = {
   approvals: [],
 };
 
+const testSolutionRun = {
+  id: "test-solution-1",
+  tenantId: "tenant-1",
+  runNumber: "TST-001001",
+  title: "Payment switch test cycle",
+  description: "Validate the payment switch latency fix before release handoff.",
+  sourceType: "release",
+  sourceId: releaseRecord.id,
+  releaseId: releaseRecord.id,
+  releaseNumber: releaseRecord.releaseNumber,
+  changeTicketId: change.id,
+  changeTicketNumber: change.ticketNumber,
+  status: "authorized",
+  requiredTestTypes: ["system", "integration", "stress_performance", "security", "data_conversion", "uat"],
+  authorizedTestTypes: ["system"],
+  testManagerId: user.id,
+  testManagerName: user.displayName,
+  testLeadId: user.id,
+  testLeadName: user.displayName,
+  releaseManagementLeadId: user.id,
+  releaseManagementLeadName: user.displayName,
+  requirements: { functional: "Payment switch latency below 200ms" },
+  testPlan: { order: ["system", "uat"] },
+  readinessChecklist: [],
+  evidence: {},
+  uatSignoff: {},
+  overallOutcome: "pending",
+  createdBy: user.id,
+  createdByName: user.displayName,
+  createdAt: now,
+  updatedAt: now,
+};
+
+const testSolutionCases = [
+  {
+    id: "test-case-1",
+    tenantId: "tenant-1",
+    runId: testSolutionRun.id,
+    testType: "system",
+    title: "Validate transaction latency under baseline load",
+    scriptReference: "SYS-001",
+    status: "ready",
+    assignedTo: user.id,
+    assignedToName: user.displayName,
+    evidence: {},
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const testSolutionSignoffs = [
+  {
+    id: "signoff-1",
+    tenantId: "tenant-1",
+    runId: testSolutionRun.id,
+    testType: "uat",
+    signerId: user.id,
+    signerName: user.displayName,
+    roleName: "test_management_specialist",
+    status: "pending",
+    comments: "",
+    evidence: {},
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
 function jwtWithFutureExpiry() {
   const payload = Buffer.from(
     JSON.stringify({ sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 }),
@@ -440,6 +507,65 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
       const body = request.postDataJSON();
       onTransition?.(path, body);
       return fulfill(route, { ...releaseRecord, status: body.targetStatus });
+    }
+
+    if (path === "/test-solutions/test-solution-1" && method === "GET") {
+      return fulfill(route, {
+        ...testSolutionRun,
+        cases: testSolutionCases,
+        signoffs: testSolutionSignoffs,
+      });
+    }
+    if (path === "/test-solutions/test-solution-1/cases") {
+      return fulfill(route, testSolutionCases);
+    }
+    if (path === "/test-solutions/test-solution-1/signoffs") {
+      return fulfill(route, testSolutionSignoffs);
+    }
+    if (path === "/itsm/workflows/test_solution" && method === "GET") {
+      return fulfill(route, {
+        entity: "test_solution",
+        statuses: [
+          { value: "intake", label: "Intake", terminal: false, transitions: [{ value: "planning", label: "Plan Test Execution" }] },
+          { value: "planning", label: "Planning", terminal: false, transitions: [{ value: "authorized", label: "Authorize Appropriate Testing" }] },
+          { value: "authorized", label: "Authorized", terminal: false, transitions: [{ value: "system_prereq", label: "Receive System Test Prerequisites", responsibleRole: "test_manager", accountableRole: "test_management_specialist" }] },
+          { value: "system_prereq", label: "System Prerequisites", terminal: false, transitions: [] },
+          { value: "release_handoff", label: "Release Handoff", terminal: false, transitions: [] },
+          { value: "closed", label: "Closed", terminal: true, transitions: [] },
+        ],
+      });
+    }
+    if (path === "/itsm/workflows/test_solution/transitions") {
+      return fulfill(route, {
+        entity: "test_solution",
+        status: url.searchParams.get("status"),
+        transitions: [
+          {
+            value: "system_prereq",
+            label: "Receive System Test Prerequisites",
+            responsibleRole: "test_manager",
+            accountableRole: "test_management_specialist",
+            checklist: [
+              { key: "unit_scripts_received", label: "Signed unit test scripts received", required: true },
+              { key: "requirements_docs_received", label: "Requirement documents received", required: true },
+              { key: "prerequisites_complete", label: "System test prerequisites complete", required: true },
+            ],
+          },
+        ],
+        blockedTransitions: [
+          {
+            value: "release_handoff",
+            label: "Handoff to Release",
+            reason: "UAT sign-off is required before handoff to Release and Deployment Management.",
+          },
+        ],
+        nextAction: "Receive System Test Prerequisites",
+      });
+    }
+    if (path === "/test-solutions/test-solution-1/transition" && method === "POST") {
+      const body = request.postDataJSON();
+      onTransition?.(path, body);
+      return fulfill(route, { ...testSolutionRun, status: body.targetStatus });
     }
 
     if (path === "/itsm/catalog/requests/request-1" && method === "GET") {
@@ -690,5 +816,34 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
       path: "/releases/release-1/transition",
       body: { targetStatus: "build" },
     });
+  });
+
+  test("test solution detail renders BRD 6.6/6.7 lifecycle roles and blocks release handoff without UAT sign-off", async ({ page }) => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    await mockApi(page, (path, body) => calls.push({ path, body }));
+
+    await page.goto("/dashboard/test-solutions/test-solution-1");
+
+    await expect(page.getByRole("heading", { name: testSolutionRun.title })).toBeVisible();
+    await expect(page.getByText("Test solution lifecycle actions")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Receive System Test Prerequisites/ })).toBeVisible();
+    await expect(page.getByText(/R: Test Manager/).first()).toBeVisible();
+    await expect(page.getByText(/A: Test Management Specialist/).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Handoff to Release/ })).toBeDisabled();
+    await expect(page.getByText(/UAT sign-off is required/).first()).toBeVisible();
+
+    await page.getByRole("button", { name: /Receive System Test Prerequisites/ }).click();
+    await expect(page.getByRole("heading", { name: "Receive System Test Prerequisites" })).toBeVisible();
+    for (const checkbox of await page.getByRole("checkbox").all()) {
+      await checkbox.check();
+    }
+    await page.getByRole("button", { name: "Confirm Receive System Test Prerequisites" }).click();
+
+    await expect
+      .poll(() => calls.find((call) => call.path === "/test-solutions/test-solution-1/transition"))
+      .toMatchObject({
+        path: "/test-solutions/test-solution-1/transition",
+        body: expect.objectContaining({ targetStatus: "system_prereq" }),
+      });
   });
 });

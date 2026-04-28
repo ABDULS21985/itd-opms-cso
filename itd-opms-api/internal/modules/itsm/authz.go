@@ -31,6 +31,10 @@ const (
 	SolutionsDeliverySpecialistRole       = "solutions_delivery_specialist"
 	SeniorReleaseManagementSpecialistRole = "senior_release_management_specialist"
 	DITDApproverRole                      = "ditd_approver"
+	TestManagerRole                       = "test_manager"
+	SolutionDeveloperRole                 = "solution_developer"
+	SeniorSolutionDeveloperRole           = "senior_solution_developer"
+	TestAnalystRole                       = "test_analyst"
 	ChangeApproverRole                    = "change_approver"
 	SupportAnalystRole                    = "support_analyst"
 )

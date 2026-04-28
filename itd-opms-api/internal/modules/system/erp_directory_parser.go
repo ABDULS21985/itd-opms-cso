@@ -311,6 +311,10 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	releaseManagementLeads := map[string]struct{}{}
 	solutionsDeliverySpecialists := map[string]struct{}{}
 	seniorReleaseManagementSpecialists := map[string]struct{}{}
+	testManagers := map[string]struct{}{}
+	solutionDevelopers := map[string]struct{}{}
+	seniorSolutionDevelopers := map[string]struct{}{}
+	testAnalysts := map[string]struct{}{}
 	ditdApprovers := map[string]struct{}{}
 	changeApprovers := map[string]struct{}{}
 	supportAnalysts := map[string]struct{}{}
@@ -398,6 +402,18 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 					seniorReleaseManagementSpecialists[rec.EmployeeNumber] = struct{}{}
 				case "ditd_approver":
 					ditdApprovers[rec.EmployeeNumber] = struct{}{}
+				}
+			}
+			for _, role := range testSolutionRolesForERPAssignment(rec) {
+				switch role {
+				case "test_manager":
+					testManagers[rec.EmployeeNumber] = struct{}{}
+				case "solution_developer":
+					solutionDevelopers[rec.EmployeeNumber] = struct{}{}
+				case "senior_solution_developer":
+					seniorSolutionDevelopers[rec.EmployeeNumber] = struct{}{}
+				case "test_analyst":
+					testAnalysts[rec.EmployeeNumber] = struct{}{}
 				}
 			}
 		}
@@ -540,6 +556,10 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.ReleaseManagementLeads = countKnownEmployees(releaseManagementLeads, employeeIDs)
 	stats.SolutionsDeliverySpecialists = countKnownEmployees(solutionsDeliverySpecialists, employeeIDs)
 	stats.SeniorReleaseManagementSpecialists = countKnownEmployees(seniorReleaseManagementSpecialists, employeeIDs)
+	stats.TestManagers = countKnownEmployees(testManagers, employeeIDs)
+	stats.SolutionDevelopers = countKnownEmployees(solutionDevelopers, employeeIDs)
+	stats.SeniorSolutionDevelopers = countKnownEmployees(seniorSolutionDevelopers, employeeIDs)
+	stats.TestAnalysts = countKnownEmployees(testAnalysts, employeeIDs)
 	stats.DITDApprovers = countKnownEmployees(ditdApprovers, employeeIDs)
 	stats.ChangeApprovers = countKnownEmployees(changeApprovers, employeeIDs)
 	stats.SupportAnalysts = countKnownEmployees(supportAnalysts, employeeIDs)
@@ -583,6 +603,10 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 		ReleaseManagementLeads:             releaseManagementLeads,
 		SolutionsDeliverySpecialists:       solutionsDeliverySpecialists,
 		SeniorReleaseManagementSpecialists: seniorReleaseManagementSpecialists,
+		TestManagers:                       testManagers,
+		SolutionDevelopers:                 solutionDevelopers,
+		SeniorSolutionDevelopers:           seniorSolutionDevelopers,
+		TestAnalysts:                       testAnalysts,
 		DITDApprovers:                      ditdApprovers,
 		ChangeApprovers:                    changeApprovers,
 		SupportAnalysts:                    supportAnalysts,
@@ -1013,6 +1037,72 @@ func releaseManagementRolesForERPAssignment(rec erpEmployeeRecord) []string {
 		strings.Contains(org, "DITD") ||
 		(strings.Contains(job, "DIRECTOR") && (strings.Contains(org, "ITD") || strings.Contains(org, "INFORMATION TECHNOLOGY"))) {
 		addRole("ditd_approver")
+	}
+
+	return roles
+}
+
+func testSolutionRolesForERPAssignment(rec erpEmployeeRecord) []string {
+	job := normalizeERPMatchText(rec.JobName)
+	org := normalizeERPMatchText(strings.Join([]string{rec.DepartmentName, rec.DivisionName, rec.OfficeName}, " "))
+	if job == "" && org == "" {
+		return nil
+	}
+
+	roles := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	addRole := func(role string) {
+		if _, ok := seen[role]; ok {
+			return
+		}
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+
+	isTestingOrg := strings.Contains(org, "TEST MANAGEMENT") ||
+		strings.Contains(org, "QUALITY ASSURANCE") ||
+		strings.Contains(org, "QUALITY CONTROL") ||
+		strings.Contains(org, "QCMD")
+	isTestingJob := strings.Contains(job, "TEST") ||
+		strings.Contains(job, "QUALITY ASSURANCE") ||
+		strings.Contains(job, "QA ") ||
+		strings.Contains(job, "QA-") ||
+		strings.Contains(job, "TESTER")
+	isSolutionOrg := strings.Contains(org, "SOLUTION DELIVERY") ||
+		strings.Contains(org, "SOLUTIONS DELIVERY") ||
+		strings.Contains(org, "APPLICATION DEVELOPMENT") ||
+		strings.Contains(org, "APPLICATION MANAGEMENT") ||
+		strings.Contains(org, "SOFTWARE DEVELOPMENT") ||
+		strings.Contains(org, "SERVICE DELIVERY")
+	isSolutionJob := strings.Contains(job, "SOLUTION DEVELOPER") ||
+		strings.Contains(job, "SOLUTIONS DEVELOPER") ||
+		strings.Contains(job, "SOFTWARE DEVELOPER") ||
+		strings.Contains(job, "APPLICATION DEVELOPER") ||
+		strings.Contains(job, "SYSTEM DEVELOPER") ||
+		strings.Contains(job, "DEVELOPER")
+
+	if strings.Contains(job, "TEST MANAGER") ||
+		strings.Contains(job, "QA MANAGER") ||
+		strings.Contains(job, "QUALITY ASSURANCE MANAGER") ||
+		(isTestingOrg && (strings.Contains(job, "MANAGER") ||
+			strings.Contains(job, "LEAD") ||
+			strings.Contains(job, "HEAD") ||
+			strings.Contains(job, "SUPERVISOR"))) {
+		addRole("test_manager")
+	}
+	if isTestingJob || isTestingOrg {
+		addRole("test_analyst")
+	}
+	if isSolutionJob || isSolutionOrg {
+		addRole("solution_developer")
+	}
+	if (isSolutionJob || isSolutionOrg) &&
+		(strings.Contains(job, "SENIOR") ||
+			strings.Contains(job, "LEAD") ||
+			strings.Contains(job, "PRINCIPAL") ||
+			strings.Contains(job, "MANAGER") ||
+			strings.Contains(job, "HEAD")) {
+		addRole("senior_solution_developer")
 	}
 
 	return roles

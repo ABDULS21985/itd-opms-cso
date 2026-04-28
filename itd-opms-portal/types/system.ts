@@ -224,6 +224,10 @@ export interface ERPDirectoryImportPreview {
   releaseManagementLeads?: number;
   solutionsDeliverySpecialists?: number;
   seniorReleaseManagementSpecialists?: number;
+  testManagers?: number;
+  solutionDevelopers?: number;
+  seniorSolutionDevelopers?: number;
+  testAnalysts?: number;
   ditdApprovers?: number;
   changeApprovers?: number;
   supportAnalysts?: number;

@@ -58,6 +58,7 @@ import {
   Server,
   Radar,
   Webhook,
+  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 
@@ -392,6 +393,12 @@ export const navGroups: NavGroup[] = [
         label: "Release Calendar",
         icon: CalendarDays,
         permission: "release.view",
+      },
+      {
+        href: "/dashboard/test-solutions",
+        label: "Test Solutions",
+        icon: FlaskConical,
+        permission: "test_solution.view",
       },
     ],
   },

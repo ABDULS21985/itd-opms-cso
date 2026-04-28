@@ -196,6 +196,66 @@ var ReleaseStateMachine = NewStateMachine("release", map[string][]string{
 	ReleaseCancelled:  {},
 })
 
+// Test solution statuses.
+const (
+	TestSolutionIntake                    = "intake"
+	TestSolutionPlanning                  = "planning"
+	TestSolutionAuthorized                = "authorized"
+	TestSolutionSystemPrereq              = "system_prereq"
+	TestSolutionSystemPlanning            = "system_planning"
+	TestSolutionSystemPreparation         = "system_preparation"
+	TestSolutionSystemReadiness           = "system_readiness"
+	TestSolutionSystemExecution           = "system_execution"
+	TestSolutionSystemReview              = "system_review"
+	TestSolutionIntegrationPreparation    = "integration_preparation"
+	TestSolutionIntegrationExecution      = "integration_execution"
+	TestSolutionStressPreparation         = "stress_preparation"
+	TestSolutionStressExecution           = "stress_execution"
+	TestSolutionSecurityPreparation       = "security_preparation"
+	TestSolutionSecurityExecution         = "security_execution"
+	TestSolutionDataConversionPreparation = "data_conversion_preparation"
+	TestSolutionDataConversionExecution   = "data_conversion_execution"
+	TestSolutionUATConfirmation           = "uat_confirmation"
+	TestSolutionUATPreparation            = "uat_preparation"
+	TestSolutionUATNominees               = "uat_nominees"
+	TestSolutionUATExecution              = "uat_execution"
+	TestSolutionUATReview                 = "uat_review"
+	TestSolutionReleaseHandoff            = "release_handoff"
+	TestSolutionBuildRework               = "build_rework"
+	TestSolutionClosed                    = "closed"
+	TestSolutionCancelled                 = "cancelled"
+)
+
+// TestSolutionStateMachine enforces the ITD Test Solution lifecycle (BRD §6.6-6.7).
+var TestSolutionStateMachine = NewStateMachine("test_solution", map[string][]string{
+	TestSolutionIntake:                    {TestSolutionPlanning, TestSolutionCancelled},
+	TestSolutionPlanning:                  {TestSolutionAuthorized, TestSolutionIntake, TestSolutionCancelled},
+	TestSolutionAuthorized:                {TestSolutionSystemPrereq, TestSolutionIntegrationPreparation, TestSolutionStressPreparation, TestSolutionSecurityPreparation, TestSolutionDataConversionPreparation, TestSolutionUATConfirmation, TestSolutionCancelled},
+	TestSolutionSystemPrereq:              {TestSolutionSystemPlanning, TestSolutionIntake, TestSolutionCancelled},
+	TestSolutionSystemPlanning:            {TestSolutionSystemPreparation, TestSolutionCancelled},
+	TestSolutionSystemPreparation:         {TestSolutionSystemReadiness, TestSolutionCancelled},
+	TestSolutionSystemReadiness:           {TestSolutionSystemExecution, TestSolutionSystemPreparation, TestSolutionCancelled},
+	TestSolutionSystemExecution:           {TestSolutionSystemReview, TestSolutionCancelled},
+	TestSolutionSystemReview:              {TestSolutionAuthorized, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionIntegrationPreparation:    {TestSolutionIntegrationExecution, TestSolutionCancelled},
+	TestSolutionIntegrationExecution:      {TestSolutionAuthorized, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionStressPreparation:         {TestSolutionStressExecution, TestSolutionCancelled},
+	TestSolutionStressExecution:           {TestSolutionAuthorized, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionSecurityPreparation:       {TestSolutionSecurityExecution, TestSolutionCancelled},
+	TestSolutionSecurityExecution:         {TestSolutionAuthorized, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionDataConversionPreparation: {TestSolutionDataConversionExecution, TestSolutionCancelled},
+	TestSolutionDataConversionExecution:   {TestSolutionAuthorized, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionUATConfirmation:           {TestSolutionUATPreparation, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionUATPreparation:            {TestSolutionUATNominees, TestSolutionCancelled},
+	TestSolutionUATNominees:               {TestSolutionUATExecution, TestSolutionCancelled},
+	TestSolutionUATExecution:              {TestSolutionUATReview, TestSolutionCancelled},
+	TestSolutionUATReview:                 {TestSolutionReleaseHandoff, TestSolutionBuildRework, TestSolutionCancelled},
+	TestSolutionReleaseHandoff:            {TestSolutionClosed},
+	TestSolutionBuildRework:               {TestSolutionPlanning, TestSolutionCancelled},
+	TestSolutionClosed:                    {},
+	TestSolutionCancelled:                 {},
+})
+
 // TicketStateMachine enforces the ITSM ticket lifecycle.
 var TicketStateMachine = NewStateMachine("ticket", map[string][]string{
 	TicketLogged:          {TicketClassified, TicketAssigned, TicketCancelled},

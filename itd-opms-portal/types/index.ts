@@ -9,3 +9,4 @@ export * from './grc';
 export * from './reporting';
 export * from './vendor';
 export * from './system';
+export * from './test-solution';

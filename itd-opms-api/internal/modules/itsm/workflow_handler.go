@@ -211,6 +211,64 @@ var itsmWorkflowDefinitions = map[string]workflowMetadata{
 			workflow.ReleaseCancelled:  "Cancel",
 		},
 	},
+	"test_solution": {
+		machine: workflow.TestSolutionStateMachine,
+		order: []string{
+			workflow.TestSolutionIntake,
+			workflow.TestSolutionPlanning,
+			workflow.TestSolutionAuthorized,
+			workflow.TestSolutionSystemPrereq,
+			workflow.TestSolutionSystemPlanning,
+			workflow.TestSolutionSystemPreparation,
+			workflow.TestSolutionSystemReadiness,
+			workflow.TestSolutionSystemExecution,
+			workflow.TestSolutionSystemReview,
+			workflow.TestSolutionIntegrationPreparation,
+			workflow.TestSolutionIntegrationExecution,
+			workflow.TestSolutionStressPreparation,
+			workflow.TestSolutionStressExecution,
+			workflow.TestSolutionSecurityPreparation,
+			workflow.TestSolutionSecurityExecution,
+			workflow.TestSolutionDataConversionPreparation,
+			workflow.TestSolutionDataConversionExecution,
+			workflow.TestSolutionUATConfirmation,
+			workflow.TestSolutionUATPreparation,
+			workflow.TestSolutionUATNominees,
+			workflow.TestSolutionUATExecution,
+			workflow.TestSolutionUATReview,
+			workflow.TestSolutionReleaseHandoff,
+			workflow.TestSolutionBuildRework,
+			workflow.TestSolutionClosed,
+			workflow.TestSolutionCancelled,
+		},
+		labels: map[string]string{
+			workflow.TestSolutionPlanning:                  "Plan Test Execution",
+			workflow.TestSolutionAuthorized:                "Authorize Appropriate Testing",
+			workflow.TestSolutionSystemPrereq:              "Receive System Test Prerequisites",
+			workflow.TestSolutionSystemPlanning:            "Plan System Test",
+			workflow.TestSolutionSystemPreparation:         "Prepare System Test",
+			workflow.TestSolutionSystemReadiness:           "Check System Environment",
+			workflow.TestSolutionSystemExecution:           "Execute System Test",
+			workflow.TestSolutionSystemReview:              "Check System Test Results",
+			workflow.TestSolutionIntegrationPreparation:    "Prepare Integration Test",
+			workflow.TestSolutionIntegrationExecution:      "Execute Integration Test",
+			workflow.TestSolutionStressPreparation:         "Prepare Stress/Performance Test",
+			workflow.TestSolutionStressExecution:           "Execute Stress/Performance Test",
+			workflow.TestSolutionSecurityPreparation:       "Prepare Security Test",
+			workflow.TestSolutionSecurityExecution:         "Execute Security Test",
+			workflow.TestSolutionDataConversionPreparation: "Prepare Data Conversion Test",
+			workflow.TestSolutionDataConversionExecution:   "Execute Data Conversion Test",
+			workflow.TestSolutionUATConfirmation:           "Confirm Initial Tests",
+			workflow.TestSolutionUATPreparation:            "Prepare UAT",
+			workflow.TestSolutionUATNominees:               "Request Test Nominees",
+			workflow.TestSolutionUATExecution:              "Execute UAT",
+			workflow.TestSolutionUATReview:                 "Confirm UAT",
+			workflow.TestSolutionReleaseHandoff:            "Handoff to Release",
+			workflow.TestSolutionBuildRework:               "Return to Build/Configure",
+			workflow.TestSolutionClosed:                    "Close Test Run",
+			workflow.TestSolutionCancelled:                 "Cancel",
+		},
+	},
 	"catalog_item": {
 		machine: workflow.CatalogItemStateMachine,
 		order: []string{
@@ -259,6 +317,8 @@ func normalizeWorkflowEntity(entity string) (string, bool) {
 		key = "problem"
 	case "releases":
 		key = "release"
+	case "test-solution", "test-solutions", "test_solutions", "testing", "uat":
+		key = "test_solution"
 	}
 	_, ok := itsmWorkflowDefinitions[key]
 	return key, ok
@@ -293,7 +353,22 @@ func workflowTransitionsForEntity(entity, status string) (ITSMWorkflowTransition
 }
 
 func applyWorkflowTransitionContext(resp *ITSMWorkflowTransitionResponse, query url.Values) {
-	if resp == nil || resp.Entity != "change" {
+	if resp == nil {
+		return
+	}
+	if resp.Entity == "test_solution" {
+		uatSigned := strings.EqualFold(query.Get("uatSigned"), "true")
+		if resp.Status == workflow.TestSolutionUATReview && !uatSigned {
+			blockWorkflowTransition(resp, workflow.TestSolutionReleaseHandoff, "UAT sign-off is required before handoff to Release and Deployment Management.")
+		}
+		if len(resp.Transitions) > 0 {
+			resp.NextAction = resp.Transitions[0].Label
+		} else {
+			resp.NextAction = ""
+		}
+		return
+	}
+	if resp.Entity != "change" {
 		return
 	}
 	classification := strings.TrimSpace(strings.ToLower(query.Get("classification")))
@@ -867,6 +942,271 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 			AccountableRole: ReleaseManagementLeadRole,
 			RequiredFields:  []string{"reason"},
 			DecisionTrail:   []string{"release_manager", "release_management_lead", "cancel_reason"},
+		}
+	case "test_solution:" + workflow.TestSolutionPlanning:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"test_requirements", "test_types"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "notification_reviewed", Label: "Test request or release notification reviewed", Required: true},
+				{Key: "test_types_selected", Label: "System, integration, performance, security, data conversion, and UAT scope determined", Required: true},
+				{Key: "missing_information_requested", Label: "Outstanding documents, clarifications, or sign-offs requested where needed", Required: false},
+			},
+			DecisionTrail: []string{"test_manager", "release_management_lead", "test_types", "requirements"},
+		}
+	case "test_solution:" + workflow.TestSolutionAuthorized:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"test_plan", "test_lead"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "test_execution_order", Label: "Order of tests planned", Required: true},
+				{Key: "requirements_documented", Label: "Functional, technical, security, and conversion requirements documented", Required: true},
+				{Key: "test_leads_authorized", Label: "Test leads authorized to commence testing", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "release_management_lead", "test_plan", "test_lead"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemPrereq:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "unit_scripts_received", Label: "Signed unit test scripts, implementation procedure, and artefacts received", Required: true},
+				{Key: "requirements_docs_received", Label: "Functional, technical, and security requirement documents received", Required: true},
+				{Key: "prerequisites_complete", Label: "System test prerequisites reviewed for completeness", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_management_specialist", "unit_test_scripts", "requirements"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemPlanning:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "artefacts_moved", Label: "Test artefacts moved from development to test environment", Required: true},
+				{Key: "system_test_team_selected", Label: "System test team members selected", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "solution_developer", "test_environment", "team_members"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "system_test_scripts_ready", Label: "System test scripts prepared", Required: true},
+				{Key: "stakeholders_notified", Label: "Environment owners and test stakeholders notified", Required: true},
+				{Key: "test_schedule_confirmed", Label: "System test schedule and team briefing confirmed", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_scripts", "schedule", "stakeholders"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemReadiness:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionDeveloperRole,
+			AccountableRole: SeniorSolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "environment_ready", Label: "Test environment and test data confirmed ready", Required: true},
+				{Key: "dependencies_ready", Label: "Required integrations and supporting artefacts are available", Required: true},
+			},
+			DecisionTrail: []string{"solution_developer", "senior_solution_developer", "environment_readiness"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "system_test_executed", Label: "System test carried out according to schedule and plan", Required: true},
+				{Key: "system_results_documented", Label: "System test results documented", Required: true},
+				{Key: "system_signoff_obtained", Label: "Completed system test scripts or cases signed off", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_management_specialist", "system_test_results", "signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionSystemReview:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			RequiredFields:  []string{"test_result"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "system_results_reviewed", Label: "System test results reviewed", Required: true},
+				{Key: "system_success_decision", Label: "System test success or rework decision recorded", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "system_test_result", "decision"},
+		}
+	case "test_solution:" + workflow.TestSolutionIntegrationPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionDeveloperRole,
+			AccountableRole: SeniorSolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "integration_scripts_reviewed", Label: "Integration test scripts prepared or reviewed", Required: true},
+				{Key: "components_assembled", Label: "Component modules assembled and environment prepared", Required: true},
+				{Key: "integration_team_notified", Label: "Integration test team assembled or notified", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "solution_developer", "integration_scripts", "components"},
+		}
+	case "test_solution:" + workflow.TestSolutionIntegrationExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "integration_test_executed", Label: "Integration test carried out as documented", Required: true},
+				{Key: "integration_results_documented", Label: "Integration test results documented", Required: true},
+				{Key: "integration_signoff_obtained", Label: "Integration test sign-off obtained", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "integration_test_result", "signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionStressPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionDeveloperRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "performance_scripts_ready", Label: "Stress/performance test scripts and targets prepared", Required: true},
+				{Key: "load_environment_ready", Label: "Load environment, test data, and monitoring prepared", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "solution_developer", "performance_targets"},
+		}
+	case "test_solution:" + workflow.TestSolutionStressExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "performance_test_executed", Label: "Stress/performance test executed", Required: true},
+				{Key: "performance_results_documented", Label: "Performance results documented", Required: true},
+				{Key: "performance_signoff_obtained", Label: "Performance test sign-off obtained", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "performance_result", "signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionSecurityPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: SolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "security_test_scope_ready", Label: "Security test scope and scripts prepared", Required: true},
+				{Key: "security_environment_ready", Label: "Security test environment and access prepared", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "solution_developer", "security_scope"},
+		}
+	case "test_solution:" + workflow.TestSolutionSecurityExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: SolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "security_test_executed", Label: "Security test executed as documented", Required: true},
+				{Key: "security_results_documented", Label: "Security results documented", Required: true},
+				{Key: "security_signoff_obtained", Label: "Security test sign-off obtained", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "security_result", "signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionDataConversionPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: TestAnalystRole,
+			AccountableRole: SolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "conversion_scripts_ready", Label: "Data conversion scripts and reconciliation criteria prepared", Required: true},
+				{Key: "conversion_data_ready", Label: "Source data, target environment, and rollback path prepared", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_analyst", "conversion_plan"},
+		}
+	case "test_solution:" + workflow.TestSolutionDataConversionExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestAnalystRole,
+			AccountableRole: SolutionDeveloperRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "conversion_test_executed", Label: "Data conversion test executed", Required: true},
+				{Key: "conversion_results_documented", Label: "Data conversion results documented", Required: true},
+				{Key: "conversion_signoff_obtained", Label: "Data conversion test sign-off obtained", Required: true},
+			},
+			DecisionTrail: []string{"test_analyst", "conversion_result", "signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionUATConfirmation:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "initial_tests_performed", Label: "All required initial tests have been performed", Required: true},
+				{Key: "initial_test_evidence_reviewed", Label: "Initial test results and sign-offs reviewed", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_management_specialist", "initial_test_results"},
+		}
+	case "test_solution:" + workflow.TestSolutionUATPreparation:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "uat_plan_defined", Label: "UAT test plan and scripts defined", Required: true},
+				{Key: "uat_success_criteria_defined", Label: "UAT success criteria and business validation scope defined", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "uat_plan", "uat_scripts"},
+		}
+	case "test_solution:" + workflow.TestSolutionUATNominees:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "nominees_requested", Label: "Test nominees requested from user groups", Required: true},
+				{Key: "nominee_availability_confirmed", Label: "Nominee availability and business representation confirmed", Required: false},
+			},
+			DecisionTrail: []string{"test_manager", "user_groups", "test_nominees"},
+		}
+	case "test_solution:" + workflow.TestSolutionUATExecution:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "uat_executed", Label: "UAT carried out according to scripts", Required: true},
+				{Key: "uat_results_documented", Label: "UAT results documented", Required: true},
+				{Key: "uat_signoff_obtained", Label: "UAT sign-off obtained", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "uat_result", "uat_signoff"},
+		}
+	case "test_solution:" + workflow.TestSolutionUATReview:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			RequiredFields:  []string{"uat_result"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "uat_confirmed", Label: "UAT confirmed as carried out accordingly", Required: true},
+				{Key: "uat_release_decision", Label: "Release handoff or build/configure rework decision recorded", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "uat_success", "release_handoff_decision"},
+		}
+	case "test_solution:" + workflow.TestSolutionReleaseHandoff:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"uat_signoff", "test_results"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "uat_signed", Label: "UAT sign-off is signed or approved", Required: true},
+				{Key: "test_results_packaged", Label: "Test results packaged for Release and Deployment Management", Required: true},
+				{Key: "release_manager_notified", Label: "Release Manager and relevant processes notified", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "release_management_lead", "uat_signoff", "test_results"},
+		}
+	case "test_solution:" + workflow.TestSolutionBuildRework:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionDeveloperRole,
+			AccountableRole: SeniorSolutionDeveloperRole,
+			RequiredFields:  []string{"failure_reason"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "failure_logged", Label: "Failed test result and root cause recorded", Required: true},
+				{Key: "rework_owner_assigned", Label: "Build/configure rework owner assigned", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "solution_developer", "failure_reason", "rework_owner"},
+		}
+	case "test_solution:" + workflow.TestSolutionClosed:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "evidence_complete", Label: "All test evidence, decisions, and sign-offs are complete", Required: true},
+				{Key: "run_closed", Label: "Test run closed for audit and reporting", Required: true},
+			},
+			DecisionTrail: []string{"test_manager", "test_management_specialist", "closed_at"},
+		}
+	case "test_solution:" + workflow.TestSolutionCancelled:
+		return transitionUXMetadata{
+			ResponsibleRole: TestManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"reason"},
+			DecisionTrail:   []string{"test_manager", "release_management_lead", "cancel_reason"},
 		}
 	case "major_incident:" + workflow.MajorIncidentResolved:
 		return transitionUXMetadata{
