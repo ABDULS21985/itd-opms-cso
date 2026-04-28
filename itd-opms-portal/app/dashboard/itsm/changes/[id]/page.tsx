@@ -327,7 +327,7 @@ export default function ChangeDetailPage() {
             onClick={() => pirMutation.mutate({ pirNotes })}
             disabled={!pirNotes || pirMutation.isPending}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #7C3AED, #6D28D9)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             {pirMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Complete PIR"}
           </button>

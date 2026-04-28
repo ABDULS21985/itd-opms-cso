@@ -80,7 +80,7 @@ export default function ReleasesListPage() {
           <Link
             href="/dashboard/releases/new"
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ background: "linear-gradient(135deg, #4F46E5, #4338CA)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             <Plus size={16} />
             New Release

@@ -421,7 +421,7 @@ export default function NewReleasePage() {
             onClick={() => setStep(step + 1)}
             disabled={!canNext()}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-30"
-            style={{ background: "linear-gradient(135deg, #4F46E5, #4338CA)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             Next
             <ArrowRight size={16} />
@@ -431,7 +431,7 @@ export default function NewReleasePage() {
             onClick={handleSubmit}
             disabled={createRelease.isPending}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg, #4F46E5, #4338CA)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             {createRelease.isPending ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />}
             Create Release

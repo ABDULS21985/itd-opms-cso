@@ -297,7 +297,7 @@ function CommandCard({
       className="group relative overflow-hidden rounded-[28px] border p-5"
       style={{
         background:
-          "radial-gradient(circle at top right, rgba(255,255,255,0.16), transparent 34%), linear-gradient(135deg, rgba(15,23,42,0.94), rgba(35,39,64,0.96))",
+          "radial-gradient(circle at top right, rgba(196,169,98,0.18), transparent 34%), linear-gradient(135deg, rgba(6,46,22,0.96), rgba(14,90,45,0.94))",
         borderColor: severity.border,
       }}
     >
@@ -715,8 +715,8 @@ export default function MajorIncidentsPage() {
 
   return (
     <div className="space-y-8 pb-10">
-      <section className="relative overflow-hidden rounded-[32px] border border-[#6b1218]/30 bg-[#120b11] p-6 text-white shadow-[0_38px_120px_-70px_rgba(127,29,29,0.9)] md:p-8">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(248,113,113,0.24),_transparent_34%),radial-gradient(circle_at_20%_20%,_rgba(234,179,8,0.16),_transparent_22%)]" />
+      <section className="relative overflow-hidden rounded-[32px] border border-[#A8893D]/30 bg-[#062E16] p-6 text-white shadow-[0_38px_120px_-70px_rgba(6,46,22,0.9)] md:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(196,169,98,0.22),_transparent_34%),radial-gradient(circle_at_20%_20%,_rgba(38,168,217,0.18),_transparent_24%)]" />
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
@@ -764,14 +764,14 @@ export default function MajorIncidentsPage() {
           title="Declared"
           value={String(stats?.total ?? incidents.length)}
           helper="Total major incidents tracked in the workflow."
-          accent="#2563EB"
+          accent="#1B7340"
           icon={ShieldAlert}
         />
         <MetricCard
           title="Average Duration"
           value={formatAverageMinutes(stats?.avgDurationMinutes)}
           helper="Mean time from declaration to restoration."
-          accent="#7C3AED"
+          accent="#A8893D"
           icon={Clock3}
         />
         <MetricCard
@@ -815,7 +815,7 @@ export default function MajorIncidentsPage() {
           </div>
         ) : (
           <div className="rounded-[28px] border border-dashed border-[var(--border)] bg-[var(--surface-0)] p-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(37,99,235,0.08)] text-[var(--primary)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(27,115,64,0.10)] text-[var(--primary)]">
               <ShieldAlert size={24} />
             </div>
             <h3 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
@@ -936,8 +936,8 @@ export default function MajorIncidentsPage() {
 
       {isDeclareOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="my-8 w-full max-w-6xl overflow-hidden rounded-[30px] border border-[#7f1d1d]/35 bg-[#120f17] text-white shadow-[0_50px_160px_-70px_rgba(15,23,42,0.92)]">
-            <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(248,113,113,0.24),_transparent_32%),linear-gradient(135deg,_rgba(88,28,135,0.28),_rgba(17,24,39,0.55))] px-6 py-6 md:px-8">
+          <div className="my-8 w-full max-w-6xl overflow-hidden rounded-[30px] border border-[#A8893D]/30 bg-[#062E16] text-white shadow-[0_50px_160px_-70px_rgba(6,46,22,0.92)]">
+            <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(248,113,113,0.22),_transparent_32%),linear-gradient(135deg,_rgba(196,169,98,0.20),_rgba(6,46,22,0.55))] px-6 py-6 md:px-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="max-w-2xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/64">

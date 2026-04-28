@@ -937,7 +937,7 @@ export default function ProblemsPage() {
                     : "All problem records currently represented by this result set."
                 }
                 icon={Bug}
-                accent="#2563EB"
+                accent="#1B7340"
               />
               <MetricCard
                 title="Active investigations"

@@ -625,7 +625,7 @@ function BulkApproveTab() {
             label="Selected"
             value={stats.selected}
             helper="Requests currently included in the pending batch."
-            accent="#2563EB"
+            accent="#1B7340"
             loading={isLoading}
           />
           <SelectionMetricCard
@@ -639,7 +639,7 @@ function BulkApproveTab() {
             label="Divisions"
             value={stats.divisions}
             helper="Distinct divisions represented in this approval run."
-            accent="#7C3AED"
+            accent="#A8893D"
             loading={isLoading}
           />
         </div>
@@ -830,14 +830,14 @@ function BulkStatusTab() {
             label="Selected"
             value={stats.selected}
             helper="Requests queued for this state update batch."
-            accent="#2563EB"
+            accent="#1B7340"
             loading={isLoading}
           />
           <SelectionMetricCard
             label="Divisions"
             value={stats.divisions}
             helper="Distinct divisions touched by the current repair set."
-            accent="#7C3AED"
+            accent="#A8893D"
             loading={isLoading}
           />
           <SelectionMetricCard
@@ -1033,7 +1033,7 @@ function BulkExportTab() {
             label="Active filters"
             value={activeFilterCount}
             helper="Filters shaping the next CSV export request."
-            accent="#2563EB"
+            accent="#1B7340"
           />
           <SelectionMetricCard
             label="Last export"

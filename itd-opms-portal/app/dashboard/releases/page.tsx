@@ -111,7 +111,7 @@ export default function ReleasesHubPage() {
         <Link
           href="/dashboard/releases/new"
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ background: "linear-gradient(135deg, #4F46E5, #4338CA)" }}
+          style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
         >
           <Plus size={16} />
           New Release
@@ -165,7 +165,7 @@ export default function ReleasesHubPage() {
           icon={List}
           label="All Releases"
           description="View and manage all releases"
-          accent="#6366F1"
+          accent="#0E5A2D"
           index={0}
         />
         <QuickLink
@@ -181,7 +181,7 @@ export default function ReleasesHubPage() {
           icon={Calendar}
           label="Release Calendar"
           description="View scheduled deployments"
-          accent="#2563EB"
+          accent="#1B7340"
           index={2}
         />
         <QuickLink

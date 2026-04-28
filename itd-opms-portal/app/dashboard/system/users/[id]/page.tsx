@@ -444,7 +444,7 @@ export default function UserDetailPage() {
                   {/* Online indicator */}
                   <div className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-[3px] border-[var(--surface-0)] ${isActive ? "bg-[var(--success)]" : "bg-[var(--surface-4)]"}`} />
                 </div>
-                <div className="pb-1">
+                <div className="pb-1 translate-y-2 sm:translate-y-3">
                   <h1 className="text-xl font-bold text-[var(--text-primary)] sm:text-2xl">
                     {user.displayName}
                   </h1>

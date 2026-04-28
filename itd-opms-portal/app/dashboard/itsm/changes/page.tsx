@@ -125,7 +125,7 @@ export default function ChangesPage() {
           <Link
             href="/dashboard/itsm/changes/new"
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ background: "linear-gradient(135deg, #7C3AED, #6D28D9)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             <Plus size={16} />
             New Change
@@ -136,12 +136,12 @@ export default function ChangesPage() {
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <MetricCard title="Total" value={stats.total} icon={GitBranch} accent="#7C3AED" />
+          <MetricCard title="Total" value={stats.total} icon={GitBranch} accent="#A8893D" />
           <MetricCard title="Emergency" value={stats.emergency} icon={Zap} accent="#DC2626" />
-          <MetricCard title="Standard" value={stats.standard} icon={CheckCircle2} accent="#2563EB" />
-          <MetricCard title="Normal" value={stats.normal} icon={GitBranch} accent="#7C3AED" />
+          <MetricCard title="Standard" value={stats.standard} icon={CheckCircle2} accent="#1B7340" />
+          <MetricCard title="Normal" value={stats.normal} icon={GitBranch} accent="#A8893D" />
           <MetricCard title="Pending CAB" value={stats.pendingCab} icon={Shield} accent="#D97706" />
-          <MetricCard title="Implementing" value={stats.implementing} icon={RefreshCw} accent="#2563EB" />
+          <MetricCard title="Implementing" value={stats.implementing} icon={RefreshCw} accent="#1B7340" />
           <MetricCard title="Pending PIR" value={stats.pendingPir} icon={Clock} accent="#EA580C" />
         </div>
       )}

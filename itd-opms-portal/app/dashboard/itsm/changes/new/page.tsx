@@ -414,7 +414,7 @@ export default function NewChangePage() {
             onClick={() => setStep(step + 1)}
             disabled={!canNext()}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-30"
-            style={{ background: "linear-gradient(135deg, #7C3AED, #6D28D9)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             Next
             <ArrowRight size={16} />
@@ -424,7 +424,7 @@ export default function NewChangePage() {
             onClick={handleSubmit}
             disabled={createChange.isPending}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg, #7C3AED, #6D28D9)" }}
+            style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
           >
             {createChange.isPending ? <Loader2 size={16} className="animate-spin" /> : <Shield size={16} />}
             Submit Change

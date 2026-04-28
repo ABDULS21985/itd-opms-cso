@@ -1442,7 +1442,7 @@ export default function ServiceCatalogPage() {
                 label="Visible services"
                 value={sourceItems.length}
                 helper="Services currently available in the active catalog scope."
-                accent="#2563EB"
+                accent="#1B7340"
                 loading={catalogLoading}
               />
               <MetricCard
@@ -1772,7 +1772,7 @@ export default function ServiceCatalogPage() {
               icon={History}
               items={recentItems || []}
               loading={recentLoading}
-              accent="#2563EB"
+              accent="#1B7340"
               emptyTitle="No recent requests"
               emptyDescription="Request activity will show up here once you start using the catalog."
               categoryMap={categoryMap}
@@ -1990,7 +1990,7 @@ export default function ServiceCatalogPage() {
                 label="Search term"
                 value={isSearchActive ? debouncedSearch : "None"}
                 helper="The active search term applied to the board."
-                accent="#7C3AED"
+                accent="#A8893D"
               />
               <MetricCard
                 label="View mode"

@@ -474,7 +474,7 @@ export default function GRCReportsPage() {
           value={openAudits}
           loading={auditsLoading}
           icon={FileSearch}
-          accent="#3B82F6"
+          accent="#26A8D9"
           accentSoft="rgba(59, 130, 246, 0.12)"
           note={`${attentionAudits} in-flight audits require readiness follow-through.`}
         />

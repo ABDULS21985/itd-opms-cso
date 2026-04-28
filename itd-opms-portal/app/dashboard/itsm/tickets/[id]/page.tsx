@@ -1755,7 +1755,7 @@ export default function TicketDetailPage({
               label="Current owner"
               value={currentOwnerName}
               helper={currentOwnerMeta || "No current assignee on this ticket."}
-              accent="#60A5FA"
+              accent="#26A8D9"
             />
             <MetricTile
               icon={TrendingUp}
@@ -1871,14 +1871,14 @@ export default function TicketDetailPage({
           label="Collaboration"
           value={`${publicCommentCount} public / ${internalCommentCount} internal`}
           helper={`${timeline.length} total activity events recorded on this ticket.`}
-          accent="#3B82F6"
+          accent="#26A8D9"
         />
         <MetricTile
           icon={LinkIcon}
           label="Linked context"
           value={`${linkedContextCount} connected records`}
           helper="Related tickets, linked assets, and problem records grouped into one view."
-          accent="#8B5CF6"
+          accent="#C4A962"
         />
         <MetricTile
           icon={Clock}
@@ -2386,7 +2386,7 @@ export default function TicketDetailPage({
                             ? new Date(ticket.slaResponseTarget).toLocaleString()
                             : "Not set"
                         }
-                        accent="#3B82F6"
+                        accent="#26A8D9"
                       />
                       <DetailCard
                         icon={Target}
@@ -2396,7 +2396,7 @@ export default function TicketDetailPage({
                             ? new Date(ticket.slaResolutionTarget).toLocaleString()
                             : "Not set"
                         }
-                        accent="#8B5CF6"
+                        accent="#C4A962"
                       />
                       <DetailCard
                         icon={

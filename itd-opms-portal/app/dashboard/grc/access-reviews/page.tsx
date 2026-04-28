@@ -786,14 +786,14 @@ export default function AccessReviewsPage() {
                 label="In flight"
                 value={inFlightCampaigns}
                 helper="Campaigns actively collecting or validating decisions."
-                accent="#2563EB"
+                accent="#1B7340"
                 loading={isLoading}
               />
               <MetricCard
                 label="Reviewers"
                 value={uniqueReviewers}
                 helper="Distinct reviewer identities represented on this page."
-                accent="#7C3AED"
+                accent="#A8893D"
                 loading={isLoading}
               />
               <MetricCard

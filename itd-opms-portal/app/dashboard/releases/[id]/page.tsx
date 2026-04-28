@@ -586,7 +586,7 @@ export default function ReleaseDetailPage() {
                   }
                   disabled={updateRelease.isPending}
                   className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60"
-                  style={{ background: "linear-gradient(135deg, #4F46E5, #4338CA)" }}
+                  style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
                 >
                   {updateRelease.isPending ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
                   Save Close-Out

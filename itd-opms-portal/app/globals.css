@@ -80,6 +80,15 @@
   --color-brand-light: #2d9b56;
   --color-accent: #8b6f2e;
 
+  /* CBN logo palette — for brand-aligned section accents */
+  --cbn-green: #1b7340;
+  --cbn-green-dark: #0e5a2d;
+  --cbn-green-deep: #062e16;
+  --cbn-blue: #26a8d9;
+  --cbn-blue-dark: #1e88bc;
+  --cbn-gold: #a8893d;
+  --cbn-gold-light: #c4a962;
+
   /* Sidebar (light theme) */
   --sidebar-bg-from: #ffffff;
   --sidebar-bg-to: #f9fafb;

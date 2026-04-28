@@ -1361,13 +1361,13 @@ export default function TicketsPage() {
               <SignalCard
                 label="Service Requests"
                 value={visibleRequestCount}
-                accent="#2563EB"
+                accent="#1B7340"
                 helper="Fulfilment work moving alongside incident demand."
               />
               <SignalCard
                 label="Unassigned"
                 value={visibleUnassignedCount}
-                accent="#7C3AED"
+                accent="#A8893D"
                 helper="Items that still need explicit ownership."
               />
             </div>

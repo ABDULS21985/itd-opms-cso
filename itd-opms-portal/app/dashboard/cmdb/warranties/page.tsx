@@ -455,7 +455,7 @@ export default function WarrantiesPage() {
               label="Tracked coverage"
               value={`${totalTracked}`}
               helper="Total warranties currently available in the registry."
-              accent="#60A5FA"
+              accent="#26A8D9"
               inverted
             />
             <SummaryTile
