@@ -71,17 +71,21 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
+  /** Tailwind-compatible CSS color used to tint icons in this section. */
+  color?: string;
 }
 
 export const navGroups: NavGroup[] = [
   {
     label: "Overview",
+    color: "#3B82F6",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     ],
   },
   {
     label: "Analytics",
+    color: "#8B5CF6",
     items: [
       {
         href: "/dashboard/analytics",
@@ -141,6 +145,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Governance",
+    color: "#6366F1",
     items: [
       {
         href: "/dashboard/governance/policies",
@@ -182,6 +187,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "People",
+    color: "#EC4899",
     items: [
       {
         href: "/dashboard/people/roster",
@@ -235,6 +241,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Planning",
+    color: "#10B981",
     items: [
       {
         href: "/dashboard/planning/portfolios",
@@ -300,6 +307,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "ITSM",
+    color: "#06B6D4",
     items: [
       {
         href: "/dashboard/itsm/command-center",
@@ -371,6 +379,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Release Mgmt",
+    color: "#F97316",
     items: [
       {
         href: "/dashboard/releases",
@@ -388,6 +397,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Assets",
+    color: "#F59E0B",
     items: [
       {
         href: "/dashboard/cmdb/assets",
@@ -453,6 +463,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Server Allocation",
+    color: "#84CC16",
     items: [
       {
         href: "/dashboard/ssa",
@@ -494,6 +505,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Knowledge",
+    color: "#0EA5E9",
     items: [
       {
         href: "/dashboard/knowledge",
@@ -517,10 +529,12 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Document Vault",
+    color: "#F43F5E",
     items: [
       {
         href: "/dashboard/vault",
         label: "Document Vault",
+    color: "#F43F5E",
         icon: FolderOpen,
         permission: "documents.view",
       },
@@ -528,6 +542,7 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "GRC",
+    color: "#EF4444",
     items: [
       {
         href: "/dashboard/grc",
@@ -569,10 +584,12 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "System",
+    color: "#64748B",
     items: [
       {
         href: "/dashboard/system",
         label: "Overview",
+    color: "#3B82F6",
         icon: LayoutDashboard,
         permission: "system.view",
       },

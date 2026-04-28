@@ -124,6 +124,7 @@ export function SidebarNavSection({
               itemIndex={0}
               dur={dur}
               staggerDur={0}
+              iconColor={group.color}
               onContextMenu={onContextMenu}
               onToggleVisibility={onToggleItemVisibility}
             />
@@ -140,7 +141,7 @@ export function SidebarNavSection({
       style={sortableStyle}
       className={`${groupIndex > 0 ? "mt-2" : ""} ${
         isCustomizing
-          ? "rounded-lg border border-dashed border-[#1B7340]/20 p-1"
+          ? "rounded-lg border border-dashed border-[color:var(--sidebar-border)] p-1"
           : ""
       } ${isSectionHidden && isCustomizing ? "opacity-50" : ""}`}
     >
@@ -151,7 +152,7 @@ export function SidebarNavSection({
           <button
             {...attributes}
             {...listeners}
-            className="flex-shrink-0 p-0.5 mr-1 rounded text-gray-400 hover:text-gray-200 cursor-grab active:cursor-grabbing transition-colors"
+            className="flex-shrink-0 p-0.5 mr-1 rounded text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-muted)] cursor-grab active:cursor-grabbing transition-colors"
             aria-label={`Reorder ${group.label} section`}
           >
             <GripVertical size={12} />
@@ -211,7 +212,7 @@ export function SidebarNavSection({
         {isCustomizing && !isOverview && (
           <button
             onClick={() => onToggleSectionVisibility(group.label)}
-            className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-200 transition-colors mr-1"
+            className="flex-shrink-0 p-0.5 rounded text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-muted)] transition-colors mr-1"
             aria-label={
               isSectionHidden
                 ? `Show ${group.label} section`
@@ -318,10 +319,10 @@ export function SidebarNavSection({
 export function SidebarNavSectionOverlay({ label }: { label: string }) {
   return (
     <div
-      className="flex items-center gap-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-2.5 bg-[#0B0A06] border border-[#8B6F2E]/30 text-[#C4A962] shadow-2xl shadow-black/50"
+      className="flex items-center gap-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-2.5 bg-[color:var(--sidebar-bg-from)] border border-[#8B6F2E]/30 text-[#C4A962] shadow-2xl shadow-black/50"
       style={{ transform: "rotate(3deg)", opacity: 0.9, width: 240 }}
     >
-      <GripVertical size={12} className="text-gray-400" />
+      <GripVertical size={12} className="text-[color:var(--sidebar-text-faint)]" />
       <span>{label}</span>
     </div>
   );

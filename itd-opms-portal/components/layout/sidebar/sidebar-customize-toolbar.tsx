@@ -24,7 +24,7 @@ export function SidebarCustomizeToolbar({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
-      className="px-3 pt-2 pb-1 flex-shrink-0 border-b border-[#1B7340]/15"
+      className="px-3 pt-2 pb-1 flex-shrink-0 border-b border-[color:var(--sidebar-border)]"
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -42,14 +42,14 @@ export function SidebarCustomizeToolbar({
       <div className="flex items-center gap-2 mb-1">
         <button
           onClick={onDone}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1B7340]/20 text-[#2D9B58] text-xs font-medium hover:bg-[#1B7340]/30 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1B7340]/20 text-[#2D9B58] text-xs font-medium hover:bg-[color:var(--sidebar-active-bg-strong)] transition-colors"
         >
           <Check size={12} />
           Done
         </button>
         <button
           onClick={onReset}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 text-xs hover:text-gray-200 hover:bg-white/5 transition-colors"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[color:var(--sidebar-text-faint)] text-xs hover:text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] transition-colors"
         >
           <RotateCcw size={11} />
           Reset

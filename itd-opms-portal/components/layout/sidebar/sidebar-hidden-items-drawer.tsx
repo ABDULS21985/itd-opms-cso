@@ -59,14 +59,14 @@ export function SidebarHiddenItemsDrawer({
 
   return (
     <div className="mt-3 mx-1">
-      <div className="border-t border-[#1B7340]/15 pt-2">
+      <div className="border-t border-[color:var(--sidebar-border)] pt-2">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400 hover:text-gray-300 transition-colors"
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-subtle)] transition-colors"
         >
           <EyeOff size={10} />
           Hidden Items
-          <span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded-full ml-1">
+          <span className="text-[9px] bg-[color:var(--sidebar-search-bg)] px-1.5 py-0.5 rounded-full ml-1">
             {totalHidden}
           </span>
           <motion.span
@@ -92,7 +92,7 @@ export function SidebarHiddenItemsDrawer({
                   <div key={sectionLabel}>
                     {/* Section label */}
                     <div className="flex items-center gap-1.5 px-2 mb-0.5">
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-500">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-[color:var(--sidebar-text-faint)]">
                         {sectionLabel}
                       </span>
                       {isSectionHidden && (
@@ -100,7 +100,7 @@ export function SidebarHiddenItemsDrawer({
                           onClick={() =>
                             onToggleSectionVisibility(sectionLabel)
                           }
-                          className="flex items-center gap-1 text-[9px] text-gray-500 hover:text-gray-300 transition-colors"
+                          className="flex items-center gap-1 text-[9px] text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-subtle)] transition-colors"
                           title="Show section"
                         >
                           <Eye size={9} />
@@ -114,7 +114,7 @@ export function SidebarHiddenItemsDrawer({
                       <button
                         key={item.href}
                         onClick={() => onToggleItemVisibility(item.href)}
-                        className="w-full flex items-center gap-2 px-3 py-1 text-xs text-gray-500 hover:text-gray-300 hover:bg-white/5 rounded-lg transition-colors"
+                        className="w-full flex items-center gap-2 px-3 py-1 text-xs text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-subtle)] hover:bg-[color:var(--sidebar-hover-bg)] rounded-lg transition-colors"
                       >
                         <EyeOff size={12} />
                         <span className="line-through truncate">

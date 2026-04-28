@@ -127,7 +127,7 @@ function HighlightedText({
         seg.highlighted ? (
           <mark
             key={i}
-            className="bg-[#1B7340]/30 text-white rounded-sm px-[1px]"
+            className="bg-[color:var(--sidebar-active-bg-strong)] text-white rounded-sm px-[1px]"
           >
             {seg.text}
           </mark>
@@ -686,7 +686,7 @@ export function Sidebar({
       <aside
         className={`
           relative flex flex-col h-screen
-          bg-gradient-to-b from-[#062E16] to-[#041F0F]
+          bg-gradient-to-b from-[var(--sidebar-bg-from)] to-[var(--sidebar-bg-to)]
           border-r border-[#1B7340]/10 shadow-2xl
           transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
 
@@ -711,7 +711,7 @@ export function Sidebar({
         {/* -------------------------------------------------------- */}
         {/*  Logo & Branding                                          */}
         {/* -------------------------------------------------------- */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-[#1B7340]/15 bg-[#1B7340]/[0.04] backdrop-blur-sm flex-shrink-0">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-[color:var(--sidebar-border)] bg-[color:var(--sidebar-divider)] backdrop-blur-sm flex-shrink-0">
           {/* Expanded logo */}
           <Link
             href="/dashboard"
@@ -728,7 +728,7 @@ export function Sidebar({
               <span className="font-semibold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 OPMS
               </span>
-              <span className="text-[9px] font-medium bg-[#1B7340]/30 text-[#1B7340] px-1.5 py-0.5 rounded-md">
+              <span className="text-[9px] font-medium bg-[color:var(--sidebar-active-bg-strong)] text-[color:var(--sidebar-accent)] px-1.5 py-0.5 rounded-md">
                 v1.0
               </span>
             </div>
@@ -753,7 +753,7 @@ export function Sidebar({
             {!collapsed && !customizeMode.isCustomizing && (
               <button
                 onClick={handleEnterCustomize}
-                className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200 flex-shrink-0"
+                className="hidden lg:flex p-1.5 rounded-lg hover:bg-[color:var(--sidebar-hover-bg-strong)] text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text)] transition-all duration-200 flex-shrink-0"
                 aria-label="Customize sidebar"
                 title="Customize sidebar"
               >
@@ -764,7 +764,7 @@ export function Sidebar({
             {/* Collapse toggle */}
             <button
               onClick={onToggleCollapse}
-              className="hidden lg:flex p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-all duration-200 flex-shrink-0"
+              className="hidden lg:flex p-1.5 rounded-lg hover:bg-[color:var(--sidebar-hover-bg-strong)] text-[color:var(--sidebar-text-subtle)] hover:text-[color:var(--sidebar-text)] transition-all duration-200 flex-shrink-0"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? (
@@ -777,7 +777,7 @@ export function Sidebar({
             {/* Close button -- mobile */}
             <button
               onClick={onMobileClose}
-              className="lg:hidden p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all duration-200"
+              className="lg:hidden p-1.5 rounded-lg hover:bg-[color:var(--sidebar-hover-bg-strong)] text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text)] transition-all duration-200"
               aria-label="Close menu"
             >
               <X size={18} />
@@ -807,7 +807,7 @@ export function Sidebar({
             <div className="relative">
               <Search
                 size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--sidebar-text-subtle)] pointer-events-none"
               />
               <input
                 ref={searchInputRef}
@@ -816,7 +816,7 @@ export function Sidebar({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Search navigation..."
-                className="w-full bg-white/5 border border-[#1B7340]/20 text-white text-sm rounded-lg pl-8 pr-8 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1B7340]/50 focus:border-[#1B7340]/50 transition-all duration-200"
+                className="w-full bg-[color:var(--sidebar-search-bg)] border border-[color:var(--sidebar-border)] text-[color:var(--sidebar-text)] text-sm rounded-lg pl-8 pr-8 py-2 placeholder:text-[color:var(--sidebar-text-faint)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sidebar-active-bg-strong)] focus:border-[color:var(--sidebar-border-strong)] transition-all duration-200"
               />
               {searchQuery ? (
                 <button
@@ -824,12 +824,12 @@ export function Sidebar({
                     setSearchQuery("");
                     searchInputRef.current?.focus();
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-white transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[color:var(--sidebar-text-subtle)] hover:text-[color:var(--sidebar-text)] transition-colors"
                 >
                   <X size={14} />
                 </button>
               ) : (
-                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 border border-[#1B7340]/20 rounded px-1 py-0.5 font-mono">
+                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[color:var(--sidebar-text-faint)] border border-[color:var(--sidebar-border)] rounded px-1 py-0.5 font-mono">
                   /
                 </kbd>
               )}
@@ -842,7 +842,7 @@ export function Sidebar({
                 onToggleCollapse();
                 setTimeout(() => searchInputRef.current?.focus(), 350);
               }}
-              className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-300 hover:text-white transition-all duration-200"
+              className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-[color:var(--sidebar-hover-bg)] text-[color:var(--sidebar-text-subtle)] hover:text-[color:var(--sidebar-text)] transition-all duration-200"
               title="Search navigation"
             >
               <Search size={18} />
@@ -868,17 +868,17 @@ export function Sidebar({
             <div>
               {flatSearchResults.length === 0 ? (
                 <div className="px-3 py-8 text-center">
-                  <Search size={32} className="mx-auto text-gray-400 mb-3" />
-                  <p className="text-sm text-gray-500">
+                  <Search size={32} className="mx-auto text-[color:var(--sidebar-text-faint)] mb-3" />
+                  <p className="text-sm text-[color:var(--sidebar-text-faint)]">
                     No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-[color:var(--sidebar-text-faint)] mt-1">
                     Try a different search term
                   </p>
                 </div>
               ) : (
                 <>
-                  <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-300">
+                  <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--sidebar-text-subtle)]">
                     Results ({flatSearchResults.length})
                   </p>
                   <div className="space-y-0.5">
@@ -896,23 +896,23 @@ export function Sidebar({
                             transition-all duration-200 px-3 py-2.5 border-l-[3px]
                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B7340]/50
                             ${active
-                              ? "border-[#1B7340] bg-[#1B7340]/15 text-white"
+                              ? "border-[color:var(--sidebar-accent)] bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
                               : focused
-                                ? "border-[#1B7340]/50 bg-white/5 text-white"
-                                : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
+                                ? "border-[color:var(--sidebar-border-strong)] bg-[color:var(--sidebar-search-bg)] text-[color:var(--sidebar-text)]"
+                                : "border-transparent text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
                             }
                           `}
                         >
                           <Icon
                             size={18}
-                            className={`flex-shrink-0 ${active ? "text-white" : "text-gray-300"}`}
+                            className={`flex-shrink-0 ${active ? "text-[color:var(--sidebar-active-text)]" : "text-[color:var(--sidebar-text-subtle)]"}`}
                           />
                           <div className="flex-1 min-w-0">
                             <HighlightedText
                               text={result.item.label}
                               matchedIndices={result.matchedIndices}
                             />
-                            <span className="text-[10px] text-gray-400 ml-2">
+                            <span className="text-[10px] text-[color:var(--sidebar-text-faint)] ml-2">
                               {result.group}
                             </span>
                           </div>
@@ -930,8 +930,8 @@ export function Sidebar({
                 !customizeMode.isCustomizing &&
                 favorites.length > 0 && (
                   <div className="mb-3">
-                    <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
-                      <Star size={10} className="text-[#1B7340]" />
+                    <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--sidebar-text-subtle)] flex items-center gap-1.5">
+                      <Star size={10} className="text-[color:var(--sidebar-accent)]" />
                       Favorites
                     </p>
                     <div className="space-y-0.5">
@@ -949,8 +949,8 @@ export function Sidebar({
                                 flex-1 flex items-center gap-2.5 rounded-xl text-xs font-medium
                                 transition-all duration-200 px-3 py-2 border-l-[3px]
                                 ${active
-                                  ? "border-[#1B7340] bg-[#1B7340]/15 text-white"
-                                  : "border-transparent text-gray-200 hover:bg-white/5 hover:text-white"
+                                  ? "border-[color:var(--sidebar-accent)] bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
+                                  : "border-transparent text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
                                 }
                               `}
                             >
@@ -959,7 +959,7 @@ export function Sidebar({
                             </Link>
                             <button
                               onClick={() => removeFavorite(fav.path)}
-                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[#1B7340] hover:text-[#1B7340]/80 transition-opacity"
+                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[color:var(--sidebar-accent)] hover:text-[color:var(--sidebar-accent)] transition-opacity"
                               title="Remove from favorites"
                             >
                               <Star size={12} fill="currentColor" />
@@ -968,7 +968,7 @@ export function Sidebar({
                         );
                       })}
                     </div>
-                    <div className="mx-3 mt-2 border-t border-[#1B7340]/15" />
+                    <div className="mx-3 mt-2 border-t border-[color:var(--sidebar-border)]" />
                   </div>
                 )}
 
@@ -979,7 +979,7 @@ export function Sidebar({
                   <div className="mb-3">
                     <button
                       onClick={() => setRecentSectionOpen((v) => !v)}
-                      className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-300 flex items-center gap-1.5 hover:text-gray-200 transition-colors"
+                      className="w-full px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--sidebar-text-subtle)] flex items-center gap-1.5 hover:text-[color:var(--sidebar-text-muted)] transition-colors"
                     >
                       <Clock size={10} />
                       Recently Visited
@@ -1007,7 +1007,7 @@ export function Sidebar({
                                 <Link
                                   key={recent.path}
                                   href={recent.path}
-                                  className="flex items-center gap-2.5 rounded-xl text-xs text-gray-300 hover:text-white hover:bg-white/5 transition-all duration-200 px-3 py-1.5"
+                                  className="flex items-center gap-2.5 rounded-xl text-xs text-[color:var(--sidebar-text-subtle)] hover:text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg)] transition-all duration-200 px-3 py-1.5"
                                 >
                                   <RecentIcon
                                     size={13}
@@ -1023,7 +1023,7 @@ export function Sidebar({
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <div className="mx-3 mt-2 border-t border-[#1B7340]/15" />
+                    <div className="mx-3 mt-2 border-t border-[color:var(--sidebar-border)]" />
                   </div>
                 )}
 
@@ -1032,7 +1032,7 @@ export function Sidebar({
                 <div className="px-3 mb-2 flex items-center justify-end">
                   <button
                     onClick={cycleCollapseMode}
-                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-400 transition-colors rounded px-1.5 py-0.5 hover:bg-white/5"
+                    className="flex items-center gap-1 text-[10px] text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-faint)] transition-colors rounded px-1.5 py-0.5 hover:bg-[color:var(--sidebar-hover-bg)]"
                     title={collapseModeConfig[collapseMode].tooltip}
                   >
                     {(() => {
@@ -1130,7 +1130,7 @@ export function Sidebar({
                   <div className="mt-4 px-3">
                     <button
                       onClick={() => setWizardOpen(true)}
-                      className="text-xs text-gray-400 hover:text-gray-400 transition-colors"
+                      className="text-xs text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-faint)] transition-colors"
                     >
                       {presetHiddenSectionCount} more section
                       {presetHiddenSectionCount > 1 ? "s" : ""} hidden
@@ -1145,7 +1145,7 @@ export function Sidebar({
         {/*  Scroll progress bar                                      */}
         {/* -------------------------------------------------------- */}
         {!collapsed && (
-          <div className="h-[2px] bg-white/5 flex-shrink-0">
+          <div className="h-[2px] bg-[color:var(--sidebar-search-bg)] flex-shrink-0">
             <motion.div
               className="h-full bg-gradient-to-r from-[#1B7340] to-[#1B7340]"
               style={{ width: `${scrollProgress * 100}%` }}
@@ -1158,7 +1158,7 @@ export function Sidebar({
         {/*  User Section                                              */}
         {/* -------------------------------------------------------- */}
         <div
-          className="relative border-t border-[#1B7340]/15 p-3"
+          className="relative border-t border-[color:var(--sidebar-border)] p-3"
           ref={userMenuRef}
         >
           <AnimatePresence>
@@ -1168,14 +1168,14 @@ export function Sidebar({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: dur }}
-                className={`absolute bottom-full mb-2 bg-[#031A0B] border border-[#1B7340]/20 rounded-xl shadow-2xl shadow-black/40 p-2 z-50 ${collapsed
+                className={`absolute bottom-full mb-2 bg-[color:var(--sidebar-bg-from)] border border-[color:var(--sidebar-border)] rounded-xl shadow-2xl shadow-black/40 p-2 z-50 ${collapsed
                     ? "left-full ml-2 w-[200px]"
                     : "left-0 w-[220px]"
                   }`}
               >
                 <Link
                   href="/dashboard/profile"
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors"
                   onClick={() => setUserMenuOpen(false)}
                 >
                   <User size={16} />
@@ -1183,26 +1183,26 @@ export function Sidebar({
                 </Link>
                 <Link
                   href="/dashboard/system/settings"
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors"
                   onClick={() => setUserMenuOpen(false)}
                 >
                   <HelpCircle size={16} />
                   Help & Support
                 </Link>
-                <div className="my-1 border-t border-[#1B7340]/15" />
+                <div className="my-1 border-t border-[color:var(--sidebar-border)]" />
                 <button
                   onClick={() => {
                     setWizardOpen(true);
                     setUserMenuOpen(false);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors w-full text-left"
                 >
                   <Layers size={16} />
                   Sidebar Layout
                 </button>
                 <button
                   onClick={handleEnterCustomize}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors w-full text-left"
                 >
                   <Pencil size={16} />
                   Customize Sidebar
@@ -1212,12 +1212,12 @@ export function Sidebar({
                     setImportExportOpen(true);
                     setUserMenuOpen(false);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors w-full text-left"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors w-full text-left"
                 >
                   <Download size={16} />
                   Import / Export
                 </button>
-                <div className="my-1 border-t border-[#1B7340]/15" />
+                <div className="my-1 border-t border-[color:var(--sidebar-border)]" />
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors w-full text-left"
@@ -1234,7 +1234,7 @@ export function Sidebar({
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className={`
               flex items-center gap-3 w-full rounded-xl transition-all duration-200
-              hover:bg-white/5 p-2
+              hover:bg-[color:var(--sidebar-hover-bg)] p-2
               ${collapsed ? "lg:justify-center" : ""}
             `}
           >
@@ -1244,14 +1244,14 @@ export function Sidebar({
                   {userInitial}
                 </span>
               </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-[#041F0F]" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-[color:var(--sidebar-bg-to)]" />
             </div>
             {user && (
               <div
                 className={`flex-1 min-w-0 text-left ${collapsed ? "lg:hidden" : ""
                   }`}
               >
-                <p className="text-sm font-medium text-white truncate">
+                <p className="text-sm font-medium text-[color:var(--sidebar-text)] truncate">
                   {user.displayName || user.email}
                 </p>
                 <span
@@ -1268,7 +1268,7 @@ export function Sidebar({
         <div className={`px-3 pb-2 ${collapsed ? "lg:hidden" : ""}`}>
           <div className="flex items-center gap-1.5 px-2">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-medium text-gray-400">
+            <span className="text-[10px] font-medium text-[color:var(--sidebar-text-faint)]">
               Development
             </span>
           </div>
@@ -1285,7 +1285,7 @@ export function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: dur * 0.5 }}
-            className="fixed z-[100] bg-[#031A0B] border border-[#1B7340]/20 rounded-lg shadow-2xl shadow-black/50 p-1 min-w-[180px]"
+            className="fixed z-[100] bg-[color:var(--sidebar-bg-from)] border border-[color:var(--sidebar-border)] rounded-lg shadow-2xl shadow-black/50 p-1 min-w-[180px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -1299,14 +1299,14 @@ export function Sidebar({
                 });
                 setContextMenu(null);
               }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm text-gray-100 hover:bg-white/5 hover:text-white transition-colors text-left"
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm text-gray-100 hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)] transition-colors text-left"
             >
               <Star
                 size={14}
                 className={
                   isFavorite(contextMenu.item.href)
-                    ? "text-[#1B7340]"
-                    : "text-gray-500"
+                    ? "text-[color:var(--sidebar-accent)]"
+                    : "text-[color:var(--sidebar-text-faint)]"
                 }
                 fill={
                   isFavorite(contextMenu.item.href) ? "currentColor" : "none"

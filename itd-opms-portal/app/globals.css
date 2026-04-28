@@ -80,6 +80,24 @@
   --color-brand-light: #2d9b56;
   --color-accent: #8b6f2e;
 
+  /* Sidebar (light theme) */
+  --sidebar-bg-from: #ffffff;
+  --sidebar-bg-to: #f9fafb;
+  --sidebar-border: rgba(27, 115, 64, 0.18);
+  --sidebar-border-strong: rgba(27, 115, 64, 0.30);
+  --sidebar-divider: rgba(27, 115, 64, 0.08);
+  --sidebar-text: #0f172a;
+  --sidebar-text-muted: #334155;
+  --sidebar-text-subtle: #475569;
+  --sidebar-text-faint: #64748b;
+  --sidebar-hover-bg: rgba(15, 23, 42, 0.04);
+  --sidebar-hover-bg-strong: rgba(15, 23, 42, 0.08);
+  --sidebar-active-bg: rgba(27, 115, 64, 0.10);
+  --sidebar-active-bg-strong: rgba(27, 115, 64, 0.16);
+  --sidebar-active-text: #0e5a2d;
+  --sidebar-search-bg: rgba(15, 23, 42, 0.04);
+  --sidebar-accent: #1b7340;
+
   /* Neutrals */
   --neutral-light: #f5f7fa;
   --neutral-gray: #334155;
@@ -1283,6 +1301,24 @@ h6,
   --surface-4: #64748b;
   --surface-elevated: #1e293b;
   --surface-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Sidebar (dark theme — keeps the CBN deep-green branding) */
+  --sidebar-bg-from: #062E16;
+  --sidebar-bg-to: #041F0F;
+  --sidebar-border: rgba(27, 115, 64, 0.15);
+  --sidebar-border-strong: rgba(27, 115, 64, 0.30);
+  --sidebar-divider: rgba(27, 115, 64, 0.10);
+  --sidebar-text: #ffffff;
+  --sidebar-text-muted: #e2e8f0;
+  --sidebar-text-subtle: #cbd5e1;
+  --sidebar-text-faint: #9ca3af;
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-hover-bg-strong: rgba(255, 255, 255, 0.10);
+  --sidebar-active-bg: rgba(27, 115, 64, 0.15);
+  --sidebar-active-bg-strong: rgba(27, 115, 64, 0.25);
+  --sidebar-active-text: #ffffff;
+  --sidebar-search-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-accent: #1b7340;
 
   /* Glassmorphism */
   --glass-bg: rgba(15, 23, 42, 0.8);

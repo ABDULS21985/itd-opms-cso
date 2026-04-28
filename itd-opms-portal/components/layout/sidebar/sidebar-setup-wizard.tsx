@@ -129,7 +129,7 @@ export function SidebarSetupWizard({
             {/* Close button */}
             <button
               onClick={handleSkip}
-              className="absolute top-4 right-4 p-1 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+              className="absolute top-4 right-4 p-1 rounded-md text-white/50 hover:text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg-strong)] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -150,7 +150,7 @@ export function SidebarSetupWizard({
                 <span
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium ${
                     step === 1
-                      ? "bg-[#1B7340] text-white"
+                      ? "bg-[color:var(--sidebar-accent)] text-white"
                       : "bg-white/10 text-white/70"
                   }`}
                 >
@@ -163,7 +163,7 @@ export function SidebarSetupWizard({
                 <span
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium ${
                     step === 2
-                      ? "bg-[#1B7340] text-white"
+                      ? "bg-[color:var(--sidebar-accent)] text-white"
                       : "bg-white/10 text-white/70"
                   }`}
                 >
@@ -198,8 +198,8 @@ export function SidebarSetupWizard({
                         onClick={() => setSelectedPreset(id)}
                         className={`w-full text-left p-4 rounded-lg border transition-all ${
                           isSelected
-                            ? "border-[#1B7340] bg-[#1B7340]/10"
-                            : "border-white/10 bg-white/5 hover:bg-white/[0.08]"
+                            ? "border-[color:var(--sidebar-accent)] bg-[#1B7340]/10"
+                            : "border-white/10 bg-[color:var(--sidebar-search-bg)] hover:bg-white/[0.08]"
                         }`}
                       >
                         <div className="flex items-start justify-between">
@@ -261,7 +261,7 @@ export function SidebarSetupWizard({
                         onClick={() => handleToggleSection(group.label)}
                         className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
                           visible
-                            ? "border-white/10 bg-white/5"
+                            ? "border-white/10 bg-[color:var(--sidebar-search-bg)]"
                             : "border-white/5 bg-white/[0.02] opacity-60"
                         }`}
                       >
@@ -285,7 +285,7 @@ export function SidebarSetupWizard({
                         {/* Toggle switch */}
                         <div
                           className={`relative w-9 h-5 rounded-full transition-colors ${
-                            visible ? "bg-[#1B7340]" : "bg-white/20"
+                            visible ? "bg-[color:var(--sidebar-accent)]" : "bg-white/20"
                           }`}
                         >
                           <div
@@ -312,7 +312,7 @@ export function SidebarSetupWizard({
             <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
               <button
                 onClick={handleSkip}
-                className="text-sm text-white/50 hover:text-white/70 transition-colors"
+                className="text-sm text-white/50 hover:text-[color:var(--sidebar-text)]/70 transition-colors"
               >
                 Skip
               </button>
@@ -321,7 +321,7 @@ export function SidebarSetupWizard({
                 {step === 2 && (
                   <button
                     onClick={() => setStep(1)}
-                    className="flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-white/10 text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                    className="flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-white/10 text-white/70 hover:text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg)] transition-colors"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                     Back
@@ -331,7 +331,7 @@ export function SidebarSetupWizard({
                 {step === 1 && (
                   <button
                     onClick={handleGoToCustomize}
-                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg bg-[#1B7340] text-white hover:bg-[#155d33] transition-colors"
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg bg-[color:var(--sidebar-accent)] text-white hover:bg-[#155d33] transition-colors"
                   >
                     Customize
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -341,7 +341,7 @@ export function SidebarSetupWizard({
                 {step === 2 && (
                   <button
                     onClick={handleApply}
-                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg bg-[#1B7340] text-white hover:bg-[#155d33] transition-colors"
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg bg-[color:var(--sidebar-accent)] text-white hover:bg-[#155d33] transition-colors"
                   >
                     <Check className="w-3.5 h-3.5" />
                     Apply Layout

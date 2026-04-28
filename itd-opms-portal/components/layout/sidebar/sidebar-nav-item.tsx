@@ -57,6 +57,8 @@ interface SidebarNavItemProps {
   itemIndex: number;
   dur: number;
   staggerDur: number;
+  /** CSS color used to tint the icon (e.g. the parent group's color). */
+  iconColor?: string;
   onContextMenu: (e: React.MouseEvent, item: NavItem) => void;
   onToggleVisibility: (href: string) => void;
 }
@@ -77,6 +79,7 @@ export function SidebarNavItem({
   itemIndex,
   dur,
   staggerDur,
+  iconColor,
   onContextMenu,
   onToggleVisibility,
 }: SidebarNavItemProps) {
@@ -116,13 +119,13 @@ export function SidebarNavItem({
         className={`
           group relative flex items-center justify-center rounded-xl
           transition-all duration-200
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B7340]/50
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sidebar-active-bg-strong)]
           active:scale-[0.98]
           w-10 h-10 mx-auto
           ${
             active
-              ? "bg-[#1B7340]/15 text-white"
-              : "text-gray-200 hover:bg-white/5 hover:text-white"
+              ? "bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
+              : "text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
           }
         `}
       >
@@ -136,9 +139,10 @@ export function SidebarNavItem({
           size={20}
           className={`flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
             active
-              ? "text-white"
-              : "text-gray-300 group-hover:text-white"
+              ? "text-[color:var(--sidebar-active-text)]"
+              : "text-[color:var(--sidebar-text-subtle)] group-hover:text-[color:var(--sidebar-text)]"
           }`}
+          style={!active && iconColor ? { color: iconColor } : undefined}
         />
       </Link>
     );
@@ -160,7 +164,7 @@ export function SidebarNavItem({
           <button
             {...attributes}
             {...listeners}
-            className="flex-shrink-0 p-1 mr-0.5 rounded text-gray-400 hover:text-gray-200 cursor-grab active:cursor-grabbing transition-colors"
+            className="flex-shrink-0 p-1 mr-0.5 rounded text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-muted)] cursor-grab active:cursor-grabbing transition-colors"
             aria-label={`Reorder ${item.label}`}
           >
             <GripVertical size={14} />
@@ -174,16 +178,16 @@ export function SidebarNavItem({
           className={`
             group relative flex-1 flex items-center gap-3 rounded-xl text-sm font-medium
             transition-all duration-200
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B7340]/50
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sidebar-active-bg-strong)]
             active:scale-[0.98]
             px-3 py-2.5
             ${isHidden && isCustomizing ? "line-through decoration-gray-500" : ""}
             ${
               active
-                ? "bg-[#1B7340]/15 text-white"
+                ? "bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
                 : isFocused
-                  ? "bg-white/5 text-white"
-                  : "text-gray-200 hover:bg-white/5 hover:text-white"
+                  ? "bg-[color:var(--sidebar-search-bg)] text-[color:var(--sidebar-text)]"
+                  : "text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
             }
           `}
         >
@@ -201,16 +205,17 @@ export function SidebarNavItem({
             size={20}
             className={`flex-shrink-0 transition-all duration-200 group-hover:${hoverClass} ${
               active
-                ? "text-white"
-                : "text-gray-300 group-hover:text-white"
+                ? "text-[color:var(--sidebar-active-text)]"
+                : "text-[color:var(--sidebar-text-subtle)] group-hover:text-[color:var(--sidebar-text)]"
             }`}
+            style={!active && iconColor ? { color: iconColor } : undefined}
           />
 
           <div className="flex-1 min-w-0">
             <span className="truncate block">{item.label}</span>
             {/* Wide mode subtitle */}
             {sidebarWidth >= 320 && item.permission && (
-              <span className="text-[10px] text-gray-400 truncate block">
+              <span className="text-[10px] text-[color:var(--sidebar-text-faint)] truncate block">
                 {item.permission}
               </span>
             )}
@@ -233,7 +238,7 @@ export function SidebarNavItem({
               e.stopPropagation();
               onToggleVisibility(item.href);
             }}
-            className="flex-shrink-0 p-1 ml-0.5 rounded text-gray-400 hover:text-gray-200 transition-colors"
+            className="flex-shrink-0 p-1 ml-0.5 rounded text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text-muted)] transition-colors"
             aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}
           >
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -252,11 +257,11 @@ export function SidebarNavItemOverlay({ item }: { item: NavItem }) {
   const Icon = item.icon;
   return (
     <div
-      className="flex items-center gap-3 rounded-xl text-sm font-medium px-3 py-2.5 bg-[#031A0B] border border-[#1B7340]/30 text-white shadow-2xl shadow-black/50"
+      className="flex items-center gap-3 rounded-xl text-sm font-medium px-3 py-2.5 bg-[color:var(--sidebar-bg-from)] border border-[color:var(--sidebar-border-strong)] text-[color:var(--sidebar-text)] shadow-2xl shadow-black/50"
       style={{ transform: "rotate(3deg)", opacity: 0.9, width: 240 }}
     >
-      <GripVertical size={14} className="text-gray-400" />
-      <Icon size={20} className="text-white flex-shrink-0" />
+      <GripVertical size={14} className="text-[color:var(--sidebar-text-faint)]" />
+      <Icon size={20} className="text-[color:var(--sidebar-text)] flex-shrink-0" />
       <span className="truncate">{item.label}</span>
     </div>
   );

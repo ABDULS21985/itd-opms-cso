@@ -114,15 +114,15 @@ export function SidebarImportExport({
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-[90vw] max-w-md"
           >
-            <div className="bg-[#031A0B] border border-[#1B7340]/20 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="bg-[color:var(--sidebar-bg-from)] border border-[color:var(--sidebar-border)] rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#1B7340]/15">
-                <h2 className="text-base font-semibold text-white">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[color:var(--sidebar-border)]">
+                <h2 className="text-base font-semibold text-[color:var(--sidebar-text)]">
                   Import / Export Layout
                 </h2>
                 <button
                   onClick={onClose}
-                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                  className="p-1 rounded-lg text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg)] transition-colors"
                 >
                   <X size={18} />
                 </button>
@@ -133,7 +133,7 @@ export function SidebarImportExport({
                 {/* Export */}
                 <button
                   onClick={handleExport}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[color:var(--sidebar-search-bg)] border border-[color:var(--sidebar-border)] text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg-strong)] transition-colors"
                 >
                   <Download
                     size={18}
@@ -143,7 +143,7 @@ export function SidebarImportExport({
                     <span className="text-sm font-medium block">
                       Export Layout
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[color:var(--sidebar-text-faint)]">
                       Download your current layout as JSON
                     </span>
                   </div>
@@ -152,7 +152,7 @@ export function SidebarImportExport({
                 {/* Import */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[color:var(--sidebar-search-bg)] border border-[color:var(--sidebar-border)] text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg-strong)] transition-colors"
                 >
                   <Upload
                     size={18}
@@ -162,7 +162,7 @@ export function SidebarImportExport({
                     <span className="text-sm font-medium block">
                       Import Layout
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[color:var(--sidebar-text-faint)]">
                       Load a layout from a JSON file
                     </span>
                   </div>
@@ -178,7 +178,7 @@ export function SidebarImportExport({
                 {/* Share */}
                 <button
                   onClick={handleShare}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-[#1B7340]/15 text-white hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[color:var(--sidebar-search-bg)] border border-[color:var(--sidebar-border)] text-[color:var(--sidebar-text)] hover:bg-[color:var(--sidebar-hover-bg-strong)] transition-colors"
                 >
                   {copied ? (
                     <Check
@@ -195,7 +195,7 @@ export function SidebarImportExport({
                     <span className="text-sm font-medium block">
                       {copied ? "Copied!" : "Share Layout"}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[color:var(--sidebar-text-faint)]">
                       Copy a shareable URL to clipboard
                     </span>
                   </div>
@@ -214,35 +214,35 @@ export function SidebarImportExport({
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
-                    className="rounded-xl bg-white/5 border border-[#1B7340]/20 p-4 space-y-3"
+                    className="rounded-xl bg-[color:var(--sidebar-search-bg)] border border-[color:var(--sidebar-border)] p-4 space-y-3"
                   >
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--sidebar-text)]">
                       <FileJson size={16} className="text-[#2D9B58]" />
                       Preview
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-gray-300">
+                    <div className="space-y-1.5 text-xs text-[color:var(--sidebar-text-subtle)]">
                       <div className="flex justify-between">
                         <span>Sections:</span>
-                        <span className="text-white">
+                        <span className="text-[color:var(--sidebar-text)]">
                           {preview.sectionOrder.length}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Hidden items:</span>
-                        <span className="text-white">
+                        <span className="text-[color:var(--sidebar-text)]">
                           {preview.hiddenItems.length}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Hidden sections:</span>
-                        <span className="text-white">
+                        <span className="text-[color:var(--sidebar-text)]">
                           {preview.hiddenSections.length}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Width:</span>
-                        <span className="text-white">
+                        <span className="text-[color:var(--sidebar-text)]">
                           {preview.sidebarWidth}px
                         </span>
                       </div>
@@ -250,7 +250,7 @@ export function SidebarImportExport({
 
                     <button
                       onClick={handleApplyImport}
-                      className="w-full py-2 rounded-lg bg-[#1B7340]/20 text-[#2D9B58] text-sm font-medium hover:bg-[#1B7340]/30 transition-colors"
+                      className="w-full py-2 rounded-lg bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-accent)] text-sm font-medium hover:bg-[color:var(--sidebar-active-bg-strong)] transition-colors"
                     >
                       Apply Layout
                     </button>
