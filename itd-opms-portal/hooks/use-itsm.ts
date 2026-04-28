@@ -101,13 +101,14 @@ export function useITSMWorkflow(entity: ITSMWorkflowEntity | undefined) {
 export function useITSMAllowedTransitions(
   entity: ITSMWorkflowEntity | undefined,
   status: string | undefined,
+  context?: Record<string, string | boolean | undefined>,
 ) {
   return useQuery({
-    queryKey: ["itsm-workflow-transitions", entity, status],
+    queryKey: ["itsm-workflow-transitions", entity, status, context],
     queryFn: () =>
       apiClient.get<ITSMWorkflowTransitionResponse>(
         `/itsm/workflows/${entity}/transitions`,
-        { status },
+        { status, ...context },
       ),
     enabled: !!entity && !!status,
     staleTime: 5 * 60 * 1000,

@@ -21,11 +21,11 @@ const (
 	BusinessAnalystRole                 = "business_analyst"
 	BusinessRelationshipManagerRole     = "business_relationship_manager"
 	ChangeManagerRole                   = "change_manager"
-	TestManagementSpecialistRole         = "test_management_specialist"
+	TestManagementSpecialistRole        = "test_management_specialist"
 	SubjectMatterExpertRole             = "subject_matter_expert"
 	ITComplianceSpecialistRole          = "it_compliance_specialist"
-	CABMemberRole                        = "cab_member"
-	CABMeetingSecretaryRole              = "cab_meeting_secretary"
+	CABMemberRole                       = "cab_member"
+	CABMeetingSecretaryRole             = "cab_meeting_secretary"
 	ReleaseManagerRole                  = "release_manager"
 	ChangeApproverRole                  = "change_approver"
 	SupportAnalystRole                  = "support_analyst"
@@ -115,7 +115,8 @@ func hasChangeManagementResponsibility(auth *types.AuthContext) bool {
 	if auth == nil {
 		return false
 	}
-	return hasChangeRequestResponsibility(auth) ||
+	return auth.HasRole(BusinessAnalystRole) ||
+		auth.HasRole(BusinessRelationshipManagerRole) ||
 		auth.HasRole(ChangeManagerRole) ||
 		auth.HasRole(TestManagementSpecialistRole) ||
 		auth.HasRole(SubjectMatterExpertRole) ||
@@ -128,10 +129,16 @@ func hasChangeManagementResponsibility(auth *types.AuthContext) bool {
 }
 
 func hasChangeRiskAssessmentResponsibility(auth *types.AuthContext) bool {
-	if hasChangeManagementResponsibility(auth) && (auth.HasRole(SubjectMatterExpertRole) || auth.HasRole(ITComplianceSpecialistRole) || auth.HasRole(ChangeManagerRole) || auth.HasRole(TestManagementSpecialistRole) || isITSMPrivileged(auth)) {
+	if isITSMPrivileged(auth) {
 		return true
 	}
-	return false
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(SubjectMatterExpertRole) ||
+		auth.HasRole(ITComplianceSpecialistRole) ||
+		auth.HasRole(ChangeManagerRole) ||
+		auth.HasRole(TestManagementSpecialistRole)
 }
 
 func hasCABResponsibility(auth *types.AuthContext) bool {

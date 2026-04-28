@@ -43,6 +43,18 @@ type ERPDirectoryImportPreview struct {
 	ITServiceCenterSpecialists       int                       `json:"itServiceCenterSpecialists"`
 	SeniorITServiceCenterSpecialists int                       `json:"seniorItServiceCenterSpecialists"`
 	ITServiceSupportSpecialists      int                       `json:"itServiceSupportSpecialists"`
+	ChangeRequestors                 int                       `json:"changeRequestors"`
+	BusinessAnalysts                 int                       `json:"businessAnalysts"`
+	BusinessRelationshipManagers     int                       `json:"businessRelationshipManagers"`
+	ChangeManagers                   int                       `json:"changeManagers"`
+	TestManagementSpecialists        int                       `json:"testManagementSpecialists"`
+	SubjectMatterExperts             int                       `json:"subjectMatterExperts"`
+	ITComplianceSpecialists          int                       `json:"itComplianceSpecialists"`
+	CABMembers                       int                       `json:"cabMembers"`
+	CABMeetingSecretaries            int                       `json:"cabMeetingSecretaries"`
+	ReleaseManagers                  int                       `json:"releaseManagers"`
+	ChangeApprovers                  int                       `json:"changeApprovers"`
+	SupportAnalysts                  int                       `json:"supportAnalysts"`
 	Warnings                         []string                  `json:"warnings"`
 	Samples                          []ERPDirectoryPreviewUser `json:"samples"`
 }
@@ -164,6 +176,18 @@ type preparedERPDirectory struct {
 	ITServiceCenterSpecialists       map[string]struct{}
 	SeniorITServiceCenterSpecialists map[string]struct{}
 	ITServiceSupportSpecialists      map[string]struct{}
+	ChangeRequestors                 map[string]struct{}
+	BusinessAnalysts                 map[string]struct{}
+	BusinessRelationshipManagers     map[string]struct{}
+	ChangeManagers                   map[string]struct{}
+	TestManagementSpecialists        map[string]struct{}
+	SubjectMatterExperts             map[string]struct{}
+	ITComplianceSpecialists          map[string]struct{}
+	CABMembers                       map[string]struct{}
+	CABMeetingSecretaries            map[string]struct{}
+	ReleaseManagers                  map[string]struct{}
+	ChangeApprovers                  map[string]struct{}
+	SupportAnalysts                  map[string]struct{}
 }
 
 type preparedERPOrgUnit struct {

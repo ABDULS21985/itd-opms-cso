@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +49,9 @@ func (s *ChangeService) CreateChange(ctx context.Context, req CreateChangeReques
 	if auth == nil {
 		return Ticket{}, apperrors.Unauthorized("authentication required")
 	}
+	if err := ensureChangeRequestResponsibility(auth, "change request notification and RFC documentation"); err != nil {
+		return Ticket{}, err
+	}
 
 	// Validate classification.
 	switch req.Classification {
@@ -78,18 +82,12 @@ func (s *ChangeService) CreateChange(ctx context.Context, req CreateChangeReques
 
 	switch req.Classification {
 	case ChangeClassificationEmergency:
-		initialStatus = workflow.ChangeApproved
-		cabRequired = false
+		initialStatus = workflow.ChangeCABReview
+		cabRequired = true
 		pirRequired = true // Emergency always needs PIR
 	case ChangeClassificationStandard:
+		initialStatus = workflow.ChangeApproved
 		cabRequired = false
-		riskLevel := "low"
-		if req.RiskLevel != nil {
-			riskLevel = *req.RiskLevel
-		}
-		if riskLevel == RiskLevelLow {
-			initialStatus = workflow.ChangeApproved
-		}
 		pirRequired = false
 	case ChangeClassificationNormal:
 		cabRequired = true
@@ -247,7 +245,10 @@ func (s *ChangeService) UpdateChange(ctx context.Context, id uuid.UUID, req Upda
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if !hasChangeManagementResponsibility(auth) && !(hasChangeRequestResponsibility(auth) && canMutateTicket(auth, existing)) {
+		return Ticket{}, apperrors.Forbidden("change record update requires a Change Management role or ownership of the RFC as a change requestor")
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -316,8 +317,14 @@ func (s *ChangeService) SubmitRiskAssessment(ctx context.Context, changeID uuid.
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeRiskAssessmentResponsibility(auth, "change impact analysis and risk assessment"); err != nil {
 		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
+	if !jsonFieldPresent(req.RiskAssessment) {
+		return Ticket{}, apperrors.Validation("riskAssessment", "risk assessment evidence is required")
 	}
 
 	now := time.Now().UTC()
@@ -370,12 +377,18 @@ func (s *ChangeService) ImplementChange(ctx context.Context, changeID uuid.UUID,
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeImplementationResponsibility(auth, "authorize change implementation"); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
 	if err := workflow.ChangeStateMachine.Validate(existing.Status, workflow.ChangeImplementing); err != nil {
 		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+	if err := validateChangeTransitionRequirements(existing, workflow.ChangeImplementing, req.Comment); err != nil {
+		return Ticket{}, err
 	}
 
 	now := time.Now().UTC()
@@ -443,7 +456,10 @@ func (s *ChangeService) CompleteChange(ctx context.Context, changeID uuid.UUID, 
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeImplementationResponsibility(auth, "review change implementation report"); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -456,6 +472,9 @@ func (s *ChangeService) CompleteChange(ctx context.Context, changeID uuid.UUID, 
 
 	if err := workflow.ChangeStateMachine.Validate(existing.Status, targetStatus); err != nil {
 		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+	if err := validateChangeTransitionRequirements(existing, targetStatus, req.Notes); err != nil {
+		return Ticket{}, err
 	}
 
 	now := time.Now().UTC()
@@ -533,12 +552,18 @@ func (s *ChangeService) RollbackChange(ctx context.Context, changeID uuid.UUID, 
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeImplementationResponsibility(auth, "rollback unsuccessful change"); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
 	if err := workflow.ChangeStateMachine.Validate(existing.Status, workflow.ChangeRolledBack); err != nil {
 		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+	if err := validateChangeTransitionRequirements(existing, workflow.ChangeRolledBack, &req.Reason); err != nil {
+		return Ticket{}, err
 	}
 
 	now := time.Now().UTC()
@@ -598,6 +623,121 @@ func (s *ChangeService) RollbackChange(ctx context.Context, changeID uuid.UUID, 
 	return t, nil
 }
 
+func validateChangeTransitionRequirements(existing Ticket, targetStatus string, comment *string) error {
+	requireComment := func(field, message string) error {
+		if comment == nil || strings.TrimSpace(*comment) == "" {
+			return apperrors.Validation(field, message)
+		}
+		return nil
+	}
+	requireText := func(field, label string, value *string) error {
+		if value == nil || strings.TrimSpace(*value) == "" {
+			return apperrors.Validation(field, label+" is required before this change workflow action")
+		}
+		return nil
+	}
+
+	switch targetStatus {
+	case workflow.ChangeSubmitted:
+		if strings.TrimSpace(existing.Title) == "" ||
+			strings.TrimSpace(existing.Description) == "" ||
+			existing.ChangeClassification == nil ||
+			strings.TrimSpace(*existing.ChangeClassification) == "" ||
+			existing.ChangeType == nil ||
+			strings.TrimSpace(*existing.ChangeType) == "" ||
+			strings.TrimSpace(existing.Urgency) == "" ||
+			strings.TrimSpace(existing.Impact) == "" {
+			return apperrors.Validation("rfc", "RFC title, description, classification, change type, impact, and urgency must be documented")
+		}
+	case workflow.ChangeCABReview:
+		if existing.ChangeClassification != nil && *existing.ChangeClassification == ChangeClassificationNormal {
+			if !jsonFieldPresent(existing.RiskAssessment) {
+				return apperrors.Validation("riskAssessment", "normal changes require documented impact analysis and risk assessment before CAB review")
+			}
+			if existing.RiskLevel == nil || strings.TrimSpace(*existing.RiskLevel) == "" {
+				return apperrors.Validation("riskLevel", "risk level is required before CAB review")
+			}
+		}
+	case workflow.ChangeApproved:
+		if existing.Status == workflow.ChangeAssessing && existing.ChangeClassification != nil && *existing.ChangeClassification == ChangeClassificationNormal {
+			return apperrors.BadRequest("normal changes must be sent to CAB review before approval")
+		}
+	case workflow.ChangeRejected:
+		if existing.Status == workflow.ChangeAssessing && existing.ChangeClassification != nil && *existing.ChangeClassification == ChangeClassificationNormal {
+			return apperrors.BadRequest("normal changes must be sent to CAB review before rejection")
+		}
+		if err := requireComment("comment", "CAB decision or rejection reason is required"); err != nil {
+			return err
+		}
+	case workflow.ChangeDeferred:
+		if err := requireComment("comment", "CAB decision or rejection reason is required"); err != nil {
+			return err
+		}
+	case workflow.ChangeScheduled, workflow.ChangeImplementing:
+		if err := requireText("implementationPlan", "implementation plan", existing.ImplementationPlan); err != nil {
+			return err
+		}
+		if err := requireText("rollbackPlan", "rollback plan", existing.RollbackPlan); err != nil {
+			return err
+		}
+		if err := requireText("testPlan", "test plan", existing.TestPlan); err != nil {
+			return err
+		}
+		if existing.ScheduledStart == nil || existing.ScheduledEnd == nil {
+			return apperrors.Validation("schedule", "scheduled start and end are required before implementation")
+		}
+	case workflow.ChangeImplemented, workflow.ChangeFailed:
+		if err := requireComment("notes", "implementation report notes are required"); err != nil {
+			return err
+		}
+	case workflow.ChangeRolledBack:
+		if err := requireComment("reason", "rollback reason is required"); err != nil {
+			return err
+		}
+	case workflow.ChangePIRPending:
+		if existing.ChangeSuccess == nil && existing.Status == workflow.ChangeImplemented {
+			return apperrors.Validation("changeSuccess", "implementation result must be recorded before PIR")
+		}
+	case workflow.ChangeClosed:
+		if existing.PIRRequired && !existing.PIRCompleted {
+			return apperrors.Validation("pirNotes", "PIR must be completed before closing this change")
+		}
+	}
+
+	return nil
+}
+
+func jsonFieldPresent(raw json.RawMessage) bool {
+	value := strings.TrimSpace(string(raw))
+	return value != "" && value != "null" && value != "{}" && value != "[]"
+}
+
+func ensureChangeTransitionResponsibility(auth *types.AuthContext, existing Ticket, targetStatus string) error {
+	switch targetStatus {
+	case workflow.ChangeSubmitted, workflow.ChangeAssessing:
+		return ensureChangeRequestResponsibility(auth, "change request notification and RFC documentation")
+	case workflow.ChangeCABReview:
+		if hasChangeRequestResponsibility(auth) || hasChangeRiskAssessmentResponsibility(auth) || hasCABResponsibility(auth) {
+			return nil
+		}
+		return apperrors.Forbidden("CAB preparation requires a change requestor, risk assessor, or CAB role")
+	case workflow.ChangeApproved, workflow.ChangeRejected, workflow.ChangeDeferred:
+		if existing.Status == workflow.ChangeAssessing &&
+			targetStatus == workflow.ChangeApproved &&
+			existing.ChangeClassification != nil &&
+			*existing.ChangeClassification == ChangeClassificationStandard {
+			return ensureChangeImplementationResponsibility(auth, "standard change approval")
+		}
+		return ensureCABResponsibility(auth, "consider and approve change request")
+	case workflow.ChangeScheduled, workflow.ChangeImplementing, workflow.ChangeImplemented, workflow.ChangeFailed, workflow.ChangeRolledBack, workflow.ChangeInvestigating, workflow.ChangeClosed:
+		return ensureChangeImplementationResponsibility(auth, "change implementation planning and closure")
+	case workflow.ChangePIRPending:
+		return ensureChangeRequestResponsibility(auth, "conduct post-implementation review")
+	default:
+		return ensureChangeManagementResponsibility(auth, "change lifecycle transition")
+	}
+}
+
 // ──────────────────────────────────────────────
 // Transition
 // ──────────────────────────────────────────────
@@ -613,13 +753,36 @@ func (s *ChangeService) TransitionChange(ctx context.Context, id uuid.UUID, req 
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
 	// Validate transition.
 	if err := workflow.ChangeStateMachine.Validate(existing.Status, req.TargetStatus); err != nil {
 		return Ticket{}, apperrors.BadRequest(err.Error())
+	}
+	if err := ensureChangeTransitionResponsibility(auth, existing, req.TargetStatus); err != nil {
+		return Ticket{}, err
+	}
+	if existing.Status == workflow.ChangeCABReview && (req.TargetStatus == workflow.ChangeApproved || req.TargetStatus == workflow.ChangeRejected || req.TargetStatus == workflow.ChangeDeferred) {
+		return Ticket{}, apperrors.BadRequest("use the CAB decision action so approval decision, notes, and decision date are recorded")
+	}
+	switch req.TargetStatus {
+	case workflow.ChangeImplementing:
+		if err := ensureChangeImplementationResponsibility(auth, "authorize change implementation"); err != nil {
+			return Ticket{}, err
+		}
+	case workflow.ChangeImplemented, workflow.ChangeFailed:
+		return Ticket{}, apperrors.BadRequest("use the complete action so implementation success, report notes, and actual end time are recorded")
+	case workflow.ChangeRolledBack:
+		return Ticket{}, apperrors.BadRequest("use the rollback action so rollback reason and audit evidence are recorded")
+	case workflow.ChangePIRPending:
+		if err := ensureChangeRequestResponsibility(auth, "conduct post-implementation review"); err != nil {
+			return Ticket{}, err
+		}
+	}
+	if err := validateChangeTransitionRequirements(existing, req.TargetStatus, req.Comment); err != nil {
+		return Ticket{}, err
 	}
 
 	now := time.Now().UTC()
@@ -734,7 +897,10 @@ func (s *ChangeService) SubmitCABDecision(ctx context.Context, changeID uuid.UUI
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureCABResponsibility(auth, "consider and approve change request"); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -753,6 +919,9 @@ func (s *ChangeService) SubmitCABDecision(ctx context.Context, changeID uuid.UUI
 		targetStatus = workflow.ChangeRejected
 	case CABDecisionDeferred:
 		targetStatus = workflow.ChangeDeferred
+	}
+	if err := validateChangeTransitionRequirements(existing, targetStatus, req.Notes); err != nil {
+		return Ticket{}, err
 	}
 
 	query := `
@@ -841,7 +1010,10 @@ func (s *ChangeService) CompletePIR(ctx context.Context, changeID uuid.UUID, req
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+	if err := ensureChangeRequestResponsibility(auth, "conduct post-implementation review"); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureChangeMutationAllowed(auth, existing); err != nil {
 		return Ticket{}, err
 	}
 
@@ -890,6 +1062,33 @@ func (s *ChangeService) CompletePIR(ctx context.Context, changeID uuid.UUID, req
 		Changes:    changes,
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	if s.js != nil {
+		eventData, _ := json.Marshal(map[string]any{
+			"changeId":       changeID,
+			"ticketNumber":   t.TicketNumber,
+			"title":          t.Title,
+			"previousStatus": existing.Status,
+			"newStatus":      workflow.ChangeClosed,
+			"pirNotes":       req.PIRNotes,
+			"actorId":        auth.UserID,
+			"reporterId":     t.ReporterID,
+			"assigneeId":     t.AssigneeID,
+			"recipientIds":   notificationRecipientIDs(&t.ReporterID, t.AssigneeID),
+			"actionUrl":      notificationChangeURL(changeID),
+		})
+		payload, _ := json.Marshal(map[string]any{
+			"type":       "itsm.change.transitioned",
+			"tenantId":   auth.TenantID,
+			"actorId":    auth.UserID,
+			"entityType": "change",
+			"entityId":   changeID,
+			"data":       json.RawMessage(eventData),
+		})
+		if _, pubErr := s.js.Publish("notify.itsm.change.transitioned", payload); pubErr != nil {
+			slog.ErrorContext(ctx, "failed to publish change PIR completion event", "error", pubErr)
+		}
 	}
 
 	return t, nil
@@ -1075,6 +1274,9 @@ func (s *ChangeService) CreateCABMeeting(ctx context.Context, req CreateCABMeeti
 	if auth == nil {
 		return CABMeeting{}, apperrors.Unauthorized("authentication required")
 	}
+	if err := ensureCABResponsibility(auth, "schedule CAB meeting"); err != nil {
+		return CABMeeting{}, err
+	}
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -1192,6 +1394,9 @@ func (s *ChangeService) UpdateCABMeeting(ctx context.Context, id uuid.UUID, req 
 	if auth == nil {
 		return CABMeeting{}, apperrors.Unauthorized("authentication required")
 	}
+	if err := ensureCABResponsibility(auth, "update CAB meeting"); err != nil {
+		return CABMeeting{}, err
+	}
 
 	if req.Status != nil {
 		existing, err := s.GetCABMeeting(ctx, id)
@@ -1260,6 +1465,9 @@ func (s *ChangeService) CompleteCABMeeting(ctx context.Context, id uuid.UUID) (C
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return CABMeeting{}, apperrors.Unauthorized("authentication required")
+	}
+	if err := ensureCABResponsibility(auth, "complete CAB meeting"); err != nil {
+		return CABMeeting{}, err
 	}
 
 	existing, err := s.GetCABMeeting(ctx, id)

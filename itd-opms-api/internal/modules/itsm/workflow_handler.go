@@ -2,6 +2,7 @@ package itsm
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"unicode"
 
@@ -146,20 +147,20 @@ var itsmWorkflowDefinitions = map[string]workflowMetadata{
 			workflow.ChangeInvestigating,
 		},
 		labels: map[string]string{
-			workflow.ChangeSubmitted:     "Submit",
-			workflow.ChangeAssessing:     "Begin Assessment",
-			workflow.ChangeCABReview:     "Send to CAB",
-			workflow.ChangeApproved:      "Approve",
-			workflow.ChangeRejected:      "Reject",
-			workflow.ChangeDeferred:      "Defer",
-			workflow.ChangeScheduled:     "Schedule",
-			workflow.ChangeImplementing:  "Start Implementation",
-			workflow.ChangeImplemented:   "Mark Implemented",
-			workflow.ChangeFailed:        "Mark Failed",
-			workflow.ChangeRolledBack:    "Rolled Back",
-			workflow.ChangePIRPending:    "Proceed to PIR",
-			workflow.ChangeClosed:        "Close",
-			workflow.ChangeInvestigating: "Investigate",
+			workflow.ChangeSubmitted:     "Document RFC",
+			workflow.ChangeAssessing:     "Risk Assessment",
+			workflow.ChangeCABReview:     "Prepare for CAB",
+			workflow.ChangeApproved:      "Approve RFC",
+			workflow.ChangeRejected:      "Reject RFC",
+			workflow.ChangeDeferred:      "Request More Information",
+			workflow.ChangeScheduled:     "Schedule Implementation",
+			workflow.ChangeImplementing:  "Authorize Implementation",
+			workflow.ChangeImplemented:   "Review Implementation",
+			workflow.ChangeFailed:        "Mark Unsuccessful",
+			workflow.ChangeRolledBack:    "Rollback",
+			workflow.ChangePIRPending:    "Post-Implementation Review",
+			workflow.ChangeClosed:        "Close Request",
+			workflow.ChangeInvestigating: "Rework Change",
 		},
 	},
 	"major_incident": {
@@ -289,6 +290,42 @@ func workflowTransitionsForEntity(entity, status string) (ITSMWorkflowTransition
 		BlockedTransitions: blockedTransitions(key, def, status, allowed),
 		NextAction:         nextAction,
 	}, true
+}
+
+func applyWorkflowTransitionContext(resp *ITSMWorkflowTransitionResponse, query url.Values) {
+	if resp == nil || resp.Entity != "change" {
+		return
+	}
+	classification := strings.TrimSpace(strings.ToLower(query.Get("classification")))
+	if resp.Status == workflow.ChangeAssessing && classification == ChangeClassificationNormal {
+		blockWorkflowTransition(resp, workflow.ChangeApproved, "Normal changes must be prepared for CAB before approval.")
+		blockWorkflowTransition(resp, workflow.ChangeRejected, "Normal changes must be reviewed by CAB before rejection.")
+	}
+
+	pirRequired := strings.EqualFold(query.Get("pirRequired"), "true")
+	pirCompleted := strings.EqualFold(query.Get("pirCompleted"), "true")
+	if resp.Status == workflow.ChangeImplemented && pirRequired && !pirCompleted {
+		blockWorkflowTransition(resp, workflow.ChangeClosed, "PIR required before closure.")
+	}
+
+	if len(resp.Transitions) > 0 {
+		resp.NextAction = resp.Transitions[0].Label
+	} else {
+		resp.NextAction = ""
+	}
+}
+
+func blockWorkflowTransition(resp *ITSMWorkflowTransitionResponse, value, reason string) {
+	next := resp.Transitions[:0]
+	for _, transition := range resp.Transitions {
+		if transition.Value == value {
+			transition.Reason = reason
+			resp.BlockedTransitions = append(resp.BlockedTransitions, transition)
+			continue
+		}
+		next = append(next, transition)
+	}
+	resp.Transitions = next
 }
 
 func workflowSnapshotForEntity(entity string) (ITSMWorkflowDefinition, bool) {
@@ -574,23 +611,163 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 			},
 			DecisionTrail: []string{"senior_it_service_center_specialist", "closure_summary", "rca_report", "knowledge_update"},
 		}
+	case "change:" + workflow.ChangeSubmitted:
+		return transitionUXMetadata{
+			ResponsibleRole: BusinessAnalystRole,
+			AccountableRole: BusinessRelationshipManagerRole,
+			RequiredFields:  []string{"title", "description", "classification", "change_type", "impact", "urgency"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "rfc_received", Label: "RFC received from business unit, incident, problem, or capacity process", Required: true},
+				{Key: "rfc_form_complete", Label: "RFC form completed with required details", Required: true},
+				{Key: "classification_ready", Label: "Emergency, standard, or normal classification ready", Required: true},
+			},
+			DecisionTrail: []string{"business_analyst", "change_requestor", "rfc_form", "classification"},
+		}
+	case "change:" + workflow.ChangeAssessing:
+		return transitionUXMetadata{
+			ResponsibleRole: BusinessAnalystRole,
+			AccountableRole: BusinessRelationshipManagerRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "sme_identified", Label: "Subject matter expert identified where required", Required: true},
+				{Key: "impact_scope_defined", Label: "Business, service, CI, and risk impact scope defined", Required: true},
+			},
+			DecisionTrail: []string{"business_analyst", "subject_matter_expert", "risk_scope"},
+		}
+	case "change:" + workflow.ChangeCABReview:
+		return transitionUXMetadata{
+			ResponsibleRole: ChangeRequestorRole,
+			AccountableRole: CABMeetingSecretaryRole,
+			RequiredFields:  []string{"risk_assessment", "risk_level"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "risk_assessment_done", Label: "Impact analysis and risk assessment completed", Required: true},
+				{Key: "cab_pack_ready", Label: "RFC pack validated for CAB deliberation", Required: true},
+				{Key: "cab_agenda_ready", Label: "CAB agenda or emergency approval route prepared", Required: true},
+			},
+			DecisionTrail: []string{"change_requestor", "cab_secretary", "risk_assessment", "cab_pack"},
+		}
 	case "change:" + workflow.ChangeApproved:
 		return transitionUXMetadata{
+			ResponsibleRole: CABMemberRole,
+			AccountableRole: ChangeApproverRole,
 			Checklist: []ITSMWorkflowChecklistItem{
-				{Key: "risk_assessed", Label: "Risk assessment reviewed", Required: true},
-				{Key: "rollback_plan", Label: "Rollback plan accepted", Required: true},
-				{Key: "test_plan", Label: "Test plan accepted", Required: true},
+				{Key: "rfc_reviewed", Label: "RFC and risk assessment reviewed", Required: true},
+				{Key: "release_reports_considered", Label: "Release and deployment reports considered where relevant", Required: false},
+				{Key: "decision_recorded", Label: "Approval decision and notes recorded", Required: true},
 			},
-			SLAImpact:     "Approval allows scheduling and CAB/reporting clocks to progress.",
-			DecisionTrail: []string{"approver", "risk_level", "decision_notes"},
+			SLAImpact:     "Approval allows scheduling and implementation planning to progress.",
+			DecisionTrail: []string{"cab_member", "change_approver", "risk_level", "decision_notes"},
+		}
+	case "change:" + workflow.ChangeRejected:
+		return transitionUXMetadata{
+			ResponsibleRole: CABMemberRole,
+			AccountableRole: ChangeApproverRole,
+			RequiredFields:  []string{"comment"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "rejection_reason", Label: "Rejection reason captured", Required: true},
+				{Key: "requestor_notification_ready", Label: "Requester notification prepared", Required: true},
+			},
+			DecisionTrail: []string{"cab_member", "change_approver", "rejection_reason"},
+		}
+	case "change:" + workflow.ChangeDeferred:
+		return transitionUXMetadata{
+			ResponsibleRole: CABMemberRole,
+			AccountableRole: CABMeetingSecretaryRole,
+			RequiredFields:  []string{"comment"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "further_information_defined", Label: "Further information request clearly defined", Required: true},
+				{Key: "sme_followup_identified", Label: "SME or requester follow-up owner identified", Required: true},
+			},
+			DecisionTrail: []string{"cab_member", "cab_secretary", "information_request"},
+		}
+	case "change:" + workflow.ChangeScheduled:
+		return transitionUXMetadata{
+			ResponsibleRole: ChangeManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			RequiredFields:  []string{"implementation_plan", "rollback_plan", "test_plan", "scheduled_start", "scheduled_end"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "change_record_updated", Label: "Change record updated after approval", Required: true},
+				{Key: "test_solution_ready", Label: "Test solution process completed or accepted", Required: true},
+				{Key: "implementation_window_selected", Label: "Next available implementation window selected", Required: true},
+			},
+			DecisionTrail: []string{"change_manager", "test_management_specialist", "implementation_plan", "schedule"},
+		}
+	case "change:" + workflow.ChangeImplementing:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ChangeApproverRole,
+			RequiredFields:  []string{"implementation_plan", "rollback_plan", "test_plan", "scheduled_start", "scheduled_end"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "components_built_tested", Label: "Required change components built and properly tested", Required: true},
+				{Key: "final_authorization_confirmed", Label: "Final implementation authorization confirmed", Required: true},
+				{Key: "release_handoff_ready", Label: "Release and deployment handoff ready where applicable", Required: false},
+			},
+			DecisionTrail: []string{"release_manager", "change_approver", "actual_start"},
+		}
+	case "change:" + workflow.ChangeImplemented:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ChangeManagerRole,
+			RequiredFields:  []string{"notes"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "implementation_report", Label: "Implementation report reviewed", Required: true},
+				{Key: "success_confirmed", Label: "Successful implementation confirmed", Required: true},
+				{Key: "requestor_notified", Label: "Requester and stakeholders notified of status", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "change_manager", "actual_end", "implementation_report"},
+		}
+	case "change:" + workflow.ChangeFailed:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ChangeManagerRole,
+			RequiredFields:  []string{"notes"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "failure_report", Label: "Implementation failure report captured", Required: true},
+				{Key: "rollback_or_workaround_assessed", Label: "Rollback or temporary workaround assessed", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "change_manager", "failure_report"},
+		}
+	case "change:" + workflow.ChangeRolledBack:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ChangeManagerRole,
+			RequiredFields:  []string{"reason"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "rollback_applied", Label: "Rollback or temporary workaround applied", Required: true},
+				{Key: "business_impact_recorded", Label: "Residual business impact recorded", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "rollback_reason", "actual_end"},
+		}
+	case "change:" + workflow.ChangeInvestigating:
+		return transitionUXMetadata{
+			ResponsibleRole: ChangeManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "failure_investigation_started", Label: "Failed change investigation started", Required: true},
+				{Key: "reschedule_plan_defined", Label: "Rework and reschedule plan defined", Required: true},
+			},
+			DecisionTrail: []string{"change_manager", "test_management_specialist", "failure_analysis"},
 		}
 	case "change:" + workflow.ChangePIRPending:
 		return transitionUXMetadata{
+			ResponsibleRole: BusinessAnalystRole,
+			AccountableRole: BusinessRelationshipManagerRole,
 			Checklist: []ITSMWorkflowChecklistItem{
 				{Key: "implementation_result", Label: "Implementation result documented", Required: true},
-				{Key: "success_criteria", Label: "Success criteria checked", Required: true},
+				{Key: "objectives_confirmed", Label: "Change objectives and requester satisfaction reviewed", Required: true},
+				{Key: "cab_report_ready", Label: "CAB reporting input ready", Required: false},
 			},
-			DecisionTrail: []string{"implementer", "actual_start", "actual_end", "pir_required"},
+			DecisionTrail: []string{"business_analyst", "business_relationship_manager", "pir_notes", "requestor_satisfaction"},
+		}
+	case "change:" + workflow.ChangeClosed:
+		return transitionUXMetadata{
+			ResponsibleRole: ChangeManagerRole,
+			AccountableRole: TestManagementSpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "documentation_complete", Label: "Formal change documentation complete", Required: true},
+				{Key: "cab_reported", Label: "Execution report submitted to CAB where required", Required: true},
+				{Key: "management_reporting_ready", Label: "Management reporting data complete", Required: true},
+			},
+			DecisionTrail: []string{"change_manager", "test_management_specialist", "closed_at", "management_reporting"},
 		}
 	case "major_incident:" + workflow.MajorIncidentResolved:
 		return transitionUXMetadata{
@@ -721,5 +898,6 @@ func (h *WorkflowHandler) GetAllowedTransitions(w http.ResponseWriter, r *http.R
 		types.ErrorMessage(w, http.StatusNotFound, "NOT_FOUND", "Unknown ITSM workflow entity")
 		return
 	}
+	applyWorkflowTransitionContext(&resp, r.URL.Query())
 	types.OK(w, resp, nil)
 }

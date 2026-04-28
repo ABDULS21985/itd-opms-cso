@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -187,4 +188,73 @@ func TestWorkflowTransitions_ProblemExposeBRDRolesAndClosure(t *testing.T) {
 		}
 	}
 	t.Fatal("closure transition missing")
+}
+
+func TestWorkflowTransitions_ChangeExposeBRDRoles(t *testing.T) {
+	resp, ok := workflowTransitionsForEntity("change", "assessing")
+	if !ok {
+		t.Fatal("change workflow not found")
+	}
+	gotCAB := false
+	for _, tr := range resp.Transitions {
+		if tr.Value == "cab_review" {
+			gotCAB = true
+			if tr.ResponsibleRole != ChangeRequestorRole {
+				t.Fatalf("CAB review responsible role = %q, want %q", tr.ResponsibleRole, ChangeRequestorRole)
+			}
+			if tr.AccountableRole != CABMeetingSecretaryRole {
+				t.Fatalf("CAB review accountable role = %q, want %q", tr.AccountableRole, CABMeetingSecretaryRole)
+			}
+			if len(tr.Checklist) == 0 {
+				t.Fatal("CAB review transition should expose BRD checklist")
+			}
+		}
+	}
+	if !gotCAB {
+		t.Fatal("CAB review transition missing")
+	}
+
+	approved, ok := workflowTransitionsForEntity("change", "approved")
+	if !ok {
+		t.Fatal("change workflow not found")
+	}
+	for _, tr := range approved.Transitions {
+		if tr.Value == "scheduled" {
+			if tr.ResponsibleRole != ChangeManagerRole {
+				t.Fatalf("schedule responsible role = %q, want %q", tr.ResponsibleRole, ChangeManagerRole)
+			}
+			if tr.AccountableRole != TestManagementSpecialistRole {
+				t.Fatalf("schedule accountable role = %q, want %q", tr.AccountableRole, TestManagementSpecialistRole)
+			}
+			return
+		}
+	}
+	t.Fatal("schedule transition missing")
+}
+
+func TestWorkflowTransitions_ChangeContextBlocksNormalDirectApproval(t *testing.T) {
+	resp, ok := workflowTransitionsForEntity("change", "assessing")
+	if !ok {
+		t.Fatal("change workflow not found")
+	}
+	applyWorkflowTransitionContext(&resp, url.Values{"classification": []string{ChangeClassificationNormal}})
+
+	for _, tr := range resp.Transitions {
+		if tr.Value == "approved" || tr.Value == "rejected" {
+			t.Fatalf("normal changes must not expose direct %s while assessing", tr.Value)
+		}
+	}
+	gotApprovalBlock := false
+	gotRejectionBlock := false
+	for _, tr := range resp.BlockedTransitions {
+		if tr.Value == "approved" && tr.Reason != "" {
+			gotApprovalBlock = true
+		}
+		if tr.Value == "rejected" && tr.Reason != "" {
+			gotRejectionBlock = true
+		}
+	}
+	if !gotApprovalBlock || !gotRejectionBlock {
+		t.Fatalf("expected direct approval and rejection to be blocked, approval=%v rejection=%v", gotApprovalBlock, gotRejectionBlock)
+	}
 }

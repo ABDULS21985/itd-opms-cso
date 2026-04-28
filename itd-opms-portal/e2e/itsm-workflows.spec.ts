@@ -323,11 +323,32 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
     if (path === "/itsm/changes/change-1" && method === "GET") {
       return fulfill(route, change);
     }
+    if (path === "/itsm/workflows/change" && method === "GET") {
+      return fulfill(route, {
+        entity: "change",
+        statuses: [
+          { value: "draft", label: "Draft", terminal: false, transitions: [{ value: "submitted", label: "Document RFC", responsibleRole: "business_analyst", accountableRole: "business_relationship_manager" }] },
+          { value: "submitted", label: "Submitted", terminal: false, transitions: [{ value: "assessing", label: "Risk Assessment", responsibleRole: "business_analyst", accountableRole: "business_relationship_manager" }] },
+          { value: "assessing", label: "Assessing", terminal: false, transitions: [{ value: "cab_review", label: "Prepare for CAB", responsibleRole: "change_requestor", accountableRole: "cab_meeting_secretary" }] },
+          { value: "cab_review", label: "CAB Review", terminal: false, transitions: [{ value: "approved", label: "Approve RFC", responsibleRole: "cab_member", accountableRole: "change_approver" }] },
+          { value: "approved", label: "Approved", terminal: false, transitions: [{ value: "scheduled", label: "Schedule Implementation", responsibleRole: "change_manager", accountableRole: "test_management_specialist" }] },
+          { value: "scheduled", label: "Scheduled", terminal: false, transitions: [{ value: "implementing", label: "Authorize Implementation", responsibleRole: "release_manager", accountableRole: "change_approver" }] },
+          { value: "closed", label: "Closed", terminal: true, transitions: [] },
+        ],
+      });
+    }
     if (path === "/itsm/workflows/change/transitions") {
       return fulfill(route, {
         entity: "change",
         status: url.searchParams.get("status"),
-        transitions: [{ value: "approved", label: "Approve" }],
+        transitions: [
+          {
+            value: "cab_review",
+            label: "Prepare for CAB",
+            responsibleRole: "change_requestor",
+            accountableRole: "cab_meeting_secretary",
+          },
+        ],
       });
     }
     if (path === "/itsm/changes/change-1/transition" && method === "POST") {
@@ -504,16 +525,18 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
     await page.goto("/dashboard/itsm/changes/change-1");
 
     await expect(page.getByRole("heading", { name: change.title })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Send to CAB", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Reject", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Prepare for CAB/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Approve RFC/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Reject RFC/ })).toHaveCount(0);
+    await expect(page.getByText(/R: Change Requestor/).first()).toBeVisible();
+    await expect(page.getByText(/A: CAB Meeting Secretary/).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Approve" })).toBeVisible();
-    await page.getByRole("button", { name: "Confirm Approve" }).click();
+    await page.getByRole("button", { name: /Prepare for CAB/ }).click();
+    await expect(page.getByRole("heading", { name: "Prepare for CAB" })).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Prepare for CAB" }).click();
     await expect.poll(() => calls).toContainEqual({
       path: "/itsm/changes/change-1/transition",
-      body: { targetStatus: "approved" },
+      body: { targetStatus: "cab_review" },
     });
   });
 

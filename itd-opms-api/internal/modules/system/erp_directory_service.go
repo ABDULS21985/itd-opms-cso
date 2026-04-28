@@ -590,6 +590,33 @@ func (s *ERPDirectoryService) applyRoleBindings(ctx context.Context, tx pgx.Tx, 
 			}
 			added += n
 		}
+		changeRoleMaps := []struct {
+			name   string
+			values map[string]struct{}
+		}{
+			{"change_requestor", prepared.ChangeRequestors},
+			{"business_analyst", prepared.BusinessAnalysts},
+			{"business_relationship_manager", prepared.BusinessRelationshipManagers},
+			{"change_manager", prepared.ChangeManagers},
+			{"test_management_specialist", prepared.TestManagementSpecialists},
+			{"subject_matter_expert", prepared.SubjectMatterExperts},
+			{"it_compliance_specialist", prepared.ITComplianceSpecialists},
+			{"cab_member", prepared.CABMembers},
+			{"cab_meeting_secretary", prepared.CABMeetingSecretaries},
+			{"release_manager", prepared.ReleaseManagers},
+			{"change_approver", prepared.ChangeApprovers},
+			{"support_analyst", prepared.SupportAnalysts},
+		}
+		for _, roleMap := range changeRoleMaps {
+			if _, ok := roleMap.values[rec.EmployeeNumber]; !ok {
+				continue
+			}
+			n, err = insertRoleBindingByName(ctx, tx, tenantID, userID, roleMap.name, "unit", &scopeID, grantedBy)
+			if err != nil {
+				return added, err
+			}
+			added += n
+		}
 	}
 	return added, nil
 }
@@ -612,10 +639,22 @@ func insertRoleBindingByName(ctx context.Context, tx pgx.Tx, tenantID, userID uu
 func (s *ERPDirectoryService) insertStagingRows(ctx context.Context, tx pgx.Tx, tenantID, runID uuid.UUID, prepared preparedERPDirectory, _ map[string]uuid.UUID) error {
 	for _, rec := range prepared.Employees {
 		roleFlags := map[string]bool{
-			"staff":            rec.isActiveAssignment(),
-			"supervisor":       hasKey(prepared.Supervisors, rec.EmployeeNumber),
-			"head_of_division": hasKey(prepared.DivHeads, rec.EmployeeNumber),
-			"global_admin":     hasKey(prepared.Elevated, rec.EmployeeNumber),
+			"staff":                         rec.isActiveAssignment(),
+			"supervisor":                    hasKey(prepared.Supervisors, rec.EmployeeNumber),
+			"head_of_division":              hasKey(prepared.DivHeads, rec.EmployeeNumber),
+			"global_admin":                  hasKey(prepared.Elevated, rec.EmployeeNumber),
+			"change_requestor":              hasKey(prepared.ChangeRequestors, rec.EmployeeNumber),
+			"business_analyst":              hasKey(prepared.BusinessAnalysts, rec.EmployeeNumber),
+			"business_relationship_manager": hasKey(prepared.BusinessRelationshipManagers, rec.EmployeeNumber),
+			"change_manager":                hasKey(prepared.ChangeManagers, rec.EmployeeNumber),
+			"test_management_specialist":    hasKey(prepared.TestManagementSpecialists, rec.EmployeeNumber),
+			"subject_matter_expert":         hasKey(prepared.SubjectMatterExperts, rec.EmployeeNumber),
+			"it_compliance_specialist":      hasKey(prepared.ITComplianceSpecialists, rec.EmployeeNumber),
+			"cab_member":                    hasKey(prepared.CABMembers, rec.EmployeeNumber),
+			"cab_meeting_secretary":         hasKey(prepared.CABMeetingSecretaries, rec.EmployeeNumber),
+			"release_manager":               hasKey(prepared.ReleaseManagers, rec.EmployeeNumber),
+			"change_approver":               hasKey(prepared.ChangeApprovers, rec.EmployeeNumber),
+			"support_analyst":               hasKey(prepared.SupportAnalysts, rec.EmployeeNumber),
 		}
 		roleJSON, _ := json.Marshal(roleFlags)
 		errorsJSON, _ := json.Marshal(rec.EmailValidationErrors)

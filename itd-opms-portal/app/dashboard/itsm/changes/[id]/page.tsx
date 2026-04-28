@@ -29,6 +29,9 @@ import {
   useTransitionChange,
   useSubmitCABDecision,
   useCompletePIR,
+  useImplementChange,
+  useCompleteChange,
+  useRollbackChange,
   useITSMWorkflow,
   useITSMAllowedTransitions,
 } from "@/hooks/use-itsm";
@@ -67,38 +70,74 @@ const RISK_COLOR: Record<string, string> = {
   critical: "#DC2626",
 };
 
+type ChangeTransitionAction = ITSMWorkflowTransition & {
+  icon: LucideIcon;
+  accent: string;
+};
+
 // Map from current status to allowed transitions with labels.
-const CHANGE_TRANSITIONS: Record<string, { value: string; label: string; icon: LucideIcon; accent: string }[]> = {
-  draft: [{ value: "submitted", label: "Submit", icon: GitBranch, accent: "#2563EB" }],
-  submitted: [{ value: "assessing", label: "Begin Assessment", icon: Shield, accent: "#7C3AED" }],
+const CHANGE_TRANSITIONS: Record<string, ChangeTransitionAction[]> = {
+  draft: [{ value: "submitted", label: "Document RFC", icon: GitBranch, accent: "#2563EB" }],
+  submitted: [{ value: "assessing", label: "Risk Assessment", icon: Shield, accent: "#7C3AED" }],
   assessing: [
-    { value: "cab_review", label: "Send to CAB", icon: Shield, accent: "#D97706" },
-    { value: "approved", label: "Approve", icon: CheckCircle2, accent: "#16A34A" },
-    { value: "rejected", label: "Reject", icon: XCircle, accent: "#DC2626" },
+    { value: "cab_review", label: "Prepare for CAB", icon: Shield, accent: "#D97706" },
+    { value: "approved", label: "Approve RFC", icon: CheckCircle2, accent: "#16A34A" },
+    { value: "rejected", label: "Reject RFC", icon: XCircle, accent: "#DC2626" },
   ],
   cab_review: [], // Handled by CAB Decision form
-  approved: [{ value: "scheduled", label: "Schedule", icon: Calendar, accent: "#2563EB" }],
-  deferred: [{ value: "assessing", label: "Re-assess", icon: RotateCcw, accent: "#7C3AED" }],
-  scheduled: [{ value: "implementing", label: "Start Implementation", icon: Zap, accent: "#D97706" }],
+  approved: [{ value: "scheduled", label: "Schedule Implementation", icon: Calendar, accent: "#2563EB" }],
+  deferred: [{ value: "assessing", label: "Risk Assessment", icon: RotateCcw, accent: "#7C3AED" }],
+  scheduled: [{ value: "implementing", label: "Authorize Implementation", icon: Zap, accent: "#D97706" }],
   implementing: [
-    { value: "implemented", label: "Mark Implemented", icon: CheckCircle2, accent: "#16A34A" },
-    { value: "failed", label: "Mark Failed", icon: XCircle, accent: "#DC2626" },
-    { value: "rolled_back", label: "Rolled Back", icon: RotateCcw, accent: "#EA580C" },
+    { value: "implemented", label: "Review Implementation", icon: CheckCircle2, accent: "#16A34A" },
+    { value: "failed", label: "Mark Unsuccessful", icon: XCircle, accent: "#DC2626" },
+    { value: "rolled_back", label: "Rollback", icon: RotateCcw, accent: "#EA580C" },
   ],
   implemented: [
-    { value: "pir_pending", label: "Proceed to PIR", icon: FileText, accent: "#D97706" },
-    { value: "closed", label: "Close", icon: CheckCircle2, accent: "#16A34A" },
+    { value: "pir_pending", label: "Post-Implementation Review", icon: FileText, accent: "#D97706" },
+    { value: "closed", label: "Close Request", icon: CheckCircle2, accent: "#16A34A" },
   ],
-  failed: [{ value: "investigating", label: "Investigate", icon: Shield, accent: "#7C3AED" }],
-  rolled_back: [{ value: "closed", label: "Close", icon: CheckCircle2, accent: "#16A34A" }],
-  investigating: [{ value: "scheduled", label: "Re-schedule", icon: Calendar, accent: "#2563EB" }],
+  failed: [{ value: "investigating", label: "Rework Change", icon: Shield, accent: "#7C3AED" }],
+  rolled_back: [{ value: "closed", label: "Close Request", icon: CheckCircle2, accent: "#16A34A" }],
+  investigating: [{ value: "scheduled", label: "Schedule Implementation", icon: Calendar, accent: "#2563EB" }],
 };
+
+const CHANGE_ACTION_ROLES = [
+  "change_requestor",
+  "business_analyst",
+  "business_relationship_manager",
+  "change_manager",
+  "test_management_specialist",
+  "subject_matter_expert",
+  "it_compliance_specialist",
+  "cab_member",
+  "cab_meeting_secretary",
+  "release_manager",
+  "change_approver",
+  "support_analyst",
+];
+
+function workflowRoleLabel(value?: string) {
+  if (!value) return "";
+  const acronyms: Record<string, string> = {
+    it: "IT",
+    cab: "CAB",
+    rfc: "RFC",
+    pir: "PIR",
+    sme: "SME",
+  };
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => acronyms[part] ?? part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function mergeChangeTransitions(
   backend:
     | { transitions: ITSMWorkflowTransition[] }
     | undefined,
-  local: { value: string; label: string; icon: LucideIcon; accent: string }[],
+  local: ChangeTransitionAction[],
 ) {
   if (!backend) {
     return local;
@@ -142,10 +181,18 @@ export default function ChangeDetailPage() {
   const transitionMutation = useTransitionChange(id);
   const cabDecisionMutation = useSubmitCABDecision(id);
   const pirMutation = useCompletePIR(id);
+  const implementMutation = useImplementChange(id);
+  const completeMutation = useCompleteChange(id);
+  const rollbackMutation = useRollbackChange(id);
   const { data: workflowDefinition } = useITSMWorkflow("change");
   const { data: allowedTransitions } = useITSMAllowedTransitions(
     "change",
     change?.status,
+    {
+      classification: change?.changeClassification,
+      pirRequired: change?.pirRequired,
+      pirCompleted: change?.pirCompleted,
+    },
   );
 
   const [activeTab, setActiveTab] = useState<"overview" | "planning" | "pir">("overview");
@@ -189,25 +236,56 @@ export default function ChangeDetailPage() {
     currentUser?.roles?.includes("admin") ||
     currentUser?.roles?.includes("tenant_admin") ||
     false;
+  const hasChangeActionRole =
+    currentUser?.roles?.some((role) => CHANGE_ACTION_ROLES.includes(role)) ?? false;
   const canManage =
     hasManagePermission &&
     (isPrivileged ||
+      hasChangeActionRole ||
       change.reporterId === currentUser?.id ||
       change.assigneeId === currentUser?.id);
+  const isWorkflowSubmitting =
+    transitionMutation.isPending ||
+    implementMutation.isPending ||
+    completeMutation.isPending ||
+    rollbackMutation.isPending;
 
   function submitWorkflowAction(payload: WorkflowActionPayload) {
+    const note =
+      payload.reason ||
+      payload.internalNote ||
+      payload.customerNote ||
+      payload.resolutionNotes ||
+      transitionComment ||
+      undefined;
+    const resetDrawer = () => {
+      setDrawerOpen(false);
+      setSelectedTransition(null);
+      setTransitionComment("");
+    };
+
+    if (payload.targetStatus === "implementing") {
+      implementMutation.mutate({ comment: note }, { onSuccess: resetDrawer });
+      return;
+    }
+    if (payload.targetStatus === "implemented" || payload.targetStatus === "failed") {
+      completeMutation.mutate(
+        { success: payload.targetStatus === "implemented", notes: note },
+        { onSuccess: resetDrawer },
+      );
+      return;
+    }
+    if (payload.targetStatus === "rolled_back") {
+      rollbackMutation.mutate({ reason: note ?? "Rollback requested" }, { onSuccess: resetDrawer });
+      return;
+    }
+
     transitionMutation.mutate(
       {
         targetStatus: payload.targetStatus,
-        comment: payload.reason || payload.internalNote || transitionComment || undefined,
+        comment: note,
       },
-      {
-        onSuccess: () => {
-          setDrawerOpen(false);
-          setSelectedTransition(null);
-          setTransitionComment("");
-        },
-      },
+      { onSuccess: resetDrawer },
     );
   }
 
@@ -253,11 +331,20 @@ export default function ChangeDetailPage() {
                   setSelectedTransition(t);
                   setDrawerOpen(true);
                 }}
-                disabled={transitionMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white border border-white/10 hover:bg-white/5 transition-colors"
+                disabled={isWorkflowSubmitting}
+                className="flex min-h-[54px] items-start gap-2 rounded-lg border border-white/10 px-4 py-2 text-left text-sm font-medium text-white transition-colors hover:bg-white/5 disabled:opacity-50"
               >
-                <TIcon size={14} style={{ color: t.accent }} />
-                {t.label}
+                <TIcon size={14} className="mt-0.5 shrink-0" style={{ color: t.accent }} />
+                <span>
+                  <span className="block">{t.label}</span>
+                  {t.responsibleRole || t.accountableRole ? (
+                    <span className="mt-1 block text-[11px] font-medium text-white/45">
+                      {t.responsibleRole ? `R: ${workflowRoleLabel(t.responsibleRole)}` : ""}
+                      {t.responsibleRole && t.accountableRole ? " · " : ""}
+                      {t.accountableRole ? `A: ${workflowRoleLabel(t.accountableRole)}` : ""}
+                    </span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
@@ -426,7 +513,7 @@ export default function ChangeDetailPage() {
         currentStatus={change.status}
         recordTitle={`${change.ticketNumber} - ${change.title}`}
         transition={selectedTransition}
-        isSubmitting={transitionMutation.isPending}
+        isSubmitting={isWorkflowSubmitting}
         onClose={() => {
           setDrawerOpen(false);
           setSelectedTransition(null);

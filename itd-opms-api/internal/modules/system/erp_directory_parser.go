@@ -298,6 +298,18 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	itServiceCenterSpecialists := map[string]struct{}{}
 	seniorITServiceCenterSpecialists := map[string]struct{}{}
 	itServiceSupportSpecialists := map[string]struct{}{}
+	changeRequestors := map[string]struct{}{}
+	businessAnalysts := map[string]struct{}{}
+	businessRelationshipManagers := map[string]struct{}{}
+	changeManagers := map[string]struct{}{}
+	testManagementSpecialists := map[string]struct{}{}
+	subjectMatterExperts := map[string]struct{}{}
+	itComplianceSpecialists := map[string]struct{}{}
+	cabMembers := map[string]struct{}{}
+	cabMeetingSecretaries := map[string]struct{}{}
+	releaseManagers := map[string]struct{}{}
+	changeApprovers := map[string]struct{}{}
+	supportAnalysts := map[string]struct{}{}
 
 	for _, rec := range records {
 		employeeIDs[rec.EmployeeNumber] = deterministicERPUUID("user", rec.EmployeeNumber)
@@ -341,6 +353,34 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 				itServiceCenterSpecialists[rec.EmployeeNumber] = struct{}{}
 			case "it_service_support_specialist":
 				itServiceSupportSpecialists[rec.EmployeeNumber] = struct{}{}
+			}
+			for _, role := range changeManagementRolesForERPAssignment(rec) {
+				switch role {
+				case "change_requestor":
+					changeRequestors[rec.EmployeeNumber] = struct{}{}
+				case "business_analyst":
+					businessAnalysts[rec.EmployeeNumber] = struct{}{}
+				case "business_relationship_manager":
+					businessRelationshipManagers[rec.EmployeeNumber] = struct{}{}
+				case "change_manager":
+					changeManagers[rec.EmployeeNumber] = struct{}{}
+				case "test_management_specialist":
+					testManagementSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "subject_matter_expert":
+					subjectMatterExperts[rec.EmployeeNumber] = struct{}{}
+				case "it_compliance_specialist":
+					itComplianceSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "cab_member":
+					cabMembers[rec.EmployeeNumber] = struct{}{}
+				case "cab_meeting_secretary":
+					cabMeetingSecretaries[rec.EmployeeNumber] = struct{}{}
+				case "release_manager":
+					releaseManagers[rec.EmployeeNumber] = struct{}{}
+				case "change_approver":
+					changeApprovers[rec.EmployeeNumber] = struct{}{}
+				case "support_analyst":
+					supportAnalysts[rec.EmployeeNumber] = struct{}{}
+				}
 			}
 		}
 	}
@@ -469,6 +509,18 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.ITServiceCenterSpecialists = countKnownEmployees(itServiceCenterSpecialists, employeeIDs)
 	stats.SeniorITServiceCenterSpecialists = countKnownEmployees(seniorITServiceCenterSpecialists, employeeIDs)
 	stats.ITServiceSupportSpecialists = countKnownEmployees(itServiceSupportSpecialists, employeeIDs)
+	stats.ChangeRequestors = countKnownEmployees(changeRequestors, employeeIDs)
+	stats.BusinessAnalysts = countKnownEmployees(businessAnalysts, employeeIDs)
+	stats.BusinessRelationshipManagers = countKnownEmployees(businessRelationshipManagers, employeeIDs)
+	stats.ChangeManagers = countKnownEmployees(changeManagers, employeeIDs)
+	stats.TestManagementSpecialists = countKnownEmployees(testManagementSpecialists, employeeIDs)
+	stats.SubjectMatterExperts = countKnownEmployees(subjectMatterExperts, employeeIDs)
+	stats.ITComplianceSpecialists = countKnownEmployees(itComplianceSpecialists, employeeIDs)
+	stats.CABMembers = countKnownEmployees(cabMembers, employeeIDs)
+	stats.CABMeetingSecretaries = countKnownEmployees(cabMeetingSecretaries, employeeIDs)
+	stats.ReleaseManagers = countKnownEmployees(releaseManagers, employeeIDs)
+	stats.ChangeApprovers = countKnownEmployees(changeApprovers, employeeIDs)
+	stats.SupportAnalysts = countKnownEmployees(supportAnalysts, employeeIDs)
 	stats.Samples = buildERPPreviewSamples(preparedRecords, elevated)
 
 	if stats.MissingEmails > 0 || stats.InvalidEmails > 0 || stats.DuplicateEmails > 0 {
@@ -496,6 +548,18 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 		ITServiceCenterSpecialists:       itServiceCenterSpecialists,
 		SeniorITServiceCenterSpecialists: seniorITServiceCenterSpecialists,
 		ITServiceSupportSpecialists:      itServiceSupportSpecialists,
+		ChangeRequestors:                 changeRequestors,
+		BusinessAnalysts:                 businessAnalysts,
+		BusinessRelationshipManagers:     businessRelationshipManagers,
+		ChangeManagers:                   changeManagers,
+		TestManagementSpecialists:        testManagementSpecialists,
+		SubjectMatterExperts:             subjectMatterExperts,
+		ITComplianceSpecialists:          itComplianceSpecialists,
+		CABMembers:                       cabMembers,
+		CABMeetingSecretaries:            cabMeetingSecretaries,
+		ReleaseManagers:                  releaseManagers,
+		ChangeApprovers:                  changeApprovers,
+		SupportAnalysts:                  supportAnalysts,
 	}
 }
 
@@ -765,6 +829,111 @@ func problemManagementRoleForERPAssignment(rec erpEmployeeRecord) string {
 		return "it_service_support_specialist"
 	}
 	return ""
+}
+
+func changeManagementRolesForERPAssignment(rec erpEmployeeRecord) []string {
+	job := normalizeERPMatchText(rec.JobName)
+	org := normalizeERPMatchText(strings.Join([]string{rec.DepartmentName, rec.DivisionName, rec.OfficeName}, " "))
+	if job == "" && org == "" {
+		return nil
+	}
+
+	roles := make([]string, 0, 6)
+	seen := map[string]struct{}{}
+	addRole := func(role string) {
+		if _, ok := seen[role]; ok {
+			return
+		}
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+
+	if strings.Contains(job, "BUSINESS ANALYST") || strings.Contains(org, "BUSINESS ANALYST") {
+		addRole("business_analyst")
+		addRole("change_requestor")
+	}
+	if strings.Contains(job, "BUSINESS RELATIONSHIP") ||
+		strings.Contains(job, "BRM") ||
+		strings.Contains(org, "BUSINESS RELATIONSHIP") {
+		addRole("business_relationship_manager")
+		addRole("change_requestor")
+	}
+	if strings.Contains(job, "CHANGE REQUESTOR") {
+		addRole("change_requestor")
+	}
+	if strings.Contains(job, "CHANGE MANAGER") ||
+		strings.Contains(job, "PROJECT MANAGER") ||
+		strings.Contains(org, "CHANGE MANAGEMENT") {
+		addRole("change_manager")
+		addRole("change_requestor")
+	}
+	if strings.Contains(job, "TEST MANAGEMENT") || strings.Contains(org, "TEST MANAGEMENT") {
+		addRole("test_management_specialist")
+		addRole("change_manager")
+		addRole("cab_meeting_secretary")
+	}
+	if strings.Contains(job, "SUBJECT MATTER EXPERT") ||
+		strings.Contains(job, "SPECIALIST") ||
+		strings.Contains(org, "APPLICATION MANAGEMENT") ||
+		strings.Contains(org, "INFRASTRUCTURE") ||
+		strings.Contains(org, "NETWORK") ||
+		strings.Contains(org, "DATABASE") ||
+		strings.Contains(org, "SYSTEM") ||
+		strings.Contains(org, "INFORMATION SECURITY") ||
+		strings.Contains(org, "IOMD") ||
+		strings.Contains(org, "ISMD") ||
+		strings.Contains(org, "AMD") {
+		addRole("subject_matter_expert")
+	}
+	if strings.Contains(job, "COMPLIANCE") ||
+		strings.Contains(job, "CONTROL") ||
+		strings.Contains(job, "RISK") ||
+		strings.Contains(org, "COMPLIANCE") ||
+		strings.Contains(org, "QUALITY") ||
+		strings.Contains(org, "QCMD") ||
+		strings.Contains(org, "CONTROL") ||
+		strings.Contains(org, "RISK") {
+		addRole("it_compliance_specialist")
+	}
+	if strings.Contains(job, "CAB") ||
+		strings.Contains(org, "CHANGE ADVISORY") ||
+		strings.Contains(job, "DIRECTOR") ||
+		strings.Contains(job, "HEAD") ||
+		strings.Contains(job, "MANAGER") ||
+		strings.Contains(job, "LEAD") ||
+		strings.Contains(org, "DITD") ||
+		strings.Contains(org, "QCMD") {
+		addRole("cab_member")
+	}
+	if strings.Contains(job, "CAB SECRETARY") ||
+		strings.Contains(job, "SECRETARY") ||
+		strings.Contains(org, "CHANGE ADVISORY") ||
+		strings.Contains(org, "CHANGE MANAGEMENT") {
+		addRole("cab_meeting_secretary")
+	}
+	if strings.Contains(job, "RELEASE") ||
+		strings.Contains(job, "DEPLOYMENT") ||
+		strings.Contains(org, "RELEASE") ||
+		strings.Contains(org, "DEPLOYMENT") {
+		addRole("release_manager")
+	}
+	if strings.Contains(job, "CHANGE APPROVER") ||
+		strings.Contains(job, "DIRECTOR") ||
+		strings.Contains(job, "DEPUTY DIRECTOR") ||
+		strings.Contains(job, "HEAD") ||
+		strings.Contains(org, "DITD") ||
+		strings.Contains(org, "QCMD") {
+		addRole("change_approver")
+	}
+	if strings.Contains(job, "SUPPORT ANALYST") ||
+		strings.Contains(org, "IT SERVICE SUPPORT") ||
+		strings.Contains(org, "USER SUPPORT") ||
+		strings.Contains(org, "SERVICE DESK") ||
+		strings.Contains(org, "HELP DESK") {
+		addRole("support_analyst")
+	}
+
+	return roles
 }
 
 func isProblemManagementERPOrg(org string) bool {

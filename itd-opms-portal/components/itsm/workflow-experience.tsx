@@ -131,13 +131,22 @@ export function WorkflowActionDrawer({
     requiredFields.includes("root_cause") ||
     (entity === "major_incident" && transition?.value === "resolved") ||
     (entity === "problem" && transition?.value === "root_cause_identified");
+  const needsTransitionReason =
+    requiredFields.includes("comment") ||
+    requiredFields.includes("notes") ||
+    requiredFields.includes("reason");
 
   const requiredChecklistComplete = (transition?.checklist ?? [])
     .filter((item) => item.required)
     .every((item) => checklist[item.key]);
   const requiredFieldsComplete =
     (!requiredFields.includes("resolution_notes") || resolutionNotes.trim().length > 0) &&
-    (!requiredFields.includes("root_cause") || rootCause.trim().length > 0);
+    (!requiredFields.includes("root_cause") || rootCause.trim().length > 0) &&
+    (!needsTransitionReason ||
+      reason.trim().length > 0 ||
+      internalNote.trim().length > 0 ||
+      customerNote.trim().length > 0 ||
+      resolutionNotes.trim().length > 0);
   const canSubmit = !!transition && requiredChecklistComplete && requiredFieldsComplete;
 
   return (

@@ -211,6 +211,18 @@ export interface ERPDirectoryImportPreview {
   itServiceCenterSpecialists?: number;
   seniorItServiceCenterSpecialists?: number;
   itServiceSupportSpecialists?: number;
+  changeRequestors?: number;
+  businessAnalysts?: number;
+  businessRelationshipManagers?: number;
+  changeManagers?: number;
+  testManagementSpecialists?: number;
+  subjectMatterExperts?: number;
+  itComplianceSpecialists?: number;
+  cabMembers?: number;
+  cabMeetingSecretaries?: number;
+  releaseManagers?: number;
+  changeApprovers?: number;
+  supportAnalysts?: number;
   warnings: string[];
   samples: ERPDirectoryPreviewUser[];
 }
