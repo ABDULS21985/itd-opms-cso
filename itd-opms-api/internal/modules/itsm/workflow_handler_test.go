@@ -258,3 +258,56 @@ func TestWorkflowTransitions_ChangeContextBlocksNormalDirectApproval(t *testing.
 		t.Fatalf("expected direct approval and rejection to be blocked, approval=%v rejection=%v", gotApprovalBlock, gotRejectionBlock)
 	}
 }
+
+func TestWorkflowTransitions_ReleaseExposeBRDRoles(t *testing.T) {
+	resp, ok := workflowTransitionsForEntity("release", "planning")
+	if !ok {
+		t.Fatal("release workflow not found")
+	}
+	gotBuild := false
+	for _, tr := range resp.Transitions {
+		if tr.Value == "build" {
+			gotBuild = true
+			if tr.Label != "Create Deployment Plan" {
+				t.Fatalf("build label = %q, want Create Deployment Plan", tr.Label)
+			}
+			if tr.ResponsibleRole != ReleaseManagerRole {
+				t.Fatalf("build responsible role = %q, want %q", tr.ResponsibleRole, ReleaseManagerRole)
+			}
+			if tr.AccountableRole != ReleaseManagementLeadRole {
+				t.Fatalf("build accountable role = %q, want %q", tr.AccountableRole, ReleaseManagementLeadRole)
+			}
+			if len(tr.Checklist) == 0 {
+				t.Fatal("release build transition should expose BRD checklist")
+			}
+			break
+		}
+	}
+	if !gotBuild {
+		t.Fatal("release build transition missing")
+	}
+
+	deploying, ok := workflowTransitionsForEntity("release", "deploying")
+	if !ok {
+		t.Fatal("release workflow not found")
+	}
+	gotDeployed := false
+	gotRollback := false
+	for _, tr := range deploying.Transitions {
+		switch tr.Value {
+		case "deployed":
+			gotDeployed = true
+			if tr.ResponsibleRole != SolutionsDeliverySpecialistRole {
+				t.Fatalf("deployed responsible role = %q, want %q", tr.ResponsibleRole, SolutionsDeliverySpecialistRole)
+			}
+		case "rolled_back":
+			gotRollback = true
+			if len(tr.RequiredFields) == 0 || tr.RequiredFields[0] != "reason" {
+				t.Fatalf("rollback should require reason, got %v", tr.RequiredFields)
+			}
+		}
+	}
+	if !gotDeployed || !gotRollback {
+		t.Fatalf("deploying transitions missing deployed=%v rollback=%v", gotDeployed, gotRollback)
+	}
+}

@@ -5,21 +5,23 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Calendar,
   CheckCircle2,
   Clock,
   FileText,
   Loader2,
   Package,
-  RotateCcw,
   Rocket,
-  Shield,
   XCircle,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FormField } from "@/components/shared/form-field";
+import {
+  WorkflowActionDrawer,
+  type WorkflowActionPayload,
+} from "@/components/itsm/workflow-experience";
+import { useITSMAllowedTransitions } from "@/hooks/use-itsm";
 import {
   useRelease,
   useReleaseItems,
@@ -28,11 +30,12 @@ import {
   useTransitionRelease,
   useDeployRelease,
   useRollbackRelease,
+  useCloseRelease,
   useDecideApproval,
-  useUpdateRelease,
 } from "@/hooks/use-release";
 import { APPROVAL_TYPES } from "@/types/release";
 import type { ReleaseItem, ReleaseDeployment, ReleaseApproval } from "@/types/release";
+import type { ITSMWorkflowTransition } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -78,19 +81,24 @@ const APPROVAL_STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   rejected: { bg: "rgba(220, 38, 38, 0.12)", text: "#DC2626" },
 };
 
-// Map from current status to allowed transitions
-const RELEASE_TRANSITIONS: Record<string, { value: string; label: string; icon: LucideIcon; accent: string }[]> = {
-  planning: [{ value: "build", label: "Submit for Build", icon: Package, accent: "#2563EB" }],
-  build: [{ value: "testing", label: "Submit for Testing", icon: Shield, accent: "#7C3AED" }],
-  testing: [{ value: "approved", label: "Submit for Approval", icon: CheckCircle2, accent: "#16A34A" }],
-  approved: [{ value: "scheduled", label: "Schedule Deployment", icon: Calendar, accent: "#2563EB" }],
-  scheduled: [{ value: "deploying", label: "Begin Deployment", icon: Zap, accent: "#D97706" }],
-  deploying: [
-    { value: "deployed", label: "Mark Deployed", icon: CheckCircle2, accent: "#16A34A" },
-    { value: "rolled_back", label: "Rollback", icon: RotateCcw, accent: "#DC2626" },
-  ],
-  deployed: [{ value: "closed", label: "Close Release", icon: CheckCircle2, accent: "#16A34A" }],
-};
+function roleLabel(value?: string) {
+  if (!value) return "";
+  const acronyms: Record<string, string> = {
+    it: "IT",
+    ditd: "DITD",
+    cab: "CAB",
+    uat: "UAT",
+  };
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => acronyms[part] ?? part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function releaseDate(primary?: string, fallback?: string) {
+  return primary ?? fallback;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Info Row Component                                                 */
@@ -133,15 +141,15 @@ export default function ReleaseDetailPage() {
   const { data: items } = useReleaseItems(id);
   const { data: deployments } = useReleaseDeployments(id);
   const { data: approvals } = useReleaseApprovals(id);
+  const { data: workflowTransitions } = useITSMAllowedTransitions("release", release?.status);
   const transitionMutation = useTransitionRelease(id);
   const deployMutation = useDeployRelease(id);
   const rollbackMutation = useRollbackRelease(id);
+  const closeMutation = useCloseRelease(id);
   const decideApproval = useDecideApproval(id);
-  const updateRelease = useUpdateRelease(id);
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [transitionComment, setTransitionComment] = useState("");
-  const [rollbackReason, setRollbackReason] = useState("");
+  const [selectedTransition, setSelectedTransition] = useState<ITSMWorkflowTransition | null>(null);
   const [closeOutNotes, setCloseOutNotes] = useState("");
   const [lessonsLearned, setLessonsLearned] = useState("");
   const [approvalNotes, setApprovalNotes] = useState<Record<string, string>>({});
@@ -165,17 +173,39 @@ export default function ReleaseDetailPage() {
 
   const typeMeta = TYPE_META[release.releaseType] ?? TYPE_META.minor;
   const TypeIcon = typeMeta.icon;
-  const transitions = RELEASE_TRANSITIONS[release.status] ?? [];
+  const transitions = workflowTransitions?.transitions ?? [];
+  const blockedTransitions = workflowTransitions?.blockedTransitions ?? [];
 
-  const handleTransition = (targetStatus: string) => {
-    if (targetStatus === "rolled_back" && release.status === "deploying") {
-      if (!rollbackReason) return;
-      rollbackMutation.mutate({ reason: rollbackReason });
-    } else if (targetStatus === "deploying") {
-      deployMutation.mutate({ environment: release.environment });
+  const handleWorkflowSubmit = (payload: WorkflowActionPayload) => {
+    const note =
+      payload.reason ||
+      payload.internalNote ||
+      payload.customerNote ||
+      payload.resolutionNotes ||
+      undefined;
+
+    if (payload.targetStatus === "deploying") {
+      deployMutation.mutate({
+        environment: release.environment,
+        deploymentType: "full",
+        notes: note,
+      });
+    } else if (payload.targetStatus === "rolled_back") {
+      rollbackMutation.mutate({ reason: note || "Rollback requested from release workflow" });
+    } else if (payload.targetStatus === "closed") {
+      closeMutation.mutate({
+        closeOutReport:
+          note ||
+          closeOutNotes ||
+          release.closeOutReport ||
+          release.closeOutNotes ||
+          "Release close-out completed.",
+        lessonsLearned: lessonsLearned || release.lessonsLearned || undefined,
+      });
     } else {
-      transitionMutation.mutate({ targetStatus, comment: transitionComment || undefined });
+      transitionMutation.mutate({ targetStatus: payload.targetStatus, comment: note });
     }
+    setSelectedTransition(null);
   };
 
   const releaseItems = (Array.isArray(items) ? items : (items as unknown as { data: ReleaseItem[] })?.data ?? []) as ReleaseItem[];
@@ -212,48 +242,69 @@ export default function ReleaseDetailPage() {
         </div>
       </div>
 
-      {/* Action Buttons */}
-      {transitions.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {transitions.map((t) => {
-            const TIcon = t.icon;
-            const isRollback = t.value === "rolled_back";
-            return (
+      {/* Backend-driven lifecycle actions */}
+      {(transitions.length > 0 || blockedTransitions.length > 0) && (
+        <div className="rounded-xl border border-white/[0.06] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Release lifecycle actions</h2>
+              {workflowTransitions?.nextAction ? (
+                <p className="text-xs text-white/40">Next required step: {workflowTransitions.nextAction}</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {transitions.map((transition) => (
               <button
-                key={t.value}
-                onClick={() => handleTransition(t.value)}
-                disabled={transitionMutation.isPending || deployMutation.isPending || rollbackMutation.isPending || (isRollback && !rollbackReason)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white border border-white/10 hover:bg-white/5 transition-colors disabled:opacity-40"
+                key={transition.value}
+                onClick={() => setSelectedTransition(transition)}
+                disabled={
+                  transitionMutation.isPending ||
+                  deployMutation.isPending ||
+                  rollbackMutation.isPending ||
+                  closeMutation.isPending
+                }
+                className="rounded-lg border border-white/10 px-4 py-2 text-left text-sm font-medium text-white transition-colors hover:bg-white/5 disabled:opacity-40"
               >
-                <TIcon size={14} style={{ color: t.accent }} />
-                {t.label}
+                <span className="block">{transition.label}</span>
+                <span className="mt-1 block text-[11px] font-normal text-white/45">
+                  R: {roleLabel(transition.responsibleRole) || "Unassigned"}
+                  {transition.accountableRole ? ` | A: ${roleLabel(transition.accountableRole)}` : ""}
+                </span>
               </button>
-            );
-          })}
-
-          {/* Rollback reason input (shown when deploying) */}
-          {release.status === "deploying" && (
-            <input
-              type="text"
-              placeholder="Rollback reason (required for rollback)"
-              value={rollbackReason}
-              onChange={(e) => setRollbackReason(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/30 flex-1 min-w-[200px]"
-            />
-          )}
-
-          {/* Transition comment input */}
-          {release.status !== "deploying" && (
-            <input
-              type="text"
-              placeholder="Transition comment (optional)"
-              value={transitionComment}
-              onChange={(e) => setTransitionComment(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/30 flex-1 min-w-[200px]"
-            />
-          )}
+            ))}
+            {blockedTransitions.slice(0, 4).map((transition) => (
+              <button
+                key={`blocked-${transition.value}`}
+                disabled
+                title={transition.reason}
+                className="rounded-lg border border-white/10 px-4 py-2 text-left text-sm font-medium text-white/35"
+              >
+                <span className="block">{transition.label}</span>
+                <span className="mt-1 block text-[11px] font-normal text-white/30">
+                  {transition.reason || "Not available from current status"}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
+
+      <WorkflowActionDrawer
+        open={!!selectedTransition}
+        entity="release"
+        currentStatus={release.status}
+        recordTitle={release.title}
+        transition={selectedTransition}
+        isSubmitting={
+          transitionMutation.isPending ||
+          deployMutation.isPending ||
+          rollbackMutation.isPending ||
+          closeMutation.isPending
+        }
+        onClose={() => setSelectedTransition(null)}
+        onSubmit={handleWorkflowSubmit}
+      />
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-white/[0.06] overflow-x-auto">
@@ -294,9 +345,15 @@ export default function ReleaseDetailPage() {
             {release.riskNotes && <InfoRow label="Risk Notes" value={release.riskNotes} />}
             <InfoRow label="Environment" value={<span className="capitalize">{release.environment}</span>} />
             <InfoRow label="Release Manager" value={release.releaseManagerName ?? "\u2014"} />
-            <InfoRow label="Planned" value={`${formatShortDate(release.plannedStartDate)} \u2192 ${formatShortDate(release.plannedEndDate)}`} />
-            {release.actualStartDate && (
-              <InfoRow label="Actual" value={`${formatShortDate(release.actualStartDate)} \u2192 ${formatShortDate(release.actualEndDate)}`} />
+            <InfoRow
+              label="Planned"
+              value={`${formatShortDate(releaseDate(release.plannedStart, release.plannedStartDate))} \u2192 ${formatShortDate(releaseDate(release.plannedEnd, release.plannedEndDate))}`}
+            />
+            {releaseDate(release.actualStart, release.actualStartDate) && (
+              <InfoRow
+                label="Actual"
+                value={`${formatShortDate(releaseDate(release.actualStart, release.actualStartDate))} \u2192 ${formatShortDate(releaseDate(release.actualEnd, release.actualEndDate))}`}
+              />
             )}
             {release.deploymentPlan && (
               <div className="pt-4 mt-4 border-t border-white/[0.06]">
@@ -421,12 +478,15 @@ export default function ReleaseDetailPage() {
                     </span>
                   </div>
 
-                  {approval?.decidedByName && (
+                  {approval?.approverName && (
                     <p className="text-xs text-white/40">
-                      Decided by {approval.decidedByName} on {formatDate(approval.decidedAt)}
+                      Approver: {approval.approverName}
+                      {approval.decidedAt ? ` | decided on ${formatDate(approval.decidedAt)}` : ""}
                     </p>
                   )}
-                  {approval?.notes && <p className="text-sm text-white/60">{approval.notes}</p>}
+                  {(approval?.comments || approval?.notes) && (
+                    <p className="text-sm text-white/60">{approval.comments || approval.notes}</p>
+                  )}
 
                   {/* Approve / Reject actions for pending approvals */}
                   {approval && approval.status === "pending" && (
@@ -524,7 +584,7 @@ export default function ReleaseDetailPage() {
                         <span className="capitalize">{a.approvalType.replace(/_/g, " ")}</span> &mdash;{" "}
                         <span className="capitalize">{a.status}</span>
                       </p>
-                      {a.decidedByName && <p className="text-xs text-white/40">by {a.decidedByName}</p>}
+                      {a.approverName && <p className="text-xs text-white/40">by {a.approverName}</p>}
                       <p className="text-xs text-white/30">{formatDate(a.decidedAt)}</p>
                     </div>
                   </div>
@@ -559,7 +619,7 @@ export default function ReleaseDetailPage() {
                     name="closeOutNotes"
                     label="Close-Out Notes"
                     type="textarea"
-                    value={closeOutNotes || release.closeOutNotes || ""}
+                    value={closeOutNotes || release.closeOutReport || release.closeOutNotes || ""}
                     onChange={(v) => setCloseOutNotes(v)}
                     placeholder="Document close-out observations, final checks, and sign-off details..."
                     rows={6}
@@ -579,24 +639,28 @@ export default function ReleaseDetailPage() {
                 </div>
                 <button
                   onClick={() =>
-                    updateRelease.mutate({
-                      closeOutNotes: closeOutNotes || undefined,
-                      lessonsLearned: lessonsLearned || undefined,
+                    closeMutation.mutate({
+                      closeOutReport:
+                        closeOutNotes ||
+                        release.closeOutReport ||
+                        release.closeOutNotes ||
+                        "Release close-out completed.",
+                      lessonsLearned: lessonsLearned || release.lessonsLearned || undefined,
                     })
                   }
-                  disabled={updateRelease.isPending}
+                  disabled={closeMutation.isPending}
                   className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60"
                   style={{ background: "linear-gradient(135deg, #1B7340, #0E5A2D)" }}
                 >
-                  {updateRelease.isPending ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
-                  Save Close-Out
+                  {closeMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                  Close Release
                 </button>
               </>
             ) : release.status === "closed" ? (
               <div className="space-y-6">
                 <div className="rounded-xl border border-white/[0.06] p-6">
                   <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Close-Out Notes</h3>
-                  <p className="text-sm text-white whitespace-pre-wrap">{release.closeOutNotes || "No close-out notes recorded."}</p>
+                  <p className="text-sm text-white whitespace-pre-wrap">{release.closeOutReport || release.closeOutNotes || "No close-out notes recorded."}</p>
                 </div>
                 <div className="rounded-xl border border-white/[0.06] p-6">
                   <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Lessons Learned</h3>

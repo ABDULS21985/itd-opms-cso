@@ -17,6 +17,10 @@ export interface Release {
   environment: string;
   releaseManagerId?: string;
   releaseManagerName?: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
   plannedStartDate?: string;
   plannedEndDate?: string;
   actualStartDate?: string;
@@ -25,6 +29,7 @@ export interface Release {
   rollbackPlan?: string;
   riskLevel?: string;
   riskNotes?: string;
+  closeOutReport?: string;
   lessonsLearned?: string;
   closeOutNotes?: string;
   tags?: string[];
@@ -77,9 +82,11 @@ export interface ReleaseApproval {
   releaseId: string;
   approvalType: string;
   status: string;
+  approverName?: string;
   decidedBy?: string;
   decidedByName?: string;
   decidedAt?: string;
+  comments?: string;
   notes?: string;
   createdAt: string;
 }
@@ -150,8 +157,8 @@ export const RISK_LEVELS = [
 ] as const;
 
 export const APPROVAL_TYPES = [
-  { value: "uat", label: "UAT Sign-off" },
-  { value: "security", label: "Security Review" },
-  { value: "ditd", label: "DITD Approval" },
-  { value: "ops_readiness", label: "Ops Readiness" },
+  { value: "uat_signoff", label: "UAT Sign-off" },
+  { value: "security_clearance", label: "Security Review" },
+  { value: "ditd_approval", label: "DITD Approval" },
+  { value: "operational_readiness", label: "Ops Readiness" },
 ] as const;

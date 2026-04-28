@@ -17,46 +17,50 @@ type ERPDirectoryImportRequest struct {
 
 // ERPDirectoryImportPreview is returned before applying a reset.
 type ERPDirectoryImportPreview struct {
-	SourcePath                       string                    `json:"sourcePath"`
-	SourceChecksum                   string                    `json:"sourceChecksum"`
-	TotalRows                        int                       `json:"totalRows"`
-	ParseErrors                      int                       `json:"parseErrors"`
-	EmployeesTotal                   int                       `json:"employeesTotal"`
-	ActiveEmployees                  int                       `json:"activeEmployees"`
-	InactiveEmployees                int                       `json:"inactiveEmployees"`
-	MissingEmails                    int                       `json:"missingEmails"`
-	InvalidEmails                    int                       `json:"invalidEmails"`
-	DuplicateEmails                  int                       `json:"duplicateEmails"`
-	PlaceholderEmails                int                       `json:"placeholderEmails"`
-	LoginEligibleEmployees           int                       `json:"loginEligibleEmployees"`
-	Departments                      int                       `json:"departments"`
-	Divisions                        int                       `json:"divisions"`
-	Offices                          int                       `json:"offices"`
-	Supervisors                      int                       `json:"supervisors"`
-	HeadsOfDivision                  int                       `json:"headsOfDivision"`
-	ElevatedAdmins                   int                       `json:"elevatedAdmins"`
-	ServiceDeskAnalysts              int                       `json:"serviceDeskAnalysts"`
-	SeniorServiceDeskAnalysts        int                       `json:"seniorServiceDeskAnalysts"`
-	ServiceDeskSpecialists           int                       `json:"serviceDeskSpecialists"`
-	EndUserSupportSpecialists        int                       `json:"endUserSupportSpecialists"`
-	SecondLevelSupportSpecialists    int                       `json:"secondLevelSupportSpecialists"`
-	ITServiceCenterSpecialists       int                       `json:"itServiceCenterSpecialists"`
-	SeniorITServiceCenterSpecialists int                       `json:"seniorItServiceCenterSpecialists"`
-	ITServiceSupportSpecialists      int                       `json:"itServiceSupportSpecialists"`
-	ChangeRequestors                 int                       `json:"changeRequestors"`
-	BusinessAnalysts                 int                       `json:"businessAnalysts"`
-	BusinessRelationshipManagers     int                       `json:"businessRelationshipManagers"`
-	ChangeManagers                   int                       `json:"changeManagers"`
-	TestManagementSpecialists        int                       `json:"testManagementSpecialists"`
-	SubjectMatterExperts             int                       `json:"subjectMatterExperts"`
-	ITComplianceSpecialists          int                       `json:"itComplianceSpecialists"`
-	CABMembers                       int                       `json:"cabMembers"`
-	CABMeetingSecretaries            int                       `json:"cabMeetingSecretaries"`
-	ReleaseManagers                  int                       `json:"releaseManagers"`
-	ChangeApprovers                  int                       `json:"changeApprovers"`
-	SupportAnalysts                  int                       `json:"supportAnalysts"`
-	Warnings                         []string                  `json:"warnings"`
-	Samples                          []ERPDirectoryPreviewUser `json:"samples"`
+	SourcePath                         string                    `json:"sourcePath"`
+	SourceChecksum                     string                    `json:"sourceChecksum"`
+	TotalRows                          int                       `json:"totalRows"`
+	ParseErrors                        int                       `json:"parseErrors"`
+	EmployeesTotal                     int                       `json:"employeesTotal"`
+	ActiveEmployees                    int                       `json:"activeEmployees"`
+	InactiveEmployees                  int                       `json:"inactiveEmployees"`
+	MissingEmails                      int                       `json:"missingEmails"`
+	InvalidEmails                      int                       `json:"invalidEmails"`
+	DuplicateEmails                    int                       `json:"duplicateEmails"`
+	PlaceholderEmails                  int                       `json:"placeholderEmails"`
+	LoginEligibleEmployees             int                       `json:"loginEligibleEmployees"`
+	Departments                        int                       `json:"departments"`
+	Divisions                          int                       `json:"divisions"`
+	Offices                            int                       `json:"offices"`
+	Supervisors                        int                       `json:"supervisors"`
+	HeadsOfDivision                    int                       `json:"headsOfDivision"`
+	ElevatedAdmins                     int                       `json:"elevatedAdmins"`
+	ServiceDeskAnalysts                int                       `json:"serviceDeskAnalysts"`
+	SeniorServiceDeskAnalysts          int                       `json:"seniorServiceDeskAnalysts"`
+	ServiceDeskSpecialists             int                       `json:"serviceDeskSpecialists"`
+	EndUserSupportSpecialists          int                       `json:"endUserSupportSpecialists"`
+	SecondLevelSupportSpecialists      int                       `json:"secondLevelSupportSpecialists"`
+	ITServiceCenterSpecialists         int                       `json:"itServiceCenterSpecialists"`
+	SeniorITServiceCenterSpecialists   int                       `json:"seniorItServiceCenterSpecialists"`
+	ITServiceSupportSpecialists        int                       `json:"itServiceSupportSpecialists"`
+	ChangeRequestors                   int                       `json:"changeRequestors"`
+	BusinessAnalysts                   int                       `json:"businessAnalysts"`
+	BusinessRelationshipManagers       int                       `json:"businessRelationshipManagers"`
+	ChangeManagers                     int                       `json:"changeManagers"`
+	TestManagementSpecialists          int                       `json:"testManagementSpecialists"`
+	SubjectMatterExperts               int                       `json:"subjectMatterExperts"`
+	ITComplianceSpecialists            int                       `json:"itComplianceSpecialists"`
+	CABMembers                         int                       `json:"cabMembers"`
+	CABMeetingSecretaries              int                       `json:"cabMeetingSecretaries"`
+	ReleaseManagers                    int                       `json:"releaseManagers"`
+	ReleaseManagementLeads             int                       `json:"releaseManagementLeads"`
+	SolutionsDeliverySpecialists       int                       `json:"solutionsDeliverySpecialists"`
+	SeniorReleaseManagementSpecialists int                       `json:"seniorReleaseManagementSpecialists"`
+	DITDApprovers                      int                       `json:"ditdApprovers"`
+	ChangeApprovers                    int                       `json:"changeApprovers"`
+	SupportAnalysts                    int                       `json:"supportAnalysts"`
+	Warnings                           []string                  `json:"warnings"`
+	Samples                            []ERPDirectoryPreviewUser `json:"samples"`
 }
 
 type ERPDirectoryPreviewUser struct {
@@ -159,35 +163,39 @@ func (r erpEmployeeRecord) displayName() string {
 }
 
 type preparedERPDirectory struct {
-	Preview                          ERPDirectoryImportPreview
-	Employees                        []erpEmployeeRecord
-	OrgUnits                         []preparedERPOrgUnit
-	EmployeeIDs                      map[string]uuid.UUID
-	Supervisors                      map[string]struct{}
-	DivHeads                         map[string]struct{}
-	OfficeHeads                      map[string]struct{}
-	Elevated                         map[string]struct{}
-	RoleEligible                     map[string]struct{}
-	ServiceDeskAnalysts              map[string]struct{}
-	SeniorServiceDeskAnalysts        map[string]struct{}
-	ServiceDeskSpecialists           map[string]struct{}
-	EndUserSupportSpecialists        map[string]struct{}
-	SecondLevelSupportSpecialists    map[string]struct{}
-	ITServiceCenterSpecialists       map[string]struct{}
-	SeniorITServiceCenterSpecialists map[string]struct{}
-	ITServiceSupportSpecialists      map[string]struct{}
-	ChangeRequestors                 map[string]struct{}
-	BusinessAnalysts                 map[string]struct{}
-	BusinessRelationshipManagers     map[string]struct{}
-	ChangeManagers                   map[string]struct{}
-	TestManagementSpecialists        map[string]struct{}
-	SubjectMatterExperts             map[string]struct{}
-	ITComplianceSpecialists          map[string]struct{}
-	CABMembers                       map[string]struct{}
-	CABMeetingSecretaries            map[string]struct{}
-	ReleaseManagers                  map[string]struct{}
-	ChangeApprovers                  map[string]struct{}
-	SupportAnalysts                  map[string]struct{}
+	Preview                            ERPDirectoryImportPreview
+	Employees                          []erpEmployeeRecord
+	OrgUnits                           []preparedERPOrgUnit
+	EmployeeIDs                        map[string]uuid.UUID
+	Supervisors                        map[string]struct{}
+	DivHeads                           map[string]struct{}
+	OfficeHeads                        map[string]struct{}
+	Elevated                           map[string]struct{}
+	RoleEligible                       map[string]struct{}
+	ServiceDeskAnalysts                map[string]struct{}
+	SeniorServiceDeskAnalysts          map[string]struct{}
+	ServiceDeskSpecialists             map[string]struct{}
+	EndUserSupportSpecialists          map[string]struct{}
+	SecondLevelSupportSpecialists      map[string]struct{}
+	ITServiceCenterSpecialists         map[string]struct{}
+	SeniorITServiceCenterSpecialists   map[string]struct{}
+	ITServiceSupportSpecialists        map[string]struct{}
+	ChangeRequestors                   map[string]struct{}
+	BusinessAnalysts                   map[string]struct{}
+	BusinessRelationshipManagers       map[string]struct{}
+	ChangeManagers                     map[string]struct{}
+	TestManagementSpecialists          map[string]struct{}
+	SubjectMatterExperts               map[string]struct{}
+	ITComplianceSpecialists            map[string]struct{}
+	CABMembers                         map[string]struct{}
+	CABMeetingSecretaries              map[string]struct{}
+	ReleaseManagers                    map[string]struct{}
+	ReleaseManagementLeads             map[string]struct{}
+	SolutionsDeliverySpecialists       map[string]struct{}
+	SeniorReleaseManagementSpecialists map[string]struct{}
+	DITDApprovers                      map[string]struct{}
+	ChangeApprovers                    map[string]struct{}
+	SupportAnalysts                    map[string]struct{}
 }
 
 type preparedERPOrgUnit struct {

@@ -170,6 +170,31 @@ const serviceRequestDetail = {
   ],
 };
 
+const releaseRecord = {
+  id: "release-1",
+  tenantId: "tenant-1",
+  releaseNumber: "REL-001001",
+  title: "Payment switch release",
+  description: "Deploy the payment switch latency fix to production.",
+  releaseType: "minor",
+  status: "planning",
+  environment: "production",
+  releaseManagerId: user.id,
+  releaseManagerName: user.displayName,
+  plannedStart: "2026-04-29T18:00:00.000Z",
+  plannedEnd: "2026-04-29T20:00:00.000Z",
+  deploymentPlan: "Deploy standby node, validate, then promote.",
+  rollbackPlan: "Roll back to previous firmware baseline.",
+  changeTicketIds: ["change-1"],
+  deploymentTeam: [user.id],
+  createdBy: user.id,
+  createdAt: now,
+  updatedAt: now,
+  items: [],
+  deployments: [],
+  approvals: [],
+};
+
 function jwtWithFutureExpiry() {
   const payload = Buffer.from(
     JSON.stringify({ sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 }),
@@ -371,6 +396,50 @@ async function mockApi(page: Page, onTransition?: (path: string, body: unknown) 
       const body = request.postDataJSON();
       onTransition?.(path, body);
       return fulfill(route, { ...majorIncident, status: body.targetStatus });
+    }
+
+    if (path === "/releases/release-1" && method === "GET") {
+      return fulfill(route, releaseRecord);
+    }
+    if (path === "/releases/release-1/items") {
+      return fulfill(route, []);
+    }
+    if (path === "/releases/release-1/deployments") {
+      return fulfill(route, []);
+    }
+    if (path === "/releases/release-1/approvals") {
+      return fulfill(route, []);
+    }
+    if (path === "/itsm/workflows/release/transitions") {
+      return fulfill(route, {
+        entity: "release",
+        status: url.searchParams.get("status"),
+        transitions: [
+          {
+            value: "build",
+            label: "Create Deployment Plan",
+            responsibleRole: "release_manager",
+            accountableRole: "release_management_lead",
+            checklist: [
+              { key: "uat_signoff_received", label: "UAT signoff received with signed test scripts", required: true },
+              { key: "deployment_plan_defined", label: "Deployment approach documented", required: true },
+            ],
+          },
+        ],
+        blockedTransitions: [
+          {
+            value: "closed",
+            label: "Conduct Close-Out",
+            reason: "Move through Evaluate Results before Conduct Close-Out.",
+          },
+        ],
+        nextAction: "Create Deployment Plan",
+      });
+    }
+    if (path === "/releases/release-1/transition" && method === "POST") {
+      const body = request.postDataJSON();
+      onTransition?.(path, body);
+      return fulfill(route, { ...releaseRecord, status: body.targetStatus });
     }
 
     if (path === "/itsm/catalog/requests/request-1" && method === "GET") {
@@ -596,5 +665,30 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
       body: { comment: "Requester notified and request closed." },
     });
     await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
+  });
+
+  test("release detail renders BRD workflow roles and uses lifecycle drawer", async ({ page }) => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    await mockApi(page, (path, body) => calls.push({ path, body }));
+
+    await page.goto("/dashboard/releases/release-1");
+
+    await expect(page.getByRole("heading", { name: releaseRecord.title })).toBeVisible();
+    await expect(page.getByText("Release lifecycle actions")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Create Deployment Plan/ })).toBeVisible();
+    await expect(page.getByText(/R: Release Manager/)).toBeVisible();
+    await expect(page.getByText(/A: Release Management Lead/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Conduct Close-Out/ })).toBeDisabled();
+
+    await page.getByRole("button", { name: /Create Deployment Plan/ }).click();
+    await expect(page.getByRole("heading", { name: "Create Deployment Plan" })).toBeVisible();
+    for (const checkbox of await page.getByRole("checkbox").all()) {
+      await checkbox.check();
+    }
+    await page.getByRole("button", { name: "Confirm Create Deployment Plan" }).click();
+    await expect.poll(() => calls).toContainEqual({
+      path: "/releases/release-1/transition",
+      body: { targetStatus: "build" },
+    });
   });
 });

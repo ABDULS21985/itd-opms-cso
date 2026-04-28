@@ -227,6 +227,48 @@ func TestChangeManagementRolesForERPAssignment(t *testing.T) {
 	}
 }
 
+func TestReleaseManagementRolesForERPAssignment(t *testing.T) {
+	cases := []struct {
+		name string
+		rec  erpEmployeeRecord
+		want []string
+	}{
+		{
+			name: "release management lead",
+			rec:  erpEmployeeRecord{JobName: "Release Management Lead", OfficeName: "Release and Deployment Office"},
+			want: []string{"release_manager", "release_management_lead"},
+		},
+		{
+			name: "solutions delivery specialist",
+			rec:  erpEmployeeRecord{JobName: "Solutions Delivery Specialist", DivisionName: "Solutions Delivery Division"},
+			want: []string{"solutions_delivery_specialist"},
+		},
+		{
+			name: "senior release management specialist",
+			rec:  erpEmployeeRecord{JobName: "Senior Release Management Specialist"},
+			want: []string{"release_manager", "release_management_lead", "senior_release_management_specialist"},
+		},
+		{
+			name: "DITD director approves",
+			rec:  erpEmployeeRecord{JobName: "Director", DepartmentName: "DITD"},
+			want: []string{"ditd_approver"},
+		},
+		{
+			name: "procurement ignored",
+			rec:  erpEmployeeRecord{JobName: "Procurement Officer", DivisionName: "Procurement Support Services"},
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := releaseManagementRolesForERPAssignment(tc.rec)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("releaseManagementRolesForERPAssignment() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseERPDirectoryDump_FromEnv(t *testing.T) {
 	path := os.Getenv("ERP_DIRECTORY_DUMP_PATH")
 	if path == "" {

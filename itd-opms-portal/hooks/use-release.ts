@@ -174,8 +174,11 @@ export function useTransitionRelease(id: string | undefined) {
 export function useDeployRelease(id: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { environment: string; notes?: string }) =>
-      apiClient.post<ReleaseDeployment>(`/releases/${id}/deploy`, body),
+    mutationFn: (body: { environment: string; deploymentType?: string; notes?: string }) =>
+      apiClient.post<Release>(`/releases/${id}/deploy`, {
+        ...body,
+        deploymentType: body.deploymentType ?? "full",
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["releases"] });
       queryClient.invalidateQueries({ queryKey: ["release", id] });
@@ -211,6 +214,26 @@ export function useRollbackRelease(id: string | undefined) {
 }
 
 /**
+ * POST /releases/{id}/close - close a deployed release with close-out evidence.
+ */
+export function useCloseRelease(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { closeOutReport: string; lessonsLearned?: string }) =>
+      apiClient.post<Release>(`/releases/${id}/close`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["releases"] });
+      queryClient.invalidateQueries({ queryKey: ["release", id] });
+      queryClient.invalidateQueries({ queryKey: ["release-stats"] });
+      toast.success("Release closed");
+    },
+    onError: () => {
+      toast.error("Failed to close release");
+    },
+  });
+}
+
+/**
  * POST /releases/{releaseId}/approvals/{approvalId}/decide - approve or reject.
  */
 export function useDecideApproval(releaseId: string | undefined) {
@@ -219,7 +242,7 @@ export function useDecideApproval(releaseId: string | undefined) {
     mutationFn: (body: { approvalId: string; decision: "approved" | "rejected"; notes?: string }) =>
       apiClient.post<ReleaseApproval>(
         `/releases/${releaseId}/approvals/${body.approvalId}/decide`,
-        { decision: body.decision, notes: body.notes }
+        { status: body.decision, comments: body.notes }
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["release-approvals", releaseId] });

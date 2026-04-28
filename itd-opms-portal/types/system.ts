@@ -221,6 +221,10 @@ export interface ERPDirectoryImportPreview {
   cabMembers?: number;
   cabMeetingSecretaries?: number;
   releaseManagers?: number;
+  releaseManagementLeads?: number;
+  solutionsDeliverySpecialists?: number;
+  seniorReleaseManagementSpecialists?: number;
+  ditdApprovers?: number;
   changeApprovers?: number;
   supportAnalysts?: number;
   warnings: string[];

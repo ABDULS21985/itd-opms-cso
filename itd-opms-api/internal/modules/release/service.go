@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -156,6 +157,9 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, req CreateReleaseReq
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
 	}
+	if err := ensureReleasePlanningResponsibility(auth, "create release"); err != nil {
+		return nil, err
+	}
 
 	env := req.Environment
 	if env == "" {
@@ -241,6 +245,9 @@ func (s *ReleaseService) UpdateRelease(ctx context.Context, id uuid.UUID, req Up
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
 	}
+	if err := ensureReleaseManagementResponsibility(auth, "update release"); err != nil {
+		return nil, err
+	}
 
 	query := `
 		UPDATE releases SET
@@ -319,6 +326,18 @@ func (s *ReleaseService) TransitionRelease(ctx context.Context, id uuid.UUID, re
 	if err := workflow.ReleaseStateMachine.Validate(currentStatus, req.TargetStatus); err != nil {
 		return nil, apperrors.BadRequest(err.Error())
 	}
+	if req.TargetStatus == workflow.ReleaseDeploying {
+		return nil, apperrors.BadRequest("use the deploy endpoint to authorize deployment and create the deployment record")
+	}
+	if req.TargetStatus == workflow.ReleaseRolledBack {
+		return nil, apperrors.BadRequest("use the rollback endpoint to record rollback reason and release outcome")
+	}
+	if req.TargetStatus == workflow.ReleaseClosed {
+		return nil, apperrors.BadRequest("use the close endpoint to capture the close-out report and lessons learned")
+	}
+	if err := ensureReleaseTransitionResponsibility(auth, currentStatus, req.TargetStatus); err != nil {
+		return nil, err
+	}
 
 	query := `
 		UPDATE releases SET status = $3, updated_at = now()
@@ -349,6 +368,15 @@ func (s *ReleaseService) TransitionRelease(ctx context.Context, id uuid.UUID, re
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
 
+	s.publishEvent("notify.release.transitioned", id, auth, map[string]any{
+		"releaseNumber": rel.ReleaseNumber,
+		"title":         rel.Title,
+		"fromStatus":    currentStatus,
+		"toStatus":      req.TargetStatus,
+		"comment":       req.Comment,
+		"actionUrl":     fmt.Sprintf("/dashboard/releases/%s", id),
+	})
+
 	return &rel, nil
 }
 
@@ -357,6 +385,9 @@ func (s *ReleaseService) DeployRelease(ctx context.Context, id uuid.UUID, req De
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
+	}
+	if err := ensureReleasePlanningResponsibility(auth, "authorize deployment"); err != nil {
+		return nil, err
 	}
 
 	var currentStatus, env string
@@ -380,6 +411,10 @@ func (s *ReleaseService) DeployRelease(ctx context.Context, id uuid.UUID, req De
 	if deployEnv == "" {
 		deployEnv = env
 	}
+	deploymentType := req.DeploymentType
+	if deploymentType == "" {
+		deploymentType = "full"
+	}
 
 	query := `
 		UPDATE releases SET status = 'deploying', actual_start = COALESCE(actual_start, $3), updated_at = now()
@@ -400,7 +435,7 @@ func (s *ReleaseService) DeployRelease(ctx context.Context, id uuid.UUID, req De
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO release_deployments (tenant_id, release_id, environment, deployment_type, deployed_by, notes, started_at, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'in_progress')`,
-		auth.TenantID, id, deployEnv, req.DeploymentType, auth.UserID, req.Notes, now,
+		auth.TenantID, id, deployEnv, deploymentType, auth.UserID, req.Notes, now,
 	)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create deployment record", "error", err)
@@ -435,6 +470,12 @@ func (s *ReleaseService) RollbackRelease(ctx context.Context, id uuid.UUID, req 
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
+	}
+	if err := ensureReleaseDeliveryResponsibility(auth, "rollback release"); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		return nil, apperrors.BadRequest("rollback reason is required")
 	}
 
 	var currentStatus string
@@ -500,6 +541,12 @@ func (s *ReleaseService) CloseRelease(ctx context.Context, id uuid.UUID, req Clo
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
 	}
+	if err := ensureReleaseClosureResponsibility(auth, "close release"); err != nil {
+		return nil, err
+	}
+	if req.CloseOutReport == nil || strings.TrimSpace(*req.CloseOutReport) == "" {
+		return nil, apperrors.BadRequest("closeOutReport is required to close a release")
+	}
 
 	var currentStatus string
 	err := s.pool.QueryRow(ctx,
@@ -551,6 +598,12 @@ func (s *ReleaseService) CloseRelease(ctx context.Context, id uuid.UUID, req Clo
 	}); auditErr != nil {
 		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
 	}
+
+	s.publishEvent("notify.release.closed", id, auth, map[string]any{
+		"releaseNumber": rel.ReleaseNumber,
+		"title":         rel.Title,
+		"actionUrl":     fmt.Sprintf("/dashboard/releases/%s", id),
+	})
 
 	return &rel, nil
 }
@@ -665,6 +718,9 @@ func (s *ReleaseService) CreateReleaseItem(ctx context.Context, releaseID uuid.U
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
 	}
+	if err := ensureReleasePlanningResponsibility(auth, "add release item"); err != nil {
+		return nil, err
+	}
 
 	// Verify release exists
 	var exists bool
@@ -733,6 +789,9 @@ func (s *ReleaseService) CreateReleaseDeployment(ctx context.Context, releaseID 
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
+	}
+	if err := ensureReleaseDeliveryResponsibility(auth, "record release deployment"); err != nil {
+		return nil, err
 	}
 
 	var exists bool
@@ -806,6 +865,9 @@ func (s *ReleaseService) CreateReleaseApproval(ctx context.Context, releaseID uu
 	auth := types.GetAuthContext(ctx)
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
+	}
+	if err := ensureReleasePlanningResponsibility(auth, "request release approval"); err != nil {
+		return nil, err
 	}
 
 	var exists bool
@@ -882,13 +944,33 @@ func (s *ReleaseService) DecideReleaseApproval(ctx context.Context, releaseID, a
 	if auth == nil {
 		return nil, apperrors.Forbidden("authentication required")
 	}
+	if req.Status != "approved" && req.Status != "rejected" {
+		return nil, apperrors.BadRequest("status must be approved or rejected")
+	}
+
+	var approverID uuid.UUID
+	err := s.pool.QueryRow(ctx, `
+		SELECT approver_id
+		FROM release_approvals
+		WHERE id = $1 AND release_id = $2 AND tenant_id = $3`,
+		approvalID, releaseID, auth.TenantID,
+	).Scan(&approverID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NotFound("release_approval", approvalID.String())
+		}
+		return nil, apperrors.Internal("failed to get release approval", err)
+	}
+	if err := ensureReleaseApprovalDecisionResponsibility(auth, approverID); err != nil {
+		return nil, err
+	}
 
 	var a ReleaseApproval
-	err := s.pool.QueryRow(ctx, `
+	err = s.pool.QueryRow(ctx, `
 		UPDATE release_approvals SET status = $3, comments = $4, decided_at = now()
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND tenant_id = $2 AND release_id = $5
 		RETURNING id, tenant_id, release_id, approver_id, approval_type, status, comments, decided_at, created_at`,
-		approvalID, auth.TenantID, req.Status, req.Comments,
+		approvalID, auth.TenantID, req.Status, req.Comments, releaseID,
 	).Scan(&a.ID, &a.TenantID, &a.ReleaseID, &a.ApproverID, &a.ApprovalType,
 		&a.Status, &a.Comments, &a.DecidedAt, &a.CreatedAt)
 	if err != nil {

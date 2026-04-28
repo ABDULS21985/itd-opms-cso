@@ -200,14 +200,14 @@ var itsmWorkflowDefinitions = map[string]workflowMetadata{
 			workflow.ReleaseCancelled,
 		},
 		labels: map[string]string{
-			workflow.ReleaseBuild:      "Start Build",
-			workflow.ReleaseTesting:    "Start Testing",
-			workflow.ReleaseApproved:   "Approve",
-			workflow.ReleaseScheduled:  "Schedule",
-			workflow.ReleaseDeploying:  "Deploy",
-			workflow.ReleaseDeployed:   "Mark Deployed",
+			workflow.ReleaseBuild:      "Create Deployment Plan",
+			workflow.ReleaseTesting:    "Set Up Deployment Team",
+			workflow.ReleaseApproved:   "Obtain Deployment Approval",
+			workflow.ReleaseScheduled:  "Authorize Deployment",
+			workflow.ReleaseDeploying:  "Deploy Solution",
+			workflow.ReleaseDeployed:   "Evaluate Results",
 			workflow.ReleaseRolledBack: "Roll Back",
-			workflow.ReleaseClosed:     "Close",
+			workflow.ReleaseClosed:     "Conduct Close-Out",
 			workflow.ReleaseCancelled:  "Cancel",
 		},
 	},
@@ -768,6 +768,105 @@ func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
 				{Key: "management_reporting_ready", Label: "Management reporting data complete", Required: true},
 			},
 			DecisionTrail: []string{"change_manager", "test_management_specialist", "closed_at", "management_reporting"},
+		}
+	case "release:" + workflow.ReleaseBuild:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"deployment_plan"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "uat_signoff_received", Label: "UAT signoff received with signed test scripts", Required: true},
+				{Key: "deployment_plan_defined", Label: "Deployment approach, team roles, environment, risk, and mitigation documented", Required: true},
+				{Key: "rollback_plan_defined", Label: "Rollback path documented before deployment planning progresses", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "uat_signoff", "deployment_plan", "rollback_plan"},
+		}
+	case "release:" + workflow.ReleaseTesting:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionsDeliverySpecialistRole,
+			AccountableRole: SolutionsDeliverySpecialistRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "deployment_team_set", Label: "Deployment team nominees received and responsibilities assigned", Required: true},
+				{Key: "kickoff_completed", Label: "Deployment team kick-off completed", Required: true},
+				{Key: "environment_prepared", Label: "Deployment environment and enabling infrastructure prepared", Required: true},
+			},
+			DecisionTrail: []string{"solutions_delivery_specialist", "deployment_team", "environment_readiness"},
+		}
+	case "release:" + workflow.ReleaseApproved:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: DITDApproverRole,
+			RequiredFields:  []string{"comment"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "readiness_assessed", Label: "Environment readiness assessed and exceptions resolved", Required: true},
+				{Key: "implementation_certificate_ready", Label: "Implementation certificate prepared for stakeholder sign-off", Required: true},
+				{Key: "ditd_approval_recorded", Label: "DITD approval for solution deployment recorded", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "release_management_lead", "ditd_approval", "implementation_certificate"},
+		}
+	case "release:" + workflow.ReleaseScheduled:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "deployment_authorized", Label: "Deployment team authorized to roll out the solution release", Required: true},
+				{Key: "deployment_option_selected", Label: "Deployment option selected: data migration, pilot, or full solution release", Required: true},
+				{Key: "stakeholders_notified", Label: "Requester and relevant stakeholders notified of deployment timing", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "release_management_lead", "deployment_option", "schedule"},
+		}
+	case "release:" + workflow.ReleaseDeploying:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "deployment_authorized", Label: "Deployment authorization confirmed", Required: true},
+				{Key: "deployment_window_ready", Label: "Deployment window and team availability confirmed", Required: true},
+			},
+			SLAImpact:     "Deployment execution starts and release actual start is recorded.",
+			DecisionTrail: []string{"release_manager", "actual_start", "deployment_type"},
+		}
+	case "release:" + workflow.ReleaseDeployed:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionsDeliverySpecialistRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"notes"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "solution_deployed", Label: "Solution rolled out according to approval and deployment plan", Required: true},
+				{Key: "results_evaluated", Label: "Release outcome evaluated against requirements and expectations", Required: true},
+				{Key: "rollout_successful", Label: "Rollout confirmed successful or rollback decision recorded", Required: true},
+			},
+			DecisionTrail: []string{"solutions_delivery_specialist", "release_management_lead", "deployment_result", "evaluation_notes"},
+		}
+	case "release:" + workflow.ReleaseRolledBack:
+		return transitionUXMetadata{
+			ResponsibleRole: SolutionsDeliverySpecialistRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"reason"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "rollback_applied", Label: "Rollback to previous state completed", Required: true},
+				{Key: "rollback_impact_recorded", Label: "Rollback impact and residual issues recorded", Required: true},
+			},
+			DecisionTrail: []string{"solutions_delivery_specialist", "release_management_lead", "rollback_reason", "actual_end"},
+		}
+	case "release:" + workflow.ReleaseClosed:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: SeniorReleaseManagementSpecialistRole,
+			RequiredFields:  []string{"comment"},
+			Checklist: []ITSMWorkflowChecklistItem{
+				{Key: "close_out_report_prepared", Label: "Close-out report prepared", Required: true},
+				{Key: "lessons_learned_recorded", Label: "Lessons learned and deployment outcome documented", Required: true},
+				{Key: "relevant_processes_notified", Label: "Change Management, Service Portfolio, Project and Program Management notified", Required: true},
+			},
+			DecisionTrail: []string{"release_manager", "senior_release_management_specialist", "close_out_report", "lessons_learned"},
+		}
+	case "release:" + workflow.ReleaseCancelled:
+		return transitionUXMetadata{
+			ResponsibleRole: ReleaseManagerRole,
+			AccountableRole: ReleaseManagementLeadRole,
+			RequiredFields:  []string{"reason"},
+			DecisionTrail:   []string{"release_manager", "release_management_lead", "cancel_reason"},
 		}
 	case "major_incident:" + workflow.MajorIncidentResolved:
 		return transitionUXMetadata{
