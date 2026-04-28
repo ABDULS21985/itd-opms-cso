@@ -12,6 +12,10 @@ import type {
   OrgUnitDetail,
   OrgTreeNode,
   OrgAnalyticsResponse,
+  ERPDirectoryImportPreview,
+  ERPDirectoryImportRequest,
+  ERPDirectoryImportResult,
+  ERPDirectoryImportRun,
   SystemSetting,
   AuditEventDetail,
   AuditStatsResponse,
@@ -647,6 +651,56 @@ export function useDeleteOrgUnit() {
     },
     onError: () => {
       toast.error("Failed to delete org unit");
+    },
+  });
+}
+
+/* ================================================================== */
+/*  ERP Directory Import — Queries & Mutations                         */
+/* ================================================================== */
+
+export function useERPDirectoryRuns(limit = 10) {
+  return useQuery({
+    queryKey: ["system-erp-directory-runs", limit],
+    queryFn: () =>
+      apiClient.get<ERPDirectoryImportRun[]>("/system/erp-directory/runs", {
+        limit,
+      }),
+  });
+}
+
+export function usePreviewERPDirectory() {
+  return useMutation({
+    mutationFn: (body: ERPDirectoryImportRequest) =>
+      apiClient.post<ERPDirectoryImportPreview>(
+        "/system/erp-directory/preview",
+        body,
+      ),
+    onError: () => {
+      toast.error("Failed to preview ERP directory");
+    },
+  });
+}
+
+export function useApplyERPDirectory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ERPDirectoryImportRequest) =>
+      apiClient.post<ERPDirectoryImportResult>(
+        "/system/erp-directory/apply",
+        body,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-erp-directory-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["system-users"] });
+      queryClient.invalidateQueries({ queryKey: ["system-user-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["system-org-units"] });
+      queryClient.invalidateQueries({ queryKey: ["system-org-tree"] });
+      queryClient.invalidateQueries({ queryKey: ["system-org-analytics"] });
+      toast.success("ERP directory import completed");
+    },
+    onError: () => {
+      toast.error("Failed to apply ERP directory import");
     },
   });
 }

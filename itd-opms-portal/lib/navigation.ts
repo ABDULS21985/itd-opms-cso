@@ -601,6 +601,12 @@ export const navGroups: NavGroup[] = [
         permission: "system.manage",
       },
       {
+        href: "/dashboard/system/erp-directory",
+        label: "ERP Directory",
+        icon: UserPlus,
+        permission: "system.manage",
+      },
+      {
         href: "/dashboard/system/audit-logs",
         label: "Audit Logs",
         icon: ScrollText,
