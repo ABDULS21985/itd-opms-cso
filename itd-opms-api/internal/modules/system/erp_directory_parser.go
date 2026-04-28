@@ -315,6 +315,12 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	solutionDevelopers := map[string]struct{}{}
 	seniorSolutionDevelopers := map[string]struct{}{}
 	testAnalysts := map[string]struct{}{}
+	assistantITFacilitiesSpecialists := map[string]struct{}{}
+	itFacilitiesSpecialists := map[string]struct{}{}
+	seniorITFacilitiesSpecialists := map[string]struct{}{}
+	itFacilitiesLeads := map[string]struct{}{}
+	inventoryOfficers := map[string]struct{}{}
+	assetDisposalCommitteeMembers := map[string]struct{}{}
 	ditdApprovers := map[string]struct{}{}
 	changeApprovers := map[string]struct{}{}
 	supportAnalysts := map[string]struct{}{}
@@ -414,6 +420,22 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 					seniorSolutionDevelopers[rec.EmployeeNumber] = struct{}{}
 				case "test_analyst":
 					testAnalysts[rec.EmployeeNumber] = struct{}{}
+				}
+			}
+			for _, role := range assetManagementRolesForERPAssignment(rec) {
+				switch role {
+				case "assistant_it_facilities_specialist":
+					assistantITFacilitiesSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "it_facilities_specialist":
+					itFacilitiesSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "senior_it_facilities_specialist":
+					seniorITFacilitiesSpecialists[rec.EmployeeNumber] = struct{}{}
+				case "it_facilities_lead":
+					itFacilitiesLeads[rec.EmployeeNumber] = struct{}{}
+				case "inventory_officer":
+					inventoryOfficers[rec.EmployeeNumber] = struct{}{}
+				case "asset_disposal_committee":
+					assetDisposalCommitteeMembers[rec.EmployeeNumber] = struct{}{}
 				}
 			}
 		}
@@ -560,6 +582,12 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 	stats.SolutionDevelopers = countKnownEmployees(solutionDevelopers, employeeIDs)
 	stats.SeniorSolutionDevelopers = countKnownEmployees(seniorSolutionDevelopers, employeeIDs)
 	stats.TestAnalysts = countKnownEmployees(testAnalysts, employeeIDs)
+	stats.AssistantITFacilitiesSpecialists = countKnownEmployees(assistantITFacilitiesSpecialists, employeeIDs)
+	stats.ITFacilitiesSpecialists = countKnownEmployees(itFacilitiesSpecialists, employeeIDs)
+	stats.SeniorITFacilitiesSpecialists = countKnownEmployees(seniorITFacilitiesSpecialists, employeeIDs)
+	stats.ITFacilitiesLeads = countKnownEmployees(itFacilitiesLeads, employeeIDs)
+	stats.InventoryOfficers = countKnownEmployees(inventoryOfficers, employeeIDs)
+	stats.AssetDisposalCommitteeMembers = countKnownEmployees(assetDisposalCommitteeMembers, employeeIDs)
 	stats.DITDApprovers = countKnownEmployees(ditdApprovers, employeeIDs)
 	stats.ChangeApprovers = countKnownEmployees(changeApprovers, employeeIDs)
 	stats.SupportAnalysts = countKnownEmployees(supportAnalysts, employeeIDs)
@@ -607,6 +635,12 @@ func prepareERPDirectory(records []erpEmployeeRecord, parseErrors []string, sour
 		SolutionDevelopers:                 solutionDevelopers,
 		SeniorSolutionDevelopers:           seniorSolutionDevelopers,
 		TestAnalysts:                       testAnalysts,
+		AssistantITFacilitiesSpecialists:   assistantITFacilitiesSpecialists,
+		ITFacilitiesSpecialists:            itFacilitiesSpecialists,
+		SeniorITFacilitiesSpecialists:      seniorITFacilitiesSpecialists,
+		ITFacilitiesLeads:                  itFacilitiesLeads,
+		InventoryOfficers:                  inventoryOfficers,
+		AssetDisposalCommitteeMembers:      assetDisposalCommitteeMembers,
 		DITDApprovers:                      ditdApprovers,
 		ChangeApprovers:                    changeApprovers,
 		SupportAnalysts:                    supportAnalysts,
@@ -1103,6 +1137,79 @@ func testSolutionRolesForERPAssignment(rec erpEmployeeRecord) []string {
 			strings.Contains(job, "MANAGER") ||
 			strings.Contains(job, "HEAD")) {
 		addRole("senior_solution_developer")
+	}
+
+	return roles
+}
+
+func assetManagementRolesForERPAssignment(rec erpEmployeeRecord) []string {
+	job := normalizeERPMatchText(rec.JobName)
+	org := normalizeERPMatchText(strings.Join([]string{rec.DepartmentName, rec.DivisionName, rec.OfficeName}, " "))
+	if job == "" && org == "" {
+		return nil
+	}
+
+	all := strings.TrimSpace(job + " " + org)
+	roles := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	addRole := func(role string) {
+		if _, ok := seen[role]; ok {
+			return
+		}
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+
+	isFacilitiesOrg := strings.Contains(all, "FACILIT") ||
+		strings.Contains(all, "IT ASSET") ||
+		strings.Contains(all, "WORK TOOL") ||
+		strings.Contains(all, "PSSD") ||
+		strings.Contains(all, "STORE") ||
+		strings.Contains(all, "INVENTORY") ||
+		strings.Contains(all, "PROCUREMENT")
+	isAssetJob := strings.Contains(job, "FACILIT") ||
+		strings.Contains(job, "ASSET") ||
+		strings.Contains(job, "INVENTORY") ||
+		strings.Contains(job, "STORE") ||
+		strings.Contains(job, "PSSD")
+
+	if isFacilitiesOrg || isAssetJob {
+		if strings.Contains(job, "ASSISTANT") ||
+			strings.Contains(job, "OFFICER") ||
+			strings.Contains(job, "ANALYST") {
+			addRole("assistant_it_facilities_specialist")
+		}
+		if strings.Contains(job, "SPECIALIST") ||
+			strings.Contains(job, "SENIOR") ||
+			strings.Contains(job, "MANAGER") ||
+			strings.Contains(job, "LEAD") ||
+			strings.Contains(job, "HEAD") {
+			addRole("it_facilities_specialist")
+		}
+		if strings.Contains(job, "SENIOR") ||
+			strings.Contains(job, "PRINCIPAL") ||
+			strings.Contains(job, "MANAGER") ||
+			strings.Contains(job, "LEAD") ||
+			strings.Contains(job, "HEAD") {
+			addRole("senior_it_facilities_specialist")
+		}
+		if strings.Contains(job, "LEAD") ||
+			strings.Contains(job, "HEAD") ||
+			strings.Contains(job, "MANAGER") ||
+			strings.Contains(all, "HEAD OF") {
+			addRole("it_facilities_lead")
+		}
+		if strings.Contains(all, "INVENTORY") ||
+			strings.Contains(all, "STORE") ||
+			strings.Contains(all, "PSSD") {
+			addRole("inventory_officer")
+		}
+	}
+
+	if strings.Contains(all, "ASSET DISPOSAL") ||
+		strings.Contains(all, "DISPOSAL COMMITTEE") ||
+		(strings.Contains(all, "DISPOSAL") && (strings.Contains(all, "ASSET") || strings.Contains(all, "FACILIT"))) {
+		addRole("asset_disposal_committee")
 	}
 
 	return roles

@@ -269,6 +269,75 @@ var itsmWorkflowDefinitions = map[string]workflowMetadata{
 			workflow.TestSolutionCancelled:                 "Cancel",
 		},
 	},
+	"asset_management": {
+		machine: workflow.AssetProcessStateMachine,
+		order: []string{
+			workflow.AssetProcessRequestReceived,
+			workflow.AssetProcessApprovalReview,
+			workflow.AssetProcessRequesterCheck,
+			workflow.AssetProcessReplacementCheck,
+			workflow.AssetProcessAvailabilityCheck,
+			workflow.AssetProcessWaitingList,
+			workflow.AssetProcessProcurement,
+			workflow.AssetProcessIssueFromStore,
+			workflow.AssetProcessConfiguration,
+			workflow.AssetProcessIssuedToUser,
+			workflow.AssetProcessBuybackDecision,
+			workflow.AssetProcessBuybackApproval,
+			workflow.AssetProcessOldAssetReturn,
+			workflow.AssetProcessDataWipe,
+			workflow.AssetProcessRedeploymentIntake,
+			workflow.AssetProcessAssetRetrieval,
+			workflow.AssetProcessMaintenanceIntake,
+			workflow.AssetProcessWarrantyCheck,
+			workflow.AssetProcessVendorDispatch,
+			workflow.AssetProcessStopGapIssued,
+			workflow.AssetProcessRepairedReceived,
+			workflow.AssetProcessMaintenanceSignoff,
+			workflow.AssetProcessStopGapReturned,
+			workflow.AssetProcessObsoleteIdentified,
+			workflow.AssetProcessReplacementPlanned,
+			workflow.AssetProcessAssetDatabaseUpdated,
+			workflow.AssetProcessDegaussingReported,
+			workflow.AssetProcessManagementReported,
+			workflow.AssetProcessClosed,
+			workflow.AssetProcessRejected,
+			workflow.AssetProcessCancelled,
+		},
+		labels: map[string]string{
+			workflow.AssetProcessRequestReceived:      "Receive Asset Request",
+			workflow.AssetProcessApprovalReview:       "Review, Validate and Seek Approval",
+			workflow.AssetProcessRequesterCheck:       "Check Requester Status",
+			workflow.AssetProcessReplacementCheck:     "Check Replacement Eligibility",
+			workflow.AssetProcessAvailabilityCheck:    "Check Work Tool Availability",
+			workflow.AssetProcessWaitingList:          "Add to Waiting List",
+			workflow.AssetProcessProcurement:          "Procure Work Tool",
+			workflow.AssetProcessIssueFromStore:       "Issue from PSSD Store",
+			workflow.AssetProcessConfiguration:        "Configure IT Asset",
+			workflow.AssetProcessIssuedToUser:         "Issue Asset to User",
+			workflow.AssetProcessBuybackDecision:      "Buy-back Decision",
+			workflow.AssetProcessBuybackApproval:      "Seek Buy-back Approval",
+			workflow.AssetProcessOldAssetReturn:       "Return Existing Asset",
+			workflow.AssetProcessDataWipe:             "Data Wipe",
+			workflow.AssetProcessRedeploymentIntake:   "Receive Exit or Transfer Notice",
+			workflow.AssetProcessAssetRetrieval:       "Retrieve Assigned Asset",
+			workflow.AssetProcessMaintenanceIntake:    "Receive Faulty Asset Report",
+			workflow.AssetProcessWarrantyCheck:        "Check Warranty Status",
+			workflow.AssetProcessVendorDispatch:       "Dispatch to Supplier/Vendor",
+			workflow.AssetProcessStopGapIssued:        "Issue Stop-gap Asset",
+			workflow.AssetProcessRepairedReceived:     "Receive Repaired/Replaced Asset",
+			workflow.AssetProcessMaintenanceSignoff:   "Maintenance Sign-off",
+			workflow.AssetProcessStopGapReturned:      "Receive Stop-gap Asset",
+			workflow.AssetProcessObsoleteIdentified:   "Identify Obsolete Assets",
+			workflow.AssetProcessReplacementPlanned:   "Replace Obsolete Assets",
+			workflow.AssetProcessAssetDatabaseUpdated: "Update Asset Database",
+			workflow.AssetProcessDegaussingReported:   "Submit Degaussing Report",
+			workflow.AssetProcessManagementReported:   "Produce Management Report",
+			workflow.AssetProcessClosed:               "Close Process",
+			workflow.AssetProcessRejected:             "Reject Request",
+			workflow.AssetProcessCancelled:            "Cancel",
+		},
+	},
 	"catalog_item": {
 		machine: workflow.CatalogItemStateMachine,
 		order: []string{
@@ -319,6 +388,8 @@ func normalizeWorkflowEntity(entity string) (string, bool) {
 		key = "release"
 	case "test-solution", "test-solutions", "test_solutions", "testing", "uat":
 		key = "test_solution"
+	case "asset-management", "asset_management", "asset-process", "asset_process", "asset-processes", "asset_processes", "it-assets", "it_assets":
+		key = "asset_management"
 	}
 	_, ok := itsmWorkflowDefinitions[key]
 	return key, ok
@@ -360,6 +431,36 @@ func applyWorkflowTransitionContext(resp *ITSMWorkflowTransitionResponse, query 
 		uatSigned := strings.EqualFold(query.Get("uatSigned"), "true")
 		if resp.Status == workflow.TestSolutionUATReview && !uatSigned {
 			blockWorkflowTransition(resp, workflow.TestSolutionReleaseHandoff, "UAT sign-off is required before handoff to Release and Deployment Management.")
+		}
+		if len(resp.Transitions) > 0 {
+			resp.NextAction = resp.Transitions[0].Label
+		} else {
+			resp.NextAction = ""
+		}
+		return
+	}
+	if resp.Entity == "asset_management" {
+		if resp.Status == workflow.AssetProcessRequestReceived && !strings.EqualFold(query.Get("approvalRequired"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessApprovalReview, "Approval review is skipped when the asset request does not require approval.")
+		}
+		if (resp.Status == workflow.AssetProcessAvailabilityCheck || resp.Status == workflow.AssetProcessProcurement || resp.Status == workflow.AssetProcessWaitingList) &&
+			!strings.EqualFold(query.Get("assetSelected"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessIssueFromStore, "Select an available work tool before issuing from the PSSD store.")
+		}
+		if resp.Status == workflow.AssetProcessConfiguration && !strings.EqualFold(query.Get("deliverySigned"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessIssuedToUser, "Delivery form sign-off is required before asset issuance.")
+		}
+		if resp.Status == workflow.AssetProcessBuybackDecision && !strings.EqualFold(query.Get("buybackOption"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessBuybackApproval, "Buy-back approval only applies to replacement laptops/desktops with buy-back option.")
+		}
+		if (resp.Status == workflow.AssetProcessOldAssetReturn || resp.Status == workflow.AssetProcessBuybackApproval || resp.Status == workflow.AssetProcessObsoleteIdentified || resp.Status == workflow.AssetProcessReplacementPlanned) &&
+			!strings.EqualFold(query.Get("dataWipeConfirmed"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessDataWipe, "Data wipe/degaussing confirmation is required before this step.")
+		}
+		if (resp.Status == workflow.AssetProcessMaintenanceSignoff || resp.Status == workflow.AssetProcessAssetRetrieval) &&
+			!strings.EqualFold(query.Get("returnSigned"), "true") {
+			blockWorkflowTransition(resp, workflow.AssetProcessStopGapReturned, "Return or job completion sign-off is required before receiving the stop-gap asset.")
+			blockWorkflowTransition(resp, workflow.AssetProcessOldAssetReturn, "Return form sign-off is required before completing asset retrieval.")
 		}
 		if len(resp.Transitions) > 0 {
 			resp.NextAction = resp.Transitions[0].Label
@@ -524,7 +625,201 @@ type transitionUXMetadata struct {
 	DecisionTrail   []string
 }
 
+func assetProcessTransitionMetadata(target string) transitionUXMetadata {
+	const assistant = "assistant_it_facilities_specialist"
+	const facilities = "it_facilities_specialist"
+	const senior = "senior_it_facilities_specialist"
+	const lead = "it_facilities_lead"
+	const disposal = "asset_disposal_committee"
+	const inventory = "inventory_officer"
+
+	base := transitionUXMetadata{
+		ResponsibleRole: assistant,
+		AccountableRole: lead,
+		DecisionTrail:   []string{assistant, lead, "decision", "evidence"},
+	}
+	switch target {
+	case workflow.AssetProcessApprovalReview:
+		base.RequiredFields = []string{"approval_status", "approver", "approval_comment"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "administrator_approved", Label: "Requestor administrator approval confirmed", Required: true},
+			{Key: "allocation_policy_checked", Label: "IT work tool allocation policy validated", Required: true},
+			{Key: "head_of_office_approval", Label: "Head of Office approval captured where required", Required: true},
+		}
+	case workflow.AssetProcessRequesterCheck:
+		base.RequiredFields = []string{"requester_status"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "new_or_replacement", Label: "Requestor classified as new staff or replacement request", Required: true},
+			{Key: "request_source_recorded", Label: "Memo, email, service request, or incident source recorded", Required: true},
+		}
+	case workflow.AssetProcessReplacementCheck:
+		base.RequiredFields = []string{"replacement_eligible"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "current_asset_inspected", Label: "Current IT work tool inspected for replacement eligibility", Required: true},
+			{Key: "policy_match", Label: "Replacement decision matches allocation policy", Required: true},
+		}
+	case workflow.AssetProcessAvailabilityCheck:
+		base.RequiredFields = []string{"availability_status"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "entitlement_checked", Label: "User entitlement to requested work tool confirmed", Required: true},
+			{Key: "pssd_store_checked", Label: "PSSD store availability checked", Required: true},
+		}
+	case workflow.AssetProcessWaitingList:
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "waiting_list_updated", Label: "Request added to waiting list", Required: true},
+			{Key: "requestor_notified", Label: "User notified by email or service desk tool", Required: true},
+		}
+	case workflow.AssetProcessProcurement:
+		base.AccountableRole = senior
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "procurement_need_recorded", Label: "Work tool procurement need recorded", Required: true},
+			{Key: "store_replenishment_tracked", Label: "Procurement or store replenishment tracked", Required: true},
+		}
+	case workflow.AssetProcessIssueFromStore:
+		base.RequiredFields = []string{"asset_id"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "store_requisition_form", Label: "Store requisition form issued", Required: true},
+			{Key: "smd_fmo_approval", Label: "Store requisition approved by Head of SMD FMO", Required: true},
+			{Key: "asset_selected", Label: "Physical asset selected from PSSD store", Required: true},
+		}
+	case workflow.AssetProcessConfiguration:
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "os_installed", Label: "Enterprise approved operating system and applications installed where applicable", Required: true},
+			{Key: "domain_joined", Label: "Asset joined to CBN domain where applicable", Required: false},
+			{Key: "configuration_recorded", Label: "Configuration evidence recorded", Required: true},
+		}
+	case workflow.AssetProcessIssuedToUser:
+		base.RequiredFields = []string{"delivery_signed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "assigned_in_application", Label: "Asset assigned to user in IT Facilities Management Application", Required: true},
+			{Key: "delivery_form_signed", Label: "Delivery form printed and signed by user", Required: true},
+			{Key: "asset_deployed", Label: "Asset physically deployed to the user", Required: true},
+		}
+	case workflow.AssetProcessBuybackDecision:
+		base.RequiredFields = []string{"buyback_option"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "replacement_buyback_checked", Label: "Replacement with option to buy back old work tool assessed", Required: true},
+			{Key: "eligible_asset_type", Label: "Buy-back limited to replaced laptops/desktops declared obsolete", Required: true},
+		}
+	case workflow.AssetProcessBuybackApproval:
+		base.AccountableRole = disposal
+		base.RequiredFields = []string{"buyback_approved"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "committee_request", Label: "Request to Asset Disposal Committee recorded", Required: true},
+			{Key: "committee_decision", Label: "Committee approval or rejection recorded", Required: true},
+		}
+	case workflow.AssetProcessOldAssetReturn:
+		base.ResponsibleRole = inventory
+		base.RequiredFields = []string{"return_signed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "old_asset_returned", Label: "Old asset returned to ITD or inventory officer", Required: true},
+			{Key: "return_form_signed", Label: "Return form signed by user", Required: true},
+		}
+	case workflow.AssetProcessDataWipe:
+		base.AccountableRole = disposal
+		base.RequiredFields = []string{"data_wipe_confirmed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "degaussing_approved", Label: "Approval to degauss obsolete asset captured where required", Required: true},
+			{Key: "data_wipe_done", Label: "Data wipe or degaussing completed", Required: true},
+			{Key: "wipe_evidence", Label: "Data wipe evidence attached", Required: true},
+		}
+	case workflow.AssetProcessRedeploymentIntake:
+		base.AccountableRole = lead
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "exit_or_transfer_notice", Label: "Staff exit or transfer notification received", Required: true},
+			{Key: "reason_recorded", Label: "Exit reason recorded as retirement, resignation, or transfer", Required: true},
+		}
+	case workflow.AssetProcessAssetRetrieval:
+		base.RequiredFields = []string{"asset_id", "return_signed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "assigned_asset_confirmed", Label: "Asset type, serial number, and tag confirmed", Required: true},
+			{Key: "asset_retrieved", Label: "Assigned IT asset retrieved", Required: true},
+			{Key: "return_form_signed", Label: "User signed the return form", Required: true},
+		}
+	case workflow.AssetProcessWarrantyCheck:
+		base.RequiredFields = []string{"warranty_status"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "warranty_confirmed", Label: "Warranty status of faulty work tool confirmed", Required: true},
+			{Key: "vendor_path_selected", Label: "Supplier or third-party maintenance vendor path selected", Required: true},
+		}
+	case workflow.AssetProcessVendorDispatch:
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "vendor_dispatch", Label: "Faulty asset dispatched to supplier or maintenance vendor", Required: true},
+			{Key: "contract_sla_recorded", Label: "Vendor contractual resolution expectation recorded", Required: true},
+		}
+	case workflow.AssetProcessStopGapIssued:
+		base.RequiredFields = []string{"stop_gap_asset_id"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "stop_gap_selected", Label: "Stop-gap system selected", Required: true},
+			{Key: "user_enabled", Label: "Stop-gap issued so the user can continue working", Required: true},
+		}
+	case workflow.AssetProcessRepairedReceived:
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "repaired_received", Label: "Repaired or replaced work tool received from vendor", Required: true},
+			{Key: "maintenance_record_updated", Label: "Maintenance record updated", Required: true},
+		}
+	case workflow.AssetProcessMaintenanceSignoff:
+		base.RequiredFields = []string{"return_signed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "returned_to_user", Label: "Repaired system returned to the user", Required: true},
+			{Key: "completion_signed", Label: "Job completion form signed by vendor and user", Required: true},
+		}
+	case workflow.AssetProcessStopGapReturned:
+		base.RequiredFields = []string{"return_signed"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "stop_gap_returned", Label: "Stop-gap returned to FMO store", Required: true},
+			{Key: "records_updated", Label: "Stop-gap records updated", Required: true},
+		}
+	case workflow.AssetProcessObsoleteIdentified:
+		base.AccountableRole = senior
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "obsolete_assets_identified", Label: "Assets nearing obsolescence identified from database", Required: true},
+			{Key: "eol_policy_applied", Label: "End-of-useful-life checked against work tool allocation policy", Required: true},
+		}
+	case workflow.AssetProcessReplacementPlanned:
+		base.AccountableRole = senior
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "users_contacted", Label: "Users with obsolete assets contacted", Required: true},
+			{Key: "replacement_plan_recorded", Label: "Replacement plan recorded", Required: true},
+		}
+	case workflow.AssetProcessAssetDatabaseUpdated:
+		base.AccountableRole = senior
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "obsolete_removed", Label: "Obsolete or degaussed items removed or marked in asset database", Required: true},
+			{Key: "asset_record_auditable", Label: "Asset record remains auditable after update", Required: true},
+		}
+	case workflow.AssetProcessDegaussingReported:
+		base.AccountableRole = disposal
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "report_to_committee", Label: "Degaussing report submitted to Asset Disposal Committee", Required: true},
+			{Key: "hr_report_if_exit", Label: "Degaussing report sent to HR Service Centre for exiting staff where applicable", Required: false},
+		}
+	case workflow.AssetProcessManagementReported:
+		base.ResponsibleRole = facilities
+		base.AccountableRole = senior
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "status_report", Label: "Baseline periodic configuration item status report prepared", Required: true},
+			{Key: "management_report", Label: "Periodic management report prepared for IT Management", Required: true},
+		}
+	case workflow.AssetProcessClosed:
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "final_state_confirmed", Label: "Final asset state and ownership confirmed", Required: true},
+			{Key: "requestor_notified", Label: "Requestor or relevant stakeholder notified", Required: true},
+		}
+	case workflow.AssetProcessRejected:
+		base.RequiredFields = []string{"comment"}
+		base.Checklist = []ITSMWorkflowChecklistItem{
+			{Key: "rejection_reason", Label: "Rejection reason recorded", Required: true},
+			{Key: "requestor_notified", Label: "Requestor notified through service desk or email", Required: true},
+		}
+	}
+	return base
+}
+
 func workflowTransitionMetadata(entity, target string) transitionUXMetadata {
+	if entity == "asset_management" {
+		return assetProcessTransitionMetadata(target)
+	}
 	switch entity + ":" + target {
 	case "ticket:" + workflow.TicketClassified:
 		return transitionUXMetadata{

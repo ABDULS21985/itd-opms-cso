@@ -40,6 +40,7 @@ export interface WorkflowActionPayload {
   internalNote?: string;
   rootCause?: string;
   kbDisposition?: string;
+  fields?: Record<string, string | boolean>;
   checklist: Record<string, boolean>;
 }
 
@@ -89,6 +90,32 @@ function formatMinutes(minutes: number) {
   return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
+const workflowFieldLabels: Record<string, string> = {
+  approval_status: "Approval status",
+  availability_status: "Availability status",
+  requester_status: "Requester status",
+  replacement_eligible: "Replacement eligible",
+  buyback_option: "Buy-back option",
+  buyback_approved: "Buy-back approved",
+  exit_reason: "Exit or transfer reason",
+  warranty_status: "Warranty status",
+  asset_id: "Asset ID",
+  assigned_asset_id: "Assigned asset ID",
+  stop_gap_asset_id: "Stop-gap asset ID",
+  data_wipe_confirmed: "Data wipe confirmed",
+  delivery_signed: "Delivery form signed",
+  return_signed: "Return or job completion signed",
+};
+
+const workflowBooleanFields = new Set([
+  "replacement_eligible",
+  "buyback_option",
+  "buyback_approved",
+  "data_wipe_confirmed",
+  "delivery_signed",
+  "return_signed",
+]);
+
 export function WorkflowActionDrawer({
   open,
   entity,
@@ -106,6 +133,7 @@ export function WorkflowActionDrawer({
   const [internalNote, setInternalNote] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [kbDisposition, setKbDisposition] = useState("linked");
+  const [fields, setFields] = useState<Record<string, string | boolean>>({});
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -117,6 +145,22 @@ export function WorkflowActionDrawer({
     setInternalNote("");
     setRootCause("");
     setKbDisposition("linked");
+    setFields(
+      Object.fromEntries(
+        (transition.requiredFields ?? [])
+          .filter(
+            (field) =>
+              ![
+                "comment",
+                "notes",
+                "reason",
+                "resolution_notes",
+                "root_cause",
+              ].includes(field),
+          )
+          .map((field) => [field, workflowBooleanFields.has(field) ? false : ""]),
+      ),
+    );
     setChecklist(
       Object.fromEntries((transition.checklist ?? []).map((item) => [item.key, false])),
     );
@@ -142,6 +186,21 @@ export function WorkflowActionDrawer({
   const requiredFieldsComplete =
     (!requiredFields.includes("resolution_notes") || resolutionNotes.trim().length > 0) &&
     (!requiredFields.includes("root_cause") || rootCause.trim().length > 0) &&
+    requiredFields
+      .filter(
+        (field) =>
+          ![
+            "comment",
+            "notes",
+            "reason",
+            "resolution_notes",
+            "root_cause",
+          ].includes(field),
+      )
+      .every((field) => {
+        const value = fields[field];
+        return typeof value === "boolean" ? value : String(value ?? "").trim().length > 0;
+      }) &&
     (!needsTransitionReason ||
       reason.trim().length > 0 ||
       internalNote.trim().length > 0 ||
@@ -295,6 +354,52 @@ export function WorkflowActionDrawer({
                 </label>
               ) : null}
 
+              {Object.keys(fields).length > 0 ? (
+                <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Required workflow data
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {Object.entries(fields).map(([key, value]) =>
+                      workflowBooleanFields.has(key) ? (
+                        <label
+                          key={key}
+                          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-sm font-medium text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(value)}
+                            onChange={(event) =>
+                              setFields((current) => ({
+                                ...current,
+                                [key]: event.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                          {workflowFieldLabels[key] ?? humanize(key)}
+                        </label>
+                      ) : (
+                        <label key={key} className="block text-sm font-medium text-slate-700">
+                          {workflowFieldLabels[key] ?? humanize(key)}
+                          <input
+                            value={String(value ?? "")}
+                            onChange={(event) =>
+                              setFields((current) => ({
+                                ...current,
+                                [key]: event.target.value,
+                              }))
+                            }
+                            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                            placeholder={workflowFieldLabels[key] ?? humanize(key)}
+                          />
+                        </label>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ) : null}
+
               <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
                 <label className="block text-sm font-medium text-slate-700">
                   Customer-facing note
@@ -369,6 +474,7 @@ export function WorkflowActionDrawer({
                       internalNote,
                       rootCause,
                       kbDisposition,
+                      fields,
                       checklist,
                     })
                   }

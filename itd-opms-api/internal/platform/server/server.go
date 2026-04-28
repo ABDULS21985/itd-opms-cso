@@ -229,7 +229,7 @@ func (s *Server) Setup() {
 	peopleHandler := people.NewHandler(s.pool, auditService)
 	planningHandler := planning.NewHandler(s.pool, auditService, s.minio, s.cfg.MinIO)
 	itsmHandler := itsm.NewHandler(s.pool, auditService, s.js)
-	cmdbHandler := cmdb.NewHandler(s.pool, auditService, graphClient, s.cfg.Discovery)
+	cmdbHandler := cmdb.NewHandler(s.pool, auditService, graphClient, s.cfg.Discovery, s.js)
 	knowledgeHandler := knowledge.NewHandler(s.pool, auditService)
 	grcHandler := grc.NewHandler(s.pool, auditService)
 	reportingHandler := reporting.NewHandler(s.pool, s.redis, auditService)

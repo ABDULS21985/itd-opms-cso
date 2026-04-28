@@ -256,6 +256,76 @@ var TestSolutionStateMachine = NewStateMachine("test_solution", map[string][]str
 	TestSolutionCancelled:                 {},
 })
 
+// Asset management process statuses (BRD §6.8).
+const (
+	AssetProcessRequestReceived      = "request_received"
+	AssetProcessApprovalReview       = "approval_review"
+	AssetProcessRequesterCheck       = "requester_check"
+	AssetProcessReplacementCheck     = "replacement_check"
+	AssetProcessAvailabilityCheck    = "availability_check"
+	AssetProcessWaitingList          = "waiting_list"
+	AssetProcessProcurement          = "procurement"
+	AssetProcessIssueFromStore       = "issue_from_store"
+	AssetProcessConfiguration        = "configuration"
+	AssetProcessIssuedToUser         = "issued_to_user"
+	AssetProcessBuybackDecision      = "buyback_decision"
+	AssetProcessBuybackApproval      = "buyback_approval"
+	AssetProcessOldAssetReturn       = "old_asset_return"
+	AssetProcessDataWipe             = "data_wipe"
+	AssetProcessRedeploymentIntake   = "redeployment_intake"
+	AssetProcessAssetRetrieval       = "asset_retrieval"
+	AssetProcessMaintenanceIntake    = "maintenance_intake"
+	AssetProcessWarrantyCheck        = "warranty_check"
+	AssetProcessVendorDispatch       = "vendor_dispatch"
+	AssetProcessStopGapIssued        = "stop_gap_issued"
+	AssetProcessRepairedReceived     = "repaired_received"
+	AssetProcessMaintenanceSignoff   = "maintenance_signoff"
+	AssetProcessStopGapReturned      = "stop_gap_returned"
+	AssetProcessObsoleteIdentified   = "obsolete_identified"
+	AssetProcessReplacementPlanned   = "replacement_planned"
+	AssetProcessAssetDatabaseUpdated = "asset_database_updated"
+	AssetProcessDegaussingReported   = "degaussing_reported"
+	AssetProcessManagementReported   = "management_reported"
+	AssetProcessClosed               = "closed"
+	AssetProcessRejected             = "rejected"
+	AssetProcessCancelled            = "cancelled"
+)
+
+// AssetProcessStateMachine enforces the IT assets management lifecycle (BRD §6.8).
+var AssetProcessStateMachine = NewStateMachine("asset_management", map[string][]string{
+	AssetProcessRequestReceived:      {AssetProcessApprovalReview, AssetProcessRequesterCheck, AssetProcessCancelled},
+	AssetProcessApprovalReview:       {AssetProcessRequesterCheck, AssetProcessRejected, AssetProcessCancelled},
+	AssetProcessRequesterCheck:       {AssetProcessReplacementCheck, AssetProcessAvailabilityCheck, AssetProcessCancelled},
+	AssetProcessReplacementCheck:     {AssetProcessAvailabilityCheck, AssetProcessRejected, AssetProcessCancelled},
+	AssetProcessAvailabilityCheck:    {AssetProcessIssueFromStore, AssetProcessWaitingList, AssetProcessProcurement, AssetProcessCancelled},
+	AssetProcessWaitingList:          {AssetProcessProcurement, AssetProcessIssueFromStore, AssetProcessCancelled},
+	AssetProcessProcurement:          {AssetProcessIssueFromStore, AssetProcessCancelled},
+	AssetProcessIssueFromStore:       {AssetProcessConfiguration, AssetProcessCancelled},
+	AssetProcessConfiguration:        {AssetProcessIssuedToUser, AssetProcessCancelled},
+	AssetProcessIssuedToUser:         {AssetProcessBuybackDecision, AssetProcessClosed},
+	AssetProcessBuybackDecision:      {AssetProcessBuybackApproval, AssetProcessOldAssetReturn, AssetProcessClosed},
+	AssetProcessBuybackApproval:      {AssetProcessDataWipe, AssetProcessOldAssetReturn, AssetProcessRejected, AssetProcessCancelled},
+	AssetProcessOldAssetReturn:       {AssetProcessDataWipe, AssetProcessClosed},
+	AssetProcessDataWipe:             {AssetProcessAssetDatabaseUpdated, AssetProcessDegaussingReported},
+	AssetProcessRedeploymentIntake:   {AssetProcessAssetRetrieval, AssetProcessCancelled},
+	AssetProcessAssetRetrieval:       {AssetProcessOldAssetReturn, AssetProcessDataWipe, AssetProcessClosed, AssetProcessCancelled},
+	AssetProcessMaintenanceIntake:    {AssetProcessWarrantyCheck, AssetProcessCancelled},
+	AssetProcessWarrantyCheck:        {AssetProcessVendorDispatch, AssetProcessStopGapIssued, AssetProcessCancelled},
+	AssetProcessVendorDispatch:       {AssetProcessStopGapIssued, AssetProcessRepairedReceived, AssetProcessCancelled},
+	AssetProcessStopGapIssued:        {AssetProcessRepairedReceived, AssetProcessCancelled},
+	AssetProcessRepairedReceived:     {AssetProcessMaintenanceSignoff, AssetProcessCancelled},
+	AssetProcessMaintenanceSignoff:   {AssetProcessStopGapReturned, AssetProcessClosed},
+	AssetProcessStopGapReturned:      {AssetProcessClosed},
+	AssetProcessObsoleteIdentified:   {AssetProcessReplacementPlanned, AssetProcessDataWipe, AssetProcessCancelled},
+	AssetProcessReplacementPlanned:   {AssetProcessIssueFromStore, AssetProcessDataWipe, AssetProcessCancelled},
+	AssetProcessAssetDatabaseUpdated: {AssetProcessDegaussingReported, AssetProcessClosed},
+	AssetProcessDegaussingReported:   {AssetProcessManagementReported, AssetProcessClosed},
+	AssetProcessManagementReported:   {AssetProcessClosed},
+	AssetProcessClosed:               {},
+	AssetProcessRejected:             {},
+	AssetProcessCancelled:            {},
+})
+
 // TicketStateMachine enforces the ITSM ticket lifecycle.
 var TicketStateMachine = NewStateMachine("ticket", map[string][]string{
 	TicketLogged:          {TicketClassified, TicketAssigned, TicketCancelled},

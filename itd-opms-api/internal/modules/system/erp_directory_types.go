@@ -60,6 +60,12 @@ type ERPDirectoryImportPreview struct {
 	SolutionDevelopers                 int                       `json:"solutionDevelopers"`
 	SeniorSolutionDevelopers           int                       `json:"seniorSolutionDevelopers"`
 	TestAnalysts                       int                       `json:"testAnalysts"`
+	AssistantITFacilitiesSpecialists   int                       `json:"assistantItFacilitiesSpecialists"`
+	ITFacilitiesSpecialists            int                       `json:"itFacilitiesSpecialists"`
+	SeniorITFacilitiesSpecialists      int                       `json:"seniorItFacilitiesSpecialists"`
+	ITFacilitiesLeads                  int                       `json:"itFacilitiesLeads"`
+	InventoryOfficers                  int                       `json:"inventoryOfficers"`
+	AssetDisposalCommitteeMembers      int                       `json:"assetDisposalCommitteeMembers"`
 	DITDApprovers                      int                       `json:"ditdApprovers"`
 	ChangeApprovers                    int                       `json:"changeApprovers"`
 	SupportAnalysts                    int                       `json:"supportAnalysts"`
@@ -201,6 +207,12 @@ type preparedERPDirectory struct {
 	SolutionDevelopers                 map[string]struct{}
 	SeniorSolutionDevelopers           map[string]struct{}
 	TestAnalysts                       map[string]struct{}
+	AssistantITFacilitiesSpecialists   map[string]struct{}
+	ITFacilitiesSpecialists            map[string]struct{}
+	SeniorITFacilitiesSpecialists      map[string]struct{}
+	ITFacilitiesLeads                  map[string]struct{}
+	InventoryOfficers                  map[string]struct{}
+	AssetDisposalCommitteeMembers      map[string]struct{}
 	DITDApprovers                      map[string]struct{}
 	ChangeApprovers                    map[string]struct{}
 	SupportAnalysts                    map[string]struct{}

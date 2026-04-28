@@ -413,6 +413,12 @@ export const navGroups: NavGroup[] = [
         permission: "assets.view",
       },
       {
+        href: "/dashboard/cmdb/asset-process",
+        label: "Asset Process",
+        icon: Package,
+        permission: "cmdb.asset_process.view",
+      },
+      {
         href: "/dashboard/cmdb/topology",
         label: "Topology",
         icon: Network,

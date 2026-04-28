@@ -3,6 +3,7 @@ package cmdb
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"github.com/itd-cbn/itd-opms-api/internal/platform/audit"
 	"github.com/itd-cbn/itd-opms-api/internal/platform/config"
@@ -15,6 +16,7 @@ import (
 // licenses, warranties, renewal alerts, verification campaigns, and ERP integration.
 type Handler struct {
 	asset        *AssetHandler
+	assetProcess *AssetProcessHandler
 	cmdb         *CMDBCIHandler
 	license      *LicenseHandler
 	warranty     *WarrantyHandler
@@ -29,6 +31,7 @@ type Handler struct {
 func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any) *Handler {
 	var graphClient *msgraph.Client
 	var discoveryCfg config.DiscoveryConfig
+	var js nats.JetStreamContext
 	if len(extras) > 0 {
 		if client, ok := extras[0].(*msgraph.Client); ok {
 			graphClient = client
@@ -39,8 +42,14 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any)
 			discoveryCfg = cfg
 		}
 	}
+	if len(extras) > 2 {
+		if stream, ok := extras[2].(nats.JetStreamContext); ok {
+			js = stream
+		}
+	}
 
 	assetSvc := NewAssetService(pool, auditSvc)
+	assetProcessSvc := NewAssetProcessService(pool, auditSvc, js)
 	cmdbSvc := NewCMDBService(pool, auditSvc)
 	licenseSvc := NewLicenseService(pool, auditSvc)
 	warrantySvc := NewWarrantyService(pool, auditSvc)
@@ -51,6 +60,7 @@ func NewHandler(pool *pgxpool.Pool, auditSvc *audit.AuditService, extras ...any)
 
 	return &Handler{
 		asset:        NewAssetHandler(assetSvc),
+		assetProcess: NewAssetProcessHandler(assetProcessSvc),
 		cmdb:         NewCMDBCIHandler(cmdbSvc),
 		license:      NewLicenseHandler(licenseSvc),
 		warranty:     NewWarrantyHandler(warrantySvc),
@@ -67,6 +77,11 @@ func (h *Handler) Routes(r chi.Router) {
 	// Asset lifecycle management (FR-E001 to FR-E005)
 	r.Route("/assets", func(r chi.Router) {
 		h.asset.Routes(r)
+	})
+
+	// BRD §6.8 IT assets management process workflow.
+	r.Route("/asset-process", func(r chi.Router) {
+		h.assetProcess.Routes(r)
 	})
 
 	// CMDB configuration items & relationships (FR-E006 to FR-E008)

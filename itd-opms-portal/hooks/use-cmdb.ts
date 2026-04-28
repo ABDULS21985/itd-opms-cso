@@ -21,6 +21,9 @@ import type {
   DiscoveredDevice,
   DiscoveryStats,
   AssetFinancialView,
+  AssetProcessEvent,
+  AssetProcessRun,
+  AssetProcessStats,
   ERPSyncStatus,
   ERPSyncLog,
   MEGAImportResult,
@@ -28,6 +31,97 @@ import type {
   CMDBQualityReport,
   PaginatedResponse,
 } from "@/types";
+
+/* ================================================================== */
+/*  Asset Management Process — Queries and Mutations                   */
+/* ================================================================== */
+
+export function useAssetProcessRuns(params?: {
+  processType?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return useQuery({
+    queryKey: ["asset-process-runs", params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<AssetProcessRun>>("/cmdb/asset-process", {
+        processType: params?.processType,
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+      }),
+  });
+}
+
+export function useAssetProcessRun(id: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-process-run", id],
+    queryFn: () => apiClient.get<AssetProcessRun>(`/cmdb/asset-process/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useAssetProcessEvents(id: string | undefined) {
+  return useQuery({
+    queryKey: ["asset-process-events", id],
+    queryFn: () =>
+      apiClient.get<AssetProcessEvent[]>(`/cmdb/asset-process/${id}/events`),
+    enabled: !!id,
+  });
+}
+
+export function useAssetProcessStats() {
+  return useQuery({
+    queryKey: ["asset-process-stats"],
+    queryFn: () => apiClient.get<AssetProcessStats>("/cmdb/asset-process/stats"),
+  });
+}
+
+export function useCreateAssetProcessRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<AssetProcessRun>("/cmdb/asset-process", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset-process-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-stats"] });
+      toast.success("Asset process run created");
+    },
+    onError: () => toast.error("Failed to create asset process run"),
+  });
+}
+
+export function useUpdateAssetProcessRun(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<AssetProcessRun>) =>
+      apiClient.put<AssetProcessRun>(`/cmdb/asset-process/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset-process-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-run", id] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-stats"] });
+      toast.success("Asset process run updated");
+    },
+    onError: () => toast.error("Failed to update asset process run"),
+  });
+}
+
+export function useTransitionAssetProcessRun(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiClient.post<AssetProcessRun>(`/cmdb/asset-process/${id}/transition`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset-process-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-run", id] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-events", id] });
+      queryClient.invalidateQueries({ queryKey: ["asset-process-stats"] });
+      toast.success("Asset workflow advanced");
+    },
+    onError: () => toast.error("Failed to transition asset process run"),
+  });
+}
 
 /* ================================================================== */
 /*  Assets — Queries                                                    */

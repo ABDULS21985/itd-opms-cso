@@ -87,6 +87,7 @@ export type ITSMWorkflowEntity =
   | "major_incident"
   | "release"
   | "test_solution"
+  | "asset_management"
   | "catalog_item"
   | "cab_meeting";
 

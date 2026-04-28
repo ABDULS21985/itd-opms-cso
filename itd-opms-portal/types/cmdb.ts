@@ -183,6 +183,123 @@ export interface AssetStats {
   retiredCount: number;
 }
 
+export interface AssetProcessRun {
+  id: string;
+  tenantId: string;
+  processNumber: string;
+  processType: string;
+  title: string;
+  description?: string;
+  sourceType: string;
+  sourceId?: string;
+  ticketId?: string;
+  serviceRequestId?: string;
+  assetId?: string;
+  assignedAssetId?: string;
+  stopGapAssetId?: string;
+  requestedForId?: string;
+  status: string;
+  approvalRequired: boolean;
+  approvalStatus: string;
+  availabilityStatus: string;
+  requesterStatus?: string;
+  replacementEligible?: boolean;
+  buybackOption?: boolean;
+  buybackApproved?: boolean;
+  exitReason?: string;
+  warrantyStatus?: string;
+  dataWipeConfirmed: boolean;
+  deliverySigned: boolean;
+  returnSigned: boolean;
+  responsibleUserId?: string;
+  accountableUserId?: string;
+  details?: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  assetTag?: string;
+  assetName?: string;
+  assignedAssetTag?: string;
+  stopGapAssetTag?: string;
+  requestedForName?: string;
+  responsibleUserName?: string;
+  accountableUserName?: string;
+  createdByName?: string;
+  ticketNumber?: string;
+  requestNumber?: string;
+}
+
+export interface AssetProcessEvent {
+  id: string;
+  tenantId: string;
+  processId: string;
+  fromStatus?: string;
+  toStatus: string;
+  action: string;
+  actorId: string;
+  actorName?: string;
+  comment?: string;
+  decision?: string;
+  evidence?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AssetProcessStats {
+  total: number;
+  deployment: number;
+  redeployment: number;
+  maintenance: number;
+  retirementDisposal: number;
+  open: number;
+  closed: number;
+  waitingList: number;
+  byStatus: Record<string, number>;
+  byType: Record<string, number>;
+}
+
+export const ASSET_PROCESS_TYPES = [
+  { value: "deployment", label: "Asset deployment" },
+  { value: "redeployment", label: "Asset redeployment" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "retirement_disposal", label: "Retirement and disposal" },
+  { value: "management_report", label: "Management report" },
+] as const;
+
+export const ASSET_PROCESS_STATUSES = [
+  { value: "request_received", label: "Request received" },
+  { value: "approval_review", label: "Approval review" },
+  { value: "requester_check", label: "Requester check" },
+  { value: "replacement_check", label: "Replacement check" },
+  { value: "availability_check", label: "Availability check" },
+  { value: "waiting_list", label: "Waiting list" },
+  { value: "procurement", label: "Procurement" },
+  { value: "issue_from_store", label: "Issue from store" },
+  { value: "configuration", label: "Configuration" },
+  { value: "issued_to_user", label: "Issued to user" },
+  { value: "buyback_decision", label: "Buy-back decision" },
+  { value: "buyback_approval", label: "Buy-back approval" },
+  { value: "old_asset_return", label: "Old asset return" },
+  { value: "data_wipe", label: "Data wipe" },
+  { value: "redeployment_intake", label: "Redeployment intake" },
+  { value: "asset_retrieval", label: "Asset retrieval" },
+  { value: "maintenance_intake", label: "Maintenance intake" },
+  { value: "warranty_check", label: "Warranty check" },
+  { value: "vendor_dispatch", label: "Vendor dispatch" },
+  { value: "stop_gap_issued", label: "Stop-gap issued" },
+  { value: "repaired_received", label: "Repaired received" },
+  { value: "maintenance_signoff", label: "Maintenance sign-off" },
+  { value: "stop_gap_returned", label: "Stop-gap returned" },
+  { value: "obsolete_identified", label: "Obsolete identified" },
+  { value: "replacement_planned", label: "Replacement planned" },
+  { value: "asset_database_updated", label: "Asset database updated" },
+  { value: "degaussing_reported", label: "Degaussing reported" },
+  { value: "management_reported", label: "Management reported" },
+  { value: "closed", label: "Closed" },
+  { value: "rejected", label: "Rejected" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
+
 export interface LicenseComplianceStats {
   total: number;
   compliant: number;
