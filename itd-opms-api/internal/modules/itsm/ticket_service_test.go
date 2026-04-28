@@ -640,9 +640,9 @@ func TestTransitionStatus_SkipSteps(t *testing.T) {
 	invalidSkips := []struct {
 		from, to string
 	}{
-		{"logged", "in_progress"},    // must go through assigned first
-		{"logged", "resolved"},       // can't resolve from logged
-		{"logged", "closed"},         // can't close from logged
+		{"logged", "in_progress"},     // must go through assigned first
+		{"logged", "resolved"},        // can't resolve from logged
+		{"logged", "closed"},          // can't close from logged
 		{"classified", "in_progress"}, // must go through assigned first
 		{"classified", "resolved"},    // can't resolve from classified
 		{"assigned", "resolved"},      // must go through in_progress first
@@ -700,6 +700,96 @@ func TestSLAPauseLogic_NoChangeForOtherTransitions(t *testing.T) {
 
 	if isPausing || isResuming {
 		t.Error("expected no SLA pause/resume change for non-pending transitions")
+	}
+}
+
+func TestValidateTicketTransitionRequirements_ClassifyRequiresBRDFields(t *testing.T) {
+	err := validateTicketTransitionRequirements(Ticket{
+		Status:      TicketStatusLogged,
+		Title:       "Network latency",
+		Description: "Investigate intermittent switch latency",
+		Urgency:     "high",
+		Impact:      "high",
+		Priority:    "P2_high",
+	}, ticketStatusTransitionOptions{targetStatus: TicketStatusClassified})
+	if err == nil {
+		t.Fatal("expected classification to require category")
+	}
+
+	category := "Network"
+	err = validateTicketTransitionRequirements(Ticket{
+		Status:      TicketStatusLogged,
+		Category:    &category,
+		Title:       "Network latency",
+		Description: "Investigate intermittent switch latency",
+		Urgency:     "high",
+		Impact:      "high",
+		Priority:    "P2_high",
+	}, ticketStatusTransitionOptions{targetStatus: TicketStatusClassified})
+	if err != nil {
+		t.Fatalf("expected complete incident record to classify: %v", err)
+	}
+}
+
+func TestValidateTicketTransitionRequirements_AssignmentAndDiagnosisRequireRouting(t *testing.T) {
+	for _, target := range []string{TicketStatusAssigned, TicketStatusInProgress} {
+		err := validateTicketTransitionRequirements(Ticket{Status: TicketStatusClassified}, ticketStatusTransitionOptions{targetStatus: target})
+		if err == nil {
+			t.Fatalf("expected %s to require an assignee or support queue", target)
+		}
+	}
+
+	assigneeID := uuid.New()
+	err := validateTicketTransitionRequirements(Ticket{
+		Status:     TicketStatusClassified,
+		AssigneeID: &assigneeID,
+	}, ticketStatusTransitionOptions{targetStatus: TicketStatusAssigned})
+	if err != nil {
+		t.Fatalf("expected routed ticket to assign: %v", err)
+	}
+}
+
+func TestValidateTicketTransitionRequirements_WaitingStatesRequireReason(t *testing.T) {
+	for _, target := range []string{TicketStatusPendingCustomer, TicketStatusPendingVendor} {
+		err := validateTicketTransitionRequirements(Ticket{Status: TicketStatusInProgress}, ticketStatusTransitionOptions{targetStatus: target})
+		if err == nil {
+			t.Fatalf("expected %s to require reason", target)
+		}
+	}
+
+	reason := "Waiting on customer confirmation"
+	err := validateTicketTransitionRequirements(Ticket{Status: TicketStatusInProgress}, ticketStatusTransitionOptions{
+		targetStatus: TicketStatusPendingCustomer,
+		reason:       &reason,
+	})
+	if err != nil {
+		t.Fatalf("expected waiting transition with reason to pass: %v", err)
+	}
+}
+
+func TestValidateTicketTransitionRequirements_ResolveAndCloseRequireResolutionEvidence(t *testing.T) {
+	err := validateTicketTransitionRequirements(Ticket{Status: TicketStatusInProgress}, ticketStatusTransitionOptions{targetStatus: TicketStatusResolved})
+	if err == nil {
+		t.Fatal("expected resolve to require resolution notes")
+	}
+
+	notes := "Restarted failed switch module and verified payment transactions."
+	err = validateTicketTransitionRequirements(Ticket{Status: TicketStatusInProgress}, ticketStatusTransitionOptions{
+		targetStatus:    TicketStatusResolved,
+		resolutionNotes: &notes,
+	})
+	if err != nil {
+		t.Fatalf("expected resolution notes to satisfy resolve requirement: %v", err)
+	}
+
+	err = validateTicketTransitionRequirements(Ticket{Status: TicketStatusResolved}, ticketStatusTransitionOptions{targetStatus: TicketStatusClosed})
+	if err == nil {
+		t.Fatal("expected close to require documented resolution activity")
+	}
+
+	err = validateTicketTransitionRequirements(Ticket{Status: TicketStatusResolved, ResolutionNotes: &notes}, ticketStatusTransitionOptions{targetStatus: TicketStatusClosed})
+	if err != nil {
+		t.Fatalf("expected documented resolution to close: %v", err)
 	}
 }
 
@@ -882,9 +972,9 @@ func TestAddComment_AutoTransitionCondition(t *testing.T) {
 	// When an external comment is added to a ticket in pending_customer status,
 	// the ticket should auto-transition to in_progress.
 	cases := []struct {
-		name           string
-		isInternal     *bool
-		existingStatus string
+		name             string
+		isInternal       *bool
+		existingStatus   string
 		shouldTransition bool
 	}{
 		{

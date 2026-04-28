@@ -17,6 +17,18 @@ const (
 	EndUserSupportSpecialistRole        = "end_user_support_specialist"
 	SecondLevelSupportSpecialistRole    = "second_level_support_specialist"
 	LegacyServiceDeskAgentRole          = "service_desk_agent"
+	ChangeRequestorRole                 = "change_requestor"
+	BusinessAnalystRole                 = "business_analyst"
+	BusinessRelationshipManagerRole     = "business_relationship_manager"
+	ChangeManagerRole                   = "change_manager"
+	TestManagementSpecialistRole         = "test_management_specialist"
+	SubjectMatterExpertRole             = "subject_matter_expert"
+	ITComplianceSpecialistRole          = "it_compliance_specialist"
+	CABMemberRole                        = "cab_member"
+	CABMeetingSecretaryRole              = "cab_meeting_secretary"
+	ReleaseManagerRole                  = "release_manager"
+	ChangeApproverRole                  = "change_approver"
+	SupportAnalystRole                  = "support_analyst"
 )
 
 func isITSMPrivileged(auth *types.AuthContext) bool {
@@ -83,6 +95,72 @@ func hasProblemDetectionResponsibility(auth *types.AuthContext) bool {
 		hasSeniorServiceDeskAccountability(auth)
 }
 
+func hasChangeRequestResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(ChangeRequestorRole) ||
+		auth.HasRole(BusinessAnalystRole) ||
+		auth.HasRole(BusinessRelationshipManagerRole) ||
+		auth.HasRole(ChangeManagerRole)
+}
+
+func hasChangeManagementResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return hasChangeRequestResponsibility(auth) ||
+		auth.HasRole(ChangeManagerRole) ||
+		auth.HasRole(TestManagementSpecialistRole) ||
+		auth.HasRole(SubjectMatterExpertRole) ||
+		auth.HasRole(ITComplianceSpecialistRole) ||
+		auth.HasRole(CABMemberRole) ||
+		auth.HasRole(CABMeetingSecretaryRole) ||
+		auth.HasRole(ReleaseManagerRole) ||
+		auth.HasRole(ChangeApproverRole) ||
+		auth.HasRole(SupportAnalystRole)
+}
+
+func hasChangeRiskAssessmentResponsibility(auth *types.AuthContext) bool {
+	if hasChangeManagementResponsibility(auth) && (auth.HasRole(SubjectMatterExpertRole) || auth.HasRole(ITComplianceSpecialistRole) || auth.HasRole(ChangeManagerRole) || auth.HasRole(TestManagementSpecialistRole) || isITSMPrivileged(auth)) {
+		return true
+	}
+	return false
+}
+
+func hasCABResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(CABMemberRole) ||
+		auth.HasRole(CABMeetingSecretaryRole) ||
+		auth.HasRole(ChangeApproverRole) ||
+		auth.HasRole(ChangeManagerRole) ||
+		auth.HasRole(TestManagementSpecialistRole)
+}
+
+func hasChangeImplementationResponsibility(auth *types.AuthContext) bool {
+	if isITSMPrivileged(auth) {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	return auth.HasRole(ChangeManagerRole) ||
+		auth.HasRole(ReleaseManagerRole) ||
+		auth.HasRole(ChangeApproverRole) ||
+		auth.HasRole(TestManagementSpecialistRole)
+}
+
 func ensureServiceDeskResponsibility(auth *types.AuthContext, action string) error {
 	if hasServiceDeskResponsibility(auth) {
 		return nil
@@ -116,6 +194,41 @@ func ensureProblemDetectionResponsibility(auth *types.AuthContext, action string
 		return nil
 	}
 	return apperrors.Forbidden(fmt.Sprintf("%s requires a problem management or service desk responsibility role", action))
+}
+
+func ensureChangeRequestResponsibility(auth *types.AuthContext, action string) error {
+	if hasChangeRequestResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, %s, or %s role", action, ChangeRequestorRole, BusinessAnalystRole, BusinessRelationshipManagerRole, ChangeManagerRole))
+}
+
+func ensureChangeManagementResponsibility(auth *types.AuthContext, action string) error {
+	if hasChangeManagementResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires a Change Management responsibility role", action))
+}
+
+func ensureChangeRiskAssessmentResponsibility(auth *types.AuthContext, action string) error {
+	if hasChangeRiskAssessmentResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, %s, or %s role", action, SubjectMatterExpertRole, ITComplianceSpecialistRole, ChangeManagerRole, TestManagementSpecialistRole))
+}
+
+func ensureCABResponsibility(auth *types.AuthContext, action string) error {
+	if hasCABResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, %s, %s, or %s role", action, CABMemberRole, CABMeetingSecretaryRole, ChangeApproverRole, ChangeManagerRole, TestManagementSpecialistRole))
+}
+
+func ensureChangeImplementationResponsibility(auth *types.AuthContext, action string) error {
+	if hasChangeImplementationResponsibility(auth) {
+		return nil
+	}
+	return apperrors.Forbidden(fmt.Sprintf("%s requires %s, %s, %s, or %s role", action, ChangeManagerRole, ReleaseManagerRole, ChangeApproverRole, TestManagementSpecialistRole))
 }
 
 func canMutateTicket(auth *types.AuthContext, ticket Ticket) bool {
@@ -176,6 +289,13 @@ func canMutateMajorIncident(auth *types.AuthContext, record MajorIncidentRecord)
 	return record.Ticket.AssigneeID != nil && *record.Ticket.AssigneeID == auth.UserID
 }
 
+func canMutateChange(auth *types.AuthContext, ticket Ticket) bool {
+	if canMutateTicket(auth, ticket) {
+		return true
+	}
+	return hasChangeManagementResponsibility(auth)
+}
+
 func canMutateMajorIncidentTicket(auth *types.AuthContext, ticket majorIncidentTicket) bool {
 	if isITSMPrivileged(auth) {
 		return true
@@ -211,6 +331,13 @@ func ensureProblemMutationAllowed(auth *types.AuthContext, problem Problem) erro
 		return nil
 	}
 	return apperrors.Forbidden("cannot modify a problem you do not own")
+}
+
+func ensureChangeMutationAllowed(auth *types.AuthContext, ticket Ticket) error {
+	if canMutateChange(auth, ticket) {
+		return nil
+	}
+	return apperrors.Forbidden("cannot modify a change unless you own it, are assigned to it, or hold a Change Management responsibility role")
 }
 
 func ensureMajorIncidentMutationAllowed(auth *types.AuthContext, record MajorIncidentRecord) error {

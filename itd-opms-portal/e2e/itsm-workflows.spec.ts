@@ -443,13 +443,13 @@ test.describe("ITSM workflow-backed lifecycle actions", () => {
     await expect(page.getByRole("heading", { name: ticket.title, level: 1 })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("button", { name: "Pending Customer", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Pending Customer/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Resolve", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
     await expect(page.getByText(/R: Service Desk Specialist/).first()).toBeVisible();
     await expect(page.getByText(/A: Senior IT Service Center Specialist/).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Pending Customer", exact: true }).click();
+    await page.getByRole("button", { name: /Pending Customer/ }).click();
     await expect(page.getByRole("heading", { name: "Pending Customer" })).toBeVisible();
     await page.getByRole("button", { name: "Confirm Pending Customer" }).click();
     await expect.poll(() => calls).toContainEqual({

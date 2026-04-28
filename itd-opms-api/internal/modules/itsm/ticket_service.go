@@ -760,6 +760,9 @@ func (s *TicketService) applyTicketStatusTransition(ctx context.Context, auth *t
 			fmt.Sprintf("invalid status transition from '%s' to '%s'", existing.Status, opts.targetStatus),
 		)
 	}
+	if err := validateTicketTransitionRequirements(existing, opts); err != nil {
+		return Ticket{}, err
+	}
 
 	now := time.Now().UTC()
 
@@ -840,6 +843,53 @@ func (s *TicketService) applyTicketStatusTransition(ctx context.Context, auth *t
 	return ticket, nil
 }
 
+func validateTicketTransitionRequirements(existing Ticket, opts ticketStatusTransitionOptions) error {
+	missing := make([]string, 0, 5)
+	require := func(field string, ok bool) {
+		if !ok {
+			missing = append(missing, field)
+		}
+	}
+
+	switch opts.targetStatus {
+	case TicketStatusClassified:
+		require("category", existing.Category != nil && strings.TrimSpace(*existing.Category) != "")
+		require("description", strings.TrimSpace(existing.Description) != "")
+		require("impact", strings.TrimSpace(existing.Impact) != "")
+		require("urgency", strings.TrimSpace(existing.Urgency) != "")
+		require("priority", strings.TrimSpace(existing.Priority) != "")
+		if len(missing) > 0 {
+			return apperrors.Validation("workflow", "cannot classify incident until "+strings.Join(missing, ", ")+" are recorded")
+		}
+	case TicketStatusAssigned:
+		if existing.AssigneeID == nil && existing.TeamQueueID == nil {
+			return apperrors.Validation("assignment", "cannot assign incident workflow until an assignee or support queue is selected")
+		}
+	case TicketStatusInProgress:
+		if existing.AssigneeID == nil && existing.TeamQueueID == nil {
+			return apperrors.Validation("assignment", "cannot start diagnosis until the incident is routed to an assignee or support queue")
+		}
+	case TicketStatusPendingCustomer:
+		if opts.reason == nil || strings.TrimSpace(*opts.reason) == "" {
+			return apperrors.Validation("reason", "customer waiting reason is required")
+		}
+	case TicketStatusPendingVendor:
+		if opts.reason == nil || strings.TrimSpace(*opts.reason) == "" {
+			return apperrors.Validation("reason", "third-party or vendor escalation reason is required")
+		}
+	case TicketStatusResolved:
+		if opts.resolutionNotes == nil || strings.TrimSpace(*opts.resolutionNotes) == "" {
+			return apperrors.Validation("resolutionNotes", "resolution notes are required; use the resolve action to document recovery work")
+		}
+	case TicketStatusClosed:
+		if existing.ResolutionNotes == nil || strings.TrimSpace(*existing.ResolutionNotes) == "" {
+			return apperrors.Validation("resolutionNotes", "cannot close incident until resolution activity is documented")
+		}
+	}
+
+	return nil
+}
+
 // TransitionStatus validates and performs a status transition on a ticket.
 func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req TransitionTicketRequest) (Ticket, error) {
 	auth := types.GetAuthContext(ctx)
@@ -856,6 +906,9 @@ func (s *TicketService) TransitionStatus(ctx context.Context, id uuid.UUID, req 
 	}
 	if err := ensureIncidentManagementResponsibility(auth, "incident lifecycle transition"); err != nil {
 		return Ticket{}, err
+	}
+	if req.Status == TicketStatusResolved {
+		return Ticket{}, apperrors.BadRequest("use the resolve action so resolution activity, SLA result, and customer communication are recorded")
 	}
 
 	return s.applyTicketStatusTransition(ctx, auth, existing, ticketStatusTransitionOptions{
@@ -1229,6 +1282,9 @@ func (s *TicketService) ResolveTicket(ctx context.Context, id uuid.UUID, req Res
 		return Ticket{}, err
 	}
 	if err := ensureTicketMutationAllowed(auth, existing); err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "incident resolution"); err != nil {
 		return Ticket{}, err
 	}
 

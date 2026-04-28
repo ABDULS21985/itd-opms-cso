@@ -131,10 +131,12 @@ const PRIORITY_META: Record<
   },
 };
 
-const STATUS_TRANSITIONS: Record<
-  string,
-  { value: string; label: string; icon?: React.ElementType; variant?: string }[]
-> = {
+type TicketActionTransition = ITSMWorkflowTransition & {
+  icon?: React.ElementType;
+  variant?: string;
+};
+
+const STATUS_TRANSITIONS: Record<string, TicketActionTransition[]> = {
   logged: [
     { value: "classified", label: "Classify", icon: ArrowRightCircle },
     { value: "assigned", label: "Assign", icon: UserPlus },
@@ -176,8 +178,8 @@ function mergeTicketTransitions(
   backend:
     | { transitions: ITSMWorkflowTransition[] }
     | undefined,
-  local: { value: string; label: string; icon?: React.ElementType; variant?: string }[],
-) {
+  local: TicketActionTransition[],
+): TicketActionTransition[] {
   if (!backend) {
     return local;
   }
@@ -191,6 +193,19 @@ function mergeTicketTransitions(
       variant: meta?.variant,
     };
   });
+}
+
+function workflowRoleLabel(value?: string) {
+  if (!value) return "";
+  return value
+    .split("_")
+    .map((part) => {
+      const upper = part.toUpperCase();
+      return ["IT", "CI", "RCA", "KB", "SLA"].includes(upper)
+        ? upper
+        : part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
 }
 
 /** Ordered pipeline stages */
@@ -1700,10 +1715,19 @@ export default function TicketDetailPage({
                       disabled={isActing}
                       onClick={() => openWorkflowDrawer(t)}
                       className={btnClass}
-                    >
-                      {TIcon && <TIcon size={16} />}
-                      {t.label}
-                    </button>
+	                    >
+	                      {TIcon && <TIcon size={16} />}
+	                      <span className="text-left leading-tight">
+	                        <span className="block">{t.label}</span>
+	                        {t.responsibleRole || t.accountableRole ? (
+	                          <span className="mt-0.5 block text-[10px] font-medium opacity-80">
+	                            {t.responsibleRole ? `R: ${workflowRoleLabel(t.responsibleRole)}` : ""}
+	                            {t.responsibleRole && t.accountableRole ? " · " : ""}
+	                            {t.accountableRole ? `A: ${workflowRoleLabel(t.accountableRole)}` : ""}
+	                          </span>
+	                        ) : null}
+	                      </span>
+	                    </button>
                   );
                 })}
 
