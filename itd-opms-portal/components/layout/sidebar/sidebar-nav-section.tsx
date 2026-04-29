@@ -34,6 +34,10 @@ interface SidebarNavSectionProps {
   navFocusIndex: number;
   visibleGroups: NavGroup[];
   groupIndex: number;
+  /** Map of href → numeric badge count. */
+  badgeCounts?: Record<string, number>;
+  /** Predicate: does an item have new activity since the user's last visit? */
+  hasNewActivity?: (href: string) => boolean;
   isActive: (pathname: string, href: string) => boolean;
   isFavorite: (href: string) => boolean;
   isItemHidden: (href: string) => boolean;
@@ -43,6 +47,7 @@ interface SidebarNavSectionProps {
   onToggleSectionVisibility: (label: string) => void;
   onToggleItemVisibility: (href: string) => void;
   onContextMenu: (e: React.MouseEvent, item: NavItem) => void;
+  onItemClick?: (href: string) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -64,6 +69,8 @@ export function SidebarNavSection({
   navFocusIndex,
   visibleGroups,
   groupIndex,
+  badgeCounts,
+  hasNewActivity,
   isActive: isActiveFn,
   isFavorite,
   isItemHidden,
@@ -73,6 +80,7 @@ export function SidebarNavSection({
   onToggleSectionVisibility,
   onToggleItemVisibility,
   onContextMenu,
+  onItemClick,
 }: SidebarNavSectionProps) {
   const isOverview = group.label === "Overview";
 
@@ -102,6 +110,15 @@ export function SidebarNavSection({
     [group.items],
   );
 
+  const sectionBadgeTotal = useMemo(() => {
+    if (!badgeCounts) return 0;
+    let total = 0;
+    for (const item of group.items) {
+      total += badgeCounts[item.href] || 0;
+    }
+    return total;
+  }, [badgeCounts, group.items]);
+
   /* ------- Collapsed mode: thin divider + icons ------- */
   if (collapsed) {
     return (
@@ -125,8 +142,11 @@ export function SidebarNavSection({
               dur={dur}
               staggerDur={0}
               iconColor={group.color}
+              badgeCount={badgeCounts?.[item.href]}
+              hasNewActivity={hasNewActivity?.(item.href)}
               onContextMenu={onContextMenu}
               onToggleVisibility={onToggleItemVisibility}
+              onItemClick={onItemClick}
             />
           ))}
         </div>
@@ -161,6 +181,7 @@ export function SidebarNavSection({
 
         <button
           onClick={() => onToggleSection(group.label)}
+          title={group.description || undefined}
           className={`
             flex-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.15em]
             transition-all duration-300 py-1.5 group/section-btn
@@ -201,6 +222,22 @@ export function SidebarNavSection({
           >
             {group.label}
           </span>
+          {group.audience && !isCustomizing && (
+            <span
+              className="text-[8px] font-semibold tracking-normal uppercase px-1.5 py-px rounded bg-[#8B6F2E]/10 text-[#8B6F2E]/80 border border-[#8B6F2E]/15"
+              aria-label={`Primary audience: ${group.audience}`}
+            >
+              {group.audience}
+            </span>
+          )}
+          {!expanded && sectionBadgeTotal > 0 && !isCustomizing && (
+            <span
+              className="text-[9px] font-bold tabular-nums px-1.5 py-px rounded-full bg-rose-500/90 text-white"
+              aria-label={`${sectionBadgeTotal} items need attention`}
+            >
+              {sectionBadgeTotal > 99 ? "99+" : sectionBadgeTotal}
+            </span>
+          )}
           {!expanded && (
             <span className="text-[9px] text-[#8B6F2E]/50 ml-1 font-normal tabular-nums">
               ({group.items.length})
@@ -299,8 +336,12 @@ export function SidebarNavSection({
                     itemIndex={itemIndex}
                     dur={dur}
                     staggerDur={staggerDur}
+                    iconColor={group.color}
+                    badgeCount={badgeCounts?.[item.href]}
+                    hasNewActivity={hasNewActivity?.(item.href)}
                     onContextMenu={onContextMenu}
                     onToggleVisibility={onToggleItemVisibility}
+                    onItemClick={onItemClick}
                   />
                 );
               })}

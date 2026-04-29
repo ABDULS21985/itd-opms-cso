@@ -31,6 +31,7 @@ import (
 	"github.com/itd-cbn/itd-opms-api/internal/modules/planning"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/release"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/reporting"
+	"github.com/itd-cbn/itd-opms-api/internal/modules/sidebar"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/ssa"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/system"
 	"github.com/itd-cbn/itd-opms-api/internal/modules/testsolution"
@@ -243,6 +244,7 @@ func (s *Server) Setup() {
 	customFieldsHandler := customfields.NewHandler(s.pool, auditService)
 	releaseHandler := release.NewHandler(s.pool, auditService, s.js)
 	testSolutionHandler := testsolution.NewHandler(s.pool, auditService, s.js)
+	sidebarHandler := sidebar.NewHandler(s.pool)
 	s.maintenanceWorker = systemHandler.Maintenance
 	s.vaultWorker = vaultHandler.Worker
 	s.dashboardRefresh = reportingHandler.DashboardRefresher(5 * time.Minute)
@@ -403,6 +405,7 @@ func (s *Server) Setup() {
 			r.Route("/custom-fields", func(r chi.Router) { customFieldsHandler.Routes(r) })
 			r.Route("/releases", func(r chi.Router) { releaseHandler.Routes(r) })
 			r.Route("/test-solutions", func(r chi.Router) { testSolutionHandler.Routes(r) })
+			r.Route("/sidebar", func(r chi.Router) { sidebarHandler.Routes(r) })
 			// Prompt 9 aliases for cross-cutting dashboards/search at top-level.
 			r.Route("/dashboards", func(r chi.Router) { reportingHandler.DashboardRoutes(r) })
 			r.Route("/search", func(r chi.Router) { reportingHandler.SearchRoutes(r) })

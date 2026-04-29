@@ -74,12 +74,17 @@ export interface NavGroup {
   items: NavItem[];
   /** Tailwind-compatible CSS color used to tint icons in this section. */
   color?: string;
+  /** One-line description of what this section is for, shown in a tooltip. */
+  description?: string;
+  /** Short audience chip (e.g. "PMO", "Ops", "Admin") rendered next to the label. */
+  audience?: string;
 }
 
 export const navGroups: NavGroup[] = [
   {
     label: "Overview",
     color: "#3B82F6",
+    description: "Your home dashboard — recent activity and pinned widgets.",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     ],
@@ -87,6 +92,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Analytics",
     color: "#8B5CF6",
+    description: "Cross-domain reports, KPIs, and the ad-hoc query builder.",
+    audience: "Reporting",
     items: [
       {
         href: "/dashboard/analytics",
@@ -147,6 +154,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Governance",
     color: "#6366F1",
+    description: "Policies, RACI, OKRs, meetings, and approvals — how work runs.",
+    audience: "Leadership",
     items: [
       {
         href: "/dashboard/governance/policies",
@@ -189,6 +198,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "People",
     color: "#EC4899",
+    description: "Directory, skills, capacity, onboarding/offboarding and people analytics.",
+    audience: "HR",
     items: [
       {
         href: "/dashboard/people/roster",
@@ -243,6 +254,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Planning",
     color: "#10B981",
+    description: "Portfolios, projects, work items, milestones, risks, and budgets.",
+    audience: "PMO",
     items: [
       {
         href: "/dashboard/planning/portfolios",
@@ -309,6 +322,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "ITSM",
     color: "#06B6D4",
+    description: "Tickets, incidents, problems, changes, CAB and SLA dashboards.",
+    audience: "Service Desk",
     items: [
       {
         href: "/dashboard/itsm/command-center",
@@ -381,6 +396,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Release Mgmt",
     color: "#F97316",
+    description: "Coordinate releases, the release calendar, and test solution gating.",
+    audience: "Release",
     items: [
       {
         href: "/dashboard/releases",
@@ -405,6 +422,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Assets",
     color: "#F59E0B",
+    description: "CMDB inventory, topology, licenses, warranties, vendors and contracts.",
+    audience: "Ops",
     items: [
       {
         href: "/dashboard/cmdb/assets",
@@ -477,6 +496,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Server Allocation",
     color: "#84CC16",
+    description: "Server space allocation requests, approvals, and bulk operations.",
+    audience: "Infra",
     items: [
       {
         href: "/dashboard/ssa",
@@ -519,6 +540,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Knowledge",
     color: "#0EA5E9",
+    description: "Knowledge base articles, full-text search, and authoring.",
     items: [
       {
         href: "/dashboard/knowledge",
@@ -543,6 +565,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Document Vault",
     color: "#F43F5E",
+    description: "Secure document storage with retention and access controls.",
     items: [
       {
         href: "/dashboard/vault",
@@ -555,6 +578,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "GRC",
     color: "#EF4444",
+    description: "Governance, risk, compliance, audits, and access reviews.",
+    audience: "Audit",
     items: [
       {
         href: "/dashboard/grc",
@@ -597,6 +622,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "System",
     color: "#64748B",
+    description: "Tenant admin, users, roles, workflows, and platform settings.",
+    audience: "Admin",
     items: [
       {
         href: "/dashboard/system",

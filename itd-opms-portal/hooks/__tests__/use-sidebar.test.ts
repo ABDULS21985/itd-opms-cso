@@ -59,10 +59,10 @@ describe("useSidebarFavorites", () => {
     expect(result.current.isFavorite("/planning")).toBe(false);
   });
 
-  it("does not exceed MAX_FAVORITES (8)", () => {
+  it("does not exceed MAX_FAVORITES (16)", () => {
     const { result } = renderHook(() => useSidebarFavorites());
 
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 17; i++) {
       act(() => {
         result.current.toggleFavorite({
           path: `/path-${i}`,
@@ -72,7 +72,7 @@ describe("useSidebarFavorites", () => {
       });
     }
 
-    expect(result.current.favorites).toHaveLength(8);
+    expect(result.current.favorites).toHaveLength(16);
   });
 
   it("removes a favorite by path", () => {

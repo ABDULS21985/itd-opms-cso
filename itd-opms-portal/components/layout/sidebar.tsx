@@ -28,6 +28,7 @@ import {
   Layers,
   Pencil,
   Download,
+  Command,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,6 +42,8 @@ import {
 } from "@/hooks/use-sidebar-sections";
 import { useSidebarFavorites } from "@/hooks/use-sidebar-favorites";
 import { useRecentlyVisited } from "@/hooks/use-sidebar-recently-visited";
+import { useSidebarTelemetry } from "@/hooks/use-sidebar-telemetry";
+import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
 import { useSidebarScroll } from "@/hooks/use-sidebar-scroll";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSidebarLayout } from "@/hooks/use-sidebar-layout";
@@ -62,6 +65,10 @@ import { SidebarCustomizeToolbar } from "@/components/layout/sidebar/sidebar-cus
 import { SidebarHiddenItemsDrawer } from "@/components/layout/sidebar/sidebar-hidden-items-drawer";
 import { SidebarResizeHandle } from "@/components/layout/sidebar/sidebar-resize-handle";
 import { SidebarImportExport } from "@/components/layout/sidebar/sidebar-import-export";
+import { SidebarFavorites } from "@/components/layout/sidebar/sidebar-favorites";
+import { SidebarUpNext } from "@/components/layout/sidebar/sidebar-up-next";
+import { SidebarTenantChip } from "@/components/layout/sidebar/sidebar-tenant-chip";
+import { SidebarCommandPalette } from "@/components/layout/sidebar/sidebar-command-palette";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -205,6 +212,7 @@ export function Sidebar({
   const [recentSectionOpen, setRecentSectionOpen] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [importExportOpen, setImportExportOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   /* ------- Preset management (localStorage) ------- */
   const [activePreset, setActivePreset] = useState<PresetId>("full");
@@ -326,6 +334,16 @@ export function Sidebar({
     [userPermissions, hasWildcard],
   );
 
+  /* ------- Click telemetry (needed by Adaptive preset) ------- */
+  const navHrefs = useMemo(() => {
+    const set = new Set<string>();
+    for (const group of navGroups) {
+      for (const item of group.items) set.add(item.href);
+    }
+    return set;
+  }, []);
+  const { getClickCounts } = useSidebarTelemetry(navHrefs);
+
   /* ------- Filter by preset ------- */
   const presetVisibleSections = useMemo(() => {
     const preset = SIDEBAR_PRESETS[activePreset];
@@ -349,12 +367,36 @@ export function Sidebar({
   }, [permissionFilteredGroups, presetVisibleSections]);
 
   /* ------- Apply layout ordering ------- */
-  const visibleGroups = useMemo(() => {
+  const baseOrderedGroups = useMemo(() => {
     return layoutHook.applyToGroups(
       presetFilteredGroups,
       customizeMode.isCustomizing,
     );
   }, [presetFilteredGroups, layoutHook, customizeMode.isCustomizing]);
+
+  /* ------- Adaptive: reorder items inside each section by click count ------- */
+  const visibleGroups = useMemo(() => {
+    if (activePreset !== "adaptive" || customizeMode.isCustomizing) {
+      return baseOrderedGroups;
+    }
+    const counts = getClickCounts();
+    return baseOrderedGroups.map((group) => {
+      // Don't shuffle Overview (single item) or sections without telemetry.
+      if (group.label === "Overview" || group.items.length <= 1) return group;
+      const sorted = [...group.items].sort((a, b) => {
+        const ca = counts.get(a.href) || 0;
+        const cb = counts.get(b.href) || 0;
+        if (ca === cb) return 0;
+        return cb - ca;
+      });
+      return { ...group, items: sorted };
+    });
+  }, [
+    baseOrderedGroups,
+    activePreset,
+    customizeMode.isCustomizing,
+    getClickCounts,
+  ]);
 
   const presetHiddenSectionCount =
     permissionFilteredGroups.length - presetFilteredGroups.length;
@@ -396,8 +438,14 @@ export function Sidebar({
     activeSectionTitle,
   });
 
-  const { favorites, isFavorite, toggleFavorite, removeFavorite } =
-    useSidebarFavorites();
+  const {
+    favorites,
+    isFavorite,
+    toggleFavorite,
+    removeFavorite,
+    reorderFavorites,
+    renameFavorite,
+  } = useSidebarFavorites();
 
   const navItemLookup = useMemo(() => {
     const map = new Map<string, { text: string; iconName: string }>();
@@ -413,6 +461,12 @@ export function Sidebar({
   }, []);
 
   const { recentItems } = useRecentlyVisited(navItemLookup);
+  const { counts: badgeCounts, hasNewActivity, markSeen } = useSidebarBadges(!!user);
+
+  // Mark the current path as "seen" so the activity dot clears immediately on visit.
+  useEffect(() => {
+    if (pathname) markSeen(pathname);
+  }, [pathname, markSeen]);
 
   const {
     scrollProgress,
@@ -492,6 +546,12 @@ export function Sidebar({
   /* ------- Global keyboard shortcuts ------- */
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
+      // ⌘K / Ctrl+K — open command palette from anywhere.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
       if (e.key === "Escape") {
         onMobileClose();
         setUserMenuOpen(false);
@@ -829,26 +889,45 @@ export function Sidebar({
                   <X size={14} />
                 </button>
               ) : (
-                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[color:var(--sidebar-text-faint)] border border-[color:var(--sidebar-border)] rounded px-1 py-0.5 font-mono">
-                  /
-                </kbd>
+                <button
+                  onClick={() => setPaletteOpen(true)}
+                  type="button"
+                  title="Open command palette (⌘K)"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-[color:var(--sidebar-text-faint)] hover:text-[color:var(--sidebar-text)] transition-colors"
+                >
+                  <kbd className="border border-[color:var(--sidebar-border)] rounded px-1 py-0.5 font-mono">
+                    /
+                  </kbd>
+                  <span className="opacity-50">·</span>
+                  <kbd className="border border-[color:var(--sidebar-border)] rounded px-1 py-0.5 font-mono inline-flex items-center gap-0.5">
+                    <Command size={9} />K
+                  </kbd>
+                </button>
               )}
             </div>
           </div>
         ) : collapsed ? (
           <div className="px-3 pt-3 pb-1 flex-shrink-0 hidden lg:block">
             <button
-              onClick={() => {
-                onToggleCollapse();
-                setTimeout(() => searchInputRef.current?.focus(), 350);
-              }}
+              onClick={() => setPaletteOpen(true)}
               className="w-10 h-10 mx-auto flex items-center justify-center rounded-lg hover:bg-[color:var(--sidebar-hover-bg)] text-[color:var(--sidebar-text-subtle)] hover:text-[color:var(--sidebar-text)] transition-all duration-200"
-              title="Search navigation"
+              title="Open command palette (⌘K)"
             >
               <Search size={18} />
             </button>
           </div>
         ) : null}
+
+        {/* Current tenant chip */}
+        {!customizeMode.isCustomizing && (
+          <SidebarTenantChip
+            tenantName={user?.tenantName}
+            canManageTenants={
+              hasWildcard || userPermissions.includes("system.view")
+            }
+            collapsed={collapsed}
+          />
+        )}
 
         {/* -------------------------------------------------------- */}
         {/*  Navigation (scrollable area)                             */}
@@ -925,52 +1004,23 @@ export function Sidebar({
             </div>
           ) : (
             <>
-              {/* ------- Favorites section ------- */}
-              {!collapsed &&
-                !customizeMode.isCustomizing &&
-                favorites.length > 0 && (
-                  <div className="mb-3">
-                    <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--sidebar-text-subtle)] flex items-center gap-1.5">
-                      <Star size={10} className="text-[color:var(--sidebar-accent)]" />
-                      Favorites
-                    </p>
-                    <div className="space-y-0.5">
-                      {favorites.map((fav) => {
-                        const FavIcon = resolveIcon(fav.iconName);
-                        const active = isActive(pathname, fav.path);
-                        return (
-                          <div
-                            key={fav.path}
-                            className="group relative flex items-center"
-                          >
-                            <Link
-                              href={fav.path}
-                              className={`
-                                flex-1 flex items-center gap-2.5 rounded-xl text-xs font-medium
-                                transition-all duration-200 px-3 py-2 border-l-[3px]
-                                ${active
-                                  ? "border-[color:var(--sidebar-accent)] bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
-                                  : "border-transparent text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
-                                }
-                              `}
-                            >
-                              <FavIcon size={14} className="flex-shrink-0" />
-                              <span className="truncate">{fav.text}</span>
-                            </Link>
-                            <button
-                              onClick={() => removeFavorite(fav.path)}
-                              className="absolute right-2 opacity-0 group-hover:opacity-100 text-[color:var(--sidebar-accent)] hover:text-[color:var(--sidebar-accent)] transition-opacity"
-                              title="Remove from favorites"
-                            >
-                              <Star size={12} fill="currentColor" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="mx-3 mt-2 border-t border-[color:var(--sidebar-border)]" />
-                  </div>
-                )}
+              {/* ------- Favorites section (drag-reorder + rename) ------- */}
+              {!collapsed && !customizeMode.isCustomizing && (
+                <SidebarFavorites
+                  favorites={favorites}
+                  pathname={pathname}
+                  isActive={isActive}
+                  resolveIcon={resolveIcon}
+                  onRemove={removeFavorite}
+                  onReorder={reorderFavorites}
+                  onRename={renameFavorite}
+                />
+              )}
+
+              {/* ------- Up Next: rule-based context panel ------- */}
+              {!collapsed && !customizeMode.isCustomizing && (
+                <SidebarUpNext counts={badgeCounts} pathname={pathname} />
+              )}
 
               {/* ------- Recently visited ------- */}
               {!collapsed &&
@@ -1092,6 +1142,8 @@ export function Sidebar({
                       navFocusIndex={navFocusIndex}
                       visibleGroups={visibleGroups}
                       groupIndex={groupIndex}
+                      badgeCounts={badgeCounts}
+                      hasNewActivity={hasNewActivity}
                       isActive={isActive}
                       isFavorite={isFavorite}
                       isItemHidden={layoutHook.isItemHidden}
@@ -1103,6 +1155,7 @@ export function Sidebar({
                       }
                       onToggleItemVisibility={layoutHook.toggleItemVisibility}
                       onContextMenu={handleContextMenu}
+                      onItemClick={markSeen}
                     />
                   );
                 })}
@@ -1341,6 +1394,15 @@ export function Sidebar({
         onClose={() => setImportExportOpen(false)}
         currentLayout={layoutHook.exportLayout()}
         onImport={layoutHook.importLayout}
+      />
+
+      {/* Command palette (⌘K) */}
+      <SidebarCommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        recents={recentItems}
+        favorites={favorites}
+        resolveIcon={resolveIcon}
       />
     </>
   );

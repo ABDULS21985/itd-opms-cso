@@ -1,4 +1,10 @@
-export type PresetId = "full" | "essentials" | "manager" | "technical" | "custom";
+export type PresetId =
+  | "full"
+  | "essentials"
+  | "manager"
+  | "technical"
+  | "adaptive"
+  | "custom";
 
 export interface SidebarPreset {
   id: PresetId;
@@ -32,6 +38,12 @@ export const SIDEBAR_PRESETS: Record<PresetId, SidebarPreset> = {
     description: "ITSM, assets, and infrastructure",
     visibleSections: ["Overview", "ITSM", "Assets", "Knowledge", "Analytics"],
   },
+  adaptive: {
+    id: "adaptive",
+    label: "Adaptive",
+    description: "Re-orders items by your 30-day click history",
+    visibleSections: [],
+  },
   custom: {
     id: "custom",
     label: "Custom",
@@ -45,5 +57,6 @@ export const PRESET_ORDER: PresetId[] = [
   "essentials",
   "manager",
   "technical",
+  "adaptive",
   "custom",
 ];

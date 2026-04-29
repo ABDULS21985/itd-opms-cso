@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/navigation";
+import { SidebarFloatingTip } from "./sidebar-floating-tip";
 
 /* ------------------------------------------------------------------ */
 /*  Icon hover animation map                                           */
@@ -59,13 +60,23 @@ interface SidebarNavItemProps {
   staggerDur: number;
   /** CSS color used to tint the icon (e.g. the parent group's color). */
   iconColor?: string;
+  /** Numeric badge count to render as a pill (omit if 0). */
+  badgeCount?: number;
+  /** Whether this item has activity since the user's last visit. */
+  hasNewActivity?: boolean;
   onContextMenu: (e: React.MouseEvent, item: NavItem) => void;
   onToggleVisibility: (href: string) => void;
+  onItemClick?: (href: string) => void;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
+
+function formatBadge(n: number): string {
+  if (n > 99) return "99+";
+  return String(n);
+}
 
 export function SidebarNavItem({
   item,
@@ -80,8 +91,11 @@ export function SidebarNavItem({
   dur,
   staggerDur,
   iconColor,
+  badgeCount,
+  hasNewActivity,
   onContextMenu,
   onToggleVisibility,
+  onItemClick,
 }: SidebarNavItemProps) {
   const Icon = item.icon;
   const hoverClass = getIconHoverClass(item.icon);
@@ -107,44 +121,64 @@ export function SidebarNavItem({
       }
     : undefined;
 
+  const showBadge = !isCustomizing && typeof badgeCount === "number" && badgeCount > 0;
+  const showActivityDot = !isCustomizing && hasNewActivity && !showBadge;
+
   /* ------- Collapsed mode ------- */
   if (collapsed) {
+    const tipSub = showBadge ? formatBadge(badgeCount!) : undefined;
     return (
-      <Link
-        key={item.href}
-        href={item.href}
-        aria-current={active ? "page" : undefined}
-        aria-label={item.label}
-        title={item.label}
-        className={`
-          group relative flex items-center justify-center rounded-xl
-          transition-all duration-200
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sidebar-active-bg-strong)]
-          active:scale-[0.98]
-          w-10 h-10 mx-auto
-          ${
-            active
-              ? "bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
-              : "text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
-          }
-        `}
-      >
-        {active && (
-          <div
-            className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#1B7340] to-[#2D9B58]"
-            style={{ boxShadow: "0 0 8px rgba(168,137,61,0.4)" }}
+      <SidebarFloatingTip label={item.label} sublabel={tipSub}>
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={() => onItemClick?.(item.href)}
+          aria-current={active ? "page" : undefined}
+          aria-label={item.label}
+          className={`
+            group relative flex items-center justify-center rounded-xl
+            transition-all duration-200
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sidebar-active-bg-strong)]
+            active:scale-[0.98]
+            w-10 h-10 mx-auto
+            ${
+              active
+                ? "bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)]"
+                : "text-[color:var(--sidebar-text-muted)] hover:bg-[color:var(--sidebar-hover-bg)] hover:text-[color:var(--sidebar-text)]"
+            }
+          `}
+        >
+          {active && (
+            <div
+              className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-gradient-to-b from-[#1B7340] to-[#2D9B58]"
+              style={{ boxShadow: "0 0 8px rgba(168,137,61,0.4)" }}
+            />
+          )}
+          <Icon
+            size={20}
+            className={`flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
+              active
+                ? "text-[color:var(--sidebar-active-text)]"
+                : "text-[color:var(--sidebar-text-subtle)] group-hover:text-[color:var(--sidebar-text)]"
+            }`}
+            style={!active && iconColor ? { color: iconColor } : undefined}
           />
-        )}
-        <Icon
-          size={20}
-          className={`flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
-            active
-              ? "text-[color:var(--sidebar-active-text)]"
-              : "text-[color:var(--sidebar-text-subtle)] group-hover:text-[color:var(--sidebar-text)]"
-          }`}
-          style={!active && iconColor ? { color: iconColor } : undefined}
-        />
-      </Link>
+          {showBadge && (
+            <span
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center bg-rose-500 text-white shadow-[0_0_0_2px_var(--sidebar-bg-from)]"
+              aria-label={`${badgeCount} pending`}
+            >
+              {formatBadge(badgeCount!)}
+            </span>
+          )}
+          {showActivityDot && (
+            <span
+              className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_0_2px_var(--sidebar-bg-from)]"
+              aria-label="New activity"
+            />
+          )}
+        </Link>
+      </SidebarFloatingTip>
     );
   }
 
@@ -173,6 +207,7 @@ export function SidebarNavItem({
 
         <Link
           href={item.href}
+          onClick={() => onItemClick?.(item.href)}
           onContextMenu={(e) => onContextMenu(e, item)}
           aria-current={active ? "page" : undefined}
           className={`
@@ -220,6 +255,29 @@ export function SidebarNavItem({
               </span>
             )}
           </div>
+
+          {/* Activity dot (suppressed when a count badge is shown) */}
+          {showActivityDot && (
+            <span
+              className="w-2 h-2 rounded-full bg-sky-400 flex-shrink-0"
+              aria-label="New activity"
+              title="New activity since your last visit"
+            />
+          )}
+
+          {/* Numeric count pill */}
+          {showBadge && (
+            <span
+              className={`flex-shrink-0 min-w-[20px] h-[18px] px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                active
+                  ? "bg-white/20 text-[color:var(--sidebar-active-text)]"
+                  : "bg-rose-500/90 text-white"
+              }`}
+              aria-label={`${badgeCount} pending`}
+            >
+              {formatBadge(badgeCount!)}
+            </span>
+          )}
 
           {/* Favorite indicator */}
           {isFav && !isCustomizing && (
