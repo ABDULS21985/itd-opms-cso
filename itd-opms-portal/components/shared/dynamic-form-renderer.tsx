@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useId } from "react";
+import { useState, useCallback, useEffect, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle,
@@ -641,6 +641,41 @@ interface DynamicFormRendererProps {
   onSubmit: (data: Record<string, unknown>) => void;
   isSubmitting?: boolean;
   submitLabel?: string;
+  initialValues?: Record<string, unknown>;
+}
+
+function emptyValueForField(field: FormSchemaField) {
+  if (field.type === "multi_select" || field.type === "file") return [];
+  if (field.type === "checkbox") return false;
+  return "";
+}
+
+function isEmptyFieldValue(value: unknown, field: FormSchemaField) {
+  if (field.type === "multi_select" || field.type === "file") {
+    return !Array.isArray(value) || value.length === 0;
+  }
+  if (field.type === "checkbox") return value === false || value === undefined;
+  return value === undefined || value === null || String(value).trim() === "";
+}
+
+function buildInitialFormData(
+  schema: FormSchema,
+  initialValues?: Record<string, unknown>,
+) {
+  const initial: Record<string, unknown> = {};
+  for (const field of schema.fields) {
+    if (
+      initialValues &&
+      Object.prototype.hasOwnProperty.call(initialValues, field.name)
+    ) {
+      initial[field.name] = initialValues[field.name];
+    } else if (field.defaultValue !== undefined) {
+      initial[field.name] = field.defaultValue;
+    } else {
+      initial[field.name] = emptyValueForField(field);
+    }
+  }
+  return initial;
 }
 
 export function DynamicFormRenderer({
@@ -648,27 +683,58 @@ export function DynamicFormRenderer({
   onSubmit,
   isSubmitting = false,
   submitLabel = "Submit Request",
+  initialValues,
 }: DynamicFormRendererProps) {
   const formId = useId();
   const [formData, setFormData] = useState<Record<string, unknown>>(() => {
-    const initial: Record<string, unknown> = {};
-    for (const field of schema.fields) {
-      if (field.defaultValue !== undefined) {
-        initial[field.name] = field.defaultValue;
-      } else if (field.type === "multi_select") {
-        initial[field.name] = [];
-      } else if (field.type === "file") {
-        initial[field.name] = [];
-      } else if (field.type === "checkbox") {
-        initial[field.name] = false;
-      } else {
-        initial[field.name] = "";
-      }
-    }
-    return initial;
+    return buildInitialFormData(schema, initialValues);
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setFormData((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const validNames = new Set(schema.fields.map((field) => field.name));
+
+      for (const key of Object.keys(next)) {
+        if (!validNames.has(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+
+      for (const field of schema.fields) {
+        const baseline =
+          field.defaultValue !== undefined
+            ? field.defaultValue
+            : emptyValueForField(field);
+        const incoming =
+          initialValues &&
+          Object.prototype.hasOwnProperty.call(initialValues, field.name)
+            ? initialValues[field.name]
+            : baseline;
+
+        if (!(field.name in next)) {
+          next[field.name] = incoming;
+          changed = true;
+          continue;
+        }
+
+        if (
+          incoming !== undefined &&
+          !Object.prototype.hasOwnProperty.call(touched, field.name) &&
+          isEmptyFieldValue(next[field.name], field)
+        ) {
+          next[field.name] = incoming;
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [schema, initialValues, touched]);
 
   const updateField = useCallback(
     (name: string, value: unknown) => {

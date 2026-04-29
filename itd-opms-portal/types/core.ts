@@ -15,6 +15,7 @@ export interface User {
   jobTitle?: string;
   office?: string;
   unit?: string;
+  employeeNumber?: string;
   phone?: string;
   orgUnitId?: string;
   orgLevel?: string;

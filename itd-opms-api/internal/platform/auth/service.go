@@ -29,23 +29,24 @@ type TokenPair struct {
 
 // UserProfile represents the authenticated user's profile data.
 type UserProfile struct {
-	ID          uuid.UUID  `json:"id"`
-	Email       string     `json:"email"`
-	DisplayName string     `json:"displayName"`
-	TenantID    uuid.UUID  `json:"tenantId"`
-	TenantName  string     `json:"tenantName"`
-	JobTitle    *string    `json:"jobTitle,omitempty"`
-	Department  *string    `json:"department,omitempty"`
-	Office      *string    `json:"office,omitempty"`
-	Unit        *string    `json:"unit,omitempty"`
-	Phone       *string    `json:"phone,omitempty"`
-	PhotoURL    *string    `json:"photoUrl,omitempty"`
-	Roles       []string   `json:"roles"`
-	Permissions []string   `json:"permissions"`
-	OrgUnitID   *uuid.UUID `json:"orgUnitId,omitempty"`
-	OrgLevel    string     `json:"orgLevel,omitempty"`
-	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
-	CreatedAt   *time.Time `json:"createdAt,omitempty"`
+	ID             uuid.UUID  `json:"id"`
+	Email          string     `json:"email"`
+	DisplayName    string     `json:"displayName"`
+	TenantID       uuid.UUID  `json:"tenantId"`
+	TenantName     string     `json:"tenantName"`
+	JobTitle       *string    `json:"jobTitle,omitempty"`
+	Department     *string    `json:"department,omitempty"`
+	Office         *string    `json:"office,omitempty"`
+	Unit           *string    `json:"unit,omitempty"`
+	EmployeeNumber *string    `json:"employeeNumber,omitempty"`
+	Phone          *string    `json:"phone,omitempty"`
+	PhotoURL       *string    `json:"photoUrl,omitempty"`
+	Roles          []string   `json:"roles"`
+	Permissions    []string   `json:"permissions"`
+	OrgUnitID      *uuid.UUID `json:"orgUnitId,omitempty"`
+	OrgLevel       string     `json:"orgLevel,omitempty"`
+	LastLoginAt    *time.Time `json:"lastLoginAt,omitempty"`
+	CreatedAt      *time.Time `json:"createdAt,omitempty"`
 }
 
 // UpdateProfileRequest is the payload for self-service profile updates.
@@ -97,34 +98,35 @@ func NewAuthService(pool *pgxpool.Pool, jwtCfg config.JWTConfig, minioClient *mi
 func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResponse, *MFALoginResponse, error) {
 	// Find the user by email.
 	var (
-		userID       uuid.UUID
-		tenantID     uuid.UUID
-		tenantName   string
-		displayName  string
-		passwordHash *string
-		jobTitle     *string
-		department   *string
-		office       *string
-		unit         *string
-		phone        *string
-		photoURL     *string
-		orgUnitID    *uuid.UUID
-		orgLevel     *string
-		lastLoginAt  *time.Time
-		createdAt    *time.Time
-		mfaEnabled   bool
+		userID         uuid.UUID
+		tenantID       uuid.UUID
+		tenantName     string
+		displayName    string
+		passwordHash   *string
+		jobTitle       *string
+		department     *string
+		office         *string
+		unit           *string
+		employeeNumber *string
+		phone          *string
+		photoURL       *string
+		orgUnitID      *uuid.UUID
+		orgLevel       *string
+		lastLoginAt    *time.Time
+		createdAt      *time.Time
+		mfaEnabled     bool
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.id, u.tenant_id, t.name, u.display_name, u.password_hash, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at,
+		        u.employee_number, u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at,
 		        COALESCE((to_jsonb(u)->>'mfa_enabled')::boolean, false)
 		 FROM users u
 		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.email = $1 AND u.is_active = true`,
 		email,
-	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt, &mfaEnabled)
+	).Scan(&userID, &tenantID, &tenantName, &displayName, &passwordHash, &jobTitle, &department, &office, &unit, &employeeNumber, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt, &mfaEnabled)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil, apperrors.Unauthorized("Invalid email or password")
@@ -212,22 +214,23 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 
 	now := time.Now()
 	profile := UserProfile{
-		ID:          userID,
-		Email:       email,
-		DisplayName: displayName,
-		TenantID:    tenantID,
-		TenantName:  tenantName,
-		JobTitle:    jobTitle,
-		Department:  department,
-		Office:      office,
-		Unit:        unit,
-		Phone:       phone,
-		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
-		Roles:       roles,
-		Permissions: permissions,
-		OrgUnitID:   orgUnitID,
-		LastLoginAt: &now,
-		CreatedAt:   createdAt,
+		ID:             userID,
+		Email:          email,
+		DisplayName:    displayName,
+		TenantID:       tenantID,
+		TenantName:     tenantName,
+		JobTitle:       jobTitle,
+		Department:     department,
+		Office:         office,
+		Unit:           unit,
+		EmployeeNumber: employeeNumber,
+		Phone:          phone,
+		PhotoURL:       s.resolvePhotoURL(ctx, photoURL),
+		Roles:          roles,
+		Permissions:    permissions,
+		OrgUnitID:      orgUnitID,
+		LastLoginAt:    &now,
+		CreatedAt:      createdAt,
 	}
 	if orgLevel != nil {
 		profile.OrgLevel = *orgLevel
@@ -244,30 +247,31 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 // GenerateLoginTokens creates a full LoginResponse for a user (used after MFA verification).
 func (s *AuthService) GenerateLoginTokens(ctx context.Context, userID uuid.UUID) (*LoginResponse, error) {
 	var (
-		email       string
-		tenantID    uuid.UUID
-		tenantName  string
-		displayName string
-		jobTitle    *string
-		department  *string
-		office      *string
-		unit        *string
-		phone       *string
-		photoURL    *string
-		orgUnitID   *uuid.UUID
-		orgLevel    *string
-		createdAt   *time.Time
+		email          string
+		tenantID       uuid.UUID
+		tenantName     string
+		displayName    string
+		jobTitle       *string
+		department     *string
+		office         *string
+		unit           *string
+		employeeNumber *string
+		phone          *string
+		photoURL       *string
+		orgUnitID      *uuid.UUID
+		orgLevel       *string
+		createdAt      *time.Time
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.email, u.tenant_id, t.name, u.display_name, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.created_at
+		        u.employee_number, u.phone, u.photo_url, u.org_unit_id, o.level::text, u.created_at
 		 FROM users u
 		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.id = $1`,
 		userID,
-	).Scan(&email, &tenantID, &tenantName, &displayName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &createdAt)
+	).Scan(&email, &tenantID, &tenantName, &displayName, &jobTitle, &department, &office, &unit, &employeeNumber, &phone, &photoURL, &orgUnitID, &orgLevel, &createdAt)
 	if err != nil {
 		return nil, apperrors.Internal("Failed to fetch user for token generation", err)
 	}
@@ -298,22 +302,23 @@ func (s *AuthService) GenerateLoginTokens(ctx context.Context, userID uuid.UUID)
 
 	now := time.Now()
 	profile := UserProfile{
-		ID:          userID,
-		Email:       email,
-		DisplayName: displayName,
-		TenantID:    tenantID,
-		TenantName:  tenantName,
-		JobTitle:    jobTitle,
-		Department:  department,
-		Office:      office,
-		Unit:        unit,
-		Phone:       phone,
-		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
-		Roles:       roles,
-		Permissions: permissions,
-		OrgUnitID:   orgUnitID,
-		LastLoginAt: &now,
-		CreatedAt:   createdAt,
+		ID:             userID,
+		Email:          email,
+		DisplayName:    displayName,
+		TenantID:       tenantID,
+		TenantName:     tenantName,
+		JobTitle:       jobTitle,
+		Department:     department,
+		Office:         office,
+		Unit:           unit,
+		EmployeeNumber: employeeNumber,
+		Phone:          phone,
+		PhotoURL:       s.resolvePhotoURL(ctx, photoURL),
+		Roles:          roles,
+		Permissions:    permissions,
+		OrgUnitID:      orgUnitID,
+		LastLoginAt:    &now,
+		CreatedAt:      createdAt,
 	}
 	if orgLevel != nil {
 		profile.OrgLevel = *orgLevel
@@ -537,31 +542,32 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, curr
 // permissions, and org scope information.
 func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile, error) {
 	var (
-		email       string
-		displayName string
-		tenantID    uuid.UUID
-		tenantName  string
-		jobTitle    *string
-		department  *string
-		office      *string
-		unit        *string
-		phone       *string
-		photoURL    *string
-		orgUnitID   *uuid.UUID
-		orgLevel    *string
-		lastLoginAt *time.Time
-		createdAt   *time.Time
+		email          string
+		displayName    string
+		tenantID       uuid.UUID
+		tenantName     string
+		jobTitle       *string
+		department     *string
+		office         *string
+		unit           *string
+		employeeNumber *string
+		phone          *string
+		photoURL       *string
+		orgUnitID      *uuid.UUID
+		orgLevel       *string
+		lastLoginAt    *time.Time
+		createdAt      *time.Time
 	)
 
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.email, u.display_name, u.tenant_id, t.name, u.job_title, u.department, u.office, u.unit,
-		        u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
+		        u.employee_number, u.phone, u.photo_url, u.org_unit_id, o.level::text, u.last_login_at, u.created_at
 		 FROM users u
 		 JOIN tenants t ON t.id = u.tenant_id
 		 LEFT JOIN org_units o ON o.id = u.org_unit_id
 		 WHERE u.id = $1 AND u.is_active = true`,
 		userID,
-	).Scan(&email, &displayName, &tenantID, &tenantName, &jobTitle, &department, &office, &unit, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
+	).Scan(&email, &displayName, &tenantID, &tenantName, &jobTitle, &department, &office, &unit, &employeeNumber, &phone, &photoURL, &orgUnitID, &orgLevel, &lastLoginAt, &createdAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NotFound("user", userID.String())
@@ -575,22 +581,23 @@ func (s *AuthService) GetMe(ctx context.Context, userID uuid.UUID) (*UserProfile
 	}
 
 	profile := &UserProfile{
-		ID:          userID,
-		Email:       email,
-		DisplayName: displayName,
-		TenantID:    tenantID,
-		TenantName:  tenantName,
-		JobTitle:    jobTitle,
-		Department:  department,
-		Office:      office,
-		Unit:        unit,
-		Phone:       phone,
-		PhotoURL:    s.resolvePhotoURL(ctx, photoURL),
-		Roles:       roles,
-		Permissions: permissions,
-		OrgUnitID:   orgUnitID,
-		LastLoginAt: lastLoginAt,
-		CreatedAt:   createdAt,
+		ID:             userID,
+		Email:          email,
+		DisplayName:    displayName,
+		TenantID:       tenantID,
+		TenantName:     tenantName,
+		JobTitle:       jobTitle,
+		Department:     department,
+		Office:         office,
+		Unit:           unit,
+		EmployeeNumber: employeeNumber,
+		Phone:          phone,
+		PhotoURL:       s.resolvePhotoURL(ctx, photoURL),
+		Roles:          roles,
+		Permissions:    permissions,
+		OrgUnitID:      orgUnitID,
+		LastLoginAt:    lastLoginAt,
+		CreatedAt:      createdAt,
 	}
 	if orgLevel != nil {
 		profile.OrgLevel = *orgLevel

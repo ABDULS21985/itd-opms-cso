@@ -26,8 +26,10 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   DynamicFormRenderer,
   type FormSchema,
+  type FormSchemaField,
 } from "@/components/shared/dynamic-form-renderer";
-import type { CatalogItem } from "@/types";
+import { useAuth } from "@/providers/auth-provider";
+import type { CatalogItem, User } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton                                                           */
@@ -181,6 +183,105 @@ function ApprovalInfo({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Profile Auto-Fill                                                  */
+/* ------------------------------------------------------------------ */
+
+type ProfileUser = User & {
+  employeeNumber?: string;
+  employeeId?: string;
+  staffId?: string;
+};
+
+function normalizeProfileField(value: string | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function hasAnyToken(value: string, tokens: string[]) {
+  return tokens.some((token) => value.includes(token));
+}
+
+function profileValueForField(field: FormSchemaField, user: ProfileUser) {
+  const name = normalizeProfileField(field.name);
+  const label = normalizeProfileField(field.label);
+  const combined = `${name} ${label}`;
+  const externalPersonField = hasAnyToken(combined, [
+    "guest",
+    "visitor",
+    "vendor",
+    "supplier",
+    "third_party",
+    "thirdparty",
+  ]);
+
+  const employeeNumber = user.employeeNumber || user.employeeId || user.staffId || "";
+
+  if (
+    !externalPersonField &&
+    (["full_name", "fullname", "requester_name", "requestor_name", "employee_name", "staff_name"].includes(name) ||
+      label === "full_name" ||
+      label === "employee_name" ||
+      label === "staff_name")
+  ) {
+    return user.displayName;
+  }
+
+  if (
+    ["employee_id", "employee_number", "staff_id", "staff_number", "requester_employee_id", "requestor_employee_id"].includes(name) ||
+    label === "employee_id" ||
+    label === "employee_contractor_id" ||
+    label === "staff_id"
+  ) {
+    return employeeNumber;
+  }
+
+  if (["email", "email_address", "work_email", "requester_email", "requestor_email"].includes(name) && !externalPersonField) {
+    return user.email;
+  }
+
+  if (["department", "department_office", "division_department", "requester_department", "requestor_department"].includes(name)) {
+    return user.department ?? "";
+  }
+
+  if (["job_title", "position", "designation", "role_title"].includes(name)) {
+    return user.jobTitle ?? "";
+  }
+
+  if (["office", "office_name", "location", "duty_station"].includes(name)) {
+    return user.office ?? "";
+  }
+
+  if (["unit", "team", "section"].includes(name)) {
+    return user.unit ?? "";
+  }
+
+  if (["phone", "phone_number", "mobile", "mobile_number", "telephone"].includes(name)) {
+    return user.phone ?? "";
+  }
+
+  if (["user_id", "requester_id", "requestor_id"].includes(name)) {
+    return user.id;
+  }
+
+  return undefined;
+}
+
+function buildProfileInitialValues(schema: FormSchema | null, user: User | null) {
+  if (!schema || !user) return undefined;
+
+  const profileUser = user as ProfileUser;
+  const values: Record<string, unknown> = {};
+
+  for (const field of schema.fields) {
+    const value = profileValueForField(field, profileUser);
+    if (typeof value === "string" && value.trim() !== "") {
+      values[field.name] = value;
+    }
+  }
+
+  return Object.keys(values).length > 0 ? values : undefined;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -188,6 +289,7 @@ export default function ServiceCatalogDetailPage() {
   const params = useParams();
   const router = useRouter();
   const itemId = params.itemId as string;
+  const { user } = useAuth();
 
   const { data: item, isLoading: itemLoading } = useCatalogItem(itemId);
   const { data: category } = useCatalogCategory(item?.categoryId);
@@ -209,6 +311,11 @@ export default function ServiceCatalogDetailPage() {
     }
     return null;
   }, [item?.formSchema]);
+
+  const profileInitialValues = useMemo(
+    () => buildProfileInitialValues(formSchema, user),
+    [formSchema, user],
+  );
 
   // SLA priority targets formatted
   const slaTargets = useMemo(() => {
@@ -529,6 +636,7 @@ export default function ServiceCatalogDetailPage() {
             {formSchema ? (
               <DynamicFormRenderer
                 schema={formSchema}
+                initialValues={profileInitialValues}
                 onSubmit={handleFormSubmit}
                 isSubmitting={createTicket.isPending}
                 submitLabel="Submit Service Request"
