@@ -7,7 +7,6 @@ import {
   CheckSquare,
   Filter,
   Clock,
-  CheckCircle2,
   Layers3,
   ShieldCheck,
 } from "lucide-react";

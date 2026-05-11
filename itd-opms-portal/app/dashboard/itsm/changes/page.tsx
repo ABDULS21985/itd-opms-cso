@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle,
   ArrowRight,
   Calendar,
   CheckCircle2,
@@ -13,7 +12,6 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  Search,
   Shield,
   Zap,
   type LucideIcon,
@@ -34,10 +32,6 @@ function formatDate(value?: string) {
     month: "short",
     year: "numeric",
   });
-}
-
-function humanize(value?: string) {
-  return value ? value.replace(/_/g, " ") : "\u2014";
 }
 
 const CLASSIFICATION_META: Record<string, { icon: LucideIcon; accent: string; bg: string }> = {

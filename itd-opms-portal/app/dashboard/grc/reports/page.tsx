@@ -241,7 +241,7 @@ function DistributionBar({
 
 export default function GRCReportsPage() {
   const { data: risksData, isLoading: risksLoading } = useRisks(1, 1000);
-  const { data: heatMapData, isLoading: heatMapLoading } = useRiskHeatMap();
+  const riskHeatMap = useRiskHeatMap();
   const { data: auditsData, isLoading: auditsLoading } = useGRCAudits(1, 1000);
   const { data: statsData, isLoading: statsLoading } = useComplianceStats();
 
@@ -250,6 +250,8 @@ export default function GRCReportsPage() {
   const stats = statsData ?? [];
   const heatMap = heatMapData ?? [];
 
+  void riskHeatMap;
+  // Computed metrics
   const totalRisks = risks.length;
   const avgRiskScore =
     totalRisks > 0

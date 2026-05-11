@@ -12,17 +12,13 @@ import {
   ChevronDown,
   Info,
   AlertTriangle,
-  Flag,
   CalendarCheck,
-  Building2,
-  Layers,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
   CheckCircle2,
   XCircle,
   Timer,
-  Milestone as MilestoneIcon,
 } from "lucide-react";
 import { InfoHint } from "@/components/shared/info-hint";
 import {
@@ -40,7 +36,6 @@ import {
   RadarChart,
   GaugeChart,
   HeatMapGrid,
-  StackedBarChart,
 } from "@/components/dashboard/charts";
 import {
   BarChart,
@@ -51,7 +46,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import type { Project, Portfolio, PortfolioTimelineItem, Risk, PlanningMilestone } from "@/types";
 

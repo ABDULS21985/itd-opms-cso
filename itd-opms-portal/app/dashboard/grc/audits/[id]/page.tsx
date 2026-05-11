@@ -23,8 +23,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Target,
-  Clock3,
-  ExternalLink,
   ArrowRightCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";

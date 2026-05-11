@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   Clock,
   Edit3,
-  X,
   ChevronRight,
   Sparkles,
   Lock,
@@ -31,7 +30,6 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { toast } from "sonner";
-import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -818,7 +816,7 @@ function SecurityTab({
   router: ReturnType<typeof useRouter>;
   u: Record<string, unknown> | null;
 }) {
-  const { data: methods = [], isLoading: methodsLoading } = useMFAMethods();
+  const { data: methods = [] } = useMFAMethods();
   const setupTOTP = useSetupTOTP();
   const verifySetup = useVerifyTOTPSetup();
   const genBackupCodes = useGenerateBackupCodes();

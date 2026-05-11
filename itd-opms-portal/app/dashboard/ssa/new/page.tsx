@@ -28,7 +28,7 @@ import {
   SSAHeroChip,
   SSAHeroInsight,
 } from "../_components/ssa-ui";
-import { useCreateSSARequest, useCreateServiceImpact } from "@/hooks/use-ssa";
+import { useCreateSSARequest } from "@/hooks/use-ssa";
 import { useAuth } from "@/providers/auth-provider";
 import type { SSARequest, ServiceImpact } from "@/types/ssa";
 import {
@@ -88,7 +88,6 @@ export default function NewSSARequestPage() {
   const router = useRouter();
   const { user } = useAuth();
   const createSSARequest = useCreateSSARequest();
-  const createServiceImpact = useCreateServiceImpact(undefined);
 
   /* ---- Stepper state ---- */
   const [step, setStep] = useState(0);

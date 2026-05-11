@@ -16,7 +16,6 @@ import {
   Trash2,
   X,
   Search,
-  Calendar,
   ChevronDown,
   ChevronUp,
   LayoutGrid,
@@ -27,8 +26,6 @@ import {
   UserCircle,
   FolderKanban,
   Percent,
-  Clock,
-  CheckCircle2,
   Download,
 } from "lucide-react";
 import {

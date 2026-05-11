@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@/test/test-utils";
 import { SLAGauge } from "@/app/dashboard/itsm/tickets/[id]/page";
 

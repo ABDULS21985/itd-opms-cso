@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Check,
   X,
-  Clock,
   Send,
   CheckCircle,
   XCircle,

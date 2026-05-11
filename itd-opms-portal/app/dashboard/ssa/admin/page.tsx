@@ -37,7 +37,6 @@ import type { SSARequest, SSARequestStats } from "@/types/ssa";
 import {
   SSA_STATUS_LABELS,
   SSA_STATUS_COLORS,
-  SSA_STATUSES,
 } from "@/types/ssa";
 
 /* ------------------------------------------------------------------ */
@@ -100,54 +99,6 @@ function getStatusColor(status: string): string {
 
 function getStatusLabel(status: string): string {
   return SSA_STATUS_LABELS[status] ?? status;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Stat Card                                                          */
-/* ------------------------------------------------------------------ */
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  delay,
-}: {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
-  color: string;
-  delay: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay }}
-      className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
-    >
-      <div
-        className="absolute -right-4 -top-4 h-24 w-24 rounded-full opacity-[0.07]"
-        style={{ background: `radial-gradient(circle, ${color}, transparent)` }}
-      />
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[var(--neutral-gray)]">
-            {label}
-          </p>
-          <p className="mt-1 text-2xl font-bold text-[var(--text-primary)] tabular-nums">
-            {value}
-          </p>
-        </div>
-        <div
-          className="flex h-11 w-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${color}14` }}
-        >
-          <Icon size={20} style={{ color }} />
-        </div>
-      </div>
-    </motion.div>
-  );
 }
 
 /* ------------------------------------------------------------------ */
