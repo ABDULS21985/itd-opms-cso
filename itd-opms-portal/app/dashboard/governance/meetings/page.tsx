@@ -6,15 +6,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Activity,
-  AlertTriangle,
   ArrowLeft,
   Calendar,
   CheckCircle2,
   ClipboardList,
   Clock3,
   Plus,
+  Search,
   Sparkles,
   Target,
+  User,
+  X,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -58,6 +60,58 @@ function formatStatusLabel(value?: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+/** Friendly "in 3 days" / "2 days ago" relative label without the "ago" noise for future dates. */
+function formatDueHint(value: string) {
+  const target = new Date(value).getTime();
+  const now = Date.now();
+  const dayMs = 86_400_000;
+  const diffDays = Math.round((target - now) / dayMs);
+  if (diffDays === 0) return "Due today";
+  if (diffDays === 1) return "Due tomorrow";
+  if (diffDays === -1) return "Due yesterday";
+  if (diffDays > 1) return `Due in ${diffDays} days`;
+  return `${Math.abs(diffDays)} days overdue`;
+}
+
+/** Deterministic accent color for an id so each person avatar stays stable. */
+const AVATAR_COLORS = [
+  "#2563EB",
+  "#10B981",
+  "#7C3AED",
+  "#D97706",
+  "#DC2626",
+  "#0891B2",
+  "#DB2777",
+  "#65A30D",
+];
+
+function PersonCell({ id, fallback }: { id?: string; fallback?: string }) {
+  if (!id) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <User size={14} />
+        {fallback ?? "Unassigned"}
+      </span>
+    );
+  }
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  return (
+    <span className="inline-flex items-center gap-2" title={id}>
+      <span
+        className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold uppercase text-white"
+        style={{ backgroundColor: color }}
+      >
+        {id.slice(0, 2)}
+      </span>
+      <span className="font-mono text-xs text-[var(--text-secondary)]">
+        {id.slice(0, 8)}
+      </span>
+    </span>
+  );
+}
+
 function LoadingValue({ width = "w-14" }: { width?: string }) {
   return (
     <span
@@ -72,23 +126,44 @@ function MetricCard({
   helper,
   color,
   loading,
+  onClick,
+  active,
 }: {
   label: string;
   value: number | string;
   helper: string;
   color: string;
   loading?: boolean;
+  onClick?: () => void;
+  active?: boolean;
 }) {
+  const interactive = Boolean(onClick);
   return (
-    <div
-      className="rounded-[28px] border p-5"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!interactive}
+      className={`group h-full w-full rounded-[28px] border p-5 text-left transition-all duration-200 ${
+        interactive
+          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2"
+          : "cursor-default"
+      }`}
       style={{
-        borderColor: `${color}1f`,
-        backgroundImage: `radial-gradient(circle at 100% 0%, ${color}14, transparent 30%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+        borderColor: active ? `${color}66` : `${color}1f`,
+        backgroundImage: `radial-gradient(circle at 100% 0%, ${color}${active ? "26" : "14"}, transparent 30%), linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%)`,
+        boxShadow: active ? `0 18px 48px -32px ${color}99` : undefined,
       }}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+      <p className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
         {label}
+        {interactive && (
+          <span
+            className="text-[10px] font-medium normal-case tracking-normal opacity-0 transition-opacity group-hover:opacity-100"
+            style={{ color }}
+          >
+            {active ? "Filtered" : "View →"}
+          </span>
+        )}
       </p>
       <p className="mt-3 text-3xl font-bold tabular-nums" style={{ color }}>
         {loading ? <LoadingValue /> : value}
@@ -96,7 +171,7 @@ function MetricCard({
       <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
         {helper}
       </p>
-    </div>
+    </button>
   );
 }
 
@@ -147,6 +222,7 @@ function getProgramPulse(
 export default function MeetingsAndActionsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("meetings");
+  const [search, setSearch] = useState("");
 
   const [meetingPage, setMeetingPage] = useState(1);
   const [meetingStatus, setMeetingStatus] = useState<string | undefined>(
@@ -288,11 +364,7 @@ export default function MeetingsAndActionsPage() {
     {
       key: "organizerId",
       header: "Organizer",
-      render: (item) => (
-        <span className="text-xs font-mono text-[var(--text-secondary)]">
-          {item.organizerId?.slice(0, 8)}...
-        </span>
-      ),
+      render: (item) => <PersonCell id={item.organizerId} />,
     },
     {
       key: "status",
@@ -321,11 +393,7 @@ export default function MeetingsAndActionsPage() {
     {
       key: "ownerId",
       header: "Owner",
-      render: (item) => (
-        <span className="text-xs font-mono text-[var(--text-secondary)]">
-          {item.ownerId.slice(0, 8)}...
-        </span>
-      ),
+      render: (item) => <PersonCell id={item.ownerId} />,
     },
     {
       key: "dueDate",
@@ -347,8 +415,12 @@ export default function MeetingsAndActionsPage() {
             >
               {formatDate(item.dueDate)}
             </p>
-            <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-              {isOverdue ? "Overdue" : "In timeline"}
+            <p
+              className={`mt-0.5 text-xs ${isOverdue ? "text-[var(--error)]" : "text-[var(--text-secondary)]"}`}
+            >
+              {item.status === "completed"
+                ? "Completed"
+                : formatDueHint(item.dueDate)}
             </p>
           </div>
         );
@@ -423,6 +495,38 @@ export default function MeetingsAndActionsPage() {
     setActionStatus(normalized);
     setActionPage(1);
   }
+
+  // Jump from a summary card straight into the matching workspace + status filter.
+  function focusWorkspace(tab: Tab, status?: string) {
+    setActiveTab(tab);
+    setSearch("");
+    if (tab === "meetings") {
+      setMeetingStatus(status);
+      setMeetingPage(1);
+    } else {
+      setActionStatus(status);
+      setActionPage(1);
+    }
+  }
+
+  // Client-side search across the currently loaded page of the active workspace.
+  const query = search.trim().toLowerCase();
+  const filteredMeetings = useMemo(() => {
+    if (!query) return meetings;
+    return meetings.filter((m) =>
+      [m.title, m.meetingType, m.location, m.organizerId]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(query)),
+    );
+  }, [meetings, query]);
+  const filteredActions = useMemo(() => {
+    if (!query) return actions;
+    return actions.filter((a) =>
+      [a.title, a.sourceType, a.priority, a.ownerId]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(query)),
+    );
+  }, [actions, query]);
 
   return (
     <div className="space-y-8 pb-8">
@@ -561,6 +665,8 @@ export default function MeetingsAndActionsPage() {
           helper="Meetings currently visible with planned dates and expected governance cadence."
           color="#2563EB"
           loading={meetingsLoading}
+          onClick={() => focusWorkspace("meetings", "scheduled")}
+          active={activeTab === "meetings" && meetingStatus === "scheduled"}
         />
         <MetricCard
           label="Meetings completed"
@@ -568,6 +674,8 @@ export default function MeetingsAndActionsPage() {
           helper="Meetings that already produced minutes, outcomes, or a closed cadence loop."
           color="#10B981"
           loading={meetingsLoading}
+          onClick={() => focusWorkspace("meetings", "completed")}
+          active={activeTab === "meetings" && meetingStatus === "completed"}
         />
         <MetricCard
           label="Actions in motion"
@@ -575,6 +683,8 @@ export default function MeetingsAndActionsPage() {
           helper="Open or active follow-through items still assigned to execution owners."
           color="#7C3AED"
           loading={actionsLoading}
+          onClick={() => focusWorkspace("actions", "open")}
+          active={activeTab === "actions" && actionStatus === "open"}
         />
         <MetricCard
           label="Critical pressure"
@@ -582,6 +692,8 @@ export default function MeetingsAndActionsPage() {
           helper="High or critical action items that need closer steering from governance leads."
           color="#DC2626"
           loading={actionsLoading}
+          onClick={() => focusWorkspace("actions", "overdue")}
+          active={activeTab === "actions" && actionStatus === "overdue"}
         />
       </div>
 
@@ -611,7 +723,10 @@ export default function MeetingsAndActionsPage() {
             <button
               key={workspace.key}
               type="button"
-              onClick={() => setActiveTab(workspace.key)}
+              onClick={() => {
+                setActiveTab(workspace.key);
+                setSearch("");
+              }}
               className="rounded-[28px] border p-5 text-left transition-all duration-200"
               style={{
                 borderColor: active
@@ -691,7 +806,19 @@ export default function MeetingsAndActionsPage() {
                 <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
                   {currentLoading
                     ? "Loading current workspace..."
-                    : `${currentCount} item${currentCount !== 1 ? "s" : ""} visible with ${formatStatusLabel(currentStatusValue)} status coverage.`}
+                    : query
+                      ? `${
+                          activeTab === "meetings"
+                            ? filteredMeetings.length
+                            : filteredActions.length
+                        } match${
+                          (activeTab === "meetings"
+                            ? filteredMeetings.length
+                            : filteredActions.length) !== 1
+                            ? "es"
+                            : ""
+                        } for "${search}" on this page.`
+                      : `${currentCount} item${currentCount !== 1 ? "s" : ""} visible with ${formatStatusLabel(currentStatusValue)} status coverage.`}
                 </p>
               </div>
 
@@ -723,6 +850,34 @@ export default function MeetingsAndActionsPage() {
                 })}
               </div>
             </div>
+
+            <div className="relative mt-4">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={
+                  activeTab === "meetings"
+                    ? "Search meetings by title, type, location..."
+                    : "Search actions by title, source, priority..."
+                }
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] py-3 pl-11 pr-11 text-sm text-[var(--text-primary)] transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+                  aria-label="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           <motion.div
@@ -734,11 +889,15 @@ export default function MeetingsAndActionsPage() {
             {activeTab === "meetings" ? (
               <DataTable
                 columns={meetingColumns}
-                data={meetings}
+                data={filteredMeetings}
                 keyExtractor={(item) => item.id}
                 loading={meetingsLoading}
-                emptyTitle="No meetings found"
-                emptyDescription="Schedule your first meeting to establish the governance cadence."
+                emptyTitle={query ? "No matching meetings" : "No meetings found"}
+                emptyDescription={
+                  query
+                    ? `No meetings on this page match "${search}". Try a different search or clear it.`
+                    : "Schedule your first meeting to establish the governance cadence."
+                }
                 emptyAction={
                   <Link
                     href="/dashboard/governance/meetings/new"
@@ -767,11 +926,25 @@ export default function MeetingsAndActionsPage() {
             ) : (
               <DataTable
                 columns={actionColumns}
-                data={actions}
+                data={filteredActions}
                 keyExtractor={(item) => item.id}
                 loading={actionsLoading}
-                emptyTitle="No action items found"
-                emptyDescription="Action items from meetings and decisions will appear here."
+                emptyTitle={query ? "No matching actions" : "No action items found"}
+                emptyDescription={
+                  query
+                    ? `No actions on this page match "${search}". Try a different search or clear it.`
+                    : "Action items from meetings and decisions will appear here."
+                }
+                emptyAction={
+                  <Link
+                    href="/dashboard/governance/actions"
+                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:opacity-90"
+                    style={{ backgroundColor: "var(--primary)" }}
+                  >
+                    <ClipboardList size={16} />
+                    Open Action Hub
+                  </Link>
+                }
                 pagination={
                   actionMeta
                     ? {
@@ -888,11 +1061,21 @@ export default function MeetingsAndActionsPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                   Next due item
                 </p>
-                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
-                  {actionSummary.nextDue
-                    ? `${actionSummary.nextDue.title} due ${formatDate(actionSummary.nextDue.dueDate)}`
-                    : "No upcoming due action in the visible tracker"}
-                </p>
+                {actionSummary.nextDue ? (
+                  <>
+                    <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                      {actionSummary.nextDue.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {formatDate(actionSummary.nextDue.dueDate)} ·{" "}
+                      {formatDueHint(actionSummary.nextDue.dueDate)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                    No upcoming due action in the visible tracker
+                  </p>
+                )}
               </div>
             </div>
           </div>
