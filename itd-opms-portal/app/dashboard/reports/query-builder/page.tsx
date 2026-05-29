@@ -57,19 +57,19 @@ const CHART_ICONS: Record<string, React.ElementType> = {
 };
 
 const PANEL_CLASS =
-  "rounded-[1.75rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 
 const INPUT_CLASS =
-  "w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-all placeholder:text-[var(--text-tertiary)] focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100";
+  "w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] transition-all placeholder:text-[var(--text-tertiary)] focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100";
 
 const SECONDARY_BUTTON_CLASS =
-  "inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white/82 px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--surface-2)] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50";
 
 const PRIMARY_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_40px_-24px_rgba(5,150,105,0.85)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_28px_48px_-26px_rgba(13,148,136,0.75)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const ICON_BUTTON_CLASS =
-  "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/90 text-[var(--text-tertiary)] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500";
+  "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-tertiary)] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500";
 
 const ENTITY_META: Record<
   string,
@@ -625,7 +625,7 @@ export default function QueryBuilderPage() {
                   Point the builder at the record set you want to explore.
                 </p>
               </div>
-              <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
                 {activeEntity.label}
               </span>
             </div>
@@ -676,7 +676,7 @@ export default function QueryBuilderPage() {
                   exports.
                 </p>
               </div>
-              <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
                 {selectedColumns.length}/{currentFields.length || 0}
               </span>
             </div>
@@ -692,7 +692,7 @@ export default function QueryBuilderPage() {
                   </span>
                 ))}
                 {selectedColumns.length > highlightedColumns.length && (
-                  <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
                     +{selectedColumns.length - highlightedColumns.length} more
                   </span>
                 )}
@@ -706,21 +706,21 @@ export default function QueryBuilderPage() {
                 return (
                   <label
                     key={field.name}
-                    className="flex cursor-pointer items-center gap-3 rounded-[1.15rem] border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                    className="flex cursor-pointer items-center gap-3 rounded-[1.15rem] border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
                     style={{
                       borderColor: active
                         ? activeEntityMeta.border
-                        : "rgba(226, 232, 240, 0.85)",
+                        : "var(--border)",
                       backgroundColor: active
                         ? activeEntityMeta.tint
-                        : "rgba(248, 250, 252, 0.9)",
+                        : "var(--surface-1)",
                     }}
                   >
                     <input
                       type="checkbox"
                       checked={active}
                       onChange={() => toggleColumn(field.name)}
-                      className="h-4 w-4 rounded border-slate-300"
+                      className="h-4 w-4 rounded border-[var(--border)]"
                       style={{ accentColor: activeEntityMeta.accent }}
                     />
                     <div className="min-w-0">
@@ -731,7 +731,7 @@ export default function QueryBuilderPage() {
                         Included in preview and export output
                       </p>
                     </div>
-                    <span className="ml-auto rounded-full border border-slate-200/80 bg-white/84 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+                    <span className="ml-auto rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
                       {field.type}
                     </span>
                   </label>
@@ -739,7 +739,7 @@ export default function QueryBuilderPage() {
               })}
 
               {currentFields.length === 0 && (
-                <div className="rounded-[1.3rem] border border-dashed border-slate-200/80 bg-slate-50/80 px-4 py-10 text-center text-sm text-[var(--text-tertiary)]">
+                <div className="rounded-[1.3rem] border border-dashed border-[var(--border)] bg-[var(--surface-1)] px-4 py-10 text-center text-sm text-[var(--text-tertiary)]">
                   Loading entity schema...
                 </div>
               )}
@@ -834,10 +834,10 @@ export default function QueryBuilderPage() {
                         style={{
                           borderColor: active
                             ? activeEntityMeta.border
-                            : "rgba(226, 232, 240, 0.85)",
+                            : "var(--border)",
                           backgroundColor: active
                             ? activeEntityMeta.tint
-                            : "rgba(248, 250, 252, 0.88)",
+                            : "var(--surface-1)",
                           color: active
                             ? activeEntityMeta.accent
                             : "var(--text-secondary)",
@@ -848,10 +848,10 @@ export default function QueryBuilderPage() {
                           style={{
                             borderColor: active
                               ? activeEntityMeta.border
-                              : "rgba(226, 232, 240, 0.85)",
+                              : "var(--border)",
                             backgroundColor: active
-                              ? "rgba(255,255,255,0.62)"
-                              : "white",
+                              ? "var(--surface-0)"
+                              : "var(--surface-2)",
                           }}
                         >
                           <Icon size={16} />
@@ -906,8 +906,8 @@ export default function QueryBuilderPage() {
             </div>
 
             {filters.length === 0 ? (
-              <div className="mt-5 rounded-[1.4rem] border border-dashed border-slate-200/80 bg-slate-50/85 px-5 py-12 text-center">
-                <Filter size={32} className="mx-auto text-slate-300" />
+              <div className="mt-5 rounded-[1.4rem] border border-dashed border-[var(--border)] bg-[var(--surface-1)] px-5 py-12 text-center">
+                <Filter size={32} className="mx-auto text-[var(--text-tertiary)]" />
                 <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">
                   No filters applied
                 </p>
@@ -921,7 +921,7 @@ export default function QueryBuilderPage() {
                 {filters.map((filter, index) => (
                   <div
                     key={index}
-                    className="grid gap-3 rounded-[1.35rem] border border-slate-200/80 bg-slate-50/85 p-3 lg:grid-cols-[minmax(0,1.05fr)_210px_minmax(0,1.2fr)_auto]"
+                    className="grid gap-3 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] p-3 lg:grid-cols-[minmax(0,1.05fr)_210px_minmax(0,1.2fr)_auto]"
                   >
                     <select
                       value={filter.field}
@@ -970,7 +970,7 @@ export default function QueryBuilderPage() {
                         className={INPUT_CLASS}
                       />
                     ) : (
-                      <div className="flex items-center rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-tertiary)]">
+                      <div className="flex items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-tertiary)]">
                         No value required for this operator
                       </div>
                     )}
@@ -989,7 +989,7 @@ export default function QueryBuilderPage() {
           </section>
 
           <section className={`${PANEL_CLASS} overflow-hidden`}>
-            <div className="border-b border-slate-200/80 bg-slate-50/75 px-5 py-4">
+            <div className="border-b border-[var(--border)] bg-[var(--surface-1)] px-5 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-[var(--text-primary)]">
@@ -1001,17 +1001,17 @@ export default function QueryBuilderPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                     {previewResult
                       ? `${previewResult.rowCount} rows`
                       : "No preview"}
                   </span>
-                  <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                     {previewResult
                       ? `${previewResult.columns.length} columns`
                       : `${selectedColumns.length} selected`}
                   </span>
-                  <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                     {activeChart.label}
                   </span>
                 </div>
@@ -1038,7 +1038,7 @@ export default function QueryBuilderPage() {
                 {[...Array(6)].map((_, index) => (
                   <div
                     key={index}
-                    className="h-12 animate-pulse rounded-[1rem] bg-slate-100"
+                    className="h-12 animate-pulse rounded-[1rem] bg-[var(--surface-2)]"
                   />
                 ))}
               </div>
@@ -1048,7 +1048,7 @@ export default function QueryBuilderPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200/80 bg-slate-50/85">
+                    <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                       {previewResult.columns.map((column) => (
                         <th
                           key={column}
@@ -1063,7 +1063,7 @@ export default function QueryBuilderPage() {
                     {previewResult.rows.map((row, index) => (
                       <tr
                         key={index}
-                        className="border-b border-slate-100 last:border-b-0 hover:bg-emerald-50/35"
+                        className="border-b border-[var(--border)] last:border-b-0 hover:bg-emerald-50/35"
                       >
                         {previewResult.columns.map((column) => (
                           <td
@@ -1110,7 +1110,7 @@ export default function QueryBuilderPage() {
               onClick={(e) => e.stopPropagation()}
               className={`${PANEL_CLASS} w-full max-w-xl overflow-hidden p-0`}
             >
-              <div className="border-b border-slate-200/80 bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
+              <div className="border-b border-[var(--border)] bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Save Query</h2>
@@ -1155,7 +1155,7 @@ export default function QueryBuilderPage() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-[1.35rem] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
                     <span className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
                       <Share2 size={14} />
                       Share with team
@@ -1180,7 +1180,7 @@ export default function QueryBuilderPage() {
                     </button>
                   </div>
 
-                  <div className="rounded-[1.4rem] border border-slate-200/80 bg-slate-50/80 p-4">
+                  <div className="rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-1)] p-4">
                     <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                       <Clock size={14} />
                       Schedule
@@ -1244,7 +1244,7 @@ export default function QueryBuilderPage() {
               onClick={(e) => e.stopPropagation()}
               className={`${PANEL_CLASS} w-full max-w-xl overflow-hidden p-0`}
             >
-              <div className="border-b border-slate-200/80 bg-gradient-to-r from-[#0f5132] to-[#0b6177] px-6 py-5 text-white">
+              <div className="border-b border-[var(--border)] bg-gradient-to-r from-[#0f5132] to-[#0b6177] px-6 py-5 text-white">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Saved Queries</h2>
@@ -1264,7 +1264,7 @@ export default function QueryBuilderPage() {
 
               <div className="p-6">
                 {savedQueries.length === 0 ? (
-                  <div className="rounded-[1.35rem] border border-dashed border-slate-200/80 bg-slate-50/80 px-5 py-10 text-center text-sm text-[var(--text-tertiary)]">
+                  <div className="rounded-[1.35rem] border border-dashed border-[var(--border)] bg-[var(--surface-1)] px-5 py-10 text-center text-sm text-[var(--text-tertiary)]">
                     No saved queries yet
                   </div>
                 ) : (
@@ -1272,7 +1272,7 @@ export default function QueryBuilderPage() {
                     {savedQueries.map((sq) => (
                       <div
                         key={sq.id}
-                        className="flex items-center justify-between gap-3 rounded-[1.25rem] border border-slate-200/80 bg-slate-50/80 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                        className="flex items-center justify-between gap-3 rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-1)] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
                       >
                         <div
                           className="min-w-0 flex-1 cursor-pointer"
@@ -1287,7 +1287,7 @@ export default function QueryBuilderPage() {
                             )?.label || sq.entityType}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full border border-slate-200/80 bg-white/84 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+                            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
                               {sq.columns.length} columns
                             </span>
                             {sq.schedule && (

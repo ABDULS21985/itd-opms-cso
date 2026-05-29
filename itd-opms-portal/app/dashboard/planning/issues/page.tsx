@@ -30,9 +30,9 @@ import type { ProjectIssue } from "@/types";
 /* ------------------------------------------------------------------ */
 
 const PANEL_CLASS =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const SOFT_PANEL_CLASS =
-  "rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  "rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
 const PRIMARY_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5";
 const PRIMARY_BUTTON_STYLE = {
@@ -195,10 +195,10 @@ function StatTile({
       style={{
         border: inverted
           ? "1px solid rgba(255,255,255,0.12)"
-          : "1px solid rgba(148,163,184,0.18)",
+          : "1px solid var(--border)",
         background: inverted
           ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.07))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))",
+          : "var(--surface-1)",
         boxShadow: inverted
           ? "0 18px 40px rgba(2, 6, 23, 0.12)"
           : "0 18px 40px rgba(15, 23, 42, 0.06)",
@@ -664,7 +664,7 @@ export default function IssuesPage() {
                 setPage(1);
               }}
               placeholder="Search issues by title, description, or category..."
-              className="w-full rounded-2xl border border-slate-200/80 bg-white/90 py-3 pl-11 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] py-3 pl-11 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
             />
           </div>
 
@@ -675,7 +675,7 @@ export default function IssuesPage() {
               className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 ${
                 showFilters || filtersApplied > 0
                   ? "border-[var(--primary-light)] bg-[var(--success-light)] text-[var(--primary)]"
-                  : "border-[var(--border)] bg-white/86 text-[var(--text-primary)]"
+                  : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-primary)]"
               }`}
             >
               <Filter size={16} />
@@ -723,7 +723,7 @@ export default function IssuesPage() {
                     setStatus(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                 >
                   {STATUSES.map((s) => (
                     <option key={s.value} value={s.value}>
@@ -743,7 +743,7 @@ export default function IssuesPage() {
                     setSeverity(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                 >
                   {SEVERITIES.map((s) => (
                     <option key={s.value} value={s.value}>
@@ -762,7 +762,7 @@ export default function IssuesPage() {
                       setSeverity("");
                       setPage(1);
                     }}
-                    className="rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
                   >
                     Clear filters
                   </button>
@@ -792,7 +792,7 @@ export default function IssuesPage() {
                 posture.
               </p>
             </div>
-            <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               {displayIssues.length} of {visibleTotal} showing
             </span>
           </div>

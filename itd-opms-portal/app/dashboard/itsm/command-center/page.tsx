@@ -43,11 +43,11 @@ function WorkItemRow({ ticket }: { ticket: Ticket }) {
   return (
     <Link
       href={`/dashboard/itsm/tickets/${ticket.id}`}
-      className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50"
+      className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4 transition-colors hover:bg-[var(--surface-1)]"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-slate-500">
+          <span className="font-mono text-xs font-semibold text-[var(--text-muted)]">
             {ticket.ticketNumber}
           </span>
           <StatusBadge status={ticket.status} />
@@ -57,12 +57,12 @@ function WorkItemRow({ ticket }: { ticket: Ticket }) {
             </span>
           ) : null}
         </div>
-        <p className="mt-2 truncate text-sm font-semibold text-slate-950">
+        <p className="mt-2 truncate text-sm font-semibold text-[var(--text-primary)]">
           {ticket.title}
         </p>
-        <p className="mt-1 text-xs text-slate-500">{nextAction(ticket)}</p>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">{nextAction(ticket)}</p>
       </div>
-      <ArrowRight size={16} className="shrink-0 text-slate-400" />
+      <ArrowRight size={16} className="shrink-0 text-[var(--text-tertiary)]" />
     </Link>
   );
 }
@@ -114,13 +114,13 @@ export default function ITSMCommandCenterPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
+      <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-6 shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               ITSM command center
             </p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+            <h1 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
               Agent workbench
             </h1>
           </div>
@@ -136,12 +136,12 @@ export default function ITSMCommandCenterPage() {
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
-              <div key={stat.label} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div key={stat.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4">
                 <Icon size={18} style={{ color: stat.accent }} />
-                <p className="mt-3 text-2xl font-semibold text-slate-950">
+                <p className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
                   {stat.value}
                 </p>
-                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                   {stat.label}
                 </p>
               </div>
@@ -151,8 +151,8 @@ export default function ITSMCommandCenterPage() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.8fr)]">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-5">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <Inbox size={17} className="text-[#1B7340]" />
             My assigned tickets
           </p>
@@ -160,7 +160,7 @@ export default function ITSMCommandCenterPage() {
             {myQueue.length > 0 ? (
               myQueue.map((ticket) => <WorkItemRow key={ticket.id} ticket={ticket} />)
             ) : (
-              <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+              <p className="rounded-2xl bg-[var(--surface-1)] p-4 text-sm text-[var(--text-muted)]">
                 No assigned tickets in the current queue.
               </p>
             )}
@@ -177,15 +177,15 @@ export default function ITSMCommandCenterPage() {
               {slaRisk.length > 0 ? (
                 slaRisk.map((ticket) => <WorkItemRow key={ticket.id} ticket={ticket} />)
               ) : (
-                <p className="rounded-2xl bg-white p-4 text-sm text-rose-700">
+                <p className="rounded-2xl bg-[var(--surface-1)] p-4 text-sm text-rose-700">
                   No ticket is inside the two-hour risk window.
                 </p>
               )}
             </div>
           </section>
 
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5">
-            <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
               <Radio size={17} className="text-rose-600" />
               Major incident room
             </p>
@@ -195,21 +195,21 @@ export default function ITSMCommandCenterPage() {
                   <Link
                     key={incident.id}
                     href={`/dashboard/itsm/major-incidents/${incident.id}`}
-                    className="block rounded-2xl border border-slate-200 bg-slate-50/80 p-4 hover:bg-white"
+                    className="block rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4 hover:bg-[var(--surface-2)]"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-semibold text-slate-950">
+                      <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
                         {incident.ticket?.title ?? incident.id}
                       </p>
                       <StatusBadge status={incident.status} />
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-2 text-xs text-[var(--text-muted)]">
                       {incident.affectedServices.join(", ") || "Services not captured"}
                     </p>
                   </Link>
                 ))
               ) : (
-                <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                <p className="rounded-2xl bg-[var(--surface-1)] p-4 text-sm text-[var(--text-muted)]">
                   No active major incident.
                 </p>
               )}

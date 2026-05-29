@@ -251,9 +251,8 @@ function MetricCard({
     <div
       className="rounded-[24px] border p-5"
       style={{
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.72))",
-        borderColor: "rgba(148, 163, 184, 0.2)",
+        background: "var(--surface-1)",
+        borderColor: "var(--border)",
         boxShadow: "0 18px 48px -38px rgba(15, 23, 42, 0.55)",
       }}
     >

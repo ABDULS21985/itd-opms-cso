@@ -38,9 +38,9 @@ import {
 import type { CMDBItem, CMDBRelationship } from "@/types";
 
 const PANEL_CLASS =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const SOFT_PANEL_CLASS =
-  "rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  "rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
 const PRIMARY_BUTTON_STYLE = {
   backgroundImage: "var(--gradient-primary)",
   borderColor: "var(--primary-light)",
@@ -339,12 +339,10 @@ function CICard({
       onClick={() => onSelect(item.id)}
       className="w-full rounded-[1.2rem] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5"
       style={{
-        borderColor: isSelected
-          ? "rgba(27,115,64,0.24)"
-          : "rgba(226,232,240,0.88)",
+        borderColor: isSelected ? "rgba(27,115,64,0.24)" : "var(--border)",
         background: isSelected
-          ? "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(209,250,229,0.58))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))",
+          ? "linear-gradient(180deg, var(--surface-1), var(--success-light))"
+          : "var(--surface-1)",
         boxShadow: isSelected
           ? "0 18px 40px rgba(27,115,64,0.12)"
           : "0 12px 28px rgba(15,23,42,0.04)",
@@ -472,7 +470,7 @@ function TopologyCanvas({
   }, [positionedNodes, relationships]);
 
   return (
-    <div className="relative min-h-[34rem] overflow-hidden rounded-[1.6rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(248,250,252,0.86),rgba(255,255,255,0.98))]">
+    <div className="relative min-h-[34rem] overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-1)]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(27,115,64,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(27,115,64,0.04)_1px,transparent_1px)] bg-[size:42px_42px]" />
       <div
         className="pointer-events-none absolute inset-x-12 top-10 h-56 rounded-full blur-3xl"
@@ -483,8 +481,8 @@ function TopologyCanvas({
       />
 
       {isLoading && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/72 backdrop-blur-sm">
-          <div className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 py-2 text-sm text-[var(--text-secondary)]">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--surface-0)]/72 backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2 text-sm text-[var(--text-secondary)]">
             <Loader2 size={16} className="animate-spin" />
             Loading topology...
           </div>
@@ -532,8 +530,8 @@ function TopologyCanvas({
                       width={64}
                       height={20}
                       rx={10}
-                      fill="rgba(255,255,255,0.92)"
-                      stroke="rgba(226,232,240,0.8)"
+                      fill="var(--surface-0)"
+                      stroke="var(--border)"
                     />
                     <text
                       textAnchor="middle"

@@ -99,9 +99,9 @@ const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOUR_START = 7;
 const HOUR_END = 22;
 const PANEL_CLASS =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const SOFT_PANEL_CLASS =
-  "rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  "rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
 const PRIMARY_BUTTON_STYLE = {
   backgroundImage: "var(--gradient-primary)",
   borderColor: "var(--primary-light)",
@@ -332,10 +332,10 @@ function CalendarSignalCard({
       style={{
         border: inverted
           ? "1px solid rgba(255,255,255,0.12)"
-          : "1px solid rgba(148,163,184,0.18)",
+          : "1px solid var(--border)",
         background: inverted
           ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.07))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))",
+          : "var(--surface-0)",
         boxShadow: inverted
           ? "0 18px 40px rgba(2, 6, 23, 0.12)"
           : "0 18px 40px rgba(15, 23, 42, 0.06)",
@@ -706,7 +706,7 @@ export default function CalendarPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="w-full flex-shrink-0 overflow-y-auto border-b bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.84))] lg:w-[320px] lg:border-b-0 lg:border-r"
+              className="w-full flex-shrink-0 overflow-y-auto border-b bg-[var(--surface-1)] lg:w-[320px] lg:border-b-0 lg:border-r"
               style={{ borderColor: "var(--border)" }}
             >
               <div className="space-y-5 p-4">
@@ -754,10 +754,10 @@ export default function CalendarPage() {
                         style={{
                           borderColor: filterTypes.has(type)
                             ? `${EVENT_TYPE_COLORS[type]}33`
-                            : "rgba(226,232,240,0.88)",
+                            : "var(--border)",
                           background: filterTypes.has(type)
-                            ? `linear-gradient(180deg, rgba(255,255,255,0.98), ${EVENT_TYPE_COLORS[type]}14)`
-                            : "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,252,0.86))",
+                            ? `linear-gradient(180deg, var(--surface-0), ${EVENT_TYPE_COLORS[type]}14)`
+                            : "var(--surface-0)",
                         }}
                       >
                         <div className="flex min-w-0 items-center gap-3">
@@ -821,7 +821,7 @@ export default function CalendarPage() {
                     {Object.entries(IMPACT_COLORS).map(([level, color]) => (
                       <div
                         key={level}
-                        className="flex items-center justify-between gap-3 rounded-[1rem] border border-slate-200/70 bg-white/82 px-3 py-2"
+                        className="flex items-center justify-between gap-3 rounded-[1rem] border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2"
                       >
                         <div className="flex items-center gap-2.5">
                           <span
@@ -869,7 +869,7 @@ export default function CalendarPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setSidebarOpen((v) => !v)}
-                className="rounded-xl border border-slate-200/80 bg-white/86 p-2.5 transition-all hover:-translate-y-0.5 hover:bg-white"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-2.5 transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
                 title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
               >
                 {sidebarOpen ? (
@@ -887,12 +887,12 @@ export default function CalendarPage() {
 
               <button
                 onClick={goToday}
-                className="rounded-xl border border-slate-200/80 bg-white/86 px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-all hover:-translate-y-0.5 hover:bg-white"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
               >
                 Today
               </button>
 
-              <div className="flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/86 p-1">
+              <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-1">
                 <button
                   onClick={goPrev}
                   className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-1)]"
@@ -925,7 +925,7 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex overflow-hidden rounded-xl border border-slate-200/80 bg-white/86 p-1">
+              <div className="flex overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-1">
                 {(["month", "week", "day"] as CalendarView[]).map((v) => (
                   <button
                     key={v}
@@ -994,11 +994,11 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            <div className="relative min-h-[42rem] overflow-hidden rounded-[1.6rem] border border-slate-200/70 bg-white">
+            <div className="relative min-h-[42rem] overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-0)]">
               {isLoading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/72 backdrop-blur-sm">
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--surface-0)]/72 backdrop-blur-sm">
                   <div
-                    className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 py-2 text-sm"
+                    className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-4 py-2 text-sm"
                     style={{ color: "var(--text-secondary)" }}
                   >
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />

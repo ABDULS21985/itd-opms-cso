@@ -26,6 +26,7 @@
   --text-primary: #000000;
   --text-secondary: #1e293b;
   --text-muted: #475569;
+  --text-tertiary: #64748b;
 
   /* Semantic / Status Colors */
   --success: #10b981;
@@ -1307,6 +1308,7 @@ h6,
   --text-primary: #f8fafc;
   --text-secondary: #e2e8f0;
   --text-muted: #cbd5e1;
+  --text-tertiary: #94a3b8;
 
   /* Semantic */
   --success: #34d399;
@@ -1331,9 +1333,10 @@ h6,
   --surface-elevated: #1e293b;
   --surface-overlay: rgba(0, 0, 0, 0.6);
 
-  /* Sidebar (dark theme — keeps the CBN deep-green branding) */
-  --sidebar-bg-from: #062E16;
-  --sidebar-bg-to: #041F0F;
+  /* Sidebar (dark theme — neutral near-black slate to match the dark UI;
+     CBN green is retained on the accents/borders/active states below) */
+  --sidebar-bg-from: #0f1729;
+  --sidebar-bg-to: #0a0f1c;
   --sidebar-border: rgba(27, 115, 64, 0.15);
   --sidebar-border-strong: rgba(27, 115, 64, 0.30);
   --sidebar-divider: rgba(27, 115, 64, 0.10);

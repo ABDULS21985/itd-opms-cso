@@ -47,14 +47,14 @@ import type {
 } from "@/types";
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
-const panelClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+  "w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
+const panelClass = "rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5 shadow-sm";
 
 function Confidence({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--surface-2)]">
         <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
       </div>
       {pct}% confidence
@@ -65,19 +65,19 @@ function Confidence({ value }: { value: number }) {
 function ResultList({ title, items }: { title: string; items: Array<{ label: string; reason?: string; metadata?: string[] }> }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{title}</p>
       {items.length > 0 ? (
         items.map((item) => (
-          <div key={`${title}-${item.label}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-            {item.reason && <p className="mt-1 text-xs text-slate-600">{item.reason}</p>}
+          <div key={`${title}-${item.label}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">{item.label}</p>
+            {item.reason && <p className="mt-1 text-xs text-[var(--text-secondary)]">{item.reason}</p>}
             {item.metadata && item.metadata.length > 0 && (
-              <p className="mt-1 text-[11px] text-slate-500">{item.metadata.filter(Boolean).join(" / ")}</p>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">{item.metadata.filter(Boolean).join(" / ")}</p>
             )}
           </div>
         ))
       ) : (
-        <p className="text-sm text-slate-500">No matching signals yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">No matching signals yet.</p>
       )}
     </div>
   );
@@ -86,24 +86,24 @@ function ResultList({ title, items }: { title: string; items: Array<{ label: str
 function BottleneckColumn({ title, items }: { title: string; items: ProcessBottleneck[] }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <p className="text-sm font-semibold text-[var(--text-primary)]">{title}</p>
       {items.length > 0 ? (
         items.map((item) => (
-          <div key={`${title}-${item.id}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+          <div key={`${title}-${item.id}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold capitalize text-slate-600">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">{item.label}</p>
+              <span className="rounded-full bg-[var(--surface-0)] px-2 py-1 text-[11px] font-semibold capitalize text-[var(--text-secondary)]">
                 {item.severity}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
               {item.count} item(s), avg age {item.ageHours}h
             </p>
-            <p className="mt-2 text-xs text-slate-600">{item.reasons.join(" ")}</p>
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">{item.reasons.join(" ")}</p>
           </div>
         ))
       ) : (
-        <p className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">No pressure detected.</p>
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3 text-sm text-[var(--text-muted)]">No pressure detected.</p>
       )}
     </div>
   );
@@ -111,7 +111,7 @@ function BottleneckColumn({ title, items }: { title: string; items: ProcessBottl
 
 function TaskList({ tasks }: { tasks: OperationsTask[] }) {
   if (tasks.length === 0) {
-    return <p className="text-sm text-slate-500">Nothing is waiting on you right now.</p>;
+    return <p className="text-sm text-[var(--text-muted)]">Nothing is waiting on you right now.</p>;
   }
   return (
     <div className="space-y-2">
@@ -119,13 +119,13 @@ function TaskList({ tasks }: { tasks: OperationsTask[] }) {
         <Link
           key={task.id}
           href={task.actionUrl}
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm transition hover:border-emerald-200 hover:bg-emerald-50"
         >
           <span>
-            <span className="block font-semibold text-slate-900">{task.label}</span>
-            <span className="block text-xs text-slate-500">{task.reason}</span>
+            <span className="block font-semibold text-[var(--text-primary)]">{task.label}</span>
+            <span className="block text-xs text-[var(--text-muted)]">{task.reason}</span>
           </span>
-          <ArrowRight size={16} className="text-slate-400" />
+          <ArrowRight size={16} className="text-[var(--text-tertiary)]" />
         </Link>
       ))}
     </div>
@@ -134,7 +134,7 @@ function TaskList({ tasks }: { tasks: OperationsTask[] }) {
 
 function TriageResult({ result }: { result?: TriageSuggestion }) {
   if (!result) {
-    return <p className="text-sm text-slate-500">Run the assistant to see recommended category, queue, owner, CIs, known errors, and KB articles.</p>;
+    return <p className="text-sm text-[var(--text-muted)]">Run the assistant to see recommended category, queue, owner, CIs, known errors, and KB articles.</p>;
   }
   return (
     <div className="space-y-5">
@@ -163,7 +163,7 @@ function TriageResult({ result }: { result?: TriageSuggestion }) {
 }
 
 function SimulationResult({ result }: { result?: WorkflowSimulationResult }) {
-  if (!result) return <p className="text-sm text-slate-500">Simulate lifecycle moves before a workflow version is published.</p>;
+  if (!result) return <p className="text-sm text-[var(--text-muted)]">Simulate lifecycle moves before a workflow version is published.</p>;
   return (
     <div className="space-y-4">
       <div className={`rounded-xl border p-3 ${result.allowed ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
@@ -183,7 +183,7 @@ function SimulationResult({ result }: { result?: WorkflowSimulationResult }) {
 }
 
 function SLAResult({ result }: { result?: SLAForecastResponse }) {
-  if (!result) return <p className="text-sm text-slate-500">Forecast breach probability from SLA time, workload, and priority.</p>;
+  if (!result) return <p className="text-sm text-[var(--text-muted)]">Forecast breach probability from SLA time, workload, and priority.</p>;
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">

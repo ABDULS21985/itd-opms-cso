@@ -30,9 +30,9 @@ import {
 import type { PlanningMilestone } from "@/types";
 
 const PANEL_CLASS =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const SOFT_PANEL_CLASS =
-  "rounded-[1.35rem] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  "rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
 const PRIMARY_BUTTON_STYLE = {
   backgroundImage: "var(--gradient-primary)",
   borderColor: "var(--primary-light)",
@@ -277,7 +277,7 @@ function MilestoneLane({
             return (
               <div
                 key={milestone.id}
-                className="rounded-[1.2rem] border border-slate-200/80 bg-white/92 p-4"
+                className="rounded-[1.2rem] border border-[var(--border)] bg-[var(--surface-1)] p-4"
               >
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--badge-amber-bg)] text-[var(--gold-dark)]">
@@ -375,7 +375,7 @@ function CreateMilestoneForm({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl border border-[var(--border)] bg-white/84 px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
         >
           Close
         </button>
@@ -392,8 +392,8 @@ function CreateMilestoneForm({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Phase 1 readiness gate"
-              className={`h-11 w-full rounded-2xl border bg-white/88 px-3.5 text-sm text-[var(--text-primary)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)] ${
-                errors.title ? "border-[var(--error)]" : "border-slate-200/80"
+              className={`h-11 w-full rounded-2xl border bg-[var(--surface-1)] px-3.5 text-sm text-[var(--text-primary)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)] ${
+                errors.title ? "border-[var(--error)]" : "border-[var(--border)]"
               }`}
             />
             {errors.title && (
@@ -425,10 +425,10 @@ function CreateMilestoneForm({
               type="date"
               value={targetDate}
               onChange={(event) => setTargetDate(event.target.value)}
-              className={`h-11 w-full rounded-2xl border bg-white/88 px-3.5 text-sm text-[var(--text-primary)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)] ${
+              className={`h-11 w-full rounded-2xl border bg-[var(--surface-1)] px-3.5 text-sm text-[var(--text-primary)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)] ${
                 errors.targetDate
                   ? "border-[var(--error)]"
-                  : "border-slate-200/80"
+                  : "border-[var(--border)]"
               }`}
             />
             {errors.targetDate && (
@@ -447,7 +447,7 @@ function CreateMilestoneForm({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Describe the checkpoint, scope boundary, or review gate."
-              className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
             />
           </div>
         </div>
@@ -461,15 +461,15 @@ function CreateMilestoneForm({
             value={completionCriteria}
             onChange={(event) => setCompletionCriteria(event.target.value)}
             placeholder="List the evidence or acceptance threshold required to close the milestone."
-            className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
           />
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
+        <div className="flex justify-end gap-3 border-t border-[var(--border)] pt-5">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[var(--border)] bg-white/84 px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
           >
             Cancel
           </button>
@@ -814,13 +814,13 @@ export default function MilestonesPage() {
                       style={{
                         backgroundColor: active
                           ? "var(--success-light)"
-                          : "rgba(255,255,255,0.88)",
+                          : "var(--surface-1)",
                         color: active
                           ? "var(--primary)"
                           : "var(--text-secondary)",
                         borderColor: active
                           ? "rgba(27,115,64,0.22)"
-                          : "rgba(226,232,240,0.88)",
+                          : "var(--border)",
                       }}
                     >
                       {pill.label} · {pill.count}
@@ -841,11 +841,11 @@ export default function MilestonesPage() {
             </div>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-[1.35rem] border border-slate-200/80">
+          <div className="mt-5 overflow-hidden rounded-[1.35rem] border border-[var(--border)]">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[840px] text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200/80 bg-slate-50/90">
+                  <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
                       Milestone
                     </th>
@@ -904,7 +904,7 @@ export default function MilestonesPage() {
                       return (
                         <tr
                           key={milestone.id}
-                          className="border-b border-slate-200/80 bg-white/92 transition-colors last:border-b-0 hover:bg-slate-50/80"
+                          className="border-b border-[var(--border)] bg-[var(--surface-0)] transition-colors last:border-b-0 hover:bg-[var(--surface-1)]"
                         >
                           <td className="px-4 py-4">
                             <div className="flex items-start gap-3">

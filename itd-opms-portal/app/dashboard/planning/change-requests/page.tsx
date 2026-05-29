@@ -31,10 +31,10 @@ import { useChangeRequests } from "@/hooks/use-planning";
 import type { ChangeRequest } from "@/types";
 
 const PANEL_CLASS =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 
 const SECONDARY_BUTTON_CLASS =
-  "inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white/82 px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-md";
+  "inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--surface-2)] hover:shadow-md";
 
 const PRIMARY_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5";
@@ -347,7 +347,7 @@ function WorkflowLane({
         <div>
           <div className="flex items-center gap-2">
             <span
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border bg-white/78 shadow-[0_12px_30px_rgba(15,23,42,0.05)]"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border bg-[var(--surface-0)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]"
               style={{ color: meta.accent, borderColor: meta.border }}
             >
               <Icon size={18} />
@@ -370,7 +370,7 @@ function WorkflowLane({
             className="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]"
             style={{
               color: meta.accent,
-              backgroundColor: "rgba(255,255,255,0.72)",
+              backgroundColor: "var(--surface-0)",
             }}
           >
             Focus
@@ -395,7 +395,7 @@ function WorkflowLane({
                 onOpen(item.id);
               }
             }}
-            className="rounded-[1.1rem] border border-white/70 bg-white/80 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:bg-white"
+            className="rounded-[1.1rem] border border-[var(--border)] bg-[var(--surface-0)] p-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -421,7 +421,7 @@ function WorkflowLane({
       </div>
 
       {items.length === 0 && (
-        <div className="mt-4 rounded-[1.1rem] border border-dashed border-white/70 bg-white/55 p-4 text-center text-xs text-[var(--text-secondary)]">
+        <div className="mt-4 rounded-[1.1rem] border border-dashed border-[var(--border)] bg-[var(--surface-1)] p-4 text-center text-xs text-[var(--text-secondary)]">
           No requests in this lane.
         </div>
       )}
@@ -806,7 +806,7 @@ export default function ChangeRequestsPage() {
                 one-click workflow filter.
               </p>
             </div>
-            <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               Click a lane to filter
             </span>
           </div>
@@ -852,7 +852,7 @@ export default function ChangeRequestsPage() {
             </div>
 
             <div className="mt-4 space-y-4">
-              <div className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/85 p-4">
+              <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
                     Queue Health
@@ -868,7 +868,7 @@ export default function ChangeRequestsPage() {
                 <p className="mt-1 text-sm text-[var(--text-secondary)]">
                   Approval and implementation share across the visible queue.
                 </p>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
                   <div
                     className="h-full rounded-full"
                     style={{
@@ -879,7 +879,7 @@ export default function ChangeRequestsPage() {
                 </div>
               </div>
 
-              <div className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/85 p-4">
+              <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
                     Category Mix
@@ -907,7 +907,7 @@ export default function ChangeRequestsPage() {
                               {entry.count}
                             </span>
                           </div>
-                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
                             <div
                               className="h-full rounded-full"
                               style={{
@@ -928,7 +928,7 @@ export default function ChangeRequestsPage() {
                 </div>
               </div>
 
-              <div className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/85 p-4">
+              <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
                     Pressure Points
@@ -946,7 +946,7 @@ export default function ChangeRequestsPage() {
                             `/dashboard/planning/change-requests/${request.id}`,
                           )
                         }
-                        className="flex w-full items-center justify-between gap-3 rounded-[1rem] border border-white/70 bg-white/84 px-3 py-3 text-left transition-all hover:-translate-y-0.5 hover:bg-white"
+                        className="flex w-full items-center justify-between gap-3 rounded-[1rem] border border-[var(--border)] bg-[var(--surface-0)] px-3 py-3 text-left transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-[var(--text-primary)]">
@@ -1032,11 +1032,11 @@ export default function ChangeRequestsPage() {
                           backgroundColor:
                             status === entry.value
                               ? STATUS_META[entry.value].tint
-                              : "rgba(248,250,252,0.88)",
+                              : "var(--surface-1)",
                           borderColor:
                             status === entry.value
                               ? STATUS_META[entry.value].border
-                              : "rgba(226,232,240,0.85)",
+                              : "var(--border)",
                         }}
                       >
                         {entry.label}
@@ -1056,7 +1056,7 @@ export default function ChangeRequestsPage() {
                         setStatus(event.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     >
                       {STATUSES.map((entry) => (
                         <option key={entry.value} value={entry.value}>
@@ -1076,7 +1076,7 @@ export default function ChangeRequestsPage() {
                         setPriority(event.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     >
                       {PRIORITIES.map((entry) => (
                         <option key={entry.value} value={entry.value}>
@@ -1096,7 +1096,7 @@ export default function ChangeRequestsPage() {
                         setCategory(event.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     >
                       {CATEGORIES.map((entry) => (
                         <option key={entry.value} value={entry.value}>
@@ -1189,7 +1189,7 @@ export default function ChangeRequestsPage() {
         transition={{ delay: 0.16 }}
         className={PANEL_CLASS}
       >
-        <div className="border-b border-slate-200/80 px-5 py-4">
+        <div className="border-b border-[var(--border)] px-5 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -1200,7 +1200,7 @@ export default function ChangeRequestsPage() {
                 review.
               </p>
             </div>
-            <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               {meta?.totalItems ?? 0} total visible
             </span>
           </div>
