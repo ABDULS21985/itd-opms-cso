@@ -379,7 +379,7 @@ export default function WarrantiesPage() {
         <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(56,189,248,0.25),_transparent_68%)]" />
         <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(250,204,21,0.18),_transparent_68%)]" />
 
-        <div className="relative grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="relative grid items-center gap-8 xl:grid-cols-[1.08fr_0.92fr]">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur-xl">
               <Sparkles size={12} />
@@ -449,7 +449,7 @@ export default function WarrantiesPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2">
             <SummaryTile
               icon={ShieldCheck}
               label="Tracked coverage"
