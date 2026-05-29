@@ -135,11 +135,21 @@ function StatCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
-      className="group relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[var(--primary)]/20"
+      className="group relative h-full overflow-hidden rounded-2xl border p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+      style={{
+        borderColor: `${color}33`,
+        backgroundImage: `linear-gradient(135deg, ${color}14 0%, ${color}05 55%, var(--surface-0) 100%)`,
+        backgroundColor: "var(--surface-0)",
+      }}
     >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: color }}
+      />
       {/* Decorative gradient blob */}
       <div
-        className="absolute -right-4 -top-4 h-20 w-20 rounded-full opacity-[0.07] blur-2xl transition-opacity group-hover:opacity-[0.12]"
+        className="absolute -right-4 -top-4 h-20 w-20 rounded-full opacity-[0.12] blur-2xl transition-opacity group-hover:opacity-[0.2]"
         style={{ backgroundColor: color }}
       />
       <div className="relative flex items-start justify-between">
@@ -147,7 +157,7 @@ function StatCard({
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--neutral-gray)]">
             {label}
           </p>
-          <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+          <p className="text-2xl font-bold tabular-nums" style={{ color }}>
             {typeof value === "number" ? value.toLocaleString() : value}
           </p>
           {subtitle && (
@@ -156,7 +166,7 @@ function StatCard({
         </div>
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
-          style={{ backgroundColor: `${color}14` }}
+          style={{ backgroundColor: `${color}26` }}
         >
           <Icon size={20} style={{ color }} />
         </div>

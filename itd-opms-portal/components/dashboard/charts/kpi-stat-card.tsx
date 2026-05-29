@@ -45,9 +45,18 @@ export function KPIStatCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.1 + index * 0.05 }}
-      className={`relative rounded-xl border p-4 ${href ? "transition-all hover:shadow-md hover:border-[var(--primary)]/30 cursor-pointer group" : ""}`}
-      style={{ backgroundColor: "var(--surface-0)", borderColor: "var(--border)" }}
+      className={`relative h-full overflow-hidden rounded-xl border p-4 ${href ? "transition-all hover:shadow-md cursor-pointer group" : ""}`}
+      style={{
+        backgroundColor: "var(--surface-0)",
+        backgroundImage: `linear-gradient(135deg, ${color}14 0%, ${color}05 55%, var(--surface-0) 100%)`,
+        borderColor: `${color}33`,
+      }}
     >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: color }}
+      />
       <div className="flex items-center justify-between mb-2">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center"

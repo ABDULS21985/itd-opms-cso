@@ -566,7 +566,7 @@ export default function GRCReportsPage() {
                   {statusEntries.map(([status, count]) => (
                     <div
                       key={status}
-                      className="min-w-[8.5rem] flex-1 rounded-[1.2rem] border border-[var(--border)]/70 bg-white px-4 py-3 shadow-sm"
+                      className="min-w-[8.5rem] flex-1 rounded-[1.2rem] border border-[var(--border)]/70 bg-[var(--surface-0)] px-4 py-3 shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span
@@ -595,7 +595,7 @@ export default function GRCReportsPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.15 }}
-          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(245,247,250,0.9))] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -610,7 +610,7 @@ export default function GRCReportsPage() {
                 the hottest cells first.
               </p>
             </div>
-            <div className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+            <div className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
               {activeHeatCells} active cells
             </div>
           </div>
@@ -665,9 +665,9 @@ export default function GRCReportsPage() {
                             className="flex min-h-[4.5rem] flex-col items-center justify-center rounded-[1.1rem] border text-center transition-all duration-300 hover:-translate-y-0.5"
                             style={{
                               borderColor:
-                                count > 0 ? `rgba(27, 115, 64, ${0.14 + intensity * 0.55})` : "rgba(15, 23, 42, 0.06)",
+                                count > 0 ? `rgba(27, 115, 64, ${0.14 + intensity * 0.55})` : "var(--border)",
                               backgroundColor:
-                                count > 0 ? `rgba(27, 115, 64, ${intensity})` : "rgba(255, 255, 255, 0.82)",
+                                count > 0 ? `rgba(27, 115, 64, ${intensity})` : "var(--surface-2)",
                             }}
                           >
                             <span className="text-xl font-bold tracking-[-0.04em] text-[var(--text-primary)]">
@@ -683,7 +683,7 @@ export default function GRCReportsPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-[var(--border)]/80 bg-white px-4 py-3">
+                <div className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-[var(--border)]/80 bg-[var(--surface-1)] px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold text-[var(--text-primary)]">Likelihood</p>
                     <p className="text-xs text-[var(--text-secondary)]">
@@ -715,7 +715,7 @@ export default function GRCReportsPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-white/94 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -736,10 +736,10 @@ export default function GRCReportsPage() {
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[linear-gradient(180deg,_rgba(240,253,244,0.9),_rgba(255,255,255,0.96))] p-4">
+            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[color-mix(in_srgb,_var(--success)_10%,_var(--surface-0))] p-4">
               <div className="flex items-center gap-3">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(16,185,129,0.12)]">
-                  <ShieldCheck className="h-5 w-5 text-[#10B981]" />
+                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,_var(--success)_14%,_transparent)]">
+                  <ShieldCheck className="h-5 w-5 text-[var(--success)]" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]/70">
@@ -757,10 +757,10 @@ export default function GRCReportsPage() {
               </p>
             </div>
 
-            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[linear-gradient(180deg,_rgba(254,242,242,0.95),_rgba(255,255,255,0.96))] p-4">
+            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[color-mix(in_srgb,_var(--error)_10%,_var(--surface-0))] p-4">
               <div className="flex items-center gap-3">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(239,68,68,0.12)]">
-                  <Scale className="h-5 w-5 text-[#EF4444]" />
+                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,_var(--error)_14%,_transparent)]">
+                  <Scale className="h-5 w-5 text-[var(--error)]" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]/70">
@@ -840,7 +840,7 @@ export default function GRCReportsPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.25 }}
-          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.97),_rgba(248,250,252,0.92))] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -883,7 +883,7 @@ export default function GRCReportsPage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="rounded-[1.3rem] border border-[var(--border)]/70 bg-white p-4"
+                className="rounded-[1.3rem] border border-[var(--border)]/70 bg-[var(--surface-1)] p-4"
               >
                 <div className="flex items-center justify-between gap-3">
                   <item.icon size={18} style={{ color: item.color }} />
@@ -914,7 +914,7 @@ export default function GRCReportsPage() {
                 return (
                   <div
                     key={audit.id}
-                    className="rounded-[1.35rem] border border-[var(--border)]/70 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
+                    className="rounded-[1.35rem] border border-[var(--border)]/70 bg-[var(--surface-1)] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
                   >
                     <div className="flex items-start gap-4">
                       <div

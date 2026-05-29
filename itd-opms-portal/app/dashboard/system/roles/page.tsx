@@ -190,6 +190,30 @@ function CreateRoleDialog({
 /*  Role Card                                                           */
 /* ------------------------------------------------------------------ */
 
+/** Stable color palette — each role gets a consistent color from its name. */
+const ROLE_COLORS = [
+  "#3B82F6", // blue
+  "#10B981", // emerald
+  "#8B5CF6", // violet
+  "#F59E0B", // amber
+  "#EC4899", // pink
+  "#06B6D4", // cyan
+  "#EF4444", // red
+  "#6366F1", // indigo
+  "#14B8A6", // teal
+  "#F97316", // orange
+  "#84CC16", // lime
+  "#A855F7", // purple
+];
+
+function roleColor(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return ROLE_COLORS[hash % ROLE_COLORS.length];
+}
+
 function RoleCard({
   role,
   onDelete,
@@ -199,35 +223,37 @@ function RoleCard({
   onDelete: (id: string) => void;
   onClick: (id: string) => void;
 }) {
+  const color = roleColor(role.name || role.id);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.3 }}
-      className="group relative cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-5 transition-all duration-200 hover:shadow-md hover:border-[var(--primary)]/30"
+      className="group relative h-full cursor-pointer overflow-hidden rounded-xl border p-5 transition-all duration-200 hover:shadow-md"
+      style={{
+        borderColor: `${color}33`,
+        backgroundImage: `linear-gradient(135deg, ${color}14 0%, ${color}05 55%, var(--surface-1) 100%)`,
+        backgroundColor: "var(--surface-1)",
+      }}
       onClick={() => onClick(role.id)}
     >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: color }}
+      />
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div
             className="flex h-10 w-10 items-center justify-center rounded-xl"
-            style={{
-              backgroundColor: role.isSystem
-                ? "rgba(99, 102, 241, 0.1)"
-                : "rgba(16, 185, 129, 0.1)",
-            }}
+            style={{ backgroundColor: `${color}26` }}
           >
-            <Shield
-              size={20}
-              style={{
-                color: role.isSystem ? "#6366F1" : "#10B981",
-              }}
-            />
+            <Shield size={20} style={{ color }} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            <h3 className="text-sm font-semibold" style={{ color }}>
               {role.name}
             </h3>
           </div>

@@ -133,12 +133,22 @@ function MetricCard({
   return (
     <Link
       href={href}
-      className="group block rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5 shadow-sm transition-all duration-200 hover:shadow-md"
+      className="group relative flex h-full flex-col justify-between overflow-hidden rounded-xl border p-5 shadow-sm transition-all duration-200 hover:shadow-md"
+      style={{
+        borderColor: `${color}33`,
+        backgroundImage: `linear-gradient(135deg, ${color}14 0%, ${color}05 55%, var(--surface-0) 100%)`,
+        backgroundColor: "var(--surface-0)",
+      }}
     >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: color }}
+      />
       <div className="flex items-start justify-between mb-3">
         <div
           className="flex h-10 w-10 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${color}18` }}
+          style={{ backgroundColor: `${color}26` }}
         >
           <Icon
             size={20}
@@ -175,7 +185,7 @@ function MetricCard({
       </div>
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+          <p className="text-2xl font-bold tabular-nums" style={{ color }}>
             {loading ? (
               <span className="inline-block w-12 h-7 rounded bg-[var(--surface-2)] animate-pulse" />
             ) : (
@@ -595,6 +605,7 @@ export default function SystemOverviewPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05 + i * 0.06 }}
+            className="h-full"
           >
             <MetricCard {...card} />
           </motion.div>
