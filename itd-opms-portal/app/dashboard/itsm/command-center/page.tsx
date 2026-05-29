@@ -249,8 +249,8 @@ export default function ITSMCommandCenterPage() {
           </div>
         </section>
 
-        <section className="rounded-[24px] border border-slate-200 bg-white p-5">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <Sparkles size={17} className="text-amber-500" />
             Suggested next actions
           </p>
@@ -259,7 +259,7 @@ export default function ITSMCommandCenterPage() {
               <WorkItemRow key={ticket.id} ticket={ticket} />
             ))}
             {recentTickets.length === 0 ? (
-              <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+              <p className="rounded-2xl bg-[var(--surface-1)] p-4 text-sm text-[var(--text-muted)]">
                 No recent ITSM records were returned.
               </p>
             ) : null}

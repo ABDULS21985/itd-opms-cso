@@ -234,7 +234,7 @@ function StatTile({
                 : "rgba(27,115,64,0.08)",
               border: inverted
                 ? "1px solid rgba(255,255,255,0.08)"
-                : "1px solid rgba(255,255,255,0.7)",
+                : "1px solid var(--border)",
             }}
           >
             <Icon size={18} style={{ color: inverted ? "#fff" : accent }} />
@@ -815,10 +815,10 @@ export default function AssetsPage() {
                     style={{
                       borderColor:
                         STATUS_META[asset.status.toLowerCase()]?.border ??
-                        "rgba(148,163,184,0.2)",
-                      background: `linear-gradient(180deg, rgba(255,255,255,0.96), ${
+                        "var(--border)",
+                      background: `linear-gradient(180deg, var(--surface-1), ${
                         STATUS_META[asset.status.toLowerCase()]?.bg ??
-                        "rgba(248,250,252,0.92)"
+                        "var(--surface-2)"
                       })`,
                     }}
                   >
@@ -903,7 +903,7 @@ export default function AssetsPage() {
                         setSearchQuery("");
                         setPage(1);
                       }}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white/86 px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
                     >
                       Clear all
                     </button>
@@ -938,11 +938,11 @@ export default function AssetsPage() {
                               backgroundColor:
                                 status === entry.value
                                   ? metaForStatus.bg
-                                  : "rgba(248,250,252,0.88)",
+                                  : "var(--surface-2)",
                               borderColor:
                                 status === entry.value
                                   ? metaForStatus.border
-                                  : "rgba(226,232,240,0.85)",
+                                  : "var(--border)",
                             }}
                           >
                             {entry.label}
@@ -964,7 +964,7 @@ export default function AssetsPage() {
                         setType(event.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     >
                       {ASSET_TYPES.map((entry) => (
                         <option key={entry.value} value={entry.value}>
@@ -984,7 +984,7 @@ export default function AssetsPage() {
                         setStatus(event.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     >
                       {ASSET_STATUSES.map((entry) => (
                         <option key={entry.value} value={entry.value}>
@@ -1005,7 +1005,7 @@ export default function AssetsPage() {
                         setPage(1);
                       }}
                       placeholder="Search assets..."
-                      className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                     />
                   </div>
                 </div>
@@ -1021,7 +1021,7 @@ export default function AssetsPage() {
         transition={{ delay: 0.16 }}
         className={PANEL_CLASS}
       >
-        <div className="border-b border-slate-200/80 px-5 py-4">
+        <div className="border-b border-[var(--border)] px-5 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -1032,7 +1032,7 @@ export default function AssetsPage() {
                 tracking.
               </p>
             </div>
-            <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               {meta?.totalItems ?? assets.length} total visible
             </span>
           </div>

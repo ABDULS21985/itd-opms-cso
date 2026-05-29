@@ -211,7 +211,7 @@ function EvidencePackResult({ pack }: { pack?: ITSMEvidencePack }) {
 }
 
 function PlaybookResult({ result }: { result?: PlaybookPreviewResponse }) {
-  if (!result) return <p className="text-sm text-slate-500">Preview automation actions triggered by workflow transitions.</p>;
+  if (!result) return <p className="text-sm text-[var(--text-muted)]">Preview automation actions triggered by workflow transitions.</p>;
   return (
     <div className="space-y-3">
       <ResultList title="Actions" items={result.actions.map((action) => ({ label: action.label, reason: action.description, metadata: [action.type, action.required ? "required" : "optional"] }))} />
@@ -221,14 +221,14 @@ function PlaybookResult({ result }: { result?: PlaybookPreviewResponse }) {
 }
 
 function ImpactMap({ map }: { map?: ImpactMapResponse }) {
-  if (!map) return <p className="text-sm text-slate-500">Enter an entity ID to inspect affected CIs, related records, and business-service signals.</p>;
+  if (!map) return <p className="text-sm text-[var(--text-muted)]">Enter an entity ID to inspect affected CIs, related records, and business-service signals.</p>;
   return (
     <div className="space-y-4">
       <div className="grid gap-2 sm:grid-cols-2">
         {map.nodes.map((node) => (
-          <div key={node.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-sm font-semibold text-slate-900">{node.label}</p>
-            <p className="text-xs capitalize text-slate-500">{node.type} {node.status ? `/ ${node.status}` : ""}</p>
+          <div key={node.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">{node.label}</p>
+            <p className="text-xs capitalize text-[var(--text-muted)]">{node.type} {node.status ? `/ ${node.status}` : ""}</p>
           </div>
         ))}
       </div>
@@ -290,24 +290,24 @@ export default function ITSMIntelligencePage() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-6 pb-10">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface-0)] p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
               <Sparkles size={14} />
               ITSM intelligence layer
             </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Operations Intelligence</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)]">Operations Intelligence</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
               Predictive triage, workflow simulation, playbook previews, impact mapping, process mining,
               mobile-ready approvals, evidence packs, and NFR readiness in one operator workspace.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {metricCards.map((metric) => (
-              <div key={metric.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <p className="text-2xl font-bold text-slate-950">{metric.value}</p>
-                <p className="text-xs text-slate-500">{metric.label}</p>
+              <div key={metric.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
+                <p className="text-2xl font-bold text-[var(--text-primary)]">{metric.value}</p>
+                <p className="text-xs text-[var(--text-muted)]">{metric.label}</p>
               </div>
             ))}
           </div>
@@ -318,7 +318,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Brain size={18} className="text-emerald-600" />
-            <h2 className="text-lg font-semibold text-slate-950">AI Triage Assistant</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">AI Triage Assistant</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <input className={inputClass} value={triageInput.title} onChange={(event) => setTriageInput((prev) => ({ ...prev, title: event.target.value }))} />
@@ -358,7 +358,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Workflow size={18} className="text-blue-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Workflow Simulation Mode</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Workflow Simulation Mode</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {(["entity", "currentStatus", "targetStatus", "priority"] as const).map((key) => (
@@ -369,11 +369,11 @@ export default function ITSMIntelligencePage() {
                 onChange={(event) => setSimulationInput((prev) => ({ ...prev, [key]: event.target.value }))}
               />
             ))}
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]">
               <input type="checkbox" checked={simulationInput.pirRequired} onChange={(event) => setSimulationInput((prev) => ({ ...prev, pirRequired: event.target.checked }))} />
               PIR required
             </label>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]">
               <input type="checkbox" checked={simulationInput.pirCompleted} onChange={(event) => setSimulationInput((prev) => ({ ...prev, pirCompleted: event.target.checked }))} />
               PIR completed
             </label>
@@ -390,7 +390,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Zap size={18} className="text-amber-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Automation Playbooks</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Automation Playbooks</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <input className={inputClass} value={playbookInput.entityType} onChange={(event) => setPlaybookInput((prev) => ({ ...prev, entityType: event.target.value }))} />
@@ -411,7 +411,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <TimerReset size={18} className="text-blue-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Advanced SLA Forecasting</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Advanced SLA Forecasting</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <input className={inputClass} value={slaInput.priority} onChange={(event) => setSlaInput((prev) => ({ ...prev, priority: event.target.value }))} />
@@ -431,7 +431,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Map size={18} className="text-emerald-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Service Impact Map</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Service Impact Map</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-[0.6fr_1fr]">
             <select className={inputClass} value={impactEntity.entityType} onChange={(event) => setImpactEntity((prev) => ({ ...prev, entityType: event.target.value }))}>
@@ -454,7 +454,7 @@ export default function ITSMIntelligencePage() {
       <section className={panelClass}>
         <div className="mb-4 flex items-center gap-2">
           <RadioTower size={18} className="text-red-600" />
-          <h2 className="text-lg font-semibold text-slate-950">Process Mining And Bottleneck Analytics</h2>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Process Mining And Bottleneck Analytics</h2>
         </div>
         <div className="grid gap-5 lg:grid-cols-4">
           <BottleneckColumn title="Queues" items={processMining.data?.queueBottlenecks ?? []} />
@@ -468,7 +468,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <FileArchive size={18} className="text-violet-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Evidence Pack Generator</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Evidence Pack Generator</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <select className={inputClass} value={evidenceInput.entityType} onChange={(event) => setEvidenceInput((prev) => ({ ...prev, entityType: event.target.value }))}>
@@ -491,7 +491,7 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <MessageSquareText size={18} className="text-sky-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Customer Communication Center</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Customer Communication Center</h2>
           </div>
           <div className="grid gap-3">
             {[
@@ -499,13 +499,13 @@ export default function ITSMIntelligencePage() {
               ["Resolution validation", "Audience: requester and watchers. Includes fix summary, validation steps, and closure window."],
               ["CAB decision notice", "Audience: implementers and impacted service owners. Includes decision, conditions, and schedule."],
             ].map(([label, reason]) => (
-              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-900">{label}</p>
-                <p className="mt-1 text-xs text-slate-600">{reason}</p>
+              <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">{label}</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">{reason}</p>
               </div>
             ))}
           </div>
-          <button type="button" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+          <button type="button" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-secondary)]">
             <Save size={16} />
             Save template draft locally
           </button>
@@ -516,21 +516,21 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Users size={18} className="text-emerald-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Waiting On Me</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Waiting On Me</h2>
           </div>
           <TaskList tasks={operations.data?.waitingOnMe ?? []} />
         </div>
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <Smartphone size={18} className="text-blue-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Mobile Approvals</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Mobile Approvals</h2>
           </div>
           <TaskList tasks={operations.data?.mobileApprovals ?? []} />
         </div>
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <ClipboardCheck size={18} className="text-amber-600" />
-            <h2 className="text-lg font-semibold text-slate-950">Saved Workspaces</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Saved Workspaces</h2>
           </div>
           <ResultList title="Views" items={(operations.data?.savedWorkspaces ?? []).map((workspace) => ({ label: workspace.label, reason: workspace.description, metadata: workspace.filters }))} />
         </div>
@@ -540,14 +540,14 @@ export default function ITSMIntelligencePage() {
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
             <ShieldCheck size={18} className="text-teal-600" />
-            <h2 className="text-lg font-semibold text-slate-950">CI Confidence And Staleness</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">CI Confidence And Staleness</h2>
           </div>
           <ResultList title="CI health" items={(operations.data?.ciHealth ?? []).map((ci) => ({ label: `${ci.label} (${Math.round(ci.confidence * 100)}%)`, reason: ci.reason, metadata: [ci.ciType, ci.staleSince ? `stale since ${new Date(ci.staleSince).toLocaleDateString()}` : "current"] }))} />
         </div>
         <div className={panelClass}>
           <div className="mb-4 flex items-center gap-2">
-            <ShieldCheck size={18} className="text-slate-700" />
-            <h2 className="text-lg font-semibold text-slate-950">DR And NFR Evidence</h2>
+            <ShieldCheck size={18} className="text-[var(--text-secondary)]" />
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">DR And NFR Evidence</h2>
           </div>
           <ResultList title="Readiness" items={(operations.data?.drReadiness ?? []).map((item) => ({ label: `${item.label}: ${item.status}`, reason: item.evidence }))} />
         </div>

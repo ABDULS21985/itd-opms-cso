@@ -159,7 +159,7 @@ const STATUS_META: Record<
     label: "Inactive",
     bg: "var(--surface-2)",
     text: "var(--text-secondary)",
-    border: "rgba(148,163,184,0.24)",
+    border: "var(--border)",
     accent: "var(--text-secondary)",
   },
   planned: {
@@ -254,7 +254,7 @@ function getStatusMeta(status: string) {
       label: toTitle(status),
       bg: "var(--surface-2)",
       text: "var(--text-secondary)",
-      border: "rgba(148,163,184,0.24)",
+      border: "var(--border)",
       accent: "var(--text-secondary)",
     }
   );
@@ -661,9 +661,8 @@ function RelationshipPanel({
                 key={relationship.id}
                 className="rounded-[1.2rem] border p-4"
                 style={{
-                  borderColor: "rgba(226,232,240,0.88)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))",
+                  borderColor: "var(--border)",
+                  background: "var(--surface-1)",
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -764,7 +763,7 @@ function RelationshipModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         className={`${PANEL_CLASS} relative w-full max-w-xl p-0 overflow-hidden`}
       >
-        <div className="border-b border-slate-200/80 px-5 py-4">
+        <div className="border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -777,7 +776,7 @@ function RelationshipModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200/80 bg-white/86 p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-2)]"
             >
               <X size={16} />
             </button>
@@ -793,7 +792,7 @@ function RelationshipModal({
               <select
                 value={sourceCiId}
                 onChange={(event) => setSourceCiId(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
               >
                 <option value="">Select source CI</option>
                 {items.map((item) => (
@@ -810,7 +809,7 @@ function RelationshipModal({
               <select
                 value={targetCiId}
                 onChange={(event) => setTargetCiId(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
               >
                 <option value="">Select target CI</option>
                 {items.map((item) => (
@@ -829,7 +828,7 @@ function RelationshipModal({
             <select
               value={relationshipType}
               onChange={(event) => setRelationshipType(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
             >
               {RELATIONSHIP_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -848,7 +847,7 @@ function RelationshipModal({
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
               placeholder="Describe why this dependency exists or how the systems interact."
-              className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
             />
           </div>
 
@@ -862,7 +861,7 @@ function RelationshipModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-[var(--border)] bg-white/84 px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
             >
               Cancel
             </button>
@@ -1079,14 +1078,14 @@ export default function TopologyPage() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search configuration items..."
-                  className="w-full rounded-2xl border border-slate-200/80 bg-white/90 pl-9 pr-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] pl-9 pr-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
                 />
               </div>
 
               <select
                 value={ciType}
                 onChange={(event) => setCiType(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
               >
                 {CI_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1098,7 +1097,7 @@ export default function TopologyPage() {
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200/80 bg-white/88 px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--success-light)]"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1116,7 +1115,7 @@ export default function TopologyPage() {
                   setCiType("");
                   setStatus("");
                 }}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-white/84 px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-1)]"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-all hover:-translate-y-0.5 hover:bg-[var(--surface-2)]"
               >
                 Clear
               </button>
@@ -1192,7 +1191,7 @@ export default function TopologyPage() {
                   connected neighbors.
                 </p>
               </div>
-              <span className="rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
                 {graphRelationships.length} visible edges
               </span>
             </div>
