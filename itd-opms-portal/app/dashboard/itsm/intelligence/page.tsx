@@ -198,7 +198,7 @@ function SLAResult({ result }: { result?: SLAForecastResponse }) {
 }
 
 function EvidencePackResult({ pack }: { pack?: ITSMEvidencePack }) {
-  if (!pack) return <p className="text-sm text-slate-500">Generate an audit/CAB/PIR evidence pack with timeline, comments, decisions, and checksum.</p>;
+  if (!pack) return <p className="text-sm text-[var(--text-muted)]">Generate an audit/CAB/PIR evidence pack with timeline, comments, decisions, and checksum.</p>;
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-violet-100 bg-violet-50 p-3">

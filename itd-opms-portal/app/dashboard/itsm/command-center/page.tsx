@@ -219,8 +219,8 @@ export default function ITSMCommandCenterPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-5">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <CheckCircle2 size={17} className="text-[#1B7340]" />
             Pending approvals
           </p>
@@ -230,11 +230,11 @@ export default function ITSMCommandCenterPage() {
                 <Link
                   key={request.id}
                   href={`/dashboard/itsm/service-catalog/my-requests/${request.id}`}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 hover:bg-white"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4 hover:bg-[var(--surface-2)]"
                 >
                   <div>
-                    <p className="font-mono text-xs text-slate-500">{request.requestNumber}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-950">
+                    <p className="font-mono text-xs text-[var(--text-muted)]">{request.requestNumber}</p>
+                    <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
                       {request.catalogItemName ?? request.catalogItemId}
                     </p>
                   </div>
@@ -242,7 +242,7 @@ export default function ITSMCommandCenterPage() {
                 </Link>
               ))
             ) : (
-              <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+              <p className="rounded-2xl bg-[var(--surface-1)] p-4 text-sm text-[var(--text-muted)]">
                 No approval tasks waiting on you.
               </p>
             )}

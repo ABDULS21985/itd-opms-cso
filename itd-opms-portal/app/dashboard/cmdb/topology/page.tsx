@@ -570,10 +570,10 @@ function TopologyCanvas({
                     ? "rgba(27,115,64,0.3)"
                     : node.isNeighbor
                       ? `${meta.accent}30`
-                      : "rgba(226,232,240,0.88)",
+                      : "var(--border)",
                   background: isSelected
-                    ? "linear-gradient(180deg, rgba(255,255,255,0.99), rgba(209,250,229,0.72))"
-                    : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))",
+                    ? "linear-gradient(180deg, var(--surface-1), var(--success-light))"
+                    : "var(--surface-1)",
                   boxShadow: isSelected
                     ? "0 20px 44px rgba(27,115,64,0.16)"
                     : "0 12px 28px rgba(15,23,42,0.06)",
