@@ -464,7 +464,7 @@ export default function NewSSARequestPage() {
           transition={{ duration: 0.4, delay: 0.05 }}
           className="hidden xl:block xl:sticky xl:top-6"
         >
-          <div className="overflow-hidden rounded-[1.75rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(248,250,252,0.92))] p-4 shadow-[0_18px_35px_rgba(15,23,42,0.05)]">
+          <div className="overflow-hidden rounded-[1.75rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-4 shadow-[0_18px_35px_rgba(15,23,42,0.05)]">
             <nav className="space-y-1">
               {STEPS.map((s, i) => {
                 const isActive = i === step;
@@ -481,7 +481,7 @@ export default function NewSSARequestPage() {
                       isActive
                         ? "bg-[var(--primary)]/10 shadow-sm shadow-[var(--primary)]/8"
                         : isClickable
-                          ? "hover:bg-white"
+                          ? "hover:bg-[var(--surface-2)]"
                           : "opacity-50 cursor-default"
                     }`}
                   >
@@ -542,7 +542,7 @@ export default function NewSSARequestPage() {
           transition={{ duration: 0.4, delay: 0.1 }}
           className="flex-1 min-w-0"
         >
-          <div className="xl:hidden mb-4 rounded-[1.5rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(248,250,252,0.92))] px-4 py-3 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
+          <div className="xl:hidden mb-4 rounded-[1.5rem] border border-[var(--border)]/80 bg-[var(--surface-0)] px-4 py-3 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
             <div className="flex items-center justify-between gap-2">
               {STEPS.map((s, i) => {
                 const isActive = i === step;
@@ -556,7 +556,7 @@ export default function NewSSARequestPage() {
                         isActive
                           ? "bg-[var(--primary)] text-white shadow-md"
                           : isDone
-                            ? "bg-emerald-100 text-emerald-600"
+                            ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
                             : "bg-[var(--surface-1)] text-[var(--neutral-gray)]"
                       }`}
                     >
@@ -583,7 +583,7 @@ export default function NewSSARequestPage() {
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-[1.9rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.94))] shadow-[0_22px_45px_rgba(15,23,42,0.06)]">
+          <div className="overflow-hidden rounded-[1.9rem] border border-[var(--border)]/80 bg-[var(--surface-0)] shadow-[0_22px_45px_rgba(15,23,42,0.06)]">
             <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/60 px-6 py-4">
               <div className="flex items-center gap-3">
                 {(() => { const Icon = STEPS[step].icon; return (

@@ -685,7 +685,7 @@ export default function GRCAuditsPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-white/94 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+        className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

@@ -352,7 +352,7 @@ export default function SSARequestsPage() {
               className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all ${
                 showFilters
                   ? "border-[var(--primary)]/20 bg-[var(--primary)]/8 text-[var(--primary)]"
-                  : "border-[var(--border)] bg-white text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
+                  : "border-[var(--border)] bg-[var(--surface-0)] text-[var(--text-primary)] hover:bg-[var(--surface-1)]"
               }`}
             >
               <Filter size={16} />
@@ -383,14 +383,14 @@ export default function SSARequestsPage() {
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/ssa/admin")}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
                 >
                   Admin dashboard
                 </button>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/ssa/delegations")}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--surface-1)]"
                 >
                   Delegations
                 </button>
@@ -402,7 +402,7 @@ export default function SSARequestsPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden rounded-[1.35rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(249,250,251,0.9),_rgba(255,255,255,0.92))] p-4"
+                className="overflow-hidden rounded-[1.35rem] border border-[var(--border)]/80 bg-[var(--surface-2)] p-4"
               >
                 <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
                   <div>
@@ -415,7 +415,7 @@ export default function SSARequestsPage() {
                         setStatus(e.target.value);
                         setPage(1);
                       }}
-                      className="w-full rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
                     >
                       <option value="">All Statuses</option>
                       {SSA_STATUSES.map((s) => (
@@ -438,7 +438,7 @@ export default function SSARequestsPage() {
                         setPage(1);
                       }}
                       placeholder="Filter by division or office..."
-                      className="w-full rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-secondary)]/70 focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-secondary)]/70 focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
                     />
                   </div>
 

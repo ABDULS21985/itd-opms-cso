@@ -133,7 +133,7 @@ function MetricCard({
   note: string;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--border)]/80 bg-white/92 p-5 shadow-[0_18px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_45px_rgba(15,23,42,0.08)]">
+    <div className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-5 shadow-[0_18px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_45px_rgba(15,23,42,0.08)]">
       <div
         className="absolute inset-x-0 top-0 h-px"
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
@@ -495,7 +495,7 @@ export default function GRCReportsPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-white/92 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+          className="overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -546,7 +546,7 @@ export default function GRCReportsPage() {
               )}
             </div>
 
-            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[linear-gradient(180deg,_rgba(248,250,252,0.95),_rgba(255,255,255,0.92))] p-4">
+            <div className="rounded-[1.4rem] border border-[var(--border)]/70 bg-[var(--surface-1)] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Status pulse</p>

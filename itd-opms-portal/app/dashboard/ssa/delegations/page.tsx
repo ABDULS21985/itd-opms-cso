@@ -395,7 +395,7 @@ function DelegationCard({
             <button
               type="button"
               onClick={onDelete}
-              className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--neutral-gray)] opacity-0 group-hover:opacity-100 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+              className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--neutral-gray)] opacity-0 group-hover:opacity-100 transition-all hover:border-[var(--error)] hover:bg-[color-mix(in_srgb,var(--error)_12%,transparent)] hover:text-[var(--error)]"
               title="Remove delegation"
             >
               <Trash2 size={14} />
@@ -727,13 +727,13 @@ export default function SSADelegationsPage() {
           transition={{ delay: 0.3 }}
           className="rounded-2xl border p-4"
           style={{
-            borderColor: "rgba(99, 102, 241, 0.15)",
-            backgroundColor: "rgba(99, 102, 241, 0.03)",
+            borderColor: "color-mix(in srgb, var(--info) 22%, transparent)",
+            backgroundColor: "color-mix(in srgb, var(--info) 8%, transparent)",
           }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Lightbulb size={14} style={{ color: "#6366F1" }} />
-            <span className="text-xs font-semibold" style={{ color: "#4F46E5" }}>
+            <Lightbulb size={14} style={{ color: "var(--info)" }} />
+            <span className="text-xs font-semibold" style={{ color: "var(--info-dark)" }}>
               About Delegations
             </span>
           </div>

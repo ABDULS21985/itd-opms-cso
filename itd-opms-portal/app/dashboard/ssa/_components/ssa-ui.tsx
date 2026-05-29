@@ -278,7 +278,7 @@ export function SSASectionCard({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-white/94 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)] ${className}`}
+      className={`overflow-hidden rounded-[1.8rem] border border-[var(--border)]/80 bg-[var(--surface-0)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.05)] ${className}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

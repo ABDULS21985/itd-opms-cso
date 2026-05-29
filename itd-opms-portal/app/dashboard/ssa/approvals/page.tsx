@@ -328,7 +328,7 @@ export default function SSAApprovalsPage() {
                     className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
                       active
                         ? "border-transparent bg-[var(--primary)] text-white shadow-sm"
-                        : "border-[var(--border)] bg-white text-[var(--text-secondary)] hover:bg-[var(--surface-1)]"
+                        : "border-[var(--border)] bg-[var(--surface-0)] text-[var(--text-secondary)] hover:bg-[var(--surface-1)]"
                     }`}
                   >
                     {tab.label}
@@ -338,7 +338,7 @@ export default function SSAApprovalsPage() {
             </div>
 
             {activeTab === "approvals" && (
-              <div className="rounded-[1.35rem] border border-[var(--border)]/80 bg-[linear-gradient(180deg,_rgba(249,250,251,0.9),_rgba(255,255,255,0.92))] p-4">
+              <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
@@ -352,7 +352,7 @@ export default function SSAApprovalsPage() {
                           setStage(e.target.value);
                           setPage(1);
                         }}
-                        className="rounded-xl border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary)]/10"
                       >
                         {APPROVAL_STAGES.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -362,7 +362,7 @@ export default function SSAApprovalsPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                  <div className="rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
                     {activeStageLabel}
                   </div>
                 </div>
