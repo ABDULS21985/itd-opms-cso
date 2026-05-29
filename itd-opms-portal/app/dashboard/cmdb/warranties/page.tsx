@@ -23,9 +23,9 @@ import { useWarranties, useExpiringWarranties } from "@/hooks/use-cmdb";
 import type { Warranty } from "@/types";
 
 const CARD_SURFACE =
-  "rounded-[1.8rem] border border-slate-200/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
+  "rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-0)]/95 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const SOFT_SURFACE =
-  "rounded-[1.35rem] border border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
+  "rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-1)] shadow-[0_12px_30px_rgba(15,23,42,0.05)]";
 
 const RENEWAL_STATUSES = [
   { value: "", label: "All statuses" },
@@ -40,26 +40,26 @@ const STATUS_META: Record<
   { bg: string; text: string; accent: string; label: string }
 > = {
   active: {
-    bg: "rgba(16, 185, 129, 0.12)",
-    text: "#059669",
+    bg: "color-mix(in srgb, var(--success) 12%, transparent)",
+    text: "var(--success-dark)",
     accent: "#10B981",
     label: "Active",
   },
   expiring_soon: {
-    bg: "rgba(245, 158, 11, 0.14)",
-    text: "#D97706",
+    bg: "color-mix(in srgb, var(--warning) 14%, transparent)",
+    text: "var(--warning-dark)",
     accent: "#F59E0B",
     label: "Expiring Soon",
   },
   expired: {
-    bg: "rgba(239, 68, 68, 0.12)",
-    text: "#DC2626",
+    bg: "color-mix(in srgb, var(--error) 12%, transparent)",
+    text: "var(--error-dark)",
     accent: "#EF4444",
     label: "Expired",
   },
   renewed: {
-    bg: "rgba(59, 130, 246, 0.12)",
-    text: "#2563EB",
+    bg: "color-mix(in srgb, var(--info) 12%, transparent)",
+    text: "var(--info-dark)",
     accent: "#3B82F6",
     label: "Renewed",
   },
@@ -100,8 +100,8 @@ function formatAssetId(id: string): string {
 function getStatusMeta(status: string) {
   return (
     STATUS_META[status] ?? {
-      bg: "rgba(148, 163, 184, 0.16)",
-      text: "#475569",
+      bg: "var(--surface-2)",
+      text: "var(--text-muted)",
       accent: "#94A3B8",
       label: status.replace(/_/g, " "),
     }
@@ -132,7 +132,7 @@ function SummaryTile({
           : "1px solid rgba(148,163,184,0.18)",
         background: inverted
           ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.08))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))",
+          : "var(--surface-0)",
         boxShadow: inverted
           ? "0 16px 36px rgba(2, 6, 23, 0.12)"
           : "0 18px 40px rgba(15, 23, 42, 0.06)",
@@ -153,7 +153,7 @@ function SummaryTile({
               backgroundColor: inverted ? `${accent}22` : `${accent}16`,
               border: inverted
                 ? "1px solid rgba(255,255,255,0.08)"
-                : "1px solid rgba(255,255,255,0.6)",
+                : "1px solid var(--border)",
             }}
           >
             <Icon size={18} style={{ color: inverted ? "#fff" : accent }} />
@@ -206,7 +206,7 @@ function StatusStrip({
           {count}
         </span>
       </div>
-      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
@@ -237,7 +237,7 @@ function ExpiringCard({ warranty }: { warranty: Warranty }) {
       className="relative overflow-hidden rounded-[1.5rem] border p-5"
       style={{
         borderColor: `${statusMeta.accent}28`,
-        background: `linear-gradient(180deg, rgba(255,255,255,0.96), ${statusMeta.bg})`,
+        background: `linear-gradient(180deg, var(--surface-0), ${statusMeta.bg})`,
       }}
     >
       <div
@@ -514,7 +514,7 @@ export default function WarrantiesPage() {
                 Renewal mix in the current view
               </h2>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-slate-50/85 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
               <Layers3 size={12} />
               {warranties.length} records loaded
             </div>
@@ -564,7 +564,7 @@ export default function WarrantiesPage() {
               </h2>
             </div>
             {renewalStatus && (
-              <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+              <span className="inline-flex rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
                 {currentFilterLabel}
               </span>
             )}
@@ -589,7 +589,7 @@ export default function WarrantiesPage() {
                       setRenewalStatus(event.target.value);
                       setPage(1);
                     }}
-                    className="mt-3 w-full rounded-2xl border border-slate-200/70 bg-white px-3.5 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/10"
+                    className="mt-3 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-3.5 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/10"
                   >
                     {RENEWAL_STATUSES.map((status) => (
                       <option key={status.value} value={status.value}>
@@ -688,7 +688,7 @@ export default function WarrantiesPage() {
         transition={{ duration: 0.4, delay: 0.14 }}
         className={`${CARD_SURFACE} overflow-hidden`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]/70">
               Renewal radar
@@ -697,7 +697,7 @@ export default function WarrantiesPage() {
               Warranties expiring within 90 days
             </h2>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-slate-50/85 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
             <AlertTriangle size={12} />
             {expiringLoading ? "Scanning coverage..." : `${expiring.length} renewals in watchlist`}
           </div>
@@ -708,7 +708,7 @@ export default function WarrantiesPage() {
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-48 animate-pulse rounded-[1.5rem] border border-slate-200/70 bg-slate-100/80"
+                className="h-48 animate-pulse rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-2)]"
               />
             ))}
           </div>
@@ -739,7 +739,7 @@ export default function WarrantiesPage() {
         transition={{ duration: 0.4, delay: 0.18 }}
         className={`${CARD_SURFACE} overflow-hidden`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]/70">
               Registry
@@ -749,7 +749,7 @@ export default function WarrantiesPage() {
             </h2>
           </div>
           {meta && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-slate-50/85 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
               <RefreshCw size={12} />
               Page {meta.page} of {meta.totalPages} · {meta.totalItems} total
             </div>
@@ -762,7 +762,7 @@ export default function WarrantiesPage() {
           </div>
         ) : warranties.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)]">
               <Shield size={24} />
             </div>
             <p className="mt-4 text-base font-semibold text-[var(--text-primary)]">
@@ -776,7 +776,7 @@ export default function WarrantiesPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-sm">
               <thead>
-                <tr className="border-b border-slate-200/70 bg-slate-50/85">
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
                   <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
                     Asset
                   </th>
@@ -803,7 +803,7 @@ export default function WarrantiesPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200/70">
+              <tbody className="divide-y divide-[var(--border)]">
                 {warranties.map((warranty) => {
                   const statusMeta = getStatusMeta(warranty.renewalStatus);
                   const remainingDays = daysUntil(warranty.endDate);
@@ -817,7 +817,7 @@ export default function WarrantiesPage() {
                   return (
                     <tr
                       key={warranty.id}
-                      className="transition-colors hover:bg-slate-50/90"
+                      className="transition-colors hover:bg-[var(--surface-1)]"
                       style={{ backgroundColor: rowTint }}
                     >
                       <td className="px-5 py-4">
@@ -832,7 +832,7 @@ export default function WarrantiesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[var(--text-secondary)]">
                             <Building2 size={14} />
                           </div>
                           <div>
@@ -887,7 +887,7 @@ export default function WarrantiesPage() {
         )}
 
         {meta && meta.totalPages > 1 && (
-          <div className="flex flex-col gap-3 border-t border-slate-200/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-[var(--text-secondary)]">
               Showing page {meta.page} of {meta.totalPages} with {warranties.length} records loaded in this view.
             </p>
@@ -896,7 +896,7 @@ export default function WarrantiesPage() {
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200/70 px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
               >
                 <ChevronLeft size={14} />
                 Previous
@@ -905,7 +905,7 @@ export default function WarrantiesPage() {
                 type="button"
                 disabled={page >= meta.totalPages}
                 onClick={() => setPage((current) => Math.min(meta.totalPages, current + 1))}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200/70 px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
               >
                 Next
                 <ChevronRight size={14} />
