@@ -615,6 +615,26 @@ h6,
   animation: orbit-spin 16s linear infinite reverse;
 }
 
+/* ---------------------------------------------------------------------------
+   Perf: the showcase panels now sit on a photographic backdrop. Keeping the
+   orbit rings / floating dots animating *behind* the frosted-glass cards forces
+   the browser to recompute backdrop-filter blur over the photo every frame,
+   which pegs the CPU/GPU. Freeze the decorative motion on the photo panels —
+   it's barely perceptible over a photo — so the blur is computed once.
+--------------------------------------------------------------------------- */
+.login-showcase-panel .login-float,
+.login-showcase-panel .login-float-slow,
+.login-showcase-panel .login-float-reverse,
+.login-showcase-panel .login-showcase-orbit::before,
+.login-showcase-panel .login-showcase-orbit::after {
+  animation: none;
+}
+
+/* Promote the backdrop to its own GPU layer so its decode/paint is cached. */
+.login-showcase-panel > img {
+  transform: translateZ(0);
+}
+
 .login-glass {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
