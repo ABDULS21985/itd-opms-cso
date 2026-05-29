@@ -336,7 +336,25 @@ function LoginPageContent() {
       <div className="absolute inset-0 login-page-aura pointer-events-none" />
 
       <div className="relative flex min-h-screen flex-col lg:h-screen lg:flex-row">
-        <div className="login-scroll-pane login-showcase-panel relative hidden overflow-hidden lg:flex lg:w-[58%] lg:min-h-0 lg:overflow-y-auto">
+        <div className="login-showcase-panel relative hidden overflow-hidden lg:flex lg:w-[58%] lg:min-h-0">
+          {/* CBN headquarters backdrop — fixed to the panel; content scrolls over it */}
+          <Image
+            src="/cbn-building.jpg"
+            alt="Central Bank of Nigeria headquarters"
+            fill
+            priority
+            sizes="58vw"
+            className="absolute inset-0 object-cover object-center"
+          />
+          {/* Backdrop overlay — mostly neutral dark with a faint green tint so the
+              building shows through while the white showcase copy stays legible */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(110deg, rgba(7,17,12,0.86) 0%, rgba(11,26,19,0.58) 45%, rgba(16,34,26,0.30) 100%)",
+            }}
+          />
           <div className="login-showcase-grid absolute inset-0" />
           <div className="login-showcase-orbit absolute inset-0" />
           <div
@@ -353,7 +371,7 @@ function LoginPageContent() {
             style={{ backgroundColor: "rgba(168,137,61,0.12)" }}
           />
 
-          <div className="login-showcase-content relative z-10 flex w-full flex-col justify-between px-8 py-8 xl:px-12 xl:py-10">
+          <div className="login-showcase-content login-scroll-pane relative z-10 flex w-full flex-col justify-between px-8 py-8 xl:px-12 xl:py-10 lg:min-h-0 lg:overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

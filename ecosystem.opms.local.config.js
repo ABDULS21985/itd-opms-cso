@@ -1,0 +1,70 @@
+// Local run config — standalone copy of ecosystem.opms.config.js with the API
+// pointed at Postgres on 5440 (remapped to avoid the policybot-db-1 conflict on
+// 5432) and absolute cwd paths. Temp file for a local perf/render check.
+const ROOT = "/Users/mac/codes/itd-opms";
+
+module.exports = {
+  apps: [
+    {
+      name: "opms-api",
+      cwd: ROOT + "/itd-opms-api",
+      script: "bin/itd-opms-api",
+      instances: 1,
+      exec_mode: "fork",
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        SERVER_HOST: "0.0.0.0",
+        SERVER_PORT: 8089,
+        SERVER_ENV: "development",
+        DB_HOST: "localhost",
+        DB_PORT: 5440,
+        DB_USER: "opms",
+        DB_PASSWORD: "opms_secret",
+        DB_NAME: "itd_opms",
+        DB_SSLMODE: "disable",
+        DB_MAX_CONNS: 25,
+        DB_MIN_CONNS: 5,
+        REDIS_HOST: "localhost",
+        REDIS_PORT: 6381,
+        REDIS_PASSWORD: "",
+        REDIS_DB: 0,
+        MINIO_ENDPOINT: "localhost:9010",
+        MINIO_ACCESS_KEY: "opms_minio",
+        MINIO_SECRET_KEY: "opms_minio_secret",
+        MINIO_USE_SSL: false,
+        NATS_URL: "nats://localhost:4222",
+        JWT_SECRET: "dev-secret-change-in-production-minimum-32-chars!!",
+        JWT_EXPIRY: "30m",
+        JWT_REFRESH_EXPIRY: "168h",
+        OTEL_EXPORTER_OTLP_ENDPOINT: "localhost:4317",
+        OTEL_SERVICE_NAME: "itd-opms-api",
+        LOG_LEVEL: "debug",
+        LOG_FORMAT: "text",
+      },
+    },
+    {
+      name: "opms-portal",
+      cwd: ROOT + "/itd-opms-portal",
+      script: "bash",
+      args: [
+        "-c",
+        "ulimit -n unlimited 2>/dev/null || true; exec node_modules/.bin/next dev --port 3005",
+      ],
+      instances: 1,
+      exec_mode: "fork",
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        NODE_ENV: "development",
+        PORT: 3005,
+        HOSTNAME: "0.0.0.0",
+        NEXT_PUBLIC_API_URL: "http://localhost:8089/api/v1",
+        WATCHPACK_POLLING: "true",
+        CHOKIDAR_USEPOLLING: "true",
+      },
+    },
+  ],
+};

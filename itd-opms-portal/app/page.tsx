@@ -175,6 +175,25 @@ export default function LandingPage() {
     <main className="relative min-h-screen overflow-x-hidden bg-[var(--surface-1)]">
       {/* ============== HERO ============== */}
       <section className="login-showcase-panel relative overflow-hidden">
+        {/* CBN headquarters backdrop */}
+        <Image
+          src="/cbn-building.jpg"
+          alt="Central Bank of Nigeria headquarters"
+          fill
+          priority
+          sizes="100vw"
+          className="absolute inset-0 object-cover object-center"
+        />
+        {/* Backdrop overlay — mostly neutral dark with a faint green tint; darker
+            on the left so the white headline stays legible, lighter on the right
+            so the building shows through with its natural colours */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(110deg, rgba(7,17,12,0.86) 0%, rgba(11,26,19,0.58) 45%, rgba(16,34,26,0.30) 100%)",
+          }}
+        />
         <div className="login-showcase-grid absolute inset-0" />
         <div className="login-showcase-orbit absolute inset-0" />
 

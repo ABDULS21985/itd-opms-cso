@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAuth } from "@/providers/auth-provider";
 import { BreadcrumbProvider } from "@/providers/breadcrumb-provider";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -22,18 +22,19 @@ function PageTransition({
   children: React.ReactNode;
   pathname: string;
 }) {
+  // Enter-only transition: keyed on pathname so the new page remounts and fades
+  // in immediately. Dropping AnimatePresence's mode="wait" exit removes the dead
+  // time where the old page animated out before new content could appear, making
+  // navigation feel instant while keeping the subtle entrance motion.
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={pathname}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={pathname}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {children}
+    </motion.div>
   );
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -19,7 +20,15 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { useExecutiveSummary } from "@/hooks/use-reporting";
 import { AttentionQueue } from "@/components/dashboard/attention-queue";
-import { InsightsEngine } from "@/components/dashboard/insights-engine";
+// Lazy-loaded: it renders low on the page (delay 0.6) and transitively pulls in
+// recharts, so deferring it keeps recharts out of the home page's initial bundle.
+const InsightsEngine = dynamic(
+  () =>
+    import("@/components/dashboard/insights-engine").then(
+      (m) => m.InsightsEngine,
+    ),
+  { ssr: false },
+);
 import BentoKPICard from "@/components/dashboard/bento-kpi-card";
 import { SecondaryMetricsStrip } from "@/components/dashboard/secondary-metrics-strip";
 import { SparkLine } from "@/components/dashboard/charts/spark-line";

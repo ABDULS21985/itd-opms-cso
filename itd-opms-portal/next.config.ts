@@ -2,6 +2,21 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Tree-shake heavy barrel-import packages so each page only bundles the
+  // icons/components it actually uses instead of the whole library.
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "framer-motion",
+      "d3-hierarchy",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities",
+      "sonner",
+      "date-fns",
+    ],
+  },
   images: {
     remotePatterns: [
       {
