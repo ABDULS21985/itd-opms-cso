@@ -667,6 +667,16 @@ type AssignTicketRequest struct {
 	TeamQueueID *uuid.UUID `json:"teamQueueId"`
 }
 
+// PauseSLARequest is the payload for manually pausing a ticket's SLA clock.
+type PauseSLARequest struct {
+	Reason string `json:"reason"`
+}
+
+// ResumeSLARequest is the payload for manually resuming a ticket's SLA clock.
+type ResumeSLARequest struct {
+	Notes string `json:"notes"`
+}
+
 // AddCommentRequest is the payload for adding a comment to a ticket.
 type AddCommentRequest struct {
 	Content    string `json:"content" validate:"required"`

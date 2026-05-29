@@ -575,7 +575,7 @@ export interface BusinessHoursCalendar {
   name: string;
   timezone: string;
   schedule: Record<string, { start: string; end: string }>;
-  holidays: Array<{ date: string; name: string }>;
+  holidays: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -596,13 +596,27 @@ export interface SLAComplianceStats {
   resolutionMet: number;
 }
 
+/**
+ * A single action step in an escalation chain. Consumed by the backend
+ * escalation worker (executeChain). The relevant fields depend on `action`.
+ */
+export interface EscalationChainStep {
+  action: "notify" | "reassign" | "change_priority";
+  /** for action === "notify" */
+  target_user_ids?: string[];
+  /** for action === "reassign" */
+  target_user_id?: string;
+  /** for action === "change_priority" */
+  new_priority?: string;
+}
+
 export interface EscalationRule {
   id: string;
   tenantId: string;
   name: string;
   triggerType: string;
   triggerConfig?: Record<string, unknown>;
-  escalationChain?: Record<string, unknown>;
+  escalationChain?: EscalationChainStep[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

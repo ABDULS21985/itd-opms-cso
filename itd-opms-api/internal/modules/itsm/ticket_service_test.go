@@ -61,6 +61,69 @@ func TestCreateTicket_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestPauseSLA_Unauthorized(t *testing.T) {
+	svc := NewTicketService(nil, nil)
+	_, err := svc.PauseSLA(context.Background(), uuid.New(), PauseSLARequest{Reason: "waiting on customer"})
+	if err == nil {
+		t.Fatal("expected error for unauthenticated context")
+	}
+	if err.Error() != "authentication required" {
+		t.Errorf("expected 'authentication required', got %q", err.Error())
+	}
+}
+
+func TestResumeSLA_Unauthorized(t *testing.T) {
+	svc := NewTicketService(nil, nil)
+	_, err := svc.ResumeSLA(context.Background(), uuid.New(), ResumeSLARequest{Notes: "resumed"})
+	if err == nil {
+		t.Fatal("expected error for unauthenticated context")
+	}
+	if err.Error() != "authentication required" {
+		t.Errorf("expected 'authentication required', got %q", err.Error())
+	}
+}
+
+func TestLookupPriorityTargetMinutes(t *testing.T) {
+	const policy = `{
+		"P1_critical": {"response_minutes": 15, "resolution_minutes": 240},
+		"P2_high":     {"response_minutes": 30, "resolution_minutes": 480},
+		"P3_medium":   {"response_minutes": 60, "resolution_minutes": 960},
+		"P4_low":      {"response_minutes": 120, "resolution_minutes": 1440}
+	}`
+
+	tests := []struct {
+		name        string
+		raw         string
+		priority    string
+		wantResp    int
+		wantResolve int
+		wantOK      bool
+	}{
+		{"critical row", policy, "P1_critical", 15, 240, true},
+		{"high row", policy, "P2_high", 30, 480, true},
+		{"medium row", policy, "P3_medium", 60, 960, true},
+		{"low row", policy, "P4_low", 120, 1440, true},
+		{"missing priority", policy, "P5_unknown", 0, 0, false},
+		{"invalid json", `{not-json`, "P1_critical", 0, 0, false},
+		{"null json", `null`, "P1_critical", 0, 0, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, resolve, ok := lookupPriorityTargetMinutes([]byte(tc.raw), tc.priority)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if resp != tc.wantResp {
+				t.Errorf("responseMinutes = %d, want %d", resp, tc.wantResp)
+			}
+			if resolve != tc.wantResolve {
+				t.Errorf("resolutionMinutes = %d, want %d", resolve, tc.wantResolve)
+			}
+		})
+	}
+}
+
 func TestGetTicket_Unauthorized(t *testing.T) {
 	svc := NewTicketService(nil, nil)
 	_, err := svc.GetTicket(context.Background(), uuid.New())

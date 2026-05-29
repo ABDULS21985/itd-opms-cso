@@ -49,6 +49,8 @@ import {
   ListTree,
   Plus,
   Unlink,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { UserPicker } from "@/components/shared/pickers";
@@ -71,6 +73,8 @@ import {
   useAddComment,
   useTransitionTicket,
   useAssignTicket,
+  usePauseTicketSLA,
+  useResumeTicketSLA,
   useResolveTicket,
   useCloseTicket,
   useTicketKBLinks,
@@ -992,6 +996,8 @@ export default function TicketDetailPage({
   const addComment = useAddComment(id);
   const transitionTicket = useTransitionTicket();
   const assignTicket = useAssignTicket();
+  const pauseSLA = usePauseTicketSLA();
+  const resumeSLA = useResumeTicketSLA();
   const resolveTicket = useResolveTicket();
   const closeTicket = useCloseTicket();
   const workflowEntity = ticket?.type === "change" ? "change" : "ticket";
@@ -1146,6 +1152,8 @@ export default function TicketDetailPage({
   const isActing =
     transitionTicket.isPending ||
     assignTicket.isPending ||
+    pauseSLA.isPending ||
+    resumeSLA.isPending ||
     resolveTicket.isPending ||
     closeTicket.isPending;
 
@@ -1739,6 +1747,32 @@ export default function TicketDetailPage({
                   <UserPlus size={16} />
                   Assign
                 </button>
+
+                {(ticket.slaResponseTarget || ticket.slaResolutionTarget) &&
+                  ticket.status !== "resolved" &&
+                  ticket.status !== "closed" &&
+                  ticket.status !== "cancelled" &&
+                  (ticket.slaPausedAt ? (
+                    <button
+                      type="button"
+                      disabled={isActing || resumeSLA.isPending}
+                      onClick={() => resumeSLA.mutate({ ticketId: ticket.id })}
+                      className={heroSecondaryButtonClass}
+                    >
+                      <PlayCircle size={16} />
+                      Resume SLA
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isActing || pauseSLA.isPending}
+                      onClick={() => pauseSLA.mutate({ ticketId: ticket.id })}
+                      className={heroSecondaryButtonClass}
+                    >
+                      <PauseCircle size={16} />
+                      Pause SLA
+                    </button>
+                  ))}
 
                 {!ticket.isMajorIncident &&
                   ticket.type === "incident" &&

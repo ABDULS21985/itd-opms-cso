@@ -759,6 +759,58 @@ export function useAssignTicket() {
 }
 
 /**
+ * POST /itsm/tickets/{id}/sla/pause - pause the SLA clock for a ticket.
+ */
+export function usePauseTicketSLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      reason,
+    }: {
+      ticketId: string;
+      reason?: string;
+    }) => apiClient.post(`/itsm/tickets/${ticketId}/sla/pause`, { reason }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket", variables.ticketId],
+      });
+      toast.success("SLA paused");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to pause SLA");
+    },
+  });
+}
+
+/**
+ * POST /itsm/tickets/{id}/sla/resume - resume the SLA clock for a ticket.
+ */
+export function useResumeTicketSLA() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      notes,
+    }: {
+      ticketId: string;
+      notes?: string;
+    }) => apiClient.post(`/itsm/tickets/${ticketId}/sla/resume`, { notes }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({
+        queryKey: ["ticket", variables.ticketId],
+      });
+      toast.success("SLA resumed");
+    },
+    onError: (error) => {
+      toastMutationError(error, "Failed to resume SLA");
+    },
+  });
+}
+
+/**
  * POST /itsm/tickets/{id}/resolve - resolve a ticket.
  */
 export function useResolveTicket() {

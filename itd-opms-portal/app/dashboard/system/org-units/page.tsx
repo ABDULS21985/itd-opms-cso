@@ -361,22 +361,26 @@ export default function OrgUnitsPage() {
           treeNodes={tree}
         />
 
-      {/* Move Unit Dialog */}
-      {moveTarget && (
-        <MoveUnitDialog
-          open={true}
-          onClose={() => setMoveTarget(null)}
-          onSubmit={handleMove}
-          loading={moveMutation.isPending}
-          unitId={moveTarget.id}
-          unitName={moveTarget.name}
-          treeNodes={tree}
-          initial={editTarget ? {
-            name: editTarget.name, code: editTarget.code, level: editTarget.level,
-            parentId: editTarget.parentId, managerUserId: editTarget.managerUserId,
-            managerName: editTarget.managerName,
-          } : undefined}
-        />
+        {/* Edit Unit Dialog */}
+        {editTarget && (
+          <UnitFormDialog
+            open={editTarget !== null}
+            onClose={() => setEditTarget(null)}
+            onSubmit={handleEdit}
+            loading={editUpdateMutation.isPending}
+            title="Edit Organisational Unit"
+            submitLabel="Save Changes"
+            treeNodes={tree}
+            initial={{
+              name: editTarget.name,
+              code: editTarget.code,
+              level: editTarget.level,
+              parentId: editTarget.parentId,
+              managerUserId: editTarget.managerUserId,
+              managerName: editTarget.managerName,
+            }}
+          />
+        )}
 
         {/* Move Unit Dialog */}
         {moveTarget && (

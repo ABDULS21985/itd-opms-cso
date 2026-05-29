@@ -250,6 +250,27 @@ func scanTicketsEnriched(rows pgx.Rows) ([]Ticket, error) {
 // Core CRUD
 // ──────────────────────────────────────────────
 
+// lookupPriorityTargetMinutes parses an SLA policy's priority_targets JSONB and
+// returns the response/resolution minutes configured for the given priority key
+// (e.g. "P1_critical"). The third return value is false when the JSON is invalid
+// or the priority has no configured row. Shape:
+//
+//	{"P1_critical": {"response_minutes": 120, "resolution_minutes": 240}, ...}
+func lookupPriorityTargetMinutes(priorityTargetsRaw json.RawMessage, priority string) (responseMinutes, resolutionMinutes int, ok bool) {
+	var targets map[string]struct {
+		ResponseMinutes   int `json:"response_minutes"`
+		ResolutionMinutes int `json:"resolution_minutes"`
+	}
+	if err := json.Unmarshal(priorityTargetsRaw, &targets); err != nil {
+		return 0, 0, false
+	}
+	t, found := targets[priority]
+	if !found {
+		return 0, 0, false
+	}
+	return t.ResponseMinutes, t.ResolutionMinutes, true
+}
+
 // CreateTicket creates a new ticket with reporter set from auth context.
 func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketRequest) (Ticket, error) {
 	auth := types.GetAuthContext(ctx)
@@ -317,13 +338,76 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		orgUnitID = &auth.OrgUnitID
 	}
 
+	// Resolve the SLA policy and compute response/resolution targets so SLA breach
+	// detection (escalation worker) and the ticket SLA gauges work for incidents.
+	// This mirrors the service-request path (request_service.go CreateRequest), but
+	// adds a default-policy fallback so incidents always get an SLA when one is configured.
+	slaPolicyID := req.SLAPolicyID
+	if slaPolicyID == nil {
+		// Fall back to the tenant's default active policy (matches SLAService.GetDefaultPolicy).
+		var defaultID uuid.UUID
+		err := s.pool.QueryRow(ctx,
+			`SELECT id FROM sla_policies
+			 WHERE tenant_id = $1 AND is_default = true AND is_active = true
+			 LIMIT 1`,
+			auth.TenantID,
+		).Scan(&defaultID)
+		if err == nil {
+			slaPolicyID = &defaultID
+		}
+		// No default policy is valid — the ticket simply has no SLA targets.
+	}
+
+	var slaResponseTarget *time.Time
+	var slaResolutionTarget *time.Time
+	if slaPolicyID != nil {
+		var priorityTargetsRaw json.RawMessage
+		var calendarID *uuid.UUID
+		err := s.pool.QueryRow(ctx,
+			`SELECT priority_targets, business_hours_calendar_id FROM sla_policies
+			 WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
+			*slaPolicyID, auth.TenantID,
+		).Scan(&priorityTargetsRaw, &calendarID)
+		if err == nil {
+			// Load business hours calendar if referenced.
+			var calendar *BusinessHoursCalendar
+			if calendarID != nil {
+				var cal BusinessHoursCalendar
+				calErr := s.pool.QueryRow(ctx,
+					`SELECT id, tenant_id, name, timezone, schedule, holidays, created_at, updated_at
+					 FROM business_hours_calendars WHERE id = $1 AND tenant_id = $2`,
+					*calendarID, auth.TenantID,
+				).Scan(&cal.ID, &cal.TenantID, &cal.Name, &cal.Timezone, &cal.Schedule, &cal.Holidays, &cal.CreatedAt, &cal.UpdatedAt)
+				if calErr == nil {
+					calendar = &cal
+				}
+			}
+
+			// Parse priority_targets JSONB and look up the row for this ticket's priority.
+			responseMins, resolutionMins, ok := lookupPriorityTargetMinutes(priorityTargetsRaw, priority)
+			if ok {
+				if responseMins > 0 {
+					rt := advanceByBusinessMinutes(now, responseMins, calendar)
+					slaResponseTarget = &rt
+				}
+				if resolutionMins > 0 {
+					rest := advanceByBusinessMinutes(now, resolutionMins, calendar)
+					slaResolutionTarget = &rest
+				}
+			}
+		} else {
+			// Policy not found or inactive — do not attach SLA targets.
+			slaPolicyID = nil
+		}
+	}
+
 	query := `
 		INSERT INTO tickets (
 			id, tenant_id, type,
 			category, subcategory, title, description,
 			priority, urgency, impact, status, channel,
 			reporter_id, assignee_id, team_queue_id,
-			sla_policy_id,
+			sla_policy_id, sla_response_target, sla_resolution_target,
 			is_major_incident, related_ticket_ids,
 			linked_asset_ids, linked_ci_ids, org_unit_id, parent_ticket_id, tags, custom_fields,
 			created_at, updated_at
@@ -332,10 +416,10 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 			$4, $5, $6, $7,
 			$8, $9, $10, 'logged', $11,
 			$12, $13, $14,
-			$15,
+			$15, $16, $17,
 			false, '{}',
-			$16, $17, $18, $19, $20, $21,
-			$22, $23
+			$18, $19, $20, $21, $22, $23,
+			$24, $25
 		)
 		RETURNING ` + ticketColumns
 
@@ -344,7 +428,7 @@ func (s *TicketService) CreateTicket(ctx context.Context, req CreateTicketReques
 		req.Category, req.Subcategory, req.Title, req.Description,
 		priority, req.Urgency, req.Impact, channel,
 		auth.UserID, assigneeID, req.TeamQueueID,
-		req.SLAPolicyID,
+		slaPolicyID, slaResponseTarget, slaResolutionTarget,
 		linkedAssetIDs, linkedCIIDs, orgUnitID, req.ParentTicketID, tags, customFields,
 		now, now,
 	))
@@ -1037,6 +1121,122 @@ func (s *TicketService) EscalateTicket(ctx context.Context, id uuid.UUID, reason
 	s.publishTicketEscalated(ctx, auth, existing, reason)
 
 	return nil
+}
+
+// PauseSLA manually pauses a ticket's SLA clock by stamping sla_paused_at.
+//
+// Manual pause/resume and the pending-status auto-pause in
+// applyTicketStatusTransition share the sla_paused_at / sla_paused_duration_minutes
+// columns. The guards below (must have an SLA, must not already be paused for pause;
+// must currently be paused for resume) prevent the two mechanisms from
+// double-counting paused time.
+func (s *TicketService) PauseSLA(ctx context.Context, id uuid.UUID, req PauseSLARequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "SLA pause"); err != nil {
+		return Ticket{}, err
+	}
+
+	if existing.SLAResponseTarget == nil && existing.SLAResolutionTarget == nil {
+		return Ticket{}, apperrors.BadRequest("ticket has no SLA to pause")
+	}
+	if existing.SLAPausedAt != nil {
+		return Ticket{}, apperrors.BadRequest("SLA is already paused")
+	}
+
+	now := time.Now().UTC()
+	query := `
+		UPDATE tickets SET
+			sla_paused_at = $1,
+			updated_at = $2
+		WHERE id = $3 AND tenant_id = $4
+		RETURNING ` + ticketColumns
+
+	ticket, err := scanTicket(s.pool.QueryRow(ctx, query, now, now, id, auth.TenantID))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to pause ticket SLA", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"reason": req.Reason,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "pause:ticket_sla",
+		EntityType: "ticket",
+		EntityID:   id,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return ticket, nil
+}
+
+// ResumeSLA manually resumes a ticket's SLA clock, accumulating the paused
+// duration into sla_paused_duration_minutes and clearing sla_paused_at.
+//
+// See PauseSLA for how this coexists with the pending-status auto-pause; the
+// "must currently be paused" guard prevents double-counting paused time.
+func (s *TicketService) ResumeSLA(ctx context.Context, id uuid.UUID, req ResumeSLARequest) (Ticket, error) {
+	auth := types.GetAuthContext(ctx)
+	if auth == nil {
+		return Ticket{}, apperrors.Unauthorized("authentication required")
+	}
+
+	existing, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := ensureIncidentManagementResponsibility(auth, "SLA resume"); err != nil {
+		return Ticket{}, err
+	}
+
+	if existing.SLAPausedAt == nil {
+		return Ticket{}, apperrors.BadRequest("SLA is not paused")
+	}
+
+	now := time.Now().UTC()
+	pausedMinutes := int(math.Round(now.Sub(*existing.SLAPausedAt).Minutes()))
+	totalPaused := existing.SLAPausedDurationMinutes + pausedMinutes
+
+	query := `
+		UPDATE tickets SET
+			sla_paused_at = NULL,
+			sla_paused_duration_minutes = $1,
+			updated_at = $2
+		WHERE id = $3 AND tenant_id = $4
+		RETURNING ` + ticketColumns
+
+	ticket, err := scanTicket(s.pool.QueryRow(ctx, query, totalPaused, now, id, auth.TenantID))
+	if err != nil {
+		return Ticket{}, apperrors.Internal("failed to resume ticket SLA", err)
+	}
+
+	changes, _ := json.Marshal(map[string]any{
+		"notes":                 req.Notes,
+		"pausedDurationMinutes": totalPaused,
+	})
+	if auditErr := s.auditSvc.Log(ctx, audit.AuditEntry{
+		TenantID:   auth.TenantID,
+		ActorID:    auth.UserID,
+		Action:     "resume:ticket_sla",
+		EntityType: "ticket",
+		EntityID:   id,
+		Changes:    changes,
+	}); auditErr != nil {
+		slog.ErrorContext(ctx, "failed to log audit event", "error", auditErr)
+	}
+
+	return ticket, nil
 }
 
 // ──────────────────────────────────────────────

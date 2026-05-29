@@ -25,6 +25,9 @@ import {
   CalendarClock,
   Plus,
   Trash2,
+  Bell,
+  CalendarDays,
+  Edit3,
 } from "lucide-react";
 import {
   useSLAComplianceStats,
@@ -45,12 +48,26 @@ import {
   useCreateDependencyChainEntry,
   useDeleteDependencyChainEntry,
   useServiceRequestSLACompliance,
+  useBusinessHoursCalendars,
+  useCreateBusinessHoursCalendar,
+  useUpdateBusinessHoursCalendar,
+  useDeleteBusinessHoursCalendar,
+  useCreateSLAPolicy,
+  useUpdateSLAPolicy,
+  useDeleteSLAPolicy,
+  useEscalationRules,
+  useCreateEscalationRule,
+  useUpdateEscalationRule,
+  useDeleteEscalationRule,
 } from "@/hooks/use-itsm";
 import type {
   SLAPolicy,
   OperationalLevelAgreement,
   UnderpinningContract,
   ConsistencyViolation,
+  BusinessHoursCalendar,
+  EscalationRule,
+  EscalationChainStep,
 } from "@/types";
 import { EnhancedKPICard } from "@/components/dashboard/enhanced-kpi-card";
 import { ChartCard } from "@/components/dashboard/charts/chart-card";
@@ -127,6 +144,8 @@ const TABS = [
   { key: "sla", label: "SLA Policies", icon: ShieldCheck },
   { key: "olas", label: "OLAs", icon: FileText },
   { key: "ucs", label: "Underpinning Contracts", icon: Building2 },
+  { key: "escalation", label: "Escalation Rules", icon: Bell },
+  { key: "businesshours", label: "Business Hours", icon: CalendarDays },
   { key: "chain", label: "Dependency Chain", icon: Link2 },
   { key: "consistency", label: "Consistency Check", icon: AlertCircle },
 ] as const;
@@ -672,6 +691,12 @@ export default function SLADashboardPage() {
         )}
         {activeTab === "olas" && <OLAsTab key="olas" />}
         {activeTab === "ucs" && <UCsTab key="ucs" />}
+        {activeTab === "escalation" && (
+          <EscalationRulesTab key="escalation" />
+        )}
+        {activeTab === "businesshours" && (
+          <BusinessHoursTab key="businesshours" />
+        )}
         {activeTab === "chain" && (
           <DependencyChainTab key="chain" policies={policies} />
         )}
@@ -685,6 +710,27 @@ export default function SLADashboardPage() {
 /*  Tab 1: SLA Policies                                                */
 /* ================================================================== */
 
+const SLA_PRIORITY_KEYS = [
+  "P1_critical",
+  "P2_high",
+  "P3_medium",
+  "P4_low",
+] as const;
+
+type SLAPriorityTargets = Record<
+  string,
+  { response_minutes: number; resolution_minutes: number }
+>;
+
+function defaultPriorityTargets(): SLAPriorityTargets {
+  return {
+    P1_critical: { response_minutes: 15, resolution_minutes: 240 },
+    P2_high: { response_minutes: 30, resolution_minutes: 480 },
+    P3_medium: { response_minutes: 60, resolution_minutes: 1440 },
+    P4_low: { response_minutes: 120, resolution_minutes: 2880 },
+  };
+}
+
 function SLAPoliciesTab({
   policies,
   expandedPolicy,
@@ -694,6 +740,97 @@ function SLAPoliciesTab({
   expandedPolicy: string | null;
   setExpandedPolicy: (id: string | null) => void;
 }) {
+  const { data: calendars } = useBusinessHoursCalendars();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const createPolicy = useCreateSLAPolicy();
+  const updatePolicy = useUpdateSLAPolicy(editingId ?? undefined);
+  const deletePolicy = useDeleteSLAPolicy();
+
+  const [form, setForm] = useState<{
+    name: string;
+    description: string;
+    businessHoursCalendarId: string;
+    isDefault: boolean;
+    isActive: boolean;
+    priorityTargets: SLAPriorityTargets;
+  }>({
+    name: "",
+    description: "",
+    businessHoursCalendarId: "",
+    isDefault: false,
+    isActive: true,
+    priorityTargets: defaultPriorityTargets(),
+  });
+
+  function resetForm() {
+    setForm({
+      name: "",
+      description: "",
+      businessHoursCalendarId: "",
+      isDefault: false,
+      isActive: true,
+      priorityTargets: defaultPriorityTargets(),
+    });
+    setEditingId(null);
+    setShowForm(false);
+  }
+
+  function startEdit(policy: SLAPolicy) {
+    const targets = defaultPriorityTargets();
+    for (const key of SLA_PRIORITY_KEYS) {
+      const existing = policy.priorityTargets?.[key];
+      if (existing) {
+        targets[key] = {
+          response_minutes: existing.response_minutes,
+          resolution_minutes: existing.resolution_minutes,
+        };
+      }
+    }
+    setForm({
+      name: policy.name,
+      description: policy.description ?? "",
+      businessHoursCalendarId: policy.businessHoursCalendarId ?? "",
+      isDefault: policy.isDefault,
+      isActive: policy.isActive,
+      priorityTargets: targets,
+    });
+    setEditingId(policy.id);
+    setShowForm(true);
+  }
+
+  function setTarget(
+    key: string,
+    field: "response_minutes" | "resolution_minutes",
+    value: number,
+  ) {
+    setForm((f) => ({
+      ...f,
+      priorityTargets: {
+        ...f.priorityTargets,
+        [key]: { ...f.priorityTargets[key], [field]: value },
+      },
+    }));
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const body = {
+      name: form.name,
+      description: form.description || undefined,
+      businessHoursCalendarId: form.businessHoursCalendarId || undefined,
+      isDefault: form.isDefault,
+      isActive: form.isActive,
+      priorityTargets: form.priorityTargets,
+    };
+    if (editingId) {
+      updatePolicy.mutate(body, { onSuccess: resetForm });
+    } else {
+      createPolicy.mutate(body, { onSuccess: resetForm });
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -711,7 +848,183 @@ function SLAPoliciesTab({
             {policies.length !== 1 ? "ies" : "y"}
           </p>
         </div>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowForm(!showForm);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          <Plus size={14} />
+          New Policy
+        </button>
       </div>
+
+      {/* Form */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.form
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            onSubmit={handleSubmit}
+            className="mb-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+          >
+            <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+              {editingId ? "Edit SLA Policy" : "Create SLA Policy"}
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Name *
+                </label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Business Hours Calendar
+                </label>
+                <select
+                  value={form.businessHoursCalendarId}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      businessHoursCalendarId: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="">None (24/7)</option>
+                  {(calendars ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end gap-4 pb-2">
+                <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={form.isDefault}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, isDefault: e.target.checked }))
+                    }
+                    className="h-4 w-4 rounded border-[var(--border)]"
+                  />
+                  Default
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, isActive: e.target.checked }))
+                    }
+                    className="h-4 w-4 rounded border-[var(--border)]"
+                  />
+                  Active
+                </label>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Description
+                </label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                  rows={2}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+
+            {/* Priority targets */}
+            <div className="mt-5">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Priority Targets (minutes)
+              </h4>
+              <div className="space-y-2">
+                {SLA_PRIORITY_KEYS.map((key) => (
+                  <div
+                    key={key}
+                    className="grid grid-cols-1 items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3 sm:grid-cols-3"
+                  >
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      {key.replace(/_/g, " ")}
+                    </span>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                        Response (min)
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        value={form.priorityTargets[key].response_minutes}
+                        onChange={(e) =>
+                          setTarget(
+                            key,
+                            "response_minutes",
+                            Number(e.target.value),
+                          )
+                        }
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                        Resolution (min)
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        value={form.priorityTargets[key].resolution_minutes}
+                        onChange={(e) =>
+                          setTarget(
+                            key,
+                            "resolution_minutes",
+                            Number(e.target.value),
+                          )
+                        }
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={createPolicy.isPending || updatePolicy.isPending}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {editingId ? "Update" : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+      </AnimatePresence>
 
       {policies.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-0)] py-16">
@@ -795,6 +1108,44 @@ function SLAPoliciesTab({
 
                   <span className="text-xs text-[var(--text-muted)]">
                     {priorities.length} priorities
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(policy);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        startEdit(policy);
+                      }
+                    }}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+                    title="Edit"
+                  >
+                    <Edit3 size={14} />
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm("Delete this SLA policy?"))
+                        deletePolicy.mutate(policy.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        if (confirm("Delete this SLA policy?"))
+                          deletePolicy.mutate(policy.id);
+                      }
+                    }}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-600"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
                   </span>
                   <motion.span
                     animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -1700,6 +2051,993 @@ function UCsTab() {
 }
 
 /* ================================================================== */
+/*  Tab: Escalation Rules                                             */
+/* ================================================================== */
+
+const ESCALATION_PRIORITIES = [
+  "P1_critical",
+  "P2_high",
+  "P3_medium",
+  "P4_low",
+] as const;
+
+type EscalationFormState = {
+  name: string;
+  triggerType: string;
+  thresholdPercent: number;
+  priority: string;
+  ageMinutes: number;
+  isActive: boolean;
+  chain: EscalationChainStep[];
+};
+
+function emptyEscalationForm(): EscalationFormState {
+  return {
+    name: "",
+    triggerType: "sla_warning",
+    thresholdPercent: 80,
+    priority: "P1_critical",
+    ageMinutes: 30,
+    isActive: true,
+    chain: [{ action: "notify", target_user_ids: [] }],
+  };
+}
+
+function buildTriggerConfig(
+  form: EscalationFormState,
+): Record<string, unknown> {
+  switch (form.triggerType) {
+    case "sla_warning":
+      return { threshold_percent: form.thresholdPercent };
+    case "priority":
+      return { priority: form.priority, age_minutes: form.ageMinutes };
+    case "sla_breach":
+    default:
+      return {};
+  }
+}
+
+function EscalationRulesTab() {
+  const { data: rules, isLoading } = useEscalationRules();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const createRule = useCreateEscalationRule();
+  const updateRule = useUpdateEscalationRule(editingId ?? undefined);
+  const deleteRule = useDeleteEscalationRule();
+
+  const [form, setForm] = useState<EscalationFormState>(emptyEscalationForm());
+
+  function resetForm() {
+    setForm(emptyEscalationForm());
+    setEditingId(null);
+    setShowForm(false);
+  }
+
+  function startEdit(rule: EscalationRule) {
+    const cfg = (rule.triggerConfig ?? {}) as {
+      threshold_percent?: number;
+      priority?: string;
+      age_minutes?: number;
+    };
+    setForm({
+      name: rule.name,
+      triggerType: rule.triggerType,
+      thresholdPercent: cfg.threshold_percent ?? 80,
+      priority: cfg.priority ?? "P1_critical",
+      ageMinutes: cfg.age_minutes ?? 30,
+      isActive: rule.isActive,
+      chain:
+        rule.escalationChain && rule.escalationChain.length > 0
+          ? rule.escalationChain.map((s) => ({ ...s }))
+          : [{ action: "notify", target_user_ids: [] }],
+    });
+    setEditingId(rule.id);
+    setShowForm(true);
+  }
+
+  function updateStep(index: number, step: EscalationChainStep) {
+    setForm((f) => ({
+      ...f,
+      chain: f.chain.map((s, i) => (i === index ? step : s)),
+    }));
+  }
+
+  function addStep() {
+    setForm((f) => ({
+      ...f,
+      chain: [...f.chain, { action: "notify", target_user_ids: [] }],
+    }));
+  }
+
+  function removeStep(index: number) {
+    setForm((f) => ({
+      ...f,
+      chain: f.chain.filter((_, i) => i !== index),
+    }));
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // Normalise each chain step so only the fields relevant to its action
+    // are emitted (matching the backend escalation worker shapes).
+    const escalationChain: EscalationChainStep[] = form.chain.map((step) => {
+      if (step.action === "notify") {
+        return {
+          action: "notify",
+          target_user_ids: step.target_user_ids ?? [],
+        };
+      }
+      if (step.action === "reassign") {
+        return {
+          action: "reassign",
+          target_user_id: step.target_user_id ?? "",
+        };
+      }
+      return {
+        action: "change_priority",
+        new_priority: step.new_priority ?? "P1_critical",
+      };
+    });
+
+    const body: Partial<EscalationRule> = {
+      name: form.name,
+      triggerType: form.triggerType,
+      triggerConfig: buildTriggerConfig(form),
+      escalationChain,
+      isActive: form.isActive,
+    };
+
+    if (editingId) {
+      updateRule.mutate(body, { onSuccess: resetForm });
+    } else {
+      createRule.mutate(body, { onSuccess: resetForm });
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-20 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--surface-0)]"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const list = rules ?? [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">
+            Escalation Rules
+          </h2>
+          <p className="text-xs text-[var(--text-muted)]">
+            Automated escalation triggers and action chains
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowForm(!showForm);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          <Plus size={14} />
+          New Rule
+        </button>
+      </div>
+
+      {/* Form */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.form
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            onSubmit={handleSubmit}
+            className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+          >
+            <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+              {editingId ? "Edit Escalation Rule" : "Create Escalation Rule"}
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Name *
+                </label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Trigger Type
+                </label>
+                <select
+                  value={form.triggerType}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, triggerType: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="sla_warning">SLA Warning</option>
+                  <option value="sla_breach">SLA Breach</option>
+                  <option value="priority">Priority</option>
+                </select>
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, isActive: e.target.checked }))
+                    }
+                    className="h-4 w-4 rounded border-[var(--border)]"
+                  />
+                  Active
+                </label>
+              </div>
+            </div>
+
+            {/* Trigger config (structured) */}
+            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Trigger Configuration
+              </h4>
+              {form.triggerType === "sla_warning" && (
+                <div className="max-w-xs">
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                    Threshold (% of SLA target)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.thresholdPercent}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        thresholdPercent: Number(e.target.value),
+                      }))
+                    }
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                  />
+                </div>
+              )}
+              {form.triggerType === "sla_breach" && (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Fires when the SLA target is exceeded.
+                </p>
+              )}
+              {form.triggerType === "priority" && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                      Priority
+                    </label>
+                    <select
+                      value={form.priority}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, priority: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    >
+                      {ESCALATION_PRIORITIES.map((p) => (
+                        <option key={p} value={p}>
+                          {p.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                      Age (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.ageMinutes}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          ageMinutes: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Escalation chain */}
+            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Escalation Chain
+                </h4>
+                <button
+                  type="button"
+                  onClick={addStep}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-2)]"
+                >
+                  <Plus size={12} />
+                  Add step
+                </button>
+              </div>
+              <div className="space-y-3">
+                {form.chain.map((step, index) => (
+                  <div
+                    key={index}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface-0)] p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">
+                        {index + 1}.
+                      </span>
+                      <select
+                        value={step.action}
+                        onChange={(e) => {
+                          const action = e.target
+                            .value as EscalationChainStep["action"];
+                          if (action === "notify") {
+                            updateStep(index, {
+                              action,
+                              target_user_ids: step.target_user_ids ?? [],
+                            });
+                          } else if (action === "reassign") {
+                            updateStep(index, {
+                              action,
+                              target_user_id: step.target_user_id ?? "",
+                            });
+                          } else {
+                            updateStep(index, {
+                              action,
+                              new_priority: step.new_priority ?? "P1_critical",
+                            });
+                          }
+                        }}
+                        className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                      >
+                        <option value="notify">Notify</option>
+                        <option value="reassign">Reassign</option>
+                        <option value="change_priority">Change Priority</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeStep(index)}
+                        className="ml-auto rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        title="Remove step"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      {step.action === "notify" && (
+                        <div>
+                          <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                            Target User IDs (comma-separated)
+                          </label>
+                          <input
+                            value={(step.target_user_ids ?? []).join(", ")}
+                            onChange={(e) =>
+                              updateStep(index, {
+                                action: "notify",
+                                target_user_ids: e.target.value
+                                  .split(",")
+                                  .map((v) => v.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="uuid-1, uuid-2"
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                          />
+                        </div>
+                      )}
+                      {step.action === "reassign" && (
+                        <div>
+                          <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                            Target User ID
+                          </label>
+                          <input
+                            value={step.target_user_id ?? ""}
+                            onChange={(e) =>
+                              updateStep(index, {
+                                action: "reassign",
+                                target_user_id: e.target.value.trim(),
+                              })
+                            }
+                            placeholder="uuid"
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                          />
+                        </div>
+                      )}
+                      {step.action === "change_priority" && (
+                        <div className="max-w-xs">
+                          <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                            New Priority
+                          </label>
+                          <select
+                            value={step.new_priority ?? "P1_critical"}
+                            onChange={(e) =>
+                              updateStep(index, {
+                                action: "change_priority",
+                                new_priority: e.target.value,
+                              })
+                            }
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+                          >
+                            {ESCALATION_PRIORITIES.map((p) => (
+                              <option key={p} value={p}>
+                                {p.replace(/_/g, " ")}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {form.chain.length === 0 && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    No steps. Add at least one escalation action.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={createRule.isPending || updateRule.isPending}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {editingId ? "Update" : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+      </AnimatePresence>
+
+      {/* List */}
+      {list.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-0)] py-16">
+          <Bell size={48} className="mb-4 text-[var(--text-muted)] opacity-40" />
+          <p className="text-sm text-[var(--text-muted)]">
+            No escalation rules configured.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
+                  Name
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
+                  Trigger
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">
+                  Steps
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {list.map((rule) => (
+                <tr
+                  key={rule.id}
+                  className="bg-[var(--surface-0)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--text-primary)]">
+                    {rule.name}
+                  </td>
+                  <td className="px-4 py-3 text-sm capitalize text-[var(--text-secondary)]">
+                    {rule.triggerType.replace(/_/g, " ")}
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm tabular-nums text-[var(--text-primary)]">
+                    {rule.escalationChain?.length ?? 0}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        rule.isActive
+                          ? "bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20"
+                          : "bg-slate-500/10 text-slate-500 ring-1 ring-slate-500/20"
+                      }`}
+                    >
+                      {rule.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => startEdit(rule)}
+                        className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+                        title="Edit"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this escalation rule?"))
+                            deleteRule.mutate(rule.id);
+                        }}
+                        className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ================================================================== */
+/*  Tab: Business Hours                                               */
+/* ================================================================== */
+
+const WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+type DaySchedule = { enabled: boolean; start: string; end: string };
+
+function defaultDaySchedule(): Record<string, DaySchedule> {
+  const out: Record<string, DaySchedule> = {};
+  for (const day of WEEKDAYS) {
+    const weekend = day === "saturday" || day === "sunday";
+    out[day] = {
+      enabled: !weekend,
+      start: "09:00",
+      end: "17:00",
+    };
+  }
+  return out;
+}
+
+function BusinessHoursTab() {
+  const { data: calendars, isLoading } = useBusinessHoursCalendars();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const createCalendar = useCreateBusinessHoursCalendar();
+  const updateCalendar = useUpdateBusinessHoursCalendar(
+    editingId ?? undefined,
+  );
+  const deleteCalendar = useDeleteBusinessHoursCalendar();
+
+  const [form, setForm] = useState<{
+    name: string;
+    timezone: string;
+    schedule: Record<string, DaySchedule>;
+    holidays: string[];
+  }>({
+    name: "",
+    timezone: "UTC",
+    schedule: defaultDaySchedule(),
+    holidays: [],
+  });
+  const [holidayInput, setHolidayInput] = useState("");
+
+  function resetForm() {
+    setForm({
+      name: "",
+      timezone: "UTC",
+      schedule: defaultDaySchedule(),
+      holidays: [],
+    });
+    setHolidayInput("");
+    setEditingId(null);
+    setShowForm(false);
+  }
+
+  function startEdit(cal: BusinessHoursCalendar) {
+    const schedule = defaultDaySchedule();
+    for (const day of WEEKDAYS) {
+      const existing = cal.schedule?.[day];
+      schedule[day] = existing
+        ? { enabled: true, start: existing.start, end: existing.end }
+        : { ...schedule[day], enabled: false };
+    }
+    setForm({
+      name: cal.name,
+      timezone: cal.timezone || "UTC",
+      schedule,
+      holidays: Array.isArray(cal.holidays) ? [...cal.holidays] : [],
+    });
+    setHolidayInput("");
+    setEditingId(cal.id);
+    setShowForm(true);
+  }
+
+  function setDay(day: string, patch: Partial<DaySchedule>) {
+    setForm((f) => ({
+      ...f,
+      schedule: {
+        ...f.schedule,
+        [day]: { ...f.schedule[day], ...patch },
+      },
+    }));
+  }
+
+  function addHoliday() {
+    const value = holidayInput.slice(0, 10);
+    if (!value) return;
+    setForm((f) =>
+      f.holidays.includes(value)
+        ? f
+        : { ...f, holidays: [...f.holidays, value].sort() },
+    );
+    setHolidayInput("");
+  }
+
+  function removeHoliday(value: string) {
+    setForm((f) => ({
+      ...f,
+      holidays: f.holidays.filter((h) => h !== value),
+    }));
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const schedule: Record<string, { start: string; end: string }> = {};
+    for (const day of WEEKDAYS) {
+      const d = form.schedule[day];
+      if (d.enabled) {
+        schedule[day] = { start: d.start, end: d.end };
+      }
+    }
+    const body = {
+      name: form.name,
+      timezone: form.timezone || "UTC",
+      schedule,
+      holidays: form.holidays,
+    };
+    if (editingId) {
+      updateCalendar.mutate(body, { onSuccess: resetForm });
+    } else {
+      createCalendar.mutate(body, { onSuccess: resetForm });
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-20 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--surface-0)]"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const list = calendars ?? [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">
+            Business Hours Calendars
+          </h2>
+          <p className="text-xs text-[var(--text-muted)]">
+            Working-hour windows and holidays used for SLA calculations
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowForm(!showForm);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          <Plus size={14} />
+          New Calendar
+        </button>
+      </div>
+
+      {/* Form */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.form
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            onSubmit={handleSubmit}
+            className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+          >
+            <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+              {editingId ? "Edit Calendar" : "Create Business Hours Calendar"}
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Name *
+                </label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Timezone
+                </label>
+                <input
+                  value={form.timezone}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, timezone: e.target.value }))
+                  }
+                  placeholder="UTC"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+
+            {/* Weekly schedule */}
+            <div className="mt-5">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Weekly Schedule
+              </h4>
+              <div className="space-y-2">
+                {WEEKDAYS.map((day) => {
+                  const d = form.schedule[day];
+                  return (
+                    <div
+                      key={day}
+                      className="grid grid-cols-1 items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3 sm:grid-cols-[160px_1fr_1fr]"
+                    >
+                      <label className="flex items-center gap-2 text-sm font-medium capitalize text-[var(--text-primary)]">
+                        <input
+                          type="checkbox"
+                          checked={d.enabled}
+                          onChange={(e) =>
+                            setDay(day, { enabled: e.target.checked })
+                          }
+                          className="h-4 w-4 rounded border-[var(--border)]"
+                        />
+                        {day}
+                      </label>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                          Start
+                        </label>
+                        <input
+                          type="time"
+                          disabled={!d.enabled}
+                          value={d.start}
+                          onChange={(e) =>
+                            setDay(day, { start: e.target.value })
+                          }
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)] disabled:opacity-40"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">
+                          End
+                        </label>
+                        <input
+                          type="time"
+                          disabled={!d.enabled}
+                          value={d.end}
+                          onChange={(e) =>
+                            setDay(day, { end: e.target.value })
+                          }
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-primary)] disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Holidays */}
+            <div className="mt-5">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Holidays
+              </h4>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={holidayInput}
+                  onChange={(e) => setHolidayInput(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+                <button
+                  type="button"
+                  onClick={addHoliday}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <Plus size={14} />
+                  Add
+                </button>
+              </div>
+              {form.holidays.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {form.holidays.map((h) => (
+                    <span
+                      key={h}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs text-[var(--text-primary)]"
+                    >
+                      {h}
+                      <button
+                        type="button"
+                        onClick={() => removeHoliday(h)}
+                        className="text-[var(--text-muted)] transition-colors hover:text-red-600"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={
+                  createCalendar.isPending || updateCalendar.isPending
+                }
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {editingId ? "Update" : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+      </AnimatePresence>
+
+      {/* List */}
+      {list.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-0)] py-16">
+          <CalendarDays
+            size={48}
+            className="mb-4 text-[var(--text-muted)] opacity-40"
+          />
+          <p className="text-sm text-[var(--text-muted)]">
+            No business hours calendars configured.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-1)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
+                  Name
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">
+                  Timezone
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">
+                  Working Days
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">
+                  Holidays
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {list.map((cal) => (
+                <tr
+                  key={cal.id}
+                  className="bg-[var(--surface-0)] transition-colors hover:bg-[var(--surface-1)]"
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--text-primary)]">
+                    {cal.name}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
+                    {cal.timezone}
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm tabular-nums text-[var(--text-primary)]">
+                    {Object.keys(cal.schedule ?? {}).length}
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm tabular-nums text-[var(--text-primary)]">
+                    {Array.isArray(cal.holidays) ? cal.holidays.length : 0}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => startEdit(cal)}
+                        className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+                        title="Edit"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this calendar?"))
+                            deleteCalendar.mutate(cal.id);
+                        }}
+                        className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ================================================================== */
 /*  Tab 4: Dependency Chain                                            */
 /* ================================================================== */
 
@@ -1711,8 +3049,36 @@ function DependencyChainTab({ policies }: { policies: SLAPolicy[] }) {
     selectedSlaId || undefined,
   );
   const { data: expiring } = useExpiringAgreements(30);
+  const { data: olas } = useOLAs();
+  const { data: ucs } = useUCs();
   const createEntry = useCreateDependencyChainEntry();
   const deleteEntry = useDeleteDependencyChainEntry();
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    slaPolicyId: "",
+    olaId: "",
+    ucId: "",
+    notes: "",
+  });
+
+  function resetForm() {
+    setForm({ slaPolicyId: "", olaId: "", ucId: "", notes: "" });
+    setShowForm(false);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    createEntry.mutate(
+      {
+        slaPolicyId: form.slaPolicyId,
+        olaId: form.olaId || undefined,
+        ucId: form.ucId || undefined,
+        notes: form.notes || undefined,
+      },
+      { onSuccess: resetForm },
+    );
+  }
 
   return (
     <motion.div
@@ -1731,19 +3097,140 @@ function DependencyChainTab({ policies }: { policies: SLAPolicy[] }) {
             How SLAs cascade into OLAs and underpinning contracts
           </p>
         </div>
-        <select
-          value={selectedSlaId}
-          onChange={(e) => setSelectedSlaId(e.target.value)}
-          className="rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-secondary)]"
-        >
-          <option value="">Select SLA Policy</option>
-          {policies.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedSlaId}
+            onChange={(e) => setSelectedSlaId(e.target.value)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--text-secondary)]"
+          >
+            <option value="">Select SLA Policy</option>
+            {policies.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              setForm((f) => ({
+                ...f,
+                slaPolicyId: selectedSlaId || f.slaPolicyId,
+              }));
+              setShowForm(!showForm);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            <Plus size={14} />
+            Link
+          </button>
+        </div>
       </div>
+
+      {/* Create form */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.form
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            onSubmit={handleSubmit}
+            className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+          >
+            <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+              Link SLA → OLA / UC
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  SLA Policy *
+                </label>
+                <select
+                  required
+                  value={form.slaPolicyId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, slaPolicyId: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="">Select SLA Policy</option>
+                  {policies.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  OLA
+                </label>
+                <select
+                  value={form.olaId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, olaId: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="">None</option>
+                  {(olas ?? []).map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Underpinning Contract
+                </label>
+                <select
+                  value={form.ucId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, ucId: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="">None</option>
+                  {(ucs ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                  Notes
+                </label>
+                <input
+                  value={form.notes}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={createEntry.isPending}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                Link
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-1)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+      </AnimatePresence>
 
       {!selectedSlaId ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-0)] py-16">

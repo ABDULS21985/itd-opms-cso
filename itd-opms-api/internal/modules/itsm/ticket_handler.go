@@ -57,6 +57,8 @@ func (h *TicketHandler) Routes(r chi.Router) {
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/transition", h.TransitionStatus)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/assign", h.AssignTicket)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/escalate", h.EscalateTicket)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/sla/pause", h.PauseSLA)
+	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/sla/resume", h.ResumeSLA)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/comments", h.AddComment)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/link", h.LinkTickets)
 	r.With(middleware.RequirePermission("itsm.manage")).Post("/{id}/configuration-links", h.LinkConfigurationItems)
@@ -415,6 +417,64 @@ func (h *TicketHandler) AssignTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ticket, err := h.svc.AssignTicket(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, ticket, nil)
+}
+
+// PauseSLA handles POST /{id}/sla/pause — manually pauses a ticket's SLA clock.
+func (h *TicketHandler) PauseSLA(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid ticket ID")
+		return
+	}
+
+	var req PauseSLARequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	ticket, err := h.svc.PauseSLA(r.Context(), id, req)
+	if err != nil {
+		writeAppError(w, r, err)
+		return
+	}
+
+	types.OK(w, ticket, nil)
+}
+
+// ResumeSLA handles POST /{id}/sla/resume — manually resumes a ticket's SLA clock.
+func (h *TicketHandler) ResumeSLA(w http.ResponseWriter, r *http.Request) {
+	auth := types.GetAuthContext(r.Context())
+	if auth == nil {
+		types.ErrorMessage(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid ticket ID")
+		return
+	}
+
+	var req ResumeSLARequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		types.ErrorMessage(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body")
+		return
+	}
+
+	ticket, err := h.svc.ResumeSLA(r.Context(), id, req)
 	if err != nil {
 		writeAppError(w, r, err)
 		return
