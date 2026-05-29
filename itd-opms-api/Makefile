@@ -1,4 +1,4 @@
-.PHONY: build run dev test lint migrate-up migrate-down migrate-create seed sqlc docker-up docker-down clean
+.PHONY: build run dev test lint migrate-up migrate-down migrate-create seed backfill-sla sqlc docker-up docker-down clean
 
 # Variables
 APP_NAME := itd-opms-api
@@ -61,6 +61,11 @@ sqlc:
 seed:
 	@echo "Seeding database..."
 	go run ./cmd/seed
+
+# Backfill SLA targets for open tickets created before SLA auto-calculation (idempotent)
+backfill-sla:
+	@echo "Backfilling ticket SLA targets..."
+	go run ./cmd/backfill-sla-targets
 
 # Docker
 docker-up:
