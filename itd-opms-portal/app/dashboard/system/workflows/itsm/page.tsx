@@ -107,13 +107,13 @@ export default function ITSMWorkflowDesignerPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
+      <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface-0)] p-6 shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
               Workflow designer
             </p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+            <h1 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
               ITSM lifecycle controls
             </h1>
           </div>
@@ -128,11 +128,11 @@ export default function ITSMWorkflowDesignerPage() {
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto_auto]">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
               Version control
             </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
+            <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
               Draft v{draftVersion} / Published v{publishedVersion}
             </p>
             {publishMessage && <p className="mt-1 text-xs text-[#1B7340]">{publishMessage}</p>}
@@ -140,7 +140,7 @@ export default function ITSMWorkflowDesignerPage() {
           <button
             type="button"
             onClick={publishDraft}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#1B7340] bg-white px-4 py-3 text-sm font-semibold text-[#1B7340]"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#1B7340] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[#1B7340]"
           >
             <Upload size={16} />
             Publish
@@ -148,7 +148,7 @@ export default function ITSMWorkflowDesignerPage() {
           <button
             type="button"
             onClick={rollbackDraft}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] px-4 py-3 text-sm font-semibold text-[var(--text-secondary)]"
           >
             <RotateCcw size={16} />
             Rollback
@@ -164,7 +164,7 @@ export default function ITSMWorkflowDesignerPage() {
               className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
                 entity === item.value
                   ? "bg-[#1B7340] text-white"
-                  : "border border-slate-200 bg-white text-slate-700"
+                  : "border border-[var(--border)] bg-[var(--surface-0)] text-[var(--text-secondary)]"
               }`}
             >
               {item.label}
@@ -174,8 +174,8 @@ export default function ITSMWorkflowDesignerPage() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-5">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <GitBranch size={17} className="text-[#1B7340]" />
             States
           </p>
@@ -187,15 +187,15 @@ export default function ITSMWorkflowDesignerPage() {
                 onClick={() => setSelectedStatus(status.value)}
                 className={`w-full rounded-2xl border p-3 text-left ${
                   selectedStatus === status.value
-                    ? "border-[#1B7340] bg-emerald-50"
-                    : "border-slate-200 bg-slate-50/70"
+                    ? "border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_12%,transparent)]"
+                    : "border-[var(--border)] bg-[var(--surface-2)]"
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-950">{status.label}</p>
-                  {status.terminal ? <Lock size={14} className="text-slate-400" /> : null}
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{status.label}</p>
+                  {status.terminal ? <Lock size={14} className="text-[var(--text-muted)]" /> : null}
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {status.transitions.length} outgoing transition
                   {status.transitions.length === 1 ? "" : "s"}
                 </p>
@@ -204,31 +204,31 @@ export default function ITSMWorkflowDesignerPage() {
           </div>
         </section>
 
-        <section className="rounded-[24px] border border-slate-200 bg-white p-5">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-0)] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                 Selected state
               </p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-950">
+              <h2 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">
                 {selected?.label ?? "No state selected"}
               </h2>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+            <span className="rounded-full bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">
               {entity.replace(/_/g, " ")}
             </span>
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <label className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm font-medium text-slate-700">
+            <label className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm font-medium text-[var(--text-secondary)]">
               Permission gate
               <input
                 value={requirePermission}
                 onChange={(event) => setRequirePermission(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--text-primary)]"
               />
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm font-medium text-slate-700">
+            <label className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm font-medium text-[var(--text-secondary)]">
               <span className="inline-flex items-center gap-2">
                 <Bell size={16} />
                 Teams notification
@@ -239,7 +239,7 @@ export default function ITSMWorkflowDesignerPage() {
                 onChange={(event) => setNotifyTeams(event.target.checked)}
               />
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm font-medium text-slate-700">
+            <label className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm font-medium text-[var(--text-secondary)]">
               <span className="inline-flex items-center gap-2">
                 <Bell size={16} />
                 Email notification
@@ -253,8 +253,8 @@ export default function ITSMWorkflowDesignerPage() {
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                 <CheckCircle2 size={16} className="text-[#1B7340]" />
                 Allowed transitions
               </p>
@@ -262,18 +262,18 @@ export default function ITSMWorkflowDesignerPage() {
                 {(transitions?.transitions ?? selected?.transitions ?? []).map((transition) => (
                   <div
                     key={transition.value}
-                    className="rounded-xl border border-slate-200 bg-white p-3"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-3"
                   >
-                    <p className="text-sm font-semibold text-slate-950">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {transition.label}
                     </p>
                     {transition.requiredFields?.length ? (
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
                         Required: {transition.requiredFields.join(", ")}
                       </p>
                     ) : null}
                     {transition.slaImpact ? (
-                      <p className="mt-2 inline-flex items-start gap-2 text-xs leading-5 text-amber-800">
+                      <p className="mt-2 inline-flex items-start gap-2 text-xs leading-5 text-[var(--warning-dark)]">
                         <Timer size={13} className="mt-0.5 shrink-0" />
                         {transition.slaImpact}
                       </p>
@@ -283,21 +283,21 @@ export default function ITSMWorkflowDesignerPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Shield size={16} className="text-slate-600" />
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <Shield size={16} className="text-[var(--text-secondary)]" />
                 Blocked transitions
               </p>
               <div className="mt-3 space-y-3">
                 {(transitions?.blockedTransitions ?? []).slice(0, 8).map((transition) => (
                   <div
                     key={transition.value}
-                    className="rounded-xl border border-slate-200 bg-white p-3"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-3"
                   >
-                    <p className="text-sm font-semibold text-slate-950">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {transition.label}
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                    <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
                       {transition.reason}
                     </p>
                   </div>
@@ -306,8 +306,8 @@ export default function ITSMWorkflowDesignerPage() {
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface-0)] p-4">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
               <SlidersHorizontal size={16} className="text-[#1B7340]" />
               Checklist and side effects
             </p>
@@ -316,12 +316,12 @@ export default function ITSMWorkflowDesignerPage() {
                 (transition.checklist ?? []).map((item) => (
                   <div
                     key={`${transition.value}-${item.key}`}
-                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"
                   >
-                    <p className="text-sm font-semibold text-slate-950">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {item.label}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
                       {transition.label} {item.required ? "requires this evidence" : "can capture this evidence"}
                     </p>
                   </div>
@@ -330,14 +330,14 @@ export default function ITSMWorkflowDesignerPage() {
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+          <div className="mt-6 rounded-2xl border border-[color-mix(in_srgb,var(--info)_45%,transparent)] bg-[color-mix(in_srgb,var(--info)_12%,transparent)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-blue-950">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--info-dark)]">
                   <Play size={16} />
                   Simulation mode
                 </p>
-                <p className="mt-1 text-xs leading-5 text-blue-800">
+                <p className="mt-1 text-xs leading-5 text-[var(--info-dark)]">
                   Dry-run the first allowed transition from the selected state with strict PIR/checklist validation.
                 </p>
               </div>
@@ -352,10 +352,10 @@ export default function ITSMWorkflowDesignerPage() {
               </button>
             </div>
             {simulation.data && (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-white p-3">
-                <p className="text-sm font-semibold text-slate-950">{simulation.data.message}</p>
+              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">{simulation.data.message}</p>
                 {simulation.data.blockers.length > 0 && (
-                  <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                  <ul className="mt-2 space-y-1 text-xs text-[var(--text-secondary)]">
                     {simulation.data.blockers.map((blocker) => (
                       <li key={blocker}>- {blocker}</li>
                     ))}

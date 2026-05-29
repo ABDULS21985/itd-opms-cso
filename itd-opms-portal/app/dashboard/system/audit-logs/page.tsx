@@ -6,7 +6,7 @@ import {
   ScrollText, Shield, Download, ChevronDown, ChevronRight, Search, Filter,
   X, Copy, Check, BarChart3, ArrowLeft, Loader2, Calendar, ChevronLeft,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
 import { JsonDiff } from "@/components/shared/json-diff";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -82,6 +82,18 @@ const cardSx = { backgroundColor: "var(--surface-0)", borderColor: "var(--border
 /*  Reusable small components                                           */
 /* ================================================================== */
 
+/** Categorical color palette for chart bars */
+const CHART_COLORS = [
+  "#3B82F6", // blue
+  "#10B981", // emerald
+  "#8B5CF6", // violet
+  "#F59E0B", // amber
+  "#EC4899", // pink
+  "#06B6D4", // cyan
+  "#EF4444", // red
+  "#F97316", // orange
+];
+
 /** Horizontal bar chart card used in stats panel */
 function HBarCard({ title, data, dataKey, nameKey, formatter }: {
   title: string; data: unknown[]; dataKey: string; nameKey: string;
@@ -95,8 +107,12 @@ function HBarCard({ title, data, dataKey, nameKey, formatter }: {
           <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-secondary)" }} allowDecimals={false} />
           <YAxis type="category" dataKey={nameKey} tick={{ fontSize: 10, fill: "var(--text-secondary)" }}
             width={100} tickFormatter={formatter} />
-          <Tooltip contentStyle={ttStyle} />
-          <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 4, 4, 0]} />
+          <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--surface-2)", opacity: 0.4 }} />
+          <Bar dataKey={dataKey} radius={[0, 4, 4, 0]}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -341,8 +357,12 @@ export default function AuditLogExplorerPage() {
                       <BarChart data={stats.eventsPerDay ?? []}>
                         <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-secondary)" }} tickFormatter={(v: string) => v.slice(5)} />
                         <YAxis tick={{ fontSize: 10, fill: "var(--text-secondary)" }} allowDecimals={false} />
-                        <Tooltip contentStyle={ttStyle} />
-                        <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                        <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--surface-2)", opacity: 0.4 }} />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                          {(stats.eventsPerDay ?? []).map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

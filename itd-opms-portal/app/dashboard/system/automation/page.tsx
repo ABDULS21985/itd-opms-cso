@@ -172,20 +172,30 @@ function StatCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface-0)] p-5"
+      className="relative h-full overflow-hidden rounded-xl border p-5"
+      style={{
+        borderColor: `${color}33`,
+        backgroundImage: `linear-gradient(135deg, ${color}14 0%, ${color}05 55%, var(--surface-0) 100%)`,
+        backgroundColor: "var(--surface-0)",
+      }}
     >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: color }}
+      />
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium text-[var(--neutral-gray)] uppercase tracking-wider">
             {label}
           </p>
-          <p className="mt-1.5 text-2xl font-bold text-[var(--text-primary)] tabular-nums">
+          <p className="mt-1.5 text-2xl font-bold tabular-nums" style={{ color }}>
             {value}
           </p>
         </div>
         <div
           className="flex h-10 w-10 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${color}18` }}
+          style={{ backgroundColor: `${color}26` }}
         >
           <Icon size={20} style={{ color }} />
         </div>
