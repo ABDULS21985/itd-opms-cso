@@ -366,18 +366,18 @@ export default function WarrantiesPage() {
 
   return (
     <div className="relative mx-auto max-w-[96rem] space-y-6 pb-10">
-      <div className="pointer-events-none absolute inset-x-12 top-4 h-72 rounded-full bg-[radial-gradient(circle,_rgba(59,130,246,0.16),_transparent_64%)] blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-64 h-80 w-80 rounded-full bg-[radial-gradient(circle,_rgba(245,158,11,0.12),_transparent_70%)] blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-12 top-4 h-72 rounded-full bg-[radial-gradient(circle,_rgba(0,175,232,0.16),_transparent_64%)] blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-64 h-80 w-80 rounded-full bg-[radial-gradient(circle,_rgba(214,176,127,0.14),_transparent_70%)] blur-3xl" />
 
       <motion.section
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="relative overflow-hidden rounded-[2.2rem] border border-[rgba(15,23,42,0.08)] bg-[linear-gradient(135deg,rgba(8,25,52,0.98),rgba(12,74,110,0.95)_48%,rgba(14,116,144,0.88))] p-6 shadow-[0_32px_90px_rgba(15,23,42,0.14)] sm:p-8"
+        className="relative overflow-hidden rounded-[2.2rem] border border-[rgba(15,23,42,0.08)] bg-[linear-gradient(135deg,rgba(20,22,24,0.98),rgba(6,52,68,0.96)_50%,rgba(0,99,130,0.92))] p-6 shadow-[0_32px_90px_rgba(15,23,42,0.14)] sm:p-8"
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.15),_transparent_22%),radial-gradient(circle_at_16%_18%,_rgba(255,255,255,0.08),_transparent_24%)]" />
-        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(56,189,248,0.25),_transparent_68%)]" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(250,204,21,0.18),_transparent_68%)]" />
+        <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(0,175,232,0.28),_transparent_68%)]" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-[radial-gradient(circle,_rgba(214,176,127,0.22),_transparent_68%)]" />
 
         <div className="relative grid items-center gap-8 xl:grid-cols-[1.08fr_0.92fr]">
           <div className="max-w-3xl">
@@ -437,7 +437,7 @@ export default function WarrantiesPage() {
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#0b3b5f] transition-all hover:-translate-y-0.5 hover:shadow-md"
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#064a5e] transition-all hover:-translate-y-0.5 hover:shadow-md"
               >
                 <Plus size={16} />
                 Add Warranty
@@ -455,7 +455,7 @@ export default function WarrantiesPage() {
               label="Tracked coverage"
               value={`${totalTracked}`}
               helper="Total warranties currently available in the registry."
-              accent="#26A8D9"
+              accent="#00AFE8"
               inverted
             />
             <SummaryTile
@@ -467,7 +467,7 @@ export default function WarrantiesPage() {
                   ? "Calculating expiring coverage across the 90-day radar."
                   : `${summary.urgentRenewals} of them need attention in the next 30 days.`
               }
-              accent="#FBBF24"
+              accent="#D6B07F"
               inverted
             />
             <SummaryTile
@@ -475,7 +475,7 @@ export default function WarrantiesPage() {
               label="Vendors in view"
               value={`${summary.uniqueVendors}`}
               helper="Distinct vendor relationships visible in the current page scope."
-              accent="#34D399"
+              accent="#00AFE8"
               inverted
             />
             <SummaryTile
@@ -491,7 +491,7 @@ export default function WarrantiesPage() {
                   ? `${summary.nearestExpiry.vendor || "Unknown vendor"} · ${new Date(summary.nearestExpiry.endDate).toLocaleDateString()}`
                   : "No expiry signal detected in the next 90 days."
               }
-              accent="#F472B6"
+              accent="#D6B07F"
               inverted
             />
           </div>

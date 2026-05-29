@@ -8,7 +8,9 @@
 
 INSERT INTO users (id, email, display_name, job_title, department, office, phone, tenant_id, is_active, password_hash, metadata)
 VALUES (
-  gen_random_uuid(),
+  -- Fixed id so later migrations (067 leadership chain) can reference this user
+  -- by id without an FK violation. Must match the id hardcoded in 067.
+  '0f6fe766-af61-4610-b8c4-371b42fe6d5f',
   'raolaniyan@cbn.gov.ng',
   'Olaniyan, Rasheed Alaba',
   'Deputy Director (Comp), ITech',

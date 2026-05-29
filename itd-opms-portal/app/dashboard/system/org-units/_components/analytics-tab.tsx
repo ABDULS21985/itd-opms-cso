@@ -296,7 +296,7 @@ export function AnalyticsTab({
               />
               <Tooltip
                 {...tooltipStyle}
-                formatter={(value?: number) => [value ?? 0, "Headcount"]}
+                formatter={(value) => [`${value ?? 0}`, "Headcount"]}
               />
               <Bar dataKey="headcount" radius={[0, 6, 6, 0]} barSize={24}>
                 {headcountData.map((entry, i) => (
@@ -331,7 +331,7 @@ export function AnalyticsTab({
               <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
               <Tooltip
                 {...tooltipStyle}
-                formatter={(value?: number) => [value ?? 0, "Managers"]}
+                formatter={(value) => [`${value ?? 0}`, "Managers"]}
               />
               <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={40}>
                 {spanData.map((entry, i) => (

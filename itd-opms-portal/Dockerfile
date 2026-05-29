@@ -38,7 +38,9 @@ USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --spider -q http://localhost:3000 || exit 1
+# Use 127.0.0.1 (not localhost): the standalone server binds IPv4 0.0.0.0,
+# but "localhost" can resolve to IPv6 [::1] in the container -> false unhealthy.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD wget --spider -q http://127.0.0.1:3000 || exit 1
 
 CMD ["node", "server.js"]

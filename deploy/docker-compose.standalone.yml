@@ -152,6 +152,13 @@ services:
       - "127.0.0.1:3005:3000"
     environment:
       NODE_ENV: production
+    healthcheck:
+      # 127.0.0.1, not localhost: Next binds IPv4 0.0.0.0; localhost may resolve to IPv6 [::1].
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
     depends_on:
       - api
     restart: unless-stopped
